@@ -1,0 +1,11 @@
+.DS_Store
+
+# Generated cloud-init user data. Contains injected secrets.
+cloud-init-devbox.yaml
+
+# Local private keys and other machine-specific secrets.
+secrets/
+
+# Local editor/tool state.
+.cursor/
+.vscode/

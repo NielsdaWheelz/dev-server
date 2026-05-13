@@ -1,0 +1,281 @@
+#cloud-config
+timezone: America/Los_Angeles
+package_update: true
+package_upgrade: true
+
+groups:
+  - docker
+
+users:
+  - name: niels
+    gecos: Niels Dev
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: [sudo, docker]
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwDGkyG3cNfQLY1UYYkxznFfUwkf51pNW1DfHyANAft
+
+ssh_pwauth: false
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/99-devbox.conf
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PubkeyAuthentication yes
+      PermitRootLogin no
+      X11Forwarding no
+      AllowUsers niels
+  - path: /home/niels/.tmux.conf
+    owner: niels:niels
+    permissions: "0644"
+    defer: true
+    content: |
+      set -g mouse on
+      set -g history-limit 50000
+      set -g renumber-windows on
+      set -g base-index 1
+      setw -g pane-base-index 1
+      set -g status-interval 5
+      set -g status-left '[#S] '
+      set -g status-right '#H %Y-%m-%d %H:%M'
+  - path: /home/niels/.gitignore_global
+    owner: niels:niels
+    permissions: "0644"
+    defer: true
+    content: |
+      .DS_Store
+      .env
+      .env.*
+      .ai-images/
+      .claude/
+      .codex/
+  - path: /home/niels/.bash_aliases
+    owner: niels:niels
+    permissions: "0644"
+    defer: true
+    content: |
+      alias ll='ls -lah'
+      alias gs='git status --short --branch'
+      alias t='tmux new -A -s main'
+      alias work='cd ~/src/work'
+      alias personal='cd ~/src/personal'
+      alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
+
+      # Route Codex auth/state by workspace. Keep ChatGPT credentials isolated per CODEX_HOME.
+      export CODEX_HOME_PERSONAL="$HOME/.codex-personal"
+      export CODEX_HOME_WORK="$HOME/.codex-work"
+
+      _codex_abspath() {
+        local target="${1:-$PWD}"
+
+        if [[ "$target" = /* ]]; then
+          if [[ -d "$target" ]]; then
+            (cd "$target" && pwd -P)
+          else
+            printf '%s\n' "$target"
+          fi
+        else
+          if [[ -d "$PWD/$target" ]]; then
+            (cd "$PWD/$target" && pwd -P)
+          else
+            printf '%s/%s\n' "$PWD" "$target"
+          fi
+        fi
+      }
+
+      _codex_home_for_args() {
+        local target="$PWD"
+        local arg
+        local next_is_cd=0
+
+        for arg in "$@"; do
+          if (( next_is_cd )); then
+            target="$arg"
+            next_is_cd=0
+            continue
+          fi
+
+          case "$arg" in
+            -C|--cd)
+              next_is_cd=1
+              ;;
+            --cd=*)
+              target="${arg#--cd=}"
+              ;;
+          esac
+        done
+
+        local dir
+        dir="$(_codex_abspath "$target")"
+
+        case "$dir/" in
+          "$HOME"/src/work/*)
+            printf '%s\n' "$CODEX_HOME_WORK"
+            ;;
+          *)
+            printf '%s\n' "$CODEX_HOME_PERSONAL"
+            ;;
+        esac
+      }
+
+      codex() {
+        local real_codex="/usr/bin/codex"
+
+        if [[ -n "${CODEX_HOME:-}" ]]; then
+          "$real_codex" "$@"
+        else
+          CODEX_HOME="$(_codex_home_for_args "$@")" "$real_codex" "$@"
+        fi
+      }
+
+      codex-home() {
+        _codex_home_for_args "$@"
+      }
+
+      codex-personal() {
+        CODEX_HOME="$CODEX_HOME_PERSONAL" codex "$@"
+      }
+
+      codex-work() {
+        CODEX_HOME="$CODEX_HOME_WORK" codex "$@"
+      }
+  - path: /home/niels/.ssh/config
+    owner: niels:niels
+    permissions: "0600"
+    defer: true
+    content: |
+      Host github.com
+        HostName github.com
+        User git
+        IdentityFile ~/.ssh/id_ed25519_github
+        IdentitiesOnly yes
+        AddKeysToAgent no
+  - path: /home/niels/.ssh/id_ed25519_github
+    owner: niels:niels
+    permissions: "0600"
+    defer: true
+    encoding: b64
+    content: __GITHUB_SSH_PRIVATE_KEY_B64__
+  - path: /home/niels/.ssh/id_ed25519_github.pub
+    owner: niels:niels
+    permissions: "0644"
+    defer: true
+    encoding: b64
+    content: __GITHUB_SSH_PUBLIC_KEY_B64__
+  - path: /usr/local/sbin/devbox-bootstrap.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euxo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+
+      if [ ! -f /swapfile ]; then
+        fallocate -l 2G /swapfile
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+      fi
+
+      apt-get update
+      apt-get install -y \
+        apt-transport-https \
+        build-essential \
+        ca-certificates \
+        curl \
+        direnv \
+        fail2ban \
+        fd-find \
+        git \
+        gnupg \
+        htop \
+        jq \
+        lsb-release \
+        mosh \
+        ripgrep \
+        rsync \
+        software-properties-common \
+        tmux \
+        ufw \
+        unattended-upgrades \
+        unzip \
+        vim
+
+      install -m 0755 -d /etc/apt/keyrings
+
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+      chmod a+r /etc/apt/keyrings/docker.asc
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" > /etc/apt/sources.list.d/docker.list
+
+      curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
+      chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
+
+      curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+      curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list -o /etc/apt/sources.list.d/tailscale.list
+
+      curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/nodesource_setup.sh
+      bash /tmp/nodesource_setup.sh
+
+      apt-get update
+      apt-get install -y \
+        containerd.io \
+        docker-buildx-plugin \
+        docker-ce \
+        docker-ce-cli \
+        docker-compose-plugin \
+        gh \
+        nodejs \
+        tailscale
+
+      systemctl enable --now docker
+      systemctl enable --now tailscaled
+      systemctl enable --now fail2ban
+      systemctl enable --now unattended-upgrades
+
+      usermod -aG docker niels
+
+      npm install -g @openai/codex @anthropic-ai/claude-code
+      corepack enable || true
+
+      mkdir -p /home/niels/src/work /home/niels/src/personal /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh
+      chown -R niels:niels /home/niels/src /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh
+      chmod 700 /home/niels/.ssh
+
+      if [ ! -s /home/niels/.ssh/id_ed25519_github ]; then
+        sudo -u niels ssh-keygen -t ed25519 -C 'niels-dev-server-github' -f /home/niels/.ssh/id_ed25519_github -N ''
+      fi
+      chmod 600 /home/niels/.ssh/id_ed25519_github
+      chmod 644 /home/niels/.ssh/id_ed25519_github.pub
+
+      sudo -u niels git config --global core.excludesfile /home/niels/.gitignore_global
+      sudo -u niels git config --global init.defaultBranch main
+      sudo -u niels git config --global --add url."git@github.com:".insteadOf "https://github.com/"
+      sudo -u niels git config --global --add url."git@github.com:".insteadOf "gh:"
+
+      ufw allow 22/tcp
+      ufw allow in on tailscale0
+      ufw --force enable
+
+      systemctl restart ssh
+
+      {
+        date
+        uname -a
+        node --version
+        npm --version
+        git --version
+        gh --version | head -n 1
+        tmux -V
+        docker --version
+        docker compose version
+        tailscale version | head -n 1
+        codex --version
+        claude --version || true
+      } > /etc/devbox-bootstrap.log
+
+runcmd:
+  - /usr/local/sbin/devbox-bootstrap.sh
