@@ -3,6 +3,8 @@
 This directory contains the Hetzner bootstrap for the `dev-server` remote
 development VPS.
 
+For the full from-scratch setup, see [WALKTHROUGH.md](WALKTHROUGH.md).
+
 ## Files
 
 - `cloud-init-devbox.template.yaml`: non-secret source template. Edit this file
@@ -30,7 +32,7 @@ hcloud server create \
   --image ubuntu-24.04 \
   --location hil \
   --ssh-key nexus-macbook \
-  --firewall dev-trial-ssh \
+  --firewall dev-server-firewall \
   --enable-backup \
   --label purpose=remote-dev \
   --label environment=dev \

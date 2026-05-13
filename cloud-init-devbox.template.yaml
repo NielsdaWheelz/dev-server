@@ -152,6 +152,7 @@ write_files:
         IdentityFile ~/.ssh/id_ed25519_github
         IdentitiesOnly yes
         AddKeysToAgent no
+        StrictHostKeyChecking accept-new
   - path: /home/niels/.ssh/id_ed25519_github
     owner: niels:niels
     permissions: "0600"
