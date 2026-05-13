@@ -31,7 +31,7 @@ hcloud server create \
   --type cpx11 \
   --image ubuntu-24.04 \
   --location hil \
-  --ssh-key nexus-macbook \
+  --ssh-key niels-macbook \
   --firewall dev-server-firewall \
   --enable-backup \
   --label purpose=remote-dev \

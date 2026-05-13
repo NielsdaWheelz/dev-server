@@ -53,8 +53,8 @@ Create a Hetzner Cloud API token in the Hetzner Cloud Console.
 Then create a local `hcloud` context:
 
 ```bash
-hcloud context create nexus
-hcloud context use nexus
+hcloud context create dev-server
+hcloud context use dev-server
 ```
 
 Verify:
@@ -76,7 +76,7 @@ Upload the public key to Hetzner:
 
 ```bash
 hcloud ssh-key create \
-  --name nexus-macbook \
+  --name niels-macbook \
   --public-key-from-file ~/.ssh/id_ed25519.pub
 ```
 
@@ -169,7 +169,7 @@ hcloud server create \
   --type cpx11 \
   --image ubuntu-24.04 \
   --location hil \
-  --ssh-key nexus-macbook \
+  --ssh-key niels-macbook \
   --firewall dev-server-firewall \
   --enable-backup \
   --label purpose=remote-dev \
@@ -551,7 +551,7 @@ hcloud server create \
   --type cpx11 \
   --image ubuntu-24.04 \
   --location hil \
-  --ssh-key nexus-macbook \
+  --ssh-key niels-macbook \
   --firewall dev-server-firewall \
   --enable-backup \
   --label purpose=remote-dev \
