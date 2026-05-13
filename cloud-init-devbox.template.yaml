@@ -141,6 +141,46 @@ write_files:
       codex-work() {
         CODEX_HOME="$CODEX_HOME_WORK" codex "$@"
       }
+
+      # Route Claude Code auth/state by workspace. Keep Claude accounts isolated per CLAUDE_CONFIG_DIR.
+      export CLAUDE_CONFIG_DIR_PERSONAL="$HOME/.claude-personal"
+      export CLAUDE_CONFIG_DIR_WORK="$HOME/.claude-work"
+
+      _claude_config_dir_for_pwd() {
+        local dir
+        dir="$(_codex_abspath "$PWD")"
+
+        case "$dir/" in
+          "$HOME"/src/work/*)
+            printf '%s\n' "$CLAUDE_CONFIG_DIR_WORK"
+            ;;
+          *)
+            printf '%s\n' "$CLAUDE_CONFIG_DIR_PERSONAL"
+            ;;
+        esac
+      }
+
+      claude() {
+        local real_claude="/usr/bin/claude"
+
+        if [[ -n "${CLAUDE_CONFIG_DIR:-}" ]]; then
+          "$real_claude" "$@"
+        else
+          CLAUDE_CONFIG_DIR="$(_claude_config_dir_for_pwd)" "$real_claude" "$@"
+        fi
+      }
+
+      claude-home() {
+        _claude_config_dir_for_pwd
+      }
+
+      claude-personal() {
+        CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR_PERSONAL" claude "$@"
+      }
+
+      claude-work() {
+        CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR_WORK" claude "$@"
+      }
   - path: /home/niels/.ssh/config
     owner: niels:niels
     permissions: "0600"
@@ -242,9 +282,10 @@ write_files:
       npm install -g @openai/codex @anthropic-ai/claude-code
       corepack enable || true
 
-      mkdir -p /home/niels/src/work /home/niels/src/personal /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh
-      chown -R niels:niels /home/niels/src /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh
+      mkdir -p /home/niels/src/work /home/niels/src/personal /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work
+      chown -R niels:niels /home/niels/src /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work
       chmod 700 /home/niels/.ssh
+      chmod 700 /home/niels/.claude-personal /home/niels/.claude-work
 
       if [ ! -s /home/niels/.ssh/id_ed25519_github ]; then
         sudo -u niels ssh-keygen -t ed25519 -C 'niels-dev-server-github' -f /home/niels/.ssh/id_ed25519_github -N ''

@@ -83,3 +83,43 @@ codex-personal() {
 codex-work() {
   CODEX_HOME="$CODEX_HOME_WORK" codex "$@"
 }
+
+# Route Claude Code auth/state by workspace. Keep Claude accounts isolated per CLAUDE_CONFIG_DIR.
+export CLAUDE_CONFIG_DIR_PERSONAL="$HOME/.claude-personal"
+export CLAUDE_CONFIG_DIR_WORK="$HOME/.claude-work"
+
+_claude_config_dir_for_pwd() {
+  local dir
+  dir="$(_codex_abspath "$PWD")"
+
+  case "$dir/" in
+    "$HOME"/src/work/*)
+      printf '%s\n' "$CLAUDE_CONFIG_DIR_WORK"
+      ;;
+    *)
+      printf '%s\n' "$CLAUDE_CONFIG_DIR_PERSONAL"
+      ;;
+  esac
+}
+
+claude() {
+  local real_claude="/usr/bin/claude"
+
+  if [[ -n "${CLAUDE_CONFIG_DIR:-}" ]]; then
+    "$real_claude" "$@"
+  else
+    CLAUDE_CONFIG_DIR="$(_claude_config_dir_for_pwd)" "$real_claude" "$@"
+  fi
+}
+
+claude-home() {
+  _claude_config_dir_for_pwd
+}
+
+claude-personal() {
+  CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR_PERSONAL" claude "$@"
+}
+
+claude-work() {
+  CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR_WORK" claude "$@"
+}

@@ -39,7 +39,8 @@ hcloud server create \
   --user-data-from-file /Users/nnandal/Documents/code/dev-server/cloud-init-devbox.yaml
 ```
 
-After a fresh rebuild, re-run human auth for `gh`, Codex, Claude, and Tailscale.
+After a fresh rebuild, re-run human auth for `gh`, Codex personal/work,
+Claude Code personal/work, and Tailscale.
 
 ## Git Safety
 

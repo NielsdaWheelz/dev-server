@@ -346,13 +346,48 @@ codex-personal login status
 codex-work login status
 ```
 
-## 16. Log Into Claude Code
+## 16. Log Into Claude Code Subscriptions
 
-On the server:
+This bootstrap routes Claude Code state by folder:
+
+```text
+~/src/work/...      -> ~/.claude-work
+everything else    -> ~/.claude-personal
+```
+
+Load the shell helpers if you are in an existing shell:
 
 ```bash
+source ~/.bash_aliases
+```
+
+Log into personal:
+
+```bash
+cd ~/src/personal
 claude auth login
 claude auth status
+```
+
+Log into work:
+
+```bash
+cd ~/src/work
+claude auth login
+claude auth status
+```
+
+Check which Claude config dir the current folder will use:
+
+```bash
+claude-home
+```
+
+You can also force one:
+
+```bash
+claude-personal auth status
+claude-work auth status
 ```
 
 ## 17. Enroll The Server In Tailscale
@@ -564,7 +599,7 @@ After rebuild, repeat the human login steps for:
 ```text
 gh
 Codex personal/work
-Claude Code
+Claude Code personal/work
 Tailscale
 ```
 
