@@ -302,13 +302,22 @@ Verify:
 gh auth status
 ```
 
-## 15. Log Into Codex Subscriptions
+## 15. Log Into AI Subscriptions
 
-This bootstrap routes Codex state by folder:
+This bootstrap routes Codex and Claude Code state by folder:
 
 ```text
-~/src/work/...      -> ~/.codex-work
-everything else    -> ~/.codex-personal
+~/src/work/...      -> work
+everything else    -> personal
+```
+
+The actual state directories are:
+
+```text
+Codex personal       ~/.codex-personal
+Codex work           ~/.codex-work
+Claude personal      ~/.claude-personal
+Claude work          ~/.claude-work
 ```
 
 Load the shell helpers if you are in an existing shell:
@@ -317,7 +326,17 @@ Load the shell helpers if you are in an existing shell:
 source ~/.bash_aliases
 ```
 
-Log into personal:
+Use `ai-whoami` to see the resolved context, state directories, and login
+status before doing expensive work:
+
+```bash
+cd ~/src/personal
+ai-whoami
+cd ~/src/work
+ai-whoami
+```
+
+Log Codex into personal:
 
 ```bash
 cd ~/src/personal
@@ -325,7 +344,7 @@ codex login --device-auth
 codex login status
 ```
 
-Log into work:
+Log Codex into work:
 
 ```bash
 cd ~/src/work
@@ -333,35 +352,22 @@ codex login --device-auth
 codex login status
 ```
 
-Check which Codex home the current folder will use:
+Check which Codex home the current folder or `-C/--cd` target will use:
 
 ```bash
 codex-home
+codex-home -C ~/src/work
+codex-home --cd ~/src/personal
 ```
 
-You can also force one:
+Force a Codex account explicitly:
 
 ```bash
 codex-personal login status
 codex-work login status
 ```
 
-## 16. Log Into Claude Code Subscriptions
-
-This bootstrap routes Claude Code state by folder:
-
-```text
-~/src/work/...      -> ~/.claude-work
-everything else    -> ~/.claude-personal
-```
-
-Load the shell helpers if you are in an existing shell:
-
-```bash
-source ~/.bash_aliases
-```
-
-Log into personal:
+Log Claude Code into personal:
 
 ```bash
 cd ~/src/personal
@@ -369,7 +375,7 @@ claude auth login
 claude auth status
 ```
 
-Log into work:
+Log Claude Code into work:
 
 ```bash
 cd ~/src/work
@@ -383,14 +389,14 @@ Check which Claude config dir the current folder will use:
 claude-home
 ```
 
-You can also force one:
+Force a Claude Code account explicitly:
 
 ```bash
 claude-personal auth status
 claude-work auth status
 ```
 
-## 17. Enroll The Server In Tailscale
+## 16. Enroll The Server In Tailscale
 
 On the server:
 
@@ -412,7 +418,7 @@ From your Mac, test the Tailscale path:
 ssh niels@TAILSCALE_IP_FROM_SERVER
 ```
 
-## 18. Switch The Mac SSH Alias To Tailscale
+## 17. Switch The Mac SSH Alias To Tailscale
 
 Edit `~/.ssh/config` on your Mac.
 
@@ -446,7 +452,7 @@ Verify:
 ssh dev-server 'hostname; whoami; tailscale ip -4'
 ```
 
-## 19. Close Public SSH
+## 18. Close Public SSH
 
 After `ssh dev-server` works through Tailscale, remove public SSH from the
 Hetzner firewall:
@@ -475,7 +481,7 @@ ssh -o ConnectTimeout=5 dev-server-public 'true'
 
 That should time out or fail.
 
-## 20. Connect Cursor
+## 19. Connect Cursor
 
 Install Cursor's Remote SSH extension if needed.
 
@@ -499,7 +505,7 @@ or:
 /home/niels/src/personal
 ```
 
-## 21. Clone And Work
+## 20. Clone And Work
 
 On the server:
 
@@ -518,7 +524,7 @@ Use `tmux` for long-running work:
 tmux new -A -s repo-name
 ```
 
-## 22. Connect From Android With Termux
+## 21. Connect From Android With Termux
 
 Install the Tailscale Android app and connect to the same tailnet.
 
@@ -555,7 +561,7 @@ tmux attach -t main
 In Termux, Volume Down acts as Ctrl. In nano, save with `Volume Down + O`,
 press Enter, and exit with `Volume Down + X`.
 
-## 23. Daily Use
+## 22. Daily Use
 
 From Mac:
 
@@ -573,7 +579,7 @@ Work folders:
 
 Public SSH should stay closed. Keep Tailscale connected on the client device.
 
-## 24. Rebuild Later
+## 23. Rebuild Later
 
 To rebuild from scratch:
 

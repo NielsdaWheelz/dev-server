@@ -5,11 +5,21 @@ alias work='cd ~/src/work'
 alias personal='cd ~/src/personal'
 alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
 
-# Route Codex auth/state by workspace. Keep ChatGPT credentials isolated per CODEX_HOME.
-export CODEX_HOME_PERSONAL="$HOME/.codex-personal"
-export CODEX_HOME_WORK="$HOME/.codex-work"
+# Directory-aware AI account routing.
+#
+# The state directory is the auth/config/history boundary. Normal `codex` and
+# `claude` calls resolve personal vs work from the current directory. Explicit
+# override commands exist for debugging and one-off use.
+export AI_PERSONAL_ROOT="${AI_PERSONAL_ROOT:-$HOME/src/personal}"
+export AI_WORK_ROOT="${AI_WORK_ROOT:-$HOME/src/work}"
 
-_codex_abspath() {
+export CODEX_HOME_PERSONAL="${CODEX_HOME_PERSONAL:-$HOME/.codex-personal}"
+export CODEX_HOME_WORK="${CODEX_HOME_WORK:-$HOME/.codex-work}"
+
+export CLAUDE_CONFIG_DIR_PERSONAL="${CLAUDE_CONFIG_DIR_PERSONAL:-$HOME/.claude-personal}"
+export CLAUDE_CONFIG_DIR_WORK="${CLAUDE_CONFIG_DIR_WORK:-$HOME/.claude-work}"
+
+_ai_abspath() {
   local target="${1:-$PWD}"
 
   if [[ "$target" = /* ]]; then
@@ -27,7 +37,23 @@ _codex_abspath() {
   fi
 }
 
-_codex_home_for_args() {
+_ai_context_for_path() {
+  local dir
+  local work_root
+  dir="$(_ai_abspath "${1:-$PWD}")"
+  work_root="$(_ai_abspath "$AI_WORK_ROOT")"
+
+  case "$dir" in
+    "$work_root"|"$work_root"/*)
+      printf 'work\n'
+      ;;
+    *)
+      printf 'personal\n'
+      ;;
+  esac
+}
+
+_ai_codex_target_from_args() {
   local target="$PWD"
   local arg
   local next_is_cd=0
@@ -49,31 +75,71 @@ _codex_home_for_args() {
     esac
   done
 
-  local dir
-  dir="$(_codex_abspath "$target")"
+  printf '%s\n' "$target"
+}
 
-  case "$dir/" in
-    "$HOME"/src/work/*)
-      printf '%s\n' "$CODEX_HOME_WORK"
-      ;;
-    *)
-      printf '%s\n' "$CODEX_HOME_PERSONAL"
-      ;;
+_ai_codex_context_for_args() {
+  _ai_context_for_path "$(_ai_codex_target_from_args "$@")"
+}
+
+_ai_codex_home_for_context() {
+  case "$1" in
+    work) printf '%s\n' "$CODEX_HOME_WORK" ;;
+    personal) printf '%s\n' "$CODEX_HOME_PERSONAL" ;;
+    *) return 1 ;;
   esac
 }
 
+_ai_claude_config_dir_for_context() {
+  case "$1" in
+    work) printf '%s\n' "$CLAUDE_CONFIG_DIR_WORK" ;;
+    personal) printf '%s\n' "$CLAUDE_CONFIG_DIR_PERSONAL" ;;
+    *) return 1 ;;
+  esac
+}
+
+ai-context() {
+  _ai_context_for_path "$PWD"
+}
+
+codex-home() {
+  _ai_codex_home_for_context "$(_ai_codex_context_for_args "$@")"
+}
+
+claude-home() {
+  _ai_claude_config_dir_for_context "$(_ai_context_for_path "$PWD")"
+}
+
 codex() {
-  local real_codex="/usr/bin/codex"
+  local real_codex
+  real_codex="${CODEX_BIN:-$(type -P codex)}"
+
+  if [[ -z "$real_codex" ]]; then
+    printf 'codex binary not found\n' >&2
+    return 127
+  fi
 
   if [[ -n "${CODEX_HOME:-}" ]]; then
     "$real_codex" "$@"
   else
-    CODEX_HOME="$(_codex_home_for_args "$@")" "$real_codex" "$@"
+    CODEX_HOME="$(codex-home "$@")" "$real_codex" "$@"
   fi
 }
 
-codex-home() {
-  _codex_home_for_args "$@"
+claude() {
+  local real_claude
+  real_claude="${CLAUDE_BIN:-$(type -P claude)}"
+
+  if [[ -z "$real_claude" ]]; then
+    printf 'claude binary not found\n' >&2
+    return 127
+  fi
+
+  if [[ -n "${CLAUDE_CONFIG_DIR:-}" ]]; then
+    "$real_claude" "$@"
+  else
+    CLAUDE_CONFIG_DIR="$(claude-home)" "$real_claude" "$@"
+  fi
 }
 
 codex-personal() {
@@ -84,42 +150,27 @@ codex-work() {
   CODEX_HOME="$CODEX_HOME_WORK" codex "$@"
 }
 
-# Route Claude Code auth/state by workspace. Keep Claude accounts isolated per CLAUDE_CONFIG_DIR.
-export CLAUDE_CONFIG_DIR_PERSONAL="$HOME/.claude-personal"
-export CLAUDE_CONFIG_DIR_WORK="$HOME/.claude-work"
-
-_claude_config_dir_for_pwd() {
-  local dir
-  dir="$(_codex_abspath "$PWD")"
-
-  case "$dir/" in
-    "$HOME"/src/work/*)
-      printf '%s\n' "$CLAUDE_CONFIG_DIR_WORK"
-      ;;
-    *)
-      printf '%s\n' "$CLAUDE_CONFIG_DIR_PERSONAL"
-      ;;
-  esac
-}
-
-claude() {
-  local real_claude="/usr/bin/claude"
-
-  if [[ -n "${CLAUDE_CONFIG_DIR:-}" ]]; then
-    "$real_claude" "$@"
-  else
-    CLAUDE_CONFIG_DIR="$(_claude_config_dir_for_pwd)" "$real_claude" "$@"
-  fi
-}
-
-claude-home() {
-  _claude_config_dir_for_pwd
-}
-
 claude-personal() {
   CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR_PERSONAL" claude "$@"
 }
 
 claude-work() {
   CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR_WORK" claude "$@"
+}
+
+ai-whoami() {
+  local context
+  local codex_home
+  local claude_dir
+
+  context="$(ai-context)"
+  codex_home="$(codex-home)"
+  claude_dir="$(claude-home)"
+
+  printf 'cwd: %s\n' "$PWD"
+  printf 'context: %s\n' "$context"
+  printf 'codex home: %s\n' "$codex_home"
+  CODEX_HOME="$codex_home" "${CODEX_BIN:-$(type -P codex)}" login status 2>&1 | sed 's/^/codex status: /'
+  printf 'claude config: %s\n' "$claude_dir"
+  CLAUDE_CONFIG_DIR="$claude_dir" "${CLAUDE_BIN:-$(type -P claude)}" auth status 2>&1 | sed 's/^/claude status: /'
 }
