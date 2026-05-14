@@ -7,8 +7,9 @@ output="$base_dir/cloud-init-devbox.yaml"
 private_key="$base_dir/secrets/id_ed25519_github"
 public_key="$base_dir/secrets/id_ed25519_github.pub"
 bash_aliases="$base_dir/bash_aliases"
+zshrc="$base_dir/zshrc"
 
-for path in "$template" "$private_key" "$public_key" "$bash_aliases"; do
+for path in "$template" "$private_key" "$public_key" "$bash_aliases" "$zshrc"; do
   if [[ ! -f "$path" ]]; then
     echo "missing required file: $path" >&2
     exit 1
@@ -18,15 +19,18 @@ done
 private_b64="$(base64 -i "$private_key" | tr -d '\n')"
 public_b64="$(base64 -i "$public_key" | tr -d '\n')"
 bash_aliases_b64="$(base64 -i "$bash_aliases" | tr -d '\n')"
+zshrc_b64="$(base64 -i "$zshrc" | tr -d '\n')"
 
 awk \
   -v private_key="$private_b64" \
   -v public_key="$public_b64" \
   -v bash_aliases="$bash_aliases_b64" \
+  -v zshrc="$zshrc_b64" \
   '{
     gsub("__GITHUB_SSH_PRIVATE_KEY_B64__", private_key)
     gsub("__GITHUB_SSH_PUBLIC_KEY_B64__", public_key)
     gsub("__BASH_ALIASES_B64__", bash_aliases)
+    gsub("__ZSHRC_B64__", zshrc)
     print
   }' "$template" > "$output"
 

@@ -234,6 +234,9 @@ ssh dev-server 'cat /etc/devbox-bootstrap.log'
 Expected tools include:
 
 ```text
+zsh
+fzf
+zoxide
 Node
 git
 gh
@@ -245,7 +248,30 @@ Codex CLI
 Claude Code
 ```
 
-## 12. Enter The Persistent Shell
+## 12. Use The Shell Improvements
+
+New SSH sessions use Zsh with:
+
+```text
+zoxide `z` directory jumping
+fzf key bindings
+fzf-tab dropdown completion
+zsh-autosuggestions
+zsh-syntax-highlighting
+colored prompt with git branch
+```
+
+Try:
+
+```bash
+z src
+cd ~/src/work
+```
+
+Then press Tab after a partial command or path to see fzf-tab completions. The
+first few `z` jumps need normal `cd` usage before zoxide has enough history.
+
+## 13. Enter The Persistent Shell
 
 ```bash
 ssh dev-server
@@ -265,7 +291,7 @@ ssh dev-server
 tmux attach -t main
 ```
 
-## 13. Verify GitHub SSH From The Server
+## 14. Verify GitHub SSH From The Server
 
 On the server:
 
@@ -279,7 +305,7 @@ Expected result:
 Hi USERNAME! You've successfully authenticated, but GitHub does not provide shell access.
 ```
 
-## 14. Log Into GitHub CLI On The Server
+## 15. Log Into GitHub CLI On The Server
 
 On the server:
 
@@ -302,7 +328,7 @@ Verify:
 gh auth status
 ```
 
-## 15. Log Into AI Subscriptions
+## 16. Log Into AI Subscriptions
 
 This bootstrap routes Codex and Claude Code state by folder:
 
@@ -396,7 +422,7 @@ claude-personal auth status
 claude-work auth status
 ```
 
-## 16. Enroll The Server In Tailscale
+## 17. Enroll The Server In Tailscale
 
 On the server:
 
@@ -418,7 +444,7 @@ From your Mac, test the Tailscale path:
 ssh niels@TAILSCALE_IP_FROM_SERVER
 ```
 
-## 17. Switch The Mac SSH Alias To Tailscale
+## 18. Switch The Mac SSH Alias To Tailscale
 
 Edit `~/.ssh/config` on your Mac.
 
@@ -452,7 +478,7 @@ Verify:
 ssh dev-server 'hostname; whoami; tailscale ip -4'
 ```
 
-## 18. Close Public SSH
+## 19. Close Public SSH
 
 After `ssh dev-server` works through Tailscale, remove public SSH from the
 Hetzner firewall:
@@ -481,7 +507,7 @@ ssh -o ConnectTimeout=5 dev-server-public 'true'
 
 That should time out or fail.
 
-## 19. Connect Cursor
+## 20. Connect Cursor
 
 Install Cursor's Remote SSH extension if needed.
 
@@ -505,7 +531,7 @@ or:
 /home/niels/src/personal
 ```
 
-## 20. Clone And Work
+## 21. Clone And Work
 
 On the server:
 
@@ -524,7 +550,7 @@ Use `tmux` for long-running work:
 tmux new -A -s repo-name
 ```
 
-## 21. Connect From Android With Termux
+## 22. Connect From Android With Termux
 
 Install the Tailscale Android app and connect to the same tailnet.
 
@@ -561,7 +587,7 @@ tmux attach -t main
 In Termux, Volume Down acts as Ctrl. In nano, save with `Volume Down + O`,
 press Enter, and exit with `Volume Down + X`.
 
-## 22. Daily Use
+## 23. Daily Use
 
 From Mac:
 
@@ -579,7 +605,7 @@ Work folders:
 
 Public SSH should stay closed. Keep Tailscale connected on the client device.
 
-## 23. Rebuild Later
+## 24. Rebuild Later
 
 To rebuild from scratch:
 

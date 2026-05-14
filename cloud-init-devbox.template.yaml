@@ -57,6 +57,12 @@ write_files:
     defer: true
     encoding: b64
     content: __BASH_ALIASES_B64__
+  - path: /home/niels/.zshrc
+    owner: niels:niels
+    permissions: "0644"
+    defer: true
+    encoding: b64
+    content: __ZSHRC_B64__
   - path: /home/niels/.ssh/config
     owner: niels:niels
     permissions: "0600"
@@ -119,7 +125,12 @@ write_files:
         ufw \
         unattended-upgrades \
         unzip \
-        vim
+        vim \
+        zsh \
+        fzf \
+        zoxide \
+        zsh-autosuggestions \
+        zsh-syntax-highlighting
 
       install -m 0755 -d /etc/apt/keyrings
 
@@ -158,10 +169,16 @@ write_files:
       npm install -g @openai/codex @anthropic-ai/claude-code
       corepack enable || true
 
-      mkdir -p /home/niels/src/work /home/niels/src/personal /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work
-      chown -R niels:niels /home/niels/src /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work
+      mkdir -p /home/niels/src/work /home/niels/src/personal /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work /home/niels/.zsh
+      chown -R niels:niels /home/niels/src /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work /home/niels/.zsh
       chmod 700 /home/niels/.ssh
       chmod 700 /home/niels/.claude-personal /home/niels/.claude-work
+
+      if [ ! -d /home/niels/.zsh/fzf-tab/.git ]; then
+        rm -rf /home/niels/.zsh/fzf-tab
+        sudo -u niels git clone --depth 1 https://github.com/Aloxaf/fzf-tab /home/niels/.zsh/fzf-tab
+      fi
+      chsh -s /usr/bin/zsh niels
 
       if [ ! -s /home/niels/.ssh/id_ed25519_github ]; then
         sudo -u niels ssh-keygen -t ed25519 -C 'niels-dev-server-github' -f /home/niels/.ssh/id_ed25519_github -N ''
@@ -188,6 +205,9 @@ write_files:
         git --version
         gh --version | head -n 1
         tmux -V
+        zsh --version
+        fzf --version
+        zoxide --version
         docker --version
         docker compose version
         tailscale version | head -n 1

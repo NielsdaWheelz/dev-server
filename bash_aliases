@@ -98,6 +98,18 @@ _ai_claude_config_dir_for_context() {
   esac
 }
 
+_ai_real_bin() {
+  local name="$1"
+
+  if command -v whence >/dev/null 2>&1; then
+    whence -p "$name"
+  elif type -P "$name" >/dev/null 2>&1; then
+    type -P "$name"
+  else
+    command -v "$name"
+  fi
+}
+
 ai-context() {
   _ai_context_for_path "$PWD"
 }
@@ -112,7 +124,7 @@ claude-home() {
 
 codex() {
   local real_codex
-  real_codex="${CODEX_BIN:-$(type -P codex)}"
+  real_codex="${CODEX_BIN:-$(_ai_real_bin codex)}"
 
   if [[ -z "$real_codex" ]]; then
     printf 'codex binary not found\n' >&2
@@ -128,7 +140,7 @@ codex() {
 
 claude() {
   local real_claude
-  real_claude="${CLAUDE_BIN:-$(type -P claude)}"
+  real_claude="${CLAUDE_BIN:-$(_ai_real_bin claude)}"
 
   if [[ -z "$real_claude" ]]; then
     printf 'claude binary not found\n' >&2
@@ -170,7 +182,7 @@ ai-whoami() {
   printf 'cwd: %s\n' "$PWD"
   printf 'context: %s\n' "$context"
   printf 'codex home: %s\n' "$codex_home"
-  CODEX_HOME="$codex_home" "${CODEX_BIN:-$(type -P codex)}" login status 2>&1 | sed 's/^/codex status: /'
+  CODEX_HOME="$codex_home" "${CODEX_BIN:-$(_ai_real_bin codex)}" login status 2>&1 | sed 's/^/codex status: /'
   printf 'claude config: %s\n' "$claude_dir"
-  CLAUDE_CONFIG_DIR="$claude_dir" "${CLAUDE_BIN:-$(type -P claude)}" auth status 2>&1 | sed 's/^/claude status: /'
+  CLAUDE_CONFIG_DIR="$claude_dir" "${CLAUDE_BIN:-$(_ai_real_bin claude)}" auth status 2>&1 | sed 's/^/claude status: /'
 }
