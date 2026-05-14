@@ -1,5 +1,10 @@
 # Managed by dev-server bootstrap.
 
+if [ -z "${ZSH_VERSION:-}" ]; then
+  echo "This file is for zsh. Run 'exec zsh' or open a new SSH session instead."
+  return 0 2>/dev/null || exit 0
+fi
+
 export EDITOR="${EDITOR:-vim}"
 export PAGER="${PAGER:-less}"
 
