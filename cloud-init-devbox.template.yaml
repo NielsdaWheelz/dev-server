@@ -40,6 +40,27 @@ write_files:
       set -g status-interval 5
       set -g status-left '[#S] '
       set -g status-right '#H %Y-%m-%d %H:%M'
+      # tpm + session persistence across reboots (auto-restore via tmux-continuum)
+      set -g @plugin 'tmux-plugins/tpm'
+      set -g @plugin 'tmux-plugins/tmux-resurrect'
+      set -g @plugin 'tmux-plugins/tmux-continuum'
+      set -g @continuum-restore 'on'
+      run '~/.tmux/plugins/tpm/tpm'
+  - path: /etc/systemd/journald.conf.d/00-devbox-persistent.conf
+    permissions: "0644"
+    content: |
+      # Persistent journald with a 1G cap so we can post-mortem OOMs and crashes
+      # after the cpx11->cpx31 upgrade. Pairs with /var/log/journal existing.
+      [Journal]
+      Storage=persistent
+      SystemMaxUse=1G
+  - path: /etc/docker/daemon.json
+    permissions: "0644"
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": { "max-size": "50m", "max-file": "3" }
+      }
   - path: /home/niels/.gitignore_global
     owner: niels:niels
     permissions: "0644"
@@ -51,6 +72,8 @@ write_files:
       .ai-images/
       .claude/
       .codex/
+      .codex-personal/
+      .codex-work/
   - path: /home/niels/.bash_aliases
     owner: niels:niels
     permissions: "0644"
@@ -63,6 +86,152 @@ write_files:
     defer: true
     encoding: b64
     content: __ZSHRC_B64__
+  - path: /home/niels/bin/codex
+    owner: niels:niels
+    permissions: "0755"
+    defer: true
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      personal_home="${CODEX_HOME_PERSONAL:-$HOME/.codex-personal}"
+      work_home="${CODEX_HOME_WORK:-$HOME/.codex-work}"
+      work_root="${AI_WORK_ROOT:-$HOME/src/work}"
+      personal_context="${AI_CONTEXT_PERSONAL:-personal}"
+      work_context="${AI_CONTEXT_WORK:-work}"
+
+      resolve_path() {
+        local target="${1:-$PWD}"
+
+        if [[ "$target" != /* ]]; then
+          target="$PWD/$target"
+        fi
+
+        if [[ -d "$target" ]]; then
+          (cd "$target" && pwd -P)
+        else
+          printf '%s\n' "$target"
+        fi
+      }
+
+      find_real_codex() {
+        local self
+        local dir
+        local candidate
+        local resolved_candidate
+        self="$(readlink -f "$0")"
+
+        IFS=: read -r -a path_parts <<< "$PATH"
+        for dir in "${path_parts[@]}"; do
+          candidate="$dir/codex"
+          if [[ ! -x "$candidate" ]]; then
+            continue
+          fi
+
+          resolved_candidate="$(readlink -f "$candidate")"
+          if [[ "$resolved_candidate" != "$self" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+          fi
+        done
+
+        return 1
+      }
+
+      if [[ -n "${CODEX_BIN:-}" ]]; then
+        real_codex="$CODEX_BIN"
+      elif [[ -x /usr/bin/codex ]]; then
+        real_codex="/usr/bin/codex"
+      else
+        real_codex="$(find_real_codex || true)"
+      fi
+      if [[ -z "$real_codex" ]]; then
+        printf 'codex binary not found\n' >&2
+        exit 127
+      fi
+
+      if [[ "${CODEX_HOME_LOCKED:-}" == "1" && -n "${CODEX_HOME:-}" ]]; then
+        if [[ "${CODEX_WRAPPER_PRINT_HOME:-}" == "1" ]]; then
+          printf '%s\n' "$CODEX_HOME"
+          exit 0
+        fi
+
+        exec "$real_codex" "$@"
+      fi
+
+      target="$PWD"
+      next_is_cd=0
+      for arg in "$@"; do
+        if (( next_is_cd )); then
+          target="$arg"
+          next_is_cd=0
+          continue
+        fi
+
+        case "$arg" in
+          -C|--cd)
+            next_is_cd=1
+            ;;
+          --cd=*)
+            target="${arg#--cd=}"
+            ;;
+        esac
+      done
+
+      target="$(resolve_path "$target")"
+      work_root="$(resolve_path "$work_root")"
+
+      case "${AI_CONTEXT:-}" in
+        "$work_context")
+          export CODEX_HOME="$work_home"
+          ;;
+        "$personal_context")
+          export CODEX_HOME="$personal_home"
+          ;;
+        "")
+          case "$target" in
+            "$work_root"|"$work_root"/*)
+              export CODEX_HOME="$work_home"
+              ;;
+            *)
+              export CODEX_HOME="$personal_home"
+              ;;
+          esac
+          ;;
+        *)
+          printf "Unsupported AI_CONTEXT '%s' (expected %s or %s)\n" "$AI_CONTEXT" "$personal_context" "$work_context" >&2
+          exit 1
+          ;;
+      esac
+
+      if [[ "${CODEX_WRAPPER_PRINT_HOME:-}" == "1" ]]; then
+        printf '%s\n' "$CODEX_HOME"
+        exit 0
+      fi
+
+      exec "$real_codex" "$@"
+  - path: /home/niels/bin/codex-personal
+    owner: niels:niels
+    permissions: "0755"
+    defer: true
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      export CODEX_HOME="${CODEX_HOME_PERSONAL:-$HOME/.codex-personal}"
+      export CODEX_HOME_LOCKED=1
+      exec "$HOME/bin/codex" "$@"
+  - path: /home/niels/bin/codex-work
+    owner: niels:niels
+    permissions: "0755"
+    defer: true
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      export CODEX_HOME="${CODEX_HOME_WORK:-$HOME/.codex-work}"
+      export CODEX_HOME_LOCKED=1
+      exec "$HOME/bin/codex" "$@"
   - path: /home/niels/.ssh/config
     owner: niels:niels
     permissions: "0600"
@@ -95,21 +264,18 @@ write_files:
       set -euxo pipefail
       export DEBIAN_FRONTEND=noninteractive
 
-      if [ ! -f /swapfile ]; then
-        fallocate -l 2G /swapfile
-        chmod 600 /swapfile
-        mkswap /swapfile
-        swapon /swapfile
-        echo '/swapfile none swap sw 0 0' >> /etc/fstab
-      fi
+      # No swapfile: 8 GB RAM + earlyoom should kill the worst process before
+      # we ever thrash. Swap was what turned the last OOM into a wedge.
 
       apt-get update
       apt-get install -y \
         apt-transport-https \
+        bat \
         build-essential \
         ca-certificates \
         curl \
         direnv \
+        earlyoom \
         fail2ban \
         fd-find \
         git \
@@ -118,6 +284,7 @@ write_files:
         jq \
         lsb-release \
         mosh \
+        ncdu \
         ripgrep \
         rsync \
         software-properties-common \
@@ -159,25 +326,57 @@ write_files:
         nodejs \
         tailscale
 
+      # Persistent journald: /etc/systemd/journald.conf.d/00-devbox-persistent.conf
+      # sets Storage=persistent + SystemMaxUse=1G. The dir must exist for it to
+      # actually persist across reboots.
+      mkdir -p /var/log/journal
+      systemd-tmpfiles --create --prefix /var/log/journal
+      systemctl restart systemd-journald
+
       systemctl enable --now docker
+      systemctl restart docker
       systemctl enable --now tailscaled
       systemctl enable --now fail2ban
       systemctl enable --now unattended-upgrades
+      # earlyoom: kill the heaviest process before the whole VM wedges
+      systemctl enable --now earlyoom
 
       usermod -aG docker niels
 
       npm install -g @openai/codex @anthropic-ai/claude-code
       corepack enable || true
 
-      mkdir -p /home/niels/src/work /home/niels/src/personal /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work /home/niels/.zsh
-      chown -R niels:niels /home/niels/src /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work /home/niels/.zsh
+      mkdir -p /home/niels/src/work /home/niels/src/personal /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work /home/niels/.codex-personal /home/niels/.codex-work /home/niels/.zsh
+      if [ -d /home/niels/.codex ] && [ ! -L /home/niels/.codex ]; then
+        mv /home/niels/.codex "/home/niels/.codex-default-archive-$(date +%Y%m%d-%H%M%S)"
+      fi
+      if [ ! -e /home/niels/.codex ]; then
+        ln -s .codex-personal /home/niels/.codex
+      fi
+      chown -R niels:niels /home/niels/src /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work /home/niels/.codex-personal /home/niels/.codex-work /home/niels/.zsh
+      chown -h niels:niels /home/niels/.codex || true
       chmod 700 /home/niels/.ssh
       chmod 700 /home/niels/.claude-personal /home/niels/.claude-work
+      chmod 700 /home/niels/.codex-personal /home/niels/.codex-work
+
+      ln -sf /home/niels/bin/codex /usr/local/bin/codex
+      ln -sf /home/niels/bin/codex-personal /usr/local/bin/codex-personal
+      ln -sf /home/niels/bin/codex-work /usr/local/bin/codex-work
 
       if [ ! -d /home/niels/.zsh/fzf-tab/.git ]; then
         rm -rf /home/niels/.zsh/fzf-tab
         sudo -u niels git clone --depth 1 https://github.com/Aloxaf/fzf-tab /home/niels/.zsh/fzf-tab
       fi
+
+      # tpm for tmux-resurrect + tmux-continuum (session persistence across reboots)
+      sudo -u niels mkdir -p /home/niels/.tmux/plugins
+      if [ ! -d /home/niels/.tmux/plugins/tpm/.git ]; then
+        rm -rf /home/niels/.tmux/plugins/tpm
+        sudo -u niels git clone --depth 1 https://github.com/tmux-plugins/tpm /home/niels/.tmux/plugins/tpm
+      fi
+      # Headless plugin install so resurrect/continuum are present on first login
+      sudo -u niels /home/niels/.tmux/plugins/tpm/bin/install_plugins || true
+
       chsh -s /usr/bin/zsh niels
 
       if [ ! -s /home/niels/.ssh/id_ed25519_github ]; then
@@ -191,6 +390,9 @@ write_files:
       sudo -u niels git config --global --add url."git@github.com:".insteadOf "https://github.com/"
       sudo -u niels git config --global --add url."git@github.com:".insteadOf "gh:"
 
+      # Temporary first-boot SSH. After Tailscale enrollment, run
+      # /usr/local/sbin/devbox-lockdown-public-ssh.sh and remove the temporary
+      # Hetzner Cloud Firewall SSH rule.
       ufw allow 22/tcp
       ufw allow in on tailscale0
       ufw --force enable
@@ -212,8 +414,21 @@ write_files:
         docker compose version
         tailscale version | head -n 1
         codex --version
+        sudo -H -u niels env PATH="/home/niels/bin:$PATH" CODEX_WRAPPER_PRINT_HOME=1 /home/niels/bin/codex --cd /home/niels/src/personal
+        sudo -H -u niels env PATH="/home/niels/bin:$PATH" CODEX_WRAPPER_PRINT_HOME=1 /home/niels/bin/codex --cd /home/niels/src/work
         claude --version || true
       } > /etc/devbox-bootstrap.log
+  - path: /usr/local/sbin/devbox-lockdown-public-ssh.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euxo pipefail
+
+      ufw --force delete allow 22/tcp || true
+      ufw allow in on tailscale0
+      ufw reload
+      ufw status verbose
 
 runcmd:
   - /usr/local/sbin/devbox-bootstrap.sh

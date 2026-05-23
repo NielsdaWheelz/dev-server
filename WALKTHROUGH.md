@@ -7,8 +7,14 @@ SSH, Docker, Codex, and Claude Code.
 The setup this repo builds is:
 
 ```text
-Mac/phone -> Tailscale -> dev-server-cpx11 -> tmux/Cursor/Codex/Claude/Docker/GitHub SSH
+Mac/phone -> Tailscale -> dev-server -> tmux/Cursor/Codex/Claude/Docker/GitHub SSH
 ```
+
+The baseline server type is `cpx31` (4 vCPU / 8 GB RAM). It used to be `cpx11`
+(2 GB), but the dev box wedged on an OOM and we couldn't post-mortem cleanly,
+so we sized up for memory headroom. The cloud-init bootstrap also enables
+persistent journald, `earlyoom`, Docker log rotation, and tmux session
+persistence — see the "Dev Box Defaults" section in `README.md`.
 
 ## 1. Install Local Tools On Mac
 
@@ -116,7 +122,7 @@ Add that public key to your GitHub account:
 
 ```bash
 gh ssh-key add secrets/id_ed25519_github.pub \
-  --title dev-server-cpx11 \
+  --title dev-server \
   --type authentication
 ```
 
@@ -141,36 +147,53 @@ Create a firewall:
 
 ```bash
 hcloud firewall create \
-  --name dev-server-firewall \
+  --name dev-server-private \
   --label purpose=remote-dev
 ```
 
-Temporarily allow public SSH for first boot and Tailscale enrollment:
+Allow Tailscale direct WireGuard from the internet:
 
 ```bash
 hcloud firewall add-rule \
   --direction in \
-  --protocol tcp \
-  --port 22 \
+  --protocol udp \
+  --port 41641 \
   --source-ips 0.0.0.0/0 \
   --source-ips ::/0 \
-  dev-server-firewall
+  --description "Tailscale direct WireGuard" \
+  dev-server-private
+```
+
+Temporarily allow public SSH only from your current public IPv4 for first boot
+and Tailscale enrollment:
+
+```bash
+MY_IP="$(curl -fsS4 https://api.ipify.org)/32"
+
+hcloud firewall add-rule \
+  --direction in \
+  --protocol tcp \
+  --port 22 \
+  --source-ips "$MY_IP" \
+  --description "Temporary bootstrap SSH from operator IPv4" \
+  dev-server-private
 ```
 
 Later, after Tailscale works, you will remove this rule.
 
 ## 9. Create The VPS
 
-Create a `cpx11` in Hillsboro:
+Create a `cpx31` in Hillsboro (8 GB RAM baseline — sized up from `cpx11`
+after a memory-OOM incident on the old 2 GB box):
 
 ```bash
 hcloud server create \
-  --name dev-server-cpx11 \
-  --type cpx11 \
+  --name dev-server \
+  --type cpx31 \
   --image ubuntu-24.04 \
   --location hil \
   --ssh-key niels-macbook \
-  --firewall dev-server-firewall \
+  --firewall dev-server-private \
   --enable-backup \
   --label purpose=remote-dev \
   --label environment=dev \
@@ -180,7 +203,7 @@ hcloud server create \
 Get the public IP:
 
 ```bash
-hcloud server ip dev-server-cpx11
+hcloud server ip dev-server
 ```
 
 ## 10. Add The Initial Mac SSH Alias
@@ -246,7 +269,22 @@ Docker Compose
 Tailscale
 Codex CLI
 Claude Code
+earlyoom
 ```
+
+## 11a. Set A Console Password For Niels
+
+Cloud-init can't set an interactive password, and the Hetzner web VNC console
+needs one to be useful as a break-glass when SSH dies. Set it manually:
+
+```bash
+ssh dev-server
+sudo passwd niels
+```
+
+Store the password in your password manager. SSH password auth stays off
+(`PasswordAuthentication no`); this password is only used at the serial/VNC
+console.
 
 ## 12. Use The Shell Improvements
 
@@ -342,9 +380,15 @@ The actual state directories are:
 ```text
 Codex personal       ~/.codex-personal
 Codex work           ~/.codex-work
+Codex default        ~/.codex -> ~/.codex-personal
 Claude personal      ~/.claude-personal
 Claude work          ~/.claude-work
 ```
+
+The bootstrap installs real `~/bin/codex`, `~/bin/codex-personal`, and
+`~/bin/codex-work` wrappers. Plain `codex` re-resolves the home from the current
+directory or `-C/--cd` target even if `CODEX_HOME` is inherited from another
+session. The explicit personal/work commands lock the requested home.
 
 Load the shell helpers if you are in an existing shell:
 
@@ -427,7 +471,7 @@ claude-work auth status
 On the server:
 
 ```bash
-sudo tailscale up --ssh --hostname=dev-server-cpx11 --operator=niels
+sudo tailscale up --ssh --hostname=dev-server --operator=niels
 ```
 
 Open the printed login URL in your Mac browser and approve the server.
@@ -480,23 +524,38 @@ ssh dev-server 'hostname; whoami; tailscale ip -4'
 
 ## 19. Close Public SSH
 
-After `ssh dev-server` works through Tailscale, remove public SSH from the
-Hetzner firewall:
+After `ssh dev-server` works through Tailscale, remove public SSH from both the
+host UFW rules and the Hetzner firewall:
 
 ```bash
+ssh dev-server 'sudo /usr/local/sbin/devbox-lockdown-public-ssh.sh'
+```
+
+Then remove the temporary Hetzner Cloud Firewall SSH rule. Use the same public
+IPv4 source you used when creating the temporary rule:
+
+```bash
+MY_IP="$(curl -fsS4 https://api.ipify.org)/32"
+
 hcloud firewall delete-rule \
   --direction in \
   --protocol tcp \
   --port 22 \
-  --source-ips 0.0.0.0/0 \
-  --source-ips ::/0 \
-  dev-server-firewall
+  --source-ips "$MY_IP" \
+  --description "Temporary bootstrap SSH from operator IPv4" \
+  dev-server-private
 ```
 
-Verify the firewall has no public inbound rules:
+Verify the firewall has only the Tailscale direct WireGuard rule:
 
 ```bash
-hcloud firewall describe dev-server-firewall
+hcloud firewall describe dev-server-private
+```
+
+Verify host UFW allows only Tailscale ingress:
+
+```bash
+ssh dev-server 'sudo ufw status verbose'
 ```
 
 Verify the public path is closed:
@@ -612,14 +671,14 @@ To rebuild from scratch:
 ```bash
 cd ~/Documents/code/dev-server
 ./render-cloud-init.sh
-hcloud server delete dev-server-cpx11
+hcloud server delete dev-server
 hcloud server create \
-  --name dev-server-cpx11 \
-  --type cpx11 \
+  --name dev-server \
+  --type cpx31 \
   --image ubuntu-24.04 \
   --location hil \
   --ssh-key niels-macbook \
-  --firewall dev-server-firewall \
+  --firewall dev-server-private \
   --enable-backup \
   --label purpose=remote-dev \
   --label environment=dev \

@@ -8,6 +8,11 @@ fi
 export EDITOR="${EDITOR:-vim}"
 export PAGER="${PAGER:-less}"
 
+case ":$PATH:" in
+  *":$HOME/bin:"*) ;;
+  *) export PATH="$HOME/bin:$PATH" ;;
+esac
+
 HISTFILE="$HOME/.zsh_history"
 HISTSIZE=50000
 SAVEHIST=50000

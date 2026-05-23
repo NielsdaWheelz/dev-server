@@ -5,11 +5,18 @@ alias work='cd ~/src/work'
 alias personal='cd ~/src/personal'
 alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
 
+case ":$PATH:" in
+  *":$HOME/bin:"*) ;;
+  *) export PATH="$HOME/bin:$PATH" ;;
+esac
+
 # Directory-aware AI account routing.
 #
 # The state directory is the auth/config/history boundary. Normal `codex` and
 # `claude` calls resolve personal vs work from the current directory. Explicit
-# override commands exist for debugging and one-off use.
+# override commands exist for debugging and one-off use. The Codex functions
+# deliberately re-resolve the home even when CODEX_HOME is inherited; only the
+# explicit wrappers set CODEX_HOME_LOCKED=1.
 export AI_PERSONAL_ROOT="${AI_PERSONAL_ROOT:-$HOME/src/personal}"
 export AI_WORK_ROOT="${AI_WORK_ROOT:-$HOME/src/work}"
 
@@ -131,10 +138,10 @@ codex() {
     return 127
   fi
 
-  if [[ -n "${CODEX_HOME:-}" ]]; then
-    "$real_codex" "$@"
+  if [[ "${CODEX_HOME_LOCKED:-}" = "1" && -n "${CODEX_HOME:-}" ]]; then
+    CODEX_HOME="$CODEX_HOME" CODEX_HOME_LOCKED=1 "$real_codex" "$@"
   else
-    CODEX_HOME="$(codex-home "$@")" "$real_codex" "$@"
+    CODEX_HOME="$(codex-home "$@")" CODEX_HOME_LOCKED=1 "$real_codex" "$@"
   fi
 }
 
@@ -155,11 +162,11 @@ claude() {
 }
 
 codex-personal() {
-  CODEX_HOME="$CODEX_HOME_PERSONAL" codex "$@"
+  CODEX_HOME="$CODEX_HOME_PERSONAL" CODEX_HOME_LOCKED=1 codex "$@"
 }
 
 codex-work() {
-  CODEX_HOME="$CODEX_HOME_WORK" codex "$@"
+  CODEX_HOME="$CODEX_HOME_WORK" CODEX_HOME_LOCKED=1 codex "$@"
 }
 
 claude-personal() {
