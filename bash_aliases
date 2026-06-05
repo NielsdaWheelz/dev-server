@@ -1,14 +1,36 @@
-alias ll='ls -lah'
+if command -v eza >/dev/null 2>&1; then
+  alias ls='eza'
+  alias ll='eza -lah --git --group-directories-first'
+  alias tree='eza --tree'
+else
+  alias ll='ls -lah'
+fi
+
+if command -v bat >/dev/null 2>&1; then
+  alias catp='bat'
+fi
+
+if command -v lazygit >/dev/null 2>&1; then
+  alias lg='lazygit'
+fi
+
+if command -v yazi >/dev/null 2>&1; then
+  alias y='yazi'
+fi
+
 alias gs='git status --short --branch'
 alias t='tmux new -A -s main'
 alias work='cd ~/src/work'
 alias personal='cd ~/src/personal'
 alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
 
-case ":$PATH:" in
-  *":$HOME/bin:"*) ;;
-  *) export PATH="$HOME/bin:$PATH" ;;
-esac
+for _devbox_path_dir in "$HOME/.local/share/mise/shims" "$HOME/.local/bin" "$HOME/bin"; do
+  case ":$PATH:" in
+    *":$_devbox_path_dir:"*) ;;
+    *) export PATH="$_devbox_path_dir:$PATH" ;;
+  esac
+done
+unset _devbox_path_dir
 
 # Directory-aware AI account routing.
 #

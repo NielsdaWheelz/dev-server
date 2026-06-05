@@ -1,0 +1,658 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+server_name="${DEVBOX_SERVER_NAME:-dev-server}"
+server_type="${DEVBOX_SERVER_TYPE:-cpx21}"
+server_image="${DEVBOX_SERVER_IMAGE:-ubuntu-24.04}"
+server_image_architecture="${DEVBOX_SERVER_IMAGE_ARCHITECTURE:-x86}"
+server_location="${DEVBOX_SERVER_LOCATION:-hil}"
+hcloud_context="${DEVBOX_HCLOUD_CONTEXT:-dev-infra}"
+ssh_key_name="${DEVBOX_HCLOUD_SSH_KEY:-niels-macbook}"
+firewall_name="${DEVBOX_FIREWALL:-dev-server-private}"
+server_user="${DEVBOX_USER:-niels}"
+ssh_identity="${DEVBOX_SSH_IDENTITY:-$HOME/.ssh/id_ed25519}"
+ssh_config="${DEVBOX_SSH_CONFIG:-$HOME/.ssh/config}"
+ssh_include_dir="${DEVBOX_SSH_INCLUDE_DIR:-$HOME/.ssh/config.d}"
+ssh_include="${DEVBOX_SSH_INCLUDE:-$ssh_include_dir/$server_name}"
+state_file="${DEVBOX_STATE_FILE:-$base_dir/secrets/devbox-state.env}"
+tailscale_auth_key_file="${DEVBOX_TAILSCALE_AUTH_KEY_FILE:-$base_dir/secrets/tailscale-auth-key}"
+
+template="$base_dir/cloud-init-devbox.template.yaml"
+output="$base_dir/cloud-init-devbox.yaml"
+private_key="$base_dir/secrets/id_ed25519_github"
+public_key="$base_dir/secrets/id_ed25519_github.pub"
+bash_aliases="$base_dir/bash_aliases"
+zshrc="$base_dir/zshrc"
+p10k_zsh="$base_dir/p10k.zsh"
+
+bootstrap_ssh_description="Temporary bootstrap SSH from operator IPv4"
+
+log() {
+  printf '==> %s\n' "$*"
+}
+
+warn() {
+  printf 'warning: %s\n' "$*" >&2
+}
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<EOF
+Usage: ./devbox <command>
+
+Commands:
+  up        Render cloud-init, converge firewall, create/reuse the VPS, enroll Tailscale, update SSH, and lock down public SSH.
+  rebuild   Delete and recreate the VPS, then run the same flow as up.
+  lockdown  Run the post-Tailscale public SSH lockdown and remove the temporary Hetzner SSH rule.
+  doctor    Check local config and live server health.
+  render    Render and validate cloud-init only.
+
+Important env overrides:
+  DEVBOX_TAILSCALE_AUTH_KEY      Short-lived Tailscale auth key for first boot.
+  DEVBOX_BOOTSTRAP_SSH_CIDR      Temporary public SSH source CIDR, defaults to current IPv4 /32.
+  DEVBOX_SKIP_LOCKDOWN=1         Leave temporary public SSH open after up.
+  DEVBOX_CONFIRM_REBUILD=dev-server
+EOF
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
+}
+
+hcloud_cmd() {
+  hcloud --context "$hcloud_context" "$@"
+}
+
+load_state() {
+  if [[ -f "$state_file" ]]; then
+    # shellcheck disable=SC1090
+    source "$state_file"
+  fi
+}
+
+save_state() {
+  mkdir -p "$(dirname "$state_file")"
+  chmod 700 "$(dirname "$state_file")"
+  {
+    printf 'STATE_BOOTSTRAP_SSH_CIDR=%q\n' "${1:-}"
+    printf 'STATE_PUBLIC_IP=%q\n' "${2:-}"
+    printf 'STATE_TAILSCALE_IP=%q\n' "${3:-}"
+  } > "$state_file"
+  chmod 600 "$state_file"
+}
+
+current_public_ipv4() {
+  curl -fsS4 https://api.ipify.org
+}
+
+validate_ipv4_cidr() {
+  [[ "$1" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]
+}
+
+bootstrap_ssh_cidr() {
+  local cidr="${DEVBOX_BOOTSTRAP_SSH_CIDR:-}"
+
+  if [[ -z "$cidr" ]]; then
+    cidr="$(current_public_ipv4)/32"
+  fi
+
+  validate_ipv4_cidr "$cidr" || die "bootstrap SSH CIDR must be IPv4 CIDR, got: $cidr"
+  printf '%s\n' "$cidr"
+}
+
+lockdown_bootstrap_ssh_cidr() {
+  local cidr="${DEVBOX_BOOTSTRAP_SSH_CIDR:-${STATE_BOOTSTRAP_SSH_CIDR:-}}"
+
+  if [[ -z "$cidr" ]]; then
+    warn "no saved bootstrap CIDR; falling back to current public IPv4"
+    cidr="$(current_public_ipv4)/32"
+  fi
+
+  validate_ipv4_cidr "$cidr" || die "bootstrap SSH CIDR must be IPv4 CIDR, got: $cidr"
+  printf '%s\n' "$cidr"
+}
+
+tailscale_auth_key() {
+  local key="${DEVBOX_TAILSCALE_AUTH_KEY:-}"
+
+  if [[ -z "$key" && -f "$tailscale_auth_key_file" ]]; then
+    key="$(tr -d '\r\n' < "$tailscale_auth_key_file")"
+  fi
+
+  printf '%s' "$key"
+}
+
+require_tailscale_auth_key() {
+  local key
+  key="$(tailscale_auth_key)"
+
+  if [[ -z "$key" ]]; then
+    die "missing Tailscale auth key. Save a short-lived non-ephemeral key to $tailscale_auth_key_file or export DEVBOX_TAILSCALE_AUTH_KEY."
+  fi
+}
+
+base64_file() {
+  if base64 --help 2>&1 | grep -q -- '-w'; then
+    base64 -w 0 "$1"
+  else
+    base64 -i "$1" | tr -d '\n'
+  fi
+}
+
+base64_string() {
+  printf '%s' "$1" | base64 | tr -d '\n'
+}
+
+ensure_github_ssh_key_files() {
+  mkdir -p "$base_dir/secrets"
+  chmod 700 "$base_dir/secrets"
+
+  if [[ ! -f "$private_key" ]]; then
+    log "generating dedicated GitHub SSH key for the dev box"
+    ssh-keygen -t ed25519 -C 'niels-dev-server-github' -f "$private_key" -N ''
+  fi
+
+  if [[ ! -f "$public_key" ]]; then
+    ssh-keygen -y -f "$private_key" > "$public_key"
+  fi
+
+  chmod 600 "$private_key"
+  chmod 644 "$public_key"
+}
+
+preflight_common() {
+  require_cmd ssh
+  require_cmd ssh-keygen
+  require_cmd curl
+  require_cmd awk
+  require_cmd base64
+  require_cmd ruby
+}
+
+preflight_render() {
+  preflight_common
+  ensure_github_ssh_key_files
+
+  for path in "$template" "$bash_aliases" "$zshrc" "$p10k_zsh"; do
+    [[ -f "$path" ]] || die "missing required file: $path"
+  done
+}
+
+preflight_hcloud() {
+  require_cmd hcloud
+}
+
+preflight_hcloud_create() {
+  preflight_hcloud
+
+  hcloud_cmd server-type describe "$server_type" >/dev/null
+  hcloud_cmd image describe --architecture "$server_image_architecture" "$server_image" >/dev/null
+  hcloud_cmd ssh-key describe "$ssh_key_name" >/dev/null
+}
+
+render_cloud_init() {
+  local cidr="$1"
+  local ts_key="$2"
+  local private_b64 public_b64 bash_aliases_b64 zshrc_b64 p10k_zsh_b64 tailscale_key_b64
+
+  private_b64="$(base64_file "$private_key")"
+  public_b64="$(base64_file "$public_key")"
+  bash_aliases_b64="$(base64_file "$bash_aliases")"
+  zshrc_b64="$(base64_file "$zshrc")"
+  p10k_zsh_b64="$(base64_file "$p10k_zsh")"
+  tailscale_key_b64="$(base64_string "$ts_key")"
+
+  awk \
+    -v private_key="$private_b64" \
+    -v public_key="$public_b64" \
+    -v bash_aliases="$bash_aliases_b64" \
+    -v zshrc="$zshrc_b64" \
+    -v p10k_zsh="$p10k_zsh_b64" \
+    -v tailscale_auth_key="$tailscale_key_b64" \
+    -v bootstrap_ssh_cidr="$cidr" \
+    -v server_name="$server_name" \
+    -v server_user="$server_user" \
+    '{
+      gsub("__GITHUB_SSH_PRIVATE_KEY_B64__", private_key)
+      gsub("__GITHUB_SSH_PUBLIC_KEY_B64__", public_key)
+      gsub("__BASH_ALIASES_B64__", bash_aliases)
+      gsub("__ZSHRC_B64__", zshrc)
+      gsub("__P10K_ZSH_B64__", p10k_zsh)
+      gsub("__TAILSCALE_AUTH_KEY_B64__", tailscale_auth_key)
+      gsub("__BOOTSTRAP_SSH_CIDR__", bootstrap_ssh_cidr)
+      gsub("__SERVER_NAME__", server_name)
+      gsub("__SERVER_USER__", server_user)
+      print
+    }' "$template" > "$output"
+
+  chmod 600 "$output"
+  log "rendered $output"
+  log "bootstrap SSH CIDR: $cidr"
+  if [[ -n "$ts_key" ]]; then
+    log "Tailscale auth key: present"
+  else
+    warn "Tailscale auth key: missing; first boot will not auto-enroll Tailscale"
+  fi
+}
+
+validate_rendered_cloud_init() {
+  ruby -e "require 'yaml'; YAML.load_file('$output'); puts 'cloud-init yaml ok'"
+
+  if grep -n '__[A-Z0-9_][A-Z0-9_]*__' "$output"; then
+    die "rendered cloud-init still contains placeholders"
+  fi
+}
+
+server_exists() {
+  hcloud_cmd server describe "$server_name" >/dev/null 2>&1
+}
+
+server_public_ip() {
+  hcloud_cmd server describe "$server_name" -o 'format={{.PublicNet.IPv4.IP}}'
+}
+
+ensure_firewall() {
+  local cidr="$1"
+
+  if ! hcloud_cmd firewall describe "$firewall_name" >/dev/null 2>&1; then
+    log "creating Hetzner firewall $firewall_name"
+    hcloud_cmd firewall create \
+      --name "$firewall_name" \
+      --label purpose=nexus-dev \
+      --label role=combined-nexus-dev
+  fi
+
+  add_firewall_rule udp 41641 "Tailscale direct WireGuard" 0.0.0.0/0 ::/0
+  add_firewall_rule tcp 80 "HTTP" 0.0.0.0/0 ::/0
+  add_firewall_rule tcp 443 "HTTPS" 0.0.0.0/0 ::/0
+  add_firewall_rule tcp 22 "$bootstrap_ssh_description" "$cidr"
+}
+
+add_firewall_rule() {
+  local protocol="$1"
+  local port="$2"
+  local description="$3"
+  shift 3
+
+  local args output_text
+  args=(firewall add-rule --direction in --protocol "$protocol" --port "$port" --description "$description")
+  for source_ip in "$@"; do
+    args+=(--source-ips "$source_ip")
+  done
+  args+=("$firewall_name")
+
+  if output_text="$(hcloud_cmd "${args[@]}" 2>&1)"; then
+    log "firewall rule added: $protocol/$port $description"
+    return
+  fi
+
+  case "$output_text" in
+    *already*exists*|*duplicate*|*already_exists*)
+      log "firewall rule already present: $protocol/$port $description"
+      ;;
+    *)
+      printf '%s\n' "$output_text" >&2
+      return 1
+      ;;
+  esac
+}
+
+delete_firewall_rule() {
+  local protocol="$1"
+  local port="$2"
+  local description="$3"
+  shift 3
+
+  local args output_text
+  args=(firewall delete-rule --direction in --protocol "$protocol" --port "$port" --description "$description")
+  for source_ip in "$@"; do
+    args+=(--source-ips "$source_ip")
+  done
+  args+=("$firewall_name")
+
+  if output_text="$(hcloud_cmd "${args[@]}" 2>&1)"; then
+    log "firewall rule deleted: $protocol/$port $description"
+    return
+  fi
+
+  case "$output_text" in
+    *not*found*|*does*not*exist*|*not_exists*)
+      log "firewall rule already absent: $protocol/$port $description"
+      ;;
+    *)
+      printf '%s\n' "$output_text" >&2
+      return 1
+      ;;
+  esac
+}
+
+create_server_if_needed() {
+  if server_exists; then
+    log "server already exists: $server_name"
+    return
+  fi
+
+  log "creating $server_name ($server_type, $server_location)"
+  hcloud_cmd server create \
+    --name "$server_name" \
+    --type "$server_type" \
+    --image "$server_image" \
+    --location "$server_location" \
+    --ssh-key "$ssh_key_name" \
+    --firewall "$firewall_name" \
+    --label purpose=nexus-dev \
+    --label environment=dev \
+    --label role=combined-nexus-dev \
+    --user-data-from-file "$output"
+}
+
+ensure_ssh_include_enabled() {
+  mkdir -p "$ssh_include_dir"
+  chmod 700 "$HOME/.ssh" "$ssh_include_dir"
+  touch "$ssh_config"
+  chmod 600 "$ssh_config"
+
+  local include_pattern="$ssh_include_dir/*"
+  if ! grep -Fqx "Include $include_pattern" "$ssh_config"; then
+    {
+      printf '\n# Managed devbox host includes\n'
+      printf 'Include %s\n' "$include_pattern"
+    } >> "$ssh_config"
+    log "enabled SSH include directory in $ssh_config"
+  fi
+}
+
+write_ssh_include() {
+  local primary_ip="$1"
+  local public_ip="${2:-}"
+
+  ensure_ssh_include_enabled
+
+  {
+    printf '# Managed by %s. Edits may be overwritten.\n' "$base_dir/devbox"
+    printf 'Host %s\n' "$server_name"
+    printf '  HostName %s\n' "$primary_ip"
+    printf '  User %s\n' "$server_user"
+    printf '  IdentityFile %s\n' "$ssh_identity"
+    printf '  IdentitiesOnly yes\n'
+    printf '  ServerAliveInterval 30\n'
+    printf '  ServerAliveCountMax 4\n'
+    printf '  StrictHostKeyChecking accept-new\n'
+    printf '  ForwardAgent no\n'
+
+    if [[ -n "$public_ip" && "$public_ip" != "$primary_ip" ]]; then
+      printf '\nHost %s-public\n' "$server_name"
+      printf '  HostName %s\n' "$public_ip"
+      printf '  User %s\n' "$server_user"
+      printf '  IdentityFile %s\n' "$ssh_identity"
+      printf '  IdentitiesOnly yes\n'
+      printf '  ServerAliveInterval 30\n'
+      printf '  ServerAliveCountMax 4\n'
+      printf '  StrictHostKeyChecking accept-new\n'
+      printf '  ForwardAgent no\n'
+    fi
+  } > "$ssh_include"
+
+  chmod 600 "$ssh_include"
+  log "wrote SSH include: $ssh_include"
+}
+
+remove_known_hosts() {
+  local host
+  for host in "$@"; do
+    [[ -n "$host" ]] || continue
+    ssh-keygen -R "$host" >/dev/null 2>&1 || true
+  done
+}
+
+ssh_devbox() {
+  ssh -o BatchMode=yes -o ConnectTimeout=10 "$server_name" "$@"
+}
+
+wait_for_ssh() {
+  local label="$1"
+  local attempt
+
+  log "waiting for SSH ($label)"
+  for attempt in {1..90}; do
+    if ssh_devbox 'true' >/dev/null 2>&1; then
+      return
+    fi
+    sleep 5
+  done
+
+  die "SSH did not become ready for $server_name"
+}
+
+wait_for_cloud_init() {
+  log "waiting for cloud-init"
+  if ! ssh_devbox 'sudo cloud-init status --wait'; then
+    warn "cloud-init failed; last bootstrap output follows"
+    ssh_devbox 'sudo tail -n 200 /var/log/cloud-init-output.log' || true
+    return 1
+  fi
+
+  ssh_devbox 'cat /etc/devbox-bootstrap.log'
+}
+
+wait_for_tailscale_ip() {
+  local attempt ip
+
+  log "waiting for Tailscale IPv4"
+  for attempt in {1..60}; do
+    ip="$(ssh_devbox 'tailscale ip -4 2>/dev/null | head -n 1' || true)"
+    if [[ -n "$ip" ]]; then
+      printf '%s\n' "$ip"
+      return
+    fi
+    sleep 5
+  done
+
+  die "Tailscale IPv4 did not appear"
+}
+
+lockdown_impl() {
+  local cidr="$1"
+  local public_ip="${2:-}"
+
+  validate_ipv4_cidr "$cidr" || die "cannot delete temporary SSH rule without a valid source CIDR"
+
+  log "running host public SSH lockdown"
+  ssh_devbox 'sudo /usr/local/sbin/devbox-lockdown-public-ssh.sh'
+
+  log "removing temporary Hetzner public SSH rule"
+  delete_firewall_rule tcp 22 "$bootstrap_ssh_description" "$cidr"
+
+  if [[ -n "$public_ip" ]]; then
+    log "verifying public SSH is closed"
+    if ssh \
+      -o BatchMode=yes \
+      -o ConnectTimeout=5 \
+      -o StrictHostKeyChecking=no \
+      -o UserKnownHostsFile=/dev/null \
+      -i "$ssh_identity" \
+      "$server_user@$public_ip" true >/dev/null 2>&1; then
+      warn "public SSH still succeeded for $public_ip"
+    else
+      log "public SSH is closed"
+    fi
+  fi
+}
+
+cmd_render() {
+  preflight_render
+  load_state
+
+  local cidr ts_key
+  cidr="$(bootstrap_ssh_cidr)"
+  ts_key="$(tailscale_auth_key)"
+
+  render_cloud_init "$cidr" "$ts_key"
+  validate_rendered_cloud_init
+}
+
+cmd_up() {
+  preflight_render
+  load_state
+  require_tailscale_auth_key
+  preflight_hcloud_create
+
+  local cidr ts_key public_ip tailscale_ip
+  cidr="$(bootstrap_ssh_cidr)"
+  ts_key="$(tailscale_auth_key)"
+
+  render_cloud_init "$cidr" "$ts_key"
+  validate_rendered_cloud_init
+  ensure_firewall "$cidr"
+  create_server_if_needed
+
+  public_ip="$(server_public_ip)"
+  save_state "$cidr" "$public_ip" "${STATE_TAILSCALE_IP:-}"
+  write_ssh_include "$public_ip" "$public_ip"
+  remove_known_hosts "$server_name" "$public_ip"
+
+  wait_for_ssh "public bootstrap"
+  wait_for_cloud_init
+
+  tailscale_ip="$(wait_for_tailscale_ip)"
+  save_state "$cidr" "$public_ip" "$tailscale_ip"
+  write_ssh_include "$tailscale_ip" "$public_ip"
+  remove_known_hosts "$server_name" "$tailscale_ip"
+  wait_for_ssh "Tailscale"
+
+  if [[ "${DEVBOX_SKIP_LOCKDOWN:-0}" != "1" ]]; then
+    lockdown_impl "$cidr" "$public_ip"
+  else
+    warn "skipping public SSH lockdown because DEVBOX_SKIP_LOCKDOWN=1"
+  fi
+
+  log "dev box ready: ssh $server_name"
+  log "remaining human auth: gh, Codex personal/work, Claude personal/work"
+}
+
+cmd_lockdown() {
+  preflight_common
+  preflight_hcloud
+  load_state
+
+  local cidr public_ip
+  cidr="$(lockdown_bootstrap_ssh_cidr)"
+
+  public_ip="${STATE_PUBLIC_IP:-}"
+  if [[ -z "$public_ip" ]] && server_exists; then
+    public_ip="$(server_public_ip)"
+  fi
+
+  if [[ -n "${STATE_TAILSCALE_IP:-}" ]]; then
+    write_ssh_include "$STATE_TAILSCALE_IP" "$public_ip"
+  fi
+
+  wait_for_ssh "current SSH config"
+  lockdown_impl "$cidr" "$public_ip"
+}
+
+confirm_rebuild() {
+  if [[ "${DEVBOX_CONFIRM_REBUILD:-}" == "$server_name" ]]; then
+    return
+  fi
+
+  printf 'This will delete and recreate Hetzner server %s. Type %s to continue: ' "$server_name" "$server_name" >&2
+  local answer
+  read -r answer
+  [[ "$answer" == "$server_name" ]] || die "rebuild cancelled"
+}
+
+wait_for_server_deleted() {
+  local attempt
+
+  for attempt in {1..60}; do
+    if ! server_exists; then
+      return
+    fi
+    sleep 3
+  done
+
+  die "server still exists after delete request"
+}
+
+cmd_rebuild() {
+  preflight_render
+  require_tailscale_auth_key
+  preflight_hcloud_create
+  confirm_rebuild
+
+  if server_exists; then
+    log "disabling delete/rebuild protection if present"
+    hcloud_cmd server disable-protection "$server_name" delete rebuild || true
+    log "deleting $server_name"
+    hcloud_cmd server delete "$server_name"
+    wait_for_server_deleted
+  fi
+
+  rm -f "$state_file"
+  unset STATE_BOOTSTRAP_SSH_CIDR STATE_PUBLIC_IP STATE_TAILSCALE_IP
+  cmd_up
+}
+
+cmd_doctor() {
+  preflight_common
+  preflight_hcloud
+  load_state
+
+  log "configuration"
+  printf 'server: %s\n' "$server_name"
+  printf 'hcloud context: %s\n' "$hcloud_context"
+  printf 'firewall: %s\n' "$firewall_name"
+  printf 'ssh include: %s\n' "$ssh_include"
+  printf 'state file: %s\n' "$state_file"
+
+  if [[ -f "$output" ]]; then
+    validate_rendered_cloud_init
+  else
+    warn "rendered cloud-init missing: $output"
+  fi
+
+  if server_exists; then
+    local public_ip
+    public_ip="$(server_public_ip)"
+    printf 'public IPv4: %s\n' "$public_ip"
+  else
+    warn "server does not exist: $server_name"
+    return
+  fi
+
+  if [[ -f "$ssh_include" ]]; then
+    ssh -G "$server_name" | awk '/^(hostname|user|identityfile) / {print}'
+  else
+    warn "SSH include missing: $ssh_include"
+  fi
+
+  if ssh_devbox 'true' >/dev/null 2>&1; then
+    ssh_devbox 'set -e; hostname; whoami; cloud-init status --long; tailscale ip -4 || true; systemctl is-active docker tailscaled earlyoom; df -h /; free -h; sudo ufw status verbose'
+  else
+    warn "ssh $server_name failed"
+  fi
+}
+
+main() {
+  local command="${1:-}"
+  shift || true
+
+  case "$command" in
+    up) cmd_up "$@" ;;
+    rebuild) cmd_rebuild "$@" ;;
+    lockdown) cmd_lockdown "$@" ;;
+    doctor) cmd_doctor "$@" ;;
+    render) cmd_render "$@" ;;
+    -h|--help|help|"") usage ;;
+    *) usage >&2; die "unknown command: $command" ;;
+  esac
+}
+
+main "$@"

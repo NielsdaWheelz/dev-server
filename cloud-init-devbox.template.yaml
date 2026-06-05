@@ -49,18 +49,23 @@ write_files:
   - path: /etc/systemd/journald.conf.d/00-devbox-persistent.conf
     permissions: "0644"
     content: |
-      # Persistent journald with a 1G cap so we can post-mortem OOMs and crashes
-      # after the cpx11->cpx31 upgrade. Pairs with /var/log/journal existing.
+      # Persistent journald with a 512M cap so we can post-mortem OOMs and
+      # crashes without letting logs crowd the cpx21's 80 GB disk.
       [Journal]
       Storage=persistent
-      SystemMaxUse=1G
+      SystemMaxUse=512M
+      MaxRetentionSec=14day
   - path: /etc/docker/daemon.json
     permissions: "0644"
     content: |
       {
         "log-driver": "json-file",
-        "log-opts": { "max-size": "50m", "max-file": "3" }
+        "log-opts": { "max-size": "20m", "max-file": "3" }
       }
+  - path: /etc/default/earlyoom
+    permissions: "0644"
+    content: |
+      EARLYOOM_ARGS="-r 60 -m 10 -s 20 --avoid '^(systemd|sshd|tailscaled|tmux|init|caddy|dockerd|containerd|postgres)$' --prefer '^(chrome|node|codex|claude|cursor-server|python|java|ruby)$'"
   - path: /home/niels/.gitignore_global
     owner: niels:niels
     permissions: "0644"
@@ -86,6 +91,17 @@ write_files:
     defer: true
     encoding: b64
     content: __ZSHRC_B64__
+  - path: /home/niels/.p10k.zsh
+    owner: niels:niels
+    permissions: "0644"
+    defer: true
+    encoding: b64
+    content: __P10K_ZSH_B64__
+  - path: /root/.devbox-tailscale-auth-key
+    owner: root:root
+    permissions: "0600"
+    encoding: b64
+    content: "__TAILSCALE_AUTH_KEY_B64__"
   - path: /home/niels/bin/codex
     owner: niels:niels
     permissions: "0755"
@@ -264,8 +280,22 @@ write_files:
       set -euxo pipefail
       export DEBIAN_FRONTEND=noninteractive
 
-      # No swapfile: 8 GB RAM + earlyoom should kill the worst process before
-      # we ever thrash. Swap was what turned the last OOM into a wedge.
+      # cpx21 has 4 GB RAM. Keep a modest swapfile for short agent/build
+      # bursts, while earlyoom still kills the worst process before a full
+      # system wedge.
+      if ! swapon --show=NAME --noheadings | grep -qx /swapfile; then
+        if [ ! -f /swapfile ]; then
+          fallocate -l 4G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=4096
+          chmod 600 /swapfile
+          mkswap /swapfile
+        fi
+        swapon /swapfile
+      fi
+      grep -qE '^[^#].*[[:space:]]/swapfile[[:space:]]' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+      cat > /etc/sysctl.d/99-devbox-swap.conf <<'SYSCTL'
+      vm.swappiness=20
+      SYSCTL
+      sysctl --system >/dev/null
 
       apt-get update
       apt-get install -y \
@@ -326,8 +356,11 @@ write_files:
         nodejs \
         tailscale
 
+      ln -sf /usr/bin/batcat /usr/local/bin/bat
+      ln -sf /usr/bin/fdfind /usr/local/bin/fd
+
       # Persistent journald: /etc/systemd/journald.conf.d/00-devbox-persistent.conf
-      # sets Storage=persistent + SystemMaxUse=1G. The dir must exist for it to
+      # sets Storage=persistent + SystemMaxUse=512M. The dir must exist for it to
       # actually persist across reboots.
       mkdir -p /var/log/journal
       systemd-tmpfiles --create --prefix /var/log/journal
@@ -336,6 +369,22 @@ write_files:
       systemctl enable --now docker
       systemctl restart docker
       systemctl enable --now tailscaled
+      if [ -s /root/.devbox-tailscale-auth-key ]; then
+        set +e +x
+        tailscale_auth_key="$(tr -d '\r\n' < /root/.devbox-tailscale-auth-key)"
+        if [ -n "$tailscale_auth_key" ]; then
+          tailscale up --auth-key "$tailscale_auth_key" --ssh --hostname=__SERVER_NAME__ --operator=__SERVER_USER__
+          tailscale_status=$?
+        else
+          tailscale_status=0
+        fi
+        unset tailscale_auth_key
+        shred -u /root/.devbox-tailscale-auth-key 2>/dev/null || rm -f /root/.devbox-tailscale-auth-key
+        set -e -x
+        if [ "$tailscale_status" -ne 0 ]; then
+          exit "$tailscale_status"
+        fi
+      fi
       systemctl enable --now fail2ban
       systemctl enable --now unattended-upgrades
       # earlyoom: kill the heaviest process before the whole VM wedges
@@ -343,29 +392,43 @@ write_files:
 
       usermod -aG docker niels
 
-      npm install -g @openai/codex @anthropic-ai/claude-code
-      corepack enable || true
-
-      mkdir -p /home/niels/src/work /home/niels/src/personal /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work /home/niels/.codex-personal /home/niels/.codex-work /home/niels/.zsh
+      mkdir -p /home/niels/src/work /home/niels/src/personal /home/niels/.ai-images /home/niels/bin /home/niels/.local/bin /home/niels/.npm /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work /home/niels/.codex-personal /home/niels/.codex-work /home/niels/.zsh
       if [ -d /home/niels/.codex ] && [ ! -L /home/niels/.codex ]; then
         mv /home/niels/.codex "/home/niels/.codex-default-archive-$(date +%Y%m%d-%H%M%S)"
       fi
       if [ ! -e /home/niels/.codex ]; then
         ln -s .codex-personal /home/niels/.codex
       fi
-      chown -R niels:niels /home/niels/src /home/niels/.ai-images /home/niels/bin /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work /home/niels/.codex-personal /home/niels/.codex-work /home/niels/.zsh
+      chown -R niels:niels /home/niels/src /home/niels/.ai-images /home/niels/bin /home/niels/.local /home/niels/.npm /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work /home/niels/.codex-personal /home/niels/.codex-work /home/niels/.zsh
       chown -h niels:niels /home/niels/.codex || true
       chmod 700 /home/niels/.ssh
       chmod 700 /home/niels/.claude-personal /home/niels/.claude-work
       chmod 700 /home/niels/.codex-personal /home/niels/.codex-work
 
+      # apt owns stable distro tools like fd, bat, and direnv. mise owns newer
+      # single-user tools that Ubuntu lacks or tends to ship stale.
+      sudo -H -u niels sh -c 'curl -fsSL https://mise.run | sh'
+      sudo -H -u niels env PATH="/home/niels/.local/bin:$PATH" MISE_YES=1 mise use -g -y --pin atuin@latest eza@latest delta@latest lazygit@latest yazi@latest
+
+      sudo -H -u niels npm config set prefix /home/niels/.local
+      sudo -H -u niels env PATH="/home/niels/.local/bin:$PATH" npm install -g @openai/codex @anthropic-ai/claude-code
+      sudo -H -u niels env PATH="/home/niels/.local/bin:$PATH" corepack enable --install-directory /home/niels/.local/bin || true
+
       ln -sf /home/niels/bin/codex /usr/local/bin/codex
       ln -sf /home/niels/bin/codex-personal /usr/local/bin/codex-personal
       ln -sf /home/niels/bin/codex-work /usr/local/bin/codex-work
 
+      if [ ! -d /home/niels/.oh-my-zsh/.git ]; then
+        rm -rf /home/niels/.oh-my-zsh
+        sudo -u niels git clone --depth 1 https://github.com/ohmyzsh/ohmyzsh.git /home/niels/.oh-my-zsh
+      fi
       if [ ! -d /home/niels/.zsh/fzf-tab/.git ]; then
         rm -rf /home/niels/.zsh/fzf-tab
         sudo -u niels git clone --depth 1 https://github.com/Aloxaf/fzf-tab /home/niels/.zsh/fzf-tab
+      fi
+      if [ ! -d /home/niels/.zsh/powerlevel10k/.git ]; then
+        rm -rf /home/niels/.zsh/powerlevel10k
+        sudo -u niels git clone --depth 1 https://github.com/romkatv/powerlevel10k.git /home/niels/.zsh/powerlevel10k
       fi
 
       # tpm for tmux-resurrect + tmux-continuum (session persistence across reboots)
@@ -387,13 +450,21 @@ write_files:
 
       sudo -u niels git config --global core.excludesfile /home/niels/.gitignore_global
       sudo -u niels git config --global init.defaultBranch main
+      sudo -u niels git config --global core.pager delta
+      sudo -u niels git config --global interactive.diffFilter 'delta --color-only'
+      sudo -u niels git config --global delta.navigate true
+      sudo -u niels git config --global delta.side-by-side false
+      sudo -u niels git config --global merge.conflictStyle zdiff3
       sudo -u niels git config --global --add url."git@github.com:".insteadOf "https://github.com/"
       sudo -u niels git config --global --add url."git@github.com:".insteadOf "gh:"
 
       # Temporary first-boot SSH. After Tailscale enrollment, run
       # /usr/local/sbin/devbox-lockdown-public-ssh.sh and remove the temporary
       # Hetzner Cloud Firewall SSH rule.
-      ufw allow 22/tcp
+      bootstrap_ssh_cidr="__BOOTSTRAP_SSH_CIDR__"
+      ufw allow from "$bootstrap_ssh_cidr" to any port 22 proto tcp
+      ufw allow 80/tcp
+      ufw allow 443/tcp
       ufw allow in on tailscale0
       ufw --force enable
 
@@ -410,13 +481,23 @@ write_files:
         zsh --version
         fzf --version
         zoxide --version
+        rg --version | head -n 1
+        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" fd --version | head -n 1
+        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" bat --version
+        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" eza --version | head -n 1
+        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" delta --version
+        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" lazygit --version | head -n 1
+        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" yazi --version | head -n 1
+        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" mise --version
+        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" direnv version
+        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" atuin --version
         docker --version
         docker compose version
         tailscale version | head -n 1
-        codex --version
-        sudo -H -u niels env PATH="/home/niels/bin:$PATH" CODEX_WRAPPER_PRINT_HOME=1 /home/niels/bin/codex --cd /home/niels/src/personal
-        sudo -H -u niels env PATH="/home/niels/bin:$PATH" CODEX_WRAPPER_PRINT_HOME=1 /home/niels/bin/codex --cd /home/niels/src/work
-        claude --version || true
+        sudo -H -u niels env PATH="/home/niels/bin:/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" codex --version
+        sudo -H -u niels env PATH="/home/niels/bin:/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" CODEX_WRAPPER_PRINT_HOME=1 /home/niels/bin/codex --cd /home/niels/src/personal
+        sudo -H -u niels env PATH="/home/niels/bin:/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" CODEX_WRAPPER_PRINT_HOME=1 /home/niels/bin/codex --cd /home/niels/src/work
+        sudo -H -u niels env PATH="/home/niels/bin:/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" claude --version || true
       } > /etc/devbox-bootstrap.log
   - path: /usr/local/sbin/devbox-lockdown-public-ssh.sh
     owner: root:root
@@ -425,7 +506,11 @@ write_files:
       #!/usr/bin/env bash
       set -euxo pipefail
 
+      bootstrap_ssh_cidr="__BOOTSTRAP_SSH_CIDR__"
+      ufw --force delete allow from "$bootstrap_ssh_cidr" to any port 22 proto tcp || true
       ufw --force delete allow 22/tcp || true
+      ufw allow 80/tcp
+      ufw allow 443/tcp
       ufw allow in on tailscale0
       ufw reload
       ufw status verbose

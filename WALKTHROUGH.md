@@ -1,111 +1,83 @@
 # Dev Server Walkthrough
 
-This walkthrough starts from a Mac with nothing configured and ends with a
-Hetzner VPS reachable through Tailscale, ready for Cursor Remote SSH, GitHub
-SSH, Docker, Codex, and Claude Code.
+This repo builds a combined Hetzner VPS: public HTTPS for one-user Nexus, and
+Tailscale-only SSH for Cursor Remote SSH, GitHub SSH, Docker, Codex, and Claude
+Code.
 
-The setup this repo builds is:
+The setup is:
 
 ```text
+Internet -> HTTPS -> dev-server/Caddy -> Nexus
 Mac/phone -> Tailscale -> dev-server -> tmux/Cursor/Codex/Claude/Docker/GitHub SSH
 ```
 
-The baseline server type is `cpx31` (4 vCPU / 8 GB RAM). It used to be `cpx11`
-(2 GB), but the dev box wedged on an OOM and we couldn't post-mortem cleanly,
-so we sized up for memory headroom. The cloud-init bootstrap also enables
-persistent journald, `earlyoom`, Docker log rotation, and tmux session
-persistence — see the "Dev Box Defaults" section in `README.md`.
+The normal workflow is the single local script:
 
-## 1. Install Local Tools On Mac
+```bash
+./devbox up
+```
 
-Install the local CLIs:
+It renders cloud-init, converges Hetzner firewall rules, creates or reuses the
+server, writes a managed SSH include file, waits for cloud-init, switches SSH to
+the Tailscale IP, and removes temporary public SSH.
+
+## 1. Local Prereqs
+
+Install local tools on the Mac:
 
 ```bash
 brew install hcloud gh
 ```
 
-Install the Tailscale Mac app from:
+For a matching local shell/dev stack, this machine uses:
+
+```bash
+brew install atuin eza git-delta lazygit yazi mise direnv fd bat
+```
+
+`zoxide`, `fzf`, and `ripgrep` are also part of the local shell/dev stack; the
+current Mac setup already had them installed.
+
+Install and sign into the Tailscale Mac app:
 
 ```text
 https://tailscale.com/download
 ```
 
-Open Tailscale, sign in, and make sure it says connected.
-
-## 2. Log Into GitHub CLI On Mac
+Log into GitHub CLI:
 
 ```bash
 gh auth login
-```
-
-Choose:
-
-```text
-GitHub.com
-SSH
-Login with a web browser
-```
-
-Verify:
-
-```bash
 gh auth status
 ```
 
-## 3. Configure Hetzner CLI
-
-Create a Hetzner Cloud API token in the Hetzner Cloud Console.
-
-Then create a local `hcloud` context:
+Configure the Hetzner context that owns the dev box:
 
 ```bash
-hcloud context create dev-server
-hcloud context use dev-server
-```
-
-Verify:
-
-```bash
+hcloud context create dev-infra
+hcloud context use dev-infra
 hcloud context active
-hcloud location list
 ```
 
-## 4. Create Or Upload Your Mac SSH Key To Hetzner
-
-If you do not already have a Mac SSH key:
+Upload your Mac SSH key to Hetzner if needed:
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -C "$(whoami)@$(hostname)-macbook"
-```
-
-Upload the public key to Hetzner:
-
-```bash
 hcloud ssh-key create \
   --name niels-macbook \
   --public-key-from-file ~/.ssh/id_ed25519.pub
 ```
 
-If it already exists, this command may fail with a duplicate-name error. That is
-fine. Check with:
+If the key already exists, the create command can fail with a duplicate-name
+error. Check with:
 
 ```bash
 hcloud ssh-key list
 ```
 
-## 5. Clone This Repo
+## 2. Repo Secrets
 
-```bash
-mkdir -p ~/Documents/code
-cd ~/Documents/code
-git clone https://github.com/NielsdaWheelz/dev-server.git
-cd dev-server
-```
-
-## 6. Create The Dedicated GitHub SSH Key For The Server
-
-This key belongs to the dev server, not your Mac. It lets the server clone and
-push GitHub repos without forwarding your Mac SSH agent.
+Create the dedicated GitHub SSH key for the server if it does not already exist:
 
 ```bash
 mkdir -p secrets
@@ -118,7 +90,7 @@ chmod 600 secrets/id_ed25519_github
 chmod 644 secrets/id_ed25519_github.pub
 ```
 
-Add that public key to your GitHub account:
+Add the public key to GitHub:
 
 ```bash
 gh ssh-key add secrets/id_ed25519_github.pub \
@@ -126,573 +98,125 @@ gh ssh-key add secrets/id_ed25519_github.pub \
   --type authentication
 ```
 
-## 7. Render The Cloud-Init File
-
-The template is safe to commit. The rendered file is not, because it contains
-the server's GitHub private key.
+Create a short-lived, non-ephemeral Tailscale auth key in the Tailscale admin
+console. Save it locally:
 
 ```bash
-./render-cloud-init.sh
+printf '%s' 'tskey-auth-...' > secrets/tailscale-auth-key
+chmod 600 secrets/tailscale-auth-key
 ```
 
-Verify the YAML parses:
+The key is injected into generated cloud-init, used once during first boot, and
+then removed from the server. The generated `cloud-init-devbox.yaml` remains a
+secret file and is ignored by git.
+
+## 3. One-Shot Create Or Update
+
+Run:
 
 ```bash
-ruby -e "require 'yaml'; YAML.load_file('cloud-init-devbox.yaml'); puts 'cloud-init yaml ok'"
+./devbox up
 ```
 
-## 8. Create The Hetzner Firewall
+What it does:
 
-Create a firewall:
+- Uses Hetzner context `dev-infra`.
+- Renders `cloud-init-devbox.yaml`.
+- Ensures firewall `dev-server-private` exists.
+- Ensures inbound UDP `41641`, TCP `80`, TCP `443`, and temporary TCP `22` from
+  your current public `/32`.
+- Creates `dev-server` as `cpx21` in Hillsboro if missing.
+- Writes `~/.ssh/config.d/dev-server` and ensures `~/.ssh/config` includes that
+  directory.
+- Waits for SSH and cloud-init.
+- Waits for the Tailscale IP.
+- Rewrites the `dev-server` SSH alias to the Tailscale IP.
+- Runs lockdown and deletes the temporary public SSH firewall rule.
 
-```bash
-hcloud firewall create \
-  --name dev-server-private \
-  --label purpose=remote-dev
-```
-
-Allow Tailscale direct WireGuard from the internet:
-
-```bash
-hcloud firewall add-rule \
-  --direction in \
-  --protocol udp \
-  --port 41641 \
-  --source-ips 0.0.0.0/0 \
-  --source-ips ::/0 \
-  --description "Tailscale direct WireGuard" \
-  dev-server-private
-```
-
-Temporarily allow public SSH only from your current public IPv4 for first boot
-and Tailscale enrollment:
-
-```bash
-MY_IP="$(curl -fsS4 https://api.ipify.org)/32"
-
-hcloud firewall add-rule \
-  --direction in \
-  --protocol tcp \
-  --port 22 \
-  --source-ips "$MY_IP" \
-  --description "Temporary bootstrap SSH from operator IPv4" \
-  dev-server-private
-```
-
-Later, after Tailscale works, you will remove this rule.
-
-## 9. Create The VPS
-
-Create a `cpx31` in Hillsboro (8 GB RAM baseline — sized up from `cpx11`
-after a memory-OOM incident on the old 2 GB box):
-
-```bash
-hcloud server create \
-  --name dev-server \
-  --type cpx31 \
-  --image ubuntu-24.04 \
-  --location hil \
-  --ssh-key niels-macbook \
-  --firewall dev-server-private \
-  --enable-backup \
-  --label purpose=remote-dev \
-  --label environment=dev \
-  --user-data-from-file ./cloud-init-devbox.yaml
-```
-
-Get the public IP:
-
-```bash
-hcloud server ip dev-server
-```
-
-## 10. Add The Initial Mac SSH Alias
-
-Edit your Mac SSH config:
-
-```bash
-mkdir -p ~/.ssh
-chmod 700 ~/.ssh
-nano ~/.ssh/config
-```
-
-Add this, replacing `PUBLIC_IP_FROM_HCLOUD`:
-
-```sshconfig
-Host dev-server
-  HostName PUBLIC_IP_FROM_HCLOUD
-  User niels
-  IdentityFile ~/.ssh/id_ed25519
-  IdentitiesOnly yes
-  ServerAliveInterval 30
-  ServerAliveCountMax 4
-  StrictHostKeyChecking accept-new
-  ForwardAgent no
-```
-
-Fix permissions:
-
-```bash
-chmod 600 ~/.ssh/config
-```
-
-## 11. Wait For Bootstrap To Finish
-
-```bash
-ssh dev-server 'cloud-init status --wait'
-```
-
-If it reports an error, inspect:
-
-```bash
-ssh dev-server 'sudo tail -n 200 /var/log/cloud-init-output.log'
-```
-
-Verify the installed tools:
-
-```bash
-ssh dev-server 'cat /etc/devbox-bootstrap.log'
-```
-
-Expected tools include:
-
-```text
-zsh
-fzf
-zoxide
-Node
-git
-gh
-tmux
-Docker
-Docker Compose
-Tailscale
-Codex CLI
-Claude Code
-earlyoom
-```
-
-## 11a. Set A Console Password For Niels
-
-Cloud-init can't set an interactive password, and the Hetzner web VNC console
-needs one to be useful as a break-glass when SSH dies. Set it manually:
-
-```bash
-ssh dev-server
-sudo passwd niels
-```
-
-Store the password in your password manager. SSH password auth stays off
-(`PasswordAuthentication no`); this password is only used at the serial/VNC
-console.
-
-## 12. Use The Shell Improvements
-
-New SSH sessions use Zsh with:
-
-```text
-zoxide `z` directory jumping
-fzf key bindings
-fzf-tab dropdown completion
-zsh-autosuggestions
-zsh-syntax-highlighting
-colored prompt with git branch
-```
-
-Try:
-
-```bash
-z src
-cd ~/src/work
-```
-
-Then press Tab after a partial command or path to see fzf-tab completions. The
-first few `z` jumps need normal `cd` usage before zoxide has enough history.
-
-## 13. Enter The Persistent Shell
+After it finishes:
 
 ```bash
 ssh dev-server
 tmux new -A -s main
 ```
 
-Detach without killing the session:
+The first login shell has Powerlevel10k, fzf/fzf-tab, zoxide, atuin, mise,
+direnv, eza aliases, delta Git diffs, lazygit, yazi, fd, bat, ripgrep, Docker,
+GitHub CLI, Codex, and Claude Code.
+
+## 4. Daily Commands
+
+Check local and live state:
+
+```bash
+./devbox doctor
+```
+
+Re-run public SSH lockdown:
+
+```bash
+./devbox lockdown
+```
+
+Render cloud-init without touching Hetzner:
+
+```bash
+./devbox render
+```
+
+Rebuild from scratch:
+
+```bash
+DEVBOX_CONFIRM_REBUILD=dev-server ./devbox rebuild
+```
+
+Or run `./devbox rebuild` and type `dev-server` at the confirmation prompt.
+
+## 5. Post-Provision Human Auth
+
+Cloud-init cannot complete browser/device auth for user tools. After a fresh
+rebuild, log into:
 
 ```text
-Ctrl-b then d
+gh
+Codex personal/work
+Claude Code personal/work
 ```
 
-Reattach:
-
-```bash
-ssh dev-server
-tmux attach -t main
-```
-
-## 14. Verify GitHub SSH From The Server
-
-On the server:
-
-```bash
-ssh -T git@github.com
-```
-
-Expected result:
-
-```text
-Hi USERNAME! You've successfully authenticated, but GitHub does not provide shell access.
-```
-
-## 15. Log Into GitHub CLI On The Server
-
-On the server:
-
-```bash
-gh auth login
-```
-
-Choose:
-
-```text
-GitHub.com
-SSH
-Login with a web browser
-Skip uploading an SSH key
-```
-
-Verify:
-
-```bash
-gh auth status
-```
-
-## 16. Log Into AI Subscriptions
-
-This bootstrap routes Codex and Claude Code state by folder:
+AI tool state is routed by folder:
 
 ```text
 ~/src/work/...      -> work
 everything else    -> personal
 ```
 
-The actual state directories are:
-
-```text
-Codex personal       ~/.codex-personal
-Codex work           ~/.codex-work
-Codex default        ~/.codex -> ~/.codex-personal
-Claude personal      ~/.claude-personal
-Claude work          ~/.claude-work
-```
-
-The bootstrap installs real `~/bin/codex`, `~/bin/codex-personal`, and
-`~/bin/codex-work` wrappers. Plain `codex` re-resolves the home from the current
-directory or `-C/--cd` target even if `CODEX_HOME` is inherited from another
-session. The explicit personal/work commands lock the requested home.
-
-Load the shell helpers if you are in an existing shell:
+Useful checks:
 
 ```bash
-source ~/.bash_aliases
-```
-
-Use `ai-whoami` to see the resolved context, state directories, and login
-status before doing expensive work:
-
-```bash
-cd ~/src/personal
 ai-whoami
-cd ~/src/work
-ai-whoami
-```
-
-Log Codex into personal:
-
-```bash
-cd ~/src/personal
-codex login --device-auth
-codex login status
-```
-
-Log Codex into work:
-
-```bash
-cd ~/src/work
-codex login --device-auth
-codex login status
-```
-
-Check which Codex home the current folder or `-C/--cd` target will use:
-
-```bash
 codex-home
-codex-home -C ~/src/work
-codex-home --cd ~/src/personal
-```
-
-Force a Codex account explicitly:
-
-```bash
-codex-personal login status
-codex-work login status
-```
-
-Log Claude Code into personal:
-
-```bash
-cd ~/src/personal
-claude auth login
-claude auth status
-```
-
-Log Claude Code into work:
-
-```bash
-cd ~/src/work
-claude auth login
-claude auth status
-```
-
-Check which Claude config dir the current folder will use:
-
-```bash
 claude-home
 ```
 
-Force a Claude Code account explicitly:
+## 6. Console Password
 
-```bash
-claude-personal auth status
-claude-work auth status
-```
-
-## 17. Enroll The Server In Tailscale
-
-On the server:
-
-```bash
-sudo tailscale up --ssh --hostname=dev-server --operator=niels
-```
-
-Open the printed login URL in your Mac browser and approve the server.
-
-Get the server's Tailscale IP:
-
-```bash
-tailscale ip -4
-```
-
-From your Mac, test the Tailscale path:
-
-```bash
-ssh niels@TAILSCALE_IP_FROM_SERVER
-```
-
-## 18. Switch The Mac SSH Alias To Tailscale
-
-Edit `~/.ssh/config` on your Mac.
-
-Change `dev-server` to use the Tailscale IP, and keep a public break-glass alias:
-
-```sshconfig
-Host dev-server
-  HostName TAILSCALE_IP_FROM_SERVER
-  User niels
-  IdentityFile ~/.ssh/id_ed25519
-  IdentitiesOnly yes
-  ServerAliveInterval 30
-  ServerAliveCountMax 4
-  StrictHostKeyChecking accept-new
-  ForwardAgent no
-
-Host dev-server-public
-  HostName PUBLIC_IP_FROM_HCLOUD
-  User niels
-  IdentityFile ~/.ssh/id_ed25519
-  IdentitiesOnly yes
-  ServerAliveInterval 30
-  ServerAliveCountMax 4
-  StrictHostKeyChecking accept-new
-  ForwardAgent no
-```
-
-Verify:
-
-```bash
-ssh dev-server 'hostname; whoami; tailscale ip -4'
-```
-
-## 19. Close Public SSH
-
-After `ssh dev-server` works through Tailscale, remove public SSH from both the
-host UFW rules and the Hetzner firewall:
-
-```bash
-ssh dev-server 'sudo /usr/local/sbin/devbox-lockdown-public-ssh.sh'
-```
-
-Then remove the temporary Hetzner Cloud Firewall SSH rule. Use the same public
-IPv4 source you used when creating the temporary rule:
-
-```bash
-MY_IP="$(curl -fsS4 https://api.ipify.org)/32"
-
-hcloud firewall delete-rule \
-  --direction in \
-  --protocol tcp \
-  --port 22 \
-  --source-ips "$MY_IP" \
-  --description "Temporary bootstrap SSH from operator IPv4" \
-  dev-server-private
-```
-
-Verify the firewall has only the Tailscale direct WireGuard rule:
-
-```bash
-hcloud firewall describe dev-server-private
-```
-
-Verify host UFW allows only Tailscale ingress:
-
-```bash
-ssh dev-server 'sudo ufw status verbose'
-```
-
-Verify the public path is closed:
-
-```bash
-ssh -o ConnectTimeout=5 dev-server-public 'true'
-```
-
-That should time out or fail.
-
-## 20. Connect Cursor
-
-Install Cursor's Remote SSH extension if needed.
-
-In Cursor:
-
-```text
-Cmd-Shift-P
-Remote-SSH: Connect to Host
-dev-server
-```
-
-Open:
-
-```text
-/home/niels/src/work
-```
-
-or:
-
-```text
-/home/niels/src/personal
-```
-
-## 21. Clone And Work
-
-On the server:
-
-```bash
-cd ~/src/work
-gh repo clone OWNER/REPO
-cd REPO
-codex
-claude
-docker compose up
-```
-
-Use `tmux` for long-running work:
-
-```bash
-tmux new -A -s repo-name
-```
-
-## 22. Connect From Android With Termux
-
-Install the Tailscale Android app and connect to the same tailnet.
-
-In Termux:
-
-```bash
-pkg update
-pkg install openssh tmux
-mkdir -p ~/.ssh
-chmod 700 ~/.ssh
-```
-
-Create a Termux SSH alias:
-
-```bash
-cat > ~/.ssh/config <<'EOF'
-Host dev-server
-  HostName TAILSCALE_IP_FROM_SERVER
-  User niels
-  ServerAliveInterval 30
-  ServerAliveCountMax 4
-  StrictHostKeyChecking accept-new
-EOF
-chmod 600 ~/.ssh/config
-```
-
-Connect:
+Cloud-init cannot set an interactive password. Set one for the Hetzner web VNC
+console after first boot:
 
 ```bash
 ssh dev-server
-tmux attach -t main
+sudo passwd niels
 ```
 
-In Termux, Volume Down acts as Ctrl. In nano, save with `Volume Down + O`,
-press Enter, and exit with `Volume Down + X`.
+SSH password auth stays disabled; this password is only for the serial/VNC
+console.
 
-## 23. Daily Use
+## 7. Clean Rebuild Policy
 
-From Mac:
+For this small combined Nexus/dev box, prefer clean rebuilds over copying the old
+home directory. Clone repos fresh, restore only required env files and secrets,
+and re-authenticate tools.
 
-```bash
-ssh dev-server
-tmux new -A -s main
-```
-
-Work folders:
-
-```text
-~/src/work
-~/src/personal
-```
-
-Public SSH should stay closed. Keep Tailscale connected on the client device.
-
-## 24. Rebuild Later
-
-To rebuild from scratch:
-
-```bash
-cd ~/Documents/code/dev-server
-./render-cloud-init.sh
-hcloud server delete dev-server
-hcloud server create \
-  --name dev-server \
-  --type cpx31 \
-  --image ubuntu-24.04 \
-  --location hil \
-  --ssh-key niels-macbook \
-  --firewall dev-server-private \
-  --enable-backup \
-  --label purpose=remote-dev \
-  --label environment=dev \
-  --user-data-from-file ./cloud-init-devbox.yaml
-```
-
-After rebuild, repeat the human login steps for:
-
-```text
-gh
-Codex personal/work
-Claude Code personal/work
-Tailscale
-```
-
-The dedicated GitHub SSH key is reused from `secrets/id_ed25519_github`, so you
-do not need to add a new GitHub SSH key unless you regenerate it.
+Do not migrate Codex/Claude histories, Cursor server state, Docker build cache,
+language package caches, or old `node_modules` trees unless you intentionally
+want that state.

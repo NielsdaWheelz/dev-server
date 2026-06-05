@@ -5,13 +5,20 @@ if [ -z "${ZSH_VERSION:-}" ]; then
   return 0 2>/dev/null || exit 0
 fi
 
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
 export EDITOR="${EDITOR:-vim}"
 export PAGER="${PAGER:-less}"
 
-case ":$PATH:" in
-  *":$HOME/bin:"*) ;;
-  *) export PATH="$HOME/bin:$PATH" ;;
-esac
+for _devbox_path_dir in "$HOME/.local/share/mise/shims" "$HOME/.local/bin" "$HOME/bin"; do
+  case ":$PATH:" in
+    *":$_devbox_path_dir:"*) ;;
+    *) export PATH="$_devbox_path_dir:$PATH" ;;
+  esac
+done
+unset _devbox_path_dir
 
 HISTFILE="$HOME/.zsh_history"
 HISTSIZE=50000
@@ -35,8 +42,16 @@ if [[ -x /usr/bin/dircolors ]]; then
   zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 fi
 
-autoload -Uz compinit
-compinit
+export ZSH="${ZSH:-$HOME/.oh-my-zsh}"
+ZSH_THEME=""
+plugins=(git)
+
+if [[ -r "$ZSH/oh-my-zsh.sh" ]]; then
+  source "$ZSH/oh-my-zsh.sh"
+else
+  autoload -Uz compinit
+  compinit
+fi
 
 zstyle ':completion:*' menu no
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
@@ -44,6 +59,18 @@ zstyle ':completion:*' squeeze-slashes true
 
 if command -v zoxide >/dev/null 2>&1; then
   eval "$(zoxide init zsh)"
+fi
+
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise activate zsh)"
+fi
+
+if command -v direnv >/dev/null 2>&1; then
+  eval "$(direnv hook zsh)"
+fi
+
+if command -v atuin >/dev/null 2>&1; then
+  eval "$(atuin init zsh)"
 fi
 
 if [[ -o interactive && -t 0 && -t 1 ]]; then
@@ -77,7 +104,18 @@ _dev_server_git_branch() {
   [[ -n "$branch" ]] && printf ' (%s)' "$branch"
 }
 
-PROMPT='%F{green}%n@%m%f:%F{blue}%~%f%F{yellow}$(_dev_server_git_branch)%f %# '
+if [[ -r "$HOME/.zsh/powerlevel10k/powerlevel10k.zsh-theme" ]]; then
+  export POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD=true
+  source "$HOME/.zsh/powerlevel10k/powerlevel10k.zsh-theme"
+
+  if [[ -r "$HOME/.p10k.zsh" ]]; then
+    source "$HOME/.p10k.zsh"
+  elif [[ -r "$HOME/.zsh/powerlevel10k/config/p10k-lean.zsh" ]]; then
+    source "$HOME/.zsh/powerlevel10k/config/p10k-lean.zsh"
+  fi
+else
+  PROMPT='%F{green}%n@%m%f:%F{blue}%~%f%F{yellow}$(_dev_server_git_branch)%f %# '
+fi
 
 # zsh-syntax-highlighting should be sourced after widgets and completions.
 if [[ -o interactive && -t 0 && -t 1 && -r /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
