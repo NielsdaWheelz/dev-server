@@ -79,12 +79,12 @@ write_files:
       .codex/
       .codex-personal/
       .codex-work/
-  - path: /home/niels/.bash_aliases
+  - path: /home/niels/.zsh_helpers
     owner: niels:niels
     permissions: "0644"
     defer: true
     encoding: b64
-    content: __BASH_ALIASES_B64__
+    content: __ZSH_HELPERS_B64__
   - path: /home/niels/.zshrc
     owner: niels:niels
     permissions: "0644"
@@ -399,6 +399,8 @@ write_files:
       if [ ! -e /home/niels/.codex ]; then
         ln -s .codex-personal /home/niels/.codex
       fi
+      rm -f /home/niels/.bash_aliases
+      rm -rf /home/niels/.oh-my-zsh
       chown -R niels:niels /home/niels/src /home/niels/.ai-images /home/niels/bin /home/niels/.local /home/niels/.npm /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work /home/niels/.codex-personal /home/niels/.codex-work /home/niels/.zsh
       chown -h niels:niels /home/niels/.codex || true
       chmod 700 /home/niels/.ssh
@@ -418,10 +420,6 @@ write_files:
       ln -sf /home/niels/bin/codex-personal /usr/local/bin/codex-personal
       ln -sf /home/niels/bin/codex-work /usr/local/bin/codex-work
 
-      if [ ! -d /home/niels/.oh-my-zsh/.git ]; then
-        rm -rf /home/niels/.oh-my-zsh
-        sudo -u niels git clone --depth 1 https://github.com/ohmyzsh/ohmyzsh.git /home/niels/.oh-my-zsh
-      fi
       if [ ! -d /home/niels/.zsh/fzf-tab/.git ]; then
         rm -rf /home/niels/.zsh/fzf-tab
         sudo -u niels git clone --depth 1 https://github.com/Aloxaf/fzf-tab /home/niels/.zsh/fzf-tab

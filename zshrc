@@ -42,16 +42,14 @@ if [[ -x /usr/bin/dircolors ]]; then
   zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 fi
 
-export ZSH="${ZSH:-$HOME/.oh-my-zsh}"
-ZSH_THEME=""
-plugins=(git)
-
-if [[ -r "$ZSH/oh-my-zsh.sh" ]]; then
-  source "$ZSH/oh-my-zsh.sh"
+autoload -Uz compinit
+_devbox_zcompdump="${XDG_CACHE_HOME:-$HOME/.cache}/zcompdump"
+if mkdir -p "${_devbox_zcompdump:h}" 2>/dev/null; then
+  compinit -d "$_devbox_zcompdump"
 else
-  autoload -Uz compinit
   compinit
 fi
+unset _devbox_zcompdump
 
 zstyle ':completion:*' menu no
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
@@ -94,8 +92,8 @@ if [[ -o interactive && -t 0 && -t 1 ]]; then
   fi
 fi
 
-if [[ -r "$HOME/.bash_aliases" ]]; then
-  source "$HOME/.bash_aliases"
+if [[ -r "$HOME/.zsh_helpers" ]]; then
+  source "$HOME/.zsh_helpers"
 fi
 
 _dev_server_git_branch() {

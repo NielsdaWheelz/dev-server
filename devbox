@@ -23,7 +23,7 @@ template="$base_dir/cloud-init-devbox.template.yaml"
 output="$base_dir/cloud-init-devbox.yaml"
 private_key="$base_dir/secrets/id_ed25519_github"
 public_key="$base_dir/secrets/id_ed25519_github.pub"
-bash_aliases="$base_dir/bash_aliases"
+zsh_helpers="$base_dir/zsh_helpers"
 zshrc="$base_dir/zshrc"
 p10k_zsh="$base_dir/p10k.zsh"
 
@@ -179,7 +179,7 @@ preflight_render() {
   preflight_common
   ensure_github_ssh_key_files
 
-  for path in "$template" "$bash_aliases" "$zshrc" "$p10k_zsh"; do
+  for path in "$template" "$zsh_helpers" "$zshrc" "$p10k_zsh"; do
     [[ -f "$path" ]] || die "missing required file: $path"
   done
 }
@@ -199,11 +199,11 @@ preflight_hcloud_create() {
 render_cloud_init() {
   local cidr="$1"
   local ts_key="$2"
-  local private_b64 public_b64 bash_aliases_b64 zshrc_b64 p10k_zsh_b64 tailscale_key_b64
+  local private_b64 public_b64 zsh_helpers_b64 zshrc_b64 p10k_zsh_b64 tailscale_key_b64
 
   private_b64="$(base64_file "$private_key")"
   public_b64="$(base64_file "$public_key")"
-  bash_aliases_b64="$(base64_file "$bash_aliases")"
+  zsh_helpers_b64="$(base64_file "$zsh_helpers")"
   zshrc_b64="$(base64_file "$zshrc")"
   p10k_zsh_b64="$(base64_file "$p10k_zsh")"
   tailscale_key_b64="$(base64_string "$ts_key")"
@@ -211,7 +211,7 @@ render_cloud_init() {
   awk \
     -v private_key="$private_b64" \
     -v public_key="$public_b64" \
-    -v bash_aliases="$bash_aliases_b64" \
+    -v zsh_helpers="$zsh_helpers_b64" \
     -v zshrc="$zshrc_b64" \
     -v p10k_zsh="$p10k_zsh_b64" \
     -v tailscale_auth_key="$tailscale_key_b64" \
@@ -221,7 +221,7 @@ render_cloud_init() {
     '{
       gsub("__GITHUB_SSH_PRIVATE_KEY_B64__", private_key)
       gsub("__GITHUB_SSH_PUBLIC_KEY_B64__", public_key)
-      gsub("__BASH_ALIASES_B64__", bash_aliases)
+      gsub("__ZSH_HELPERS_B64__", zsh_helpers)
       gsub("__ZSHRC_B64__", zshrc)
       gsub("__P10K_ZSH_B64__", p10k_zsh)
       gsub("__TAILSCALE_AUTH_KEY_B64__", tailscale_auth_key)
@@ -293,7 +293,7 @@ add_firewall_rule() {
   fi
 
   case "$output_text" in
-    *already*exists*|*duplicate*|*already_exists*)
+    *already*exists*|*duplicate*)
       log "firewall rule already present: $protocol/$port $description"
       ;;
     *)
@@ -417,10 +417,10 @@ ssh_devbox() {
 
 wait_for_ssh() {
   local label="$1"
-  local attempt
+  local _attempt
 
   log "waiting for SSH ($label)"
-  for attempt in {1..90}; do
+  for _attempt in {1..90}; do
     if ssh_devbox 'true' >/dev/null 2>&1; then
       return
     fi
@@ -442,10 +442,10 @@ wait_for_cloud_init() {
 }
 
 wait_for_tailscale_ip() {
-  local attempt ip
+  local _attempt ip
 
   log "waiting for Tailscale IPv4"
-  for attempt in {1..60}; do
+  for _attempt in {1..60}; do
     ip="$(ssh_devbox 'tailscale ip -4 2>/dev/null | head -n 1' || true)"
     if [[ -n "$ip" ]]; then
       printf '%s\n' "$ip"
@@ -569,9 +569,9 @@ confirm_rebuild() {
 }
 
 wait_for_server_deleted() {
-  local attempt
+  local _attempt
 
-  for attempt in {1..60}; do
+  for _attempt in {1..60}; do
     if ! server_exists; then
       return
     fi

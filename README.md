@@ -11,12 +11,13 @@ For the full from-scratch setup, see [WALKTHROUGH.md](WALKTHROUGH.md).
   `./devbox doctor`, `./devbox rebuild`, and `./devbox render`.
 - `cloud-init-devbox.template.yaml`: non-secret source template. Edit this file
   when changing the server bootstrap.
-- `bash_aliases`: shell helpers injected into the server. This is the source of
-  truth for directory-aware Codex/Claude account routing.
+- `zsh_helpers`: Zsh helpers injected into the server as
+  `/home/niels/.zsh_helpers`. This is the source of truth for
+  directory-aware Codex/Claude account routing.
 - `zshrc`: managed Zsh config injected into the server. Enables zoxide `z`,
   fzf key bindings, fzf-tab completions, `mise`, `direnv`, `atuin`,
-  autosuggestions, syntax highlighting, Oh My Zsh, Powerlevel10k, and `~/bin`
-  command wrappers.
+  autosuggestions, syntax highlighting, Powerlevel10k, and `~/bin` command
+  wrappers.
 - `p10k.zsh`: managed Powerlevel10k prompt config injected into the server as
   `/home/niels/.p10k.zsh`.
 - `secrets/id_ed25519_github`: dedicated GitHub SSH private key for this dev
@@ -107,7 +108,7 @@ If you change one of these, update the section below so future rebuilds match.
   diff filter, with `zdiff3` conflict markers.
 - The managed `~/.zshrc` is a curated Ubuntu remote-dev shell, not a copy of the
   Mac `~/.zshrc`. It includes PATH setup, history, fzf, fzf-tab, zoxide,
-  `mise`, `direnv`, `atuin`, Oh My Zsh with the `git` plugin, Powerlevel10k,
+  `mise`, `direnv`, `atuin`, direct Zsh completion setup, Powerlevel10k,
   autosuggestions, syntax highlighting, and the AI account routing helpers. It
   intentionally omits Mac-only Homebrew paths, Android SDK, Homebrew Java setup,
   and project-specific language/runtime tools.

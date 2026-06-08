@@ -1,3 +1,5 @@
+# Managed Zsh interactive helpers for the dev box.
+
 if command -v eza >/dev/null 2>&1; then
   alias ls='eza'
   alias ll='eza -lah --git --group-directories-first'
