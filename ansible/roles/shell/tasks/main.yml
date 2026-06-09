@@ -1,0 +1,123 @@
+---
+- name: Install managed zsh helpers
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../zsh_helpers"
+    dest: "/home/{{ devbox_user }}/.zsh_helpers"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0644"
+
+- name: Install managed zshrc
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../zshrc"
+    dest: "/home/{{ devbox_user }}/.zshrc"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0644"
+
+- name: Install managed p10k config
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../p10k.zsh"
+    dest: "/home/{{ devbox_user }}/.p10k.zsh"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0644"
+
+- name: Install tmux config
+  ansible.builtin.copy:
+    dest: "/home/{{ devbox_user }}/.tmux.conf"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0644"
+    content: |
+      set -g mouse on
+      set -g history-limit 50000
+      set -g renumber-windows on
+      set -g base-index 1
+      setw -g pane-base-index 1
+      set -g status-interval 5
+      set -g status-left '[#S] '
+      set -g status-right '#H %Y-%m-%d %H:%M'
+      set -g @plugin 'tmux-plugins/tpm'
+      set -g @plugin 'tmux-plugins/tmux-resurrect'
+      set -g @plugin 'tmux-plugins/tmux-continuum'
+      set -g @continuum-restore 'on'
+      run '~/.tmux/plugins/tpm/tpm'
+
+- name: Install global gitignore
+  ansible.builtin.copy:
+    dest: "/home/{{ devbox_user }}/.gitignore_global"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0644"
+    content: |
+      .DS_Store
+      .env
+      .env.*
+      .ai-images/
+      .claude/
+      .codex/
+      .codex-personal/
+      .codex-work/
+
+- name: Ensure tmux plugin directory exists
+  ansible.builtin.file:
+    path: "/home/{{ devbox_user }}/.tmux/plugins"
+    state: directory
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0755"
+
+- name: Install shell git repos
+  ansible.builtin.git:
+    repo: "{{ item.repo }}"
+    dest: "{{ item.dest }}"
+    update: true
+    force: false
+  become: true
+  become_user: "{{ devbox_user }}"
+  loop:
+    - repo: https://github.com/Aloxaf/fzf-tab
+      dest: "/home/{{ devbox_user }}/.zsh/fzf-tab"
+    - repo: https://github.com/romkatv/powerlevel10k.git
+      dest: "/home/{{ devbox_user }}/.zsh/powerlevel10k"
+    - repo: https://github.com/tmux-plugins/tpm
+      dest: "/home/{{ devbox_user }}/.tmux/plugins/tpm"
+
+- name: Install tmux plugins headlessly
+  ansible.builtin.command: /home/{{ devbox_user }}/.tmux/plugins/tpm/bin/install_plugins
+  become: true
+  become_user: "{{ devbox_user }}"
+  changed_when: false
+  failed_when: false
+
+- name: Set user shell to zsh
+  ansible.builtin.user:
+    name: "{{ devbox_user }}"
+    shell: /usr/bin/zsh
+
+- name: Configure git defaults
+  ansible.builtin.command: "git config --global {{ item.name }} {{ item.value | quote }}"
+  become: true
+  become_user: "{{ devbox_user }}"
+  changed_when: false
+  loop:
+    - { name: core.excludesfile, value: "/home/{{ devbox_user }}/.gitignore_global" }
+    - { name: init.defaultBranch, value: main }
+    - { name: core.pager, value: delta }
+    - { name: interactive.diffFilter, value: "delta --color-only" }
+    - { name: delta.navigate, value: "true" }
+    - { name: delta.side-by-side, value: "false" }
+    - { name: merge.conflictStyle, value: zdiff3 }
+
+- name: Configure GitHub SSH URL rewrites
+  ansible.builtin.shell: |
+    set -euo pipefail
+    git config --global --unset-all url.git@github.com:.insteadOf || true
+    git config --global --add url.git@github.com:.insteadOf https://github.com/
+    git config --global --add url.git@github.com:.insteadOf gh:
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: "{{ devbox_user }}"
+  changed_when: false

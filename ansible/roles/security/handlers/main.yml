@@ -1,0 +1,4 @@
+---
+- name: Validate and restart ssh
+  ansible.builtin.shell: sshd -t && systemctl restart ssh
+  changed_when: true

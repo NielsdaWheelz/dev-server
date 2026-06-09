@@ -18,16 +18,17 @@ ssh_include_dir="${DEVBOX_SSH_INCLUDE_DIR:-$HOME/.ssh/config.d}"
 ssh_include="${DEVBOX_SSH_INCLUDE:-$ssh_include_dir/$server_name}"
 state_file="${DEVBOX_STATE_FILE:-$base_dir/secrets/devbox-state.env}"
 tailscale_auth_key_file="${DEVBOX_TAILSCALE_AUTH_KEY_FILE:-$base_dir/secrets/tailscale-auth-key}"
+public_web="${DEVBOX_PUBLIC_WEB:-0}"
+rootful_docker="${DEVBOX_ROOTFUL_DOCKER:-0}"
 
 template="$base_dir/cloud-init-devbox.template.yaml"
-output="$base_dir/cloud-init-devbox.yaml"
-private_key="$base_dir/secrets/id_ed25519_github"
-public_key="$base_dir/secrets/id_ed25519_github.pub"
-zsh_helpers="$base_dir/zsh_helpers"
-zshrc="$base_dir/zshrc"
-p10k_zsh="$base_dir/p10k.zsh"
+default_output="$base_dir/cloud-init-devbox.yaml"
+ansible_inventory="$base_dir/ansible/inventory/devbox.yml"
+ansible_converge_playbook="$base_dir/ansible/playbooks/converge.yml"
 
 bootstrap_ssh_description="Temporary bootstrap SSH from operator IPv4"
+doctor_failures=0
+doctor_warnings=0
 
 log() {
   printf '==> %s\n' "$*"
@@ -47,16 +48,23 @@ usage() {
 Usage: ./devbox <command>
 
 Commands:
-  up        Render cloud-init, converge firewall, create/reuse the VPS, enroll Tailscale, update SSH, and lock down public SSH.
-  rebuild   Delete and recreate the VPS, then run the same flow as up.
-  lockdown  Run the post-Tailscale public SSH lockdown and remove the temporary Hetzner SSH rule.
-  doctor    Check local config and live server health.
+  up        Create or update the VPS, enroll Tailscale, lock down SSH, converge, and doctor.
+  rebuild   Delete and recreate the VPS, then run up.
+  converge  Run Ansible against the current dev-server SSH alias.
+  lockdown  Remove temporary public SSH access.
+  doctor    Run a lightweight local and remote smoke check.
   render    Render and validate cloud-init only.
 
-Important env overrides:
-  DEVBOX_TAILSCALE_AUTH_KEY      Short-lived Tailscale auth key for first boot.
-  DEVBOX_BOOTSTRAP_SSH_CIDR      Temporary public SSH source CIDR, defaults to current IPv4 /32.
-  DEVBOX_SKIP_LOCKDOWN=1         Leave temporary public SSH open after up.
+Useful env:
+  DEVBOX_TAILSCALE_AUTH_KEY       Short-lived Tailscale auth key for first boot.
+  DEVBOX_TAILSCALE_AUTH_KEY_FILE  Defaults to secrets/tailscale-auth-key.
+  DEVBOX_BOOTSTRAP_SSH_CIDR       Temporary public SSH CIDR; defaults to current IPv4 /32.
+  DEVBOX_PUBLIC_WEB=1             Keep public HTTP/HTTPS open.
+  DEVBOX_ROOTFUL_DOCKER=1         Use rootful Docker for existing rootful boxes.
+  DEVBOX_SKIP_LOCKDOWN=1          Leave temporary public SSH open after up.
+  DEVBOX_SKIP_CONVERGE=1          Skip Ansible after up.
+  DEVBOX_SKIP_DOCTOR=1            Skip doctor after up.
+  DEVBOX_SKIP_GITHUB_SSH_KEY=1    Do not auto-register the server GitHub public key.
   DEVBOX_CONFIRM_REBUILD=dev-server
 EOF
 }
@@ -65,8 +73,25 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
 }
 
+is_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 hcloud_cmd() {
   hcloud --context "$hcloud_context" "$@"
+}
+
+run_ansible_playbook() {
+  if command -v ansible-playbook >/dev/null 2>&1; then
+    ansible-playbook "$@"
+  elif command -v uvx >/dev/null 2>&1; then
+    uvx --from ansible-core ansible-playbook "$@"
+  else
+    die "missing ansible-playbook. Install Ansible or install uv for uvx fallback."
+  fi
 }
 
 load_state() {
@@ -133,37 +158,12 @@ require_tailscale_auth_key() {
   key="$(tailscale_auth_key)"
 
   if [[ -z "$key" ]]; then
-    die "missing Tailscale auth key. Save a short-lived non-ephemeral key to $tailscale_auth_key_file or export DEVBOX_TAILSCALE_AUTH_KEY."
-  fi
-}
-
-base64_file() {
-  if base64 --help 2>&1 | grep -q -- '-w'; then
-    base64 -w 0 "$1"
-  else
-    base64 -i "$1" | tr -d '\n'
+    die "missing Tailscale auth key. Export DEVBOX_TAILSCALE_AUTH_KEY or save a short-lived non-ephemeral key to $tailscale_auth_key_file."
   fi
 }
 
 base64_string() {
   printf '%s' "$1" | base64 | tr -d '\n'
-}
-
-ensure_github_ssh_key_files() {
-  mkdir -p "$base_dir/secrets"
-  chmod 700 "$base_dir/secrets"
-
-  if [[ ! -f "$private_key" ]]; then
-    log "generating dedicated GitHub SSH key for the dev box"
-    ssh-keygen -t ed25519 -C 'niels-dev-server-github' -f "$private_key" -N ''
-  fi
-
-  if [[ ! -f "$public_key" ]]; then
-    ssh-keygen -y -f "$private_key" > "$public_key"
-  fi
-
-  chmod 600 "$private_key"
-  chmod 644 "$public_key"
 }
 
 preflight_common() {
@@ -172,16 +172,12 @@ preflight_common() {
   require_cmd curl
   require_cmd awk
   require_cmd base64
-  require_cmd ruby
 }
 
 preflight_render() {
   preflight_common
-  ensure_github_ssh_key_files
-
-  for path in "$template" "$zsh_helpers" "$zshrc" "$p10k_zsh"; do
-    [[ -f "$path" ]] || die "missing required file: $path"
-  done
+  require_cmd ruby
+  [[ -f "$template" ]] || die "missing required file: $template"
 }
 
 preflight_hcloud() {
@@ -190,7 +186,6 @@ preflight_hcloud() {
 
 preflight_hcloud_create() {
   preflight_hcloud
-
   hcloud_cmd server-type describe "$server_type" >/dev/null
   hcloud_cmd image describe --architecture "$server_image_architecture" "$server_image" >/dev/null
   hcloud_cmd ssh-key describe "$ssh_key_name" >/dev/null
@@ -199,41 +194,35 @@ preflight_hcloud_create() {
 render_cloud_init() {
   local cidr="$1"
   local ts_key="$2"
-  local private_b64 public_b64 zsh_helpers_b64 zshrc_b64 p10k_zsh_b64 tailscale_key_b64
+  local render_output="$3"
+  local tailscale_key_b64 public_web_value
 
-  private_b64="$(base64_file "$private_key")"
-  public_b64="$(base64_file "$public_key")"
-  zsh_helpers_b64="$(base64_file "$zsh_helpers")"
-  zshrc_b64="$(base64_file "$zshrc")"
-  p10k_zsh_b64="$(base64_file "$p10k_zsh")"
   tailscale_key_b64="$(base64_string "$ts_key")"
+  if is_truthy "$public_web"; then
+    public_web_value=1
+  else
+    public_web_value=0
+  fi
 
   awk \
-    -v private_key="$private_b64" \
-    -v public_key="$public_b64" \
-    -v zsh_helpers="$zsh_helpers_b64" \
-    -v zshrc="$zshrc_b64" \
-    -v p10k_zsh="$p10k_zsh_b64" \
     -v tailscale_auth_key="$tailscale_key_b64" \
     -v bootstrap_ssh_cidr="$cidr" \
     -v server_name="$server_name" \
     -v server_user="$server_user" \
+    -v public_web="$public_web_value" \
     '{
-      gsub("__GITHUB_SSH_PRIVATE_KEY_B64__", private_key)
-      gsub("__GITHUB_SSH_PUBLIC_KEY_B64__", public_key)
-      gsub("__ZSH_HELPERS_B64__", zsh_helpers)
-      gsub("__ZSHRC_B64__", zshrc)
-      gsub("__P10K_ZSH_B64__", p10k_zsh)
       gsub("__TAILSCALE_AUTH_KEY_B64__", tailscale_auth_key)
       gsub("__BOOTSTRAP_SSH_CIDR__", bootstrap_ssh_cidr)
       gsub("__SERVER_NAME__", server_name)
       gsub("__SERVER_USER__", server_user)
+      gsub("__PUBLIC_WEB__", public_web)
       print
-    }' "$template" > "$output"
+    }' "$template" > "$render_output"
 
-  chmod 600 "$output"
-  log "rendered $output"
+  chmod 600 "$render_output"
+  log "rendered $render_output"
   log "bootstrap SSH CIDR: $cidr"
+  log "public web: $public_web_value"
   if [[ -n "$ts_key" ]]; then
     log "Tailscale auth key: present"
   else
@@ -242,9 +231,10 @@ render_cloud_init() {
 }
 
 validate_rendered_cloud_init() {
-  ruby -e "require 'yaml'; YAML.load_file('$output'); puts 'cloud-init yaml ok'"
+  local render_output="$1"
+  ruby -e "require 'yaml'; YAML.load_file('$render_output'); puts 'cloud-init yaml ok'"
 
-  if grep -n '__[A-Z0-9_][A-Z0-9_]*__' "$output"; then
+  if grep -n '__[A-Z0-9_][A-Z0-9_]*__' "$render_output"; then
     die "rendered cloud-init still contains placeholders"
   fi
 }
@@ -264,13 +254,18 @@ ensure_firewall() {
     log "creating Hetzner firewall $firewall_name"
     hcloud_cmd firewall create \
       --name "$firewall_name" \
-      --label purpose=nexus-dev \
-      --label role=combined-nexus-dev
+      --label purpose=devbox \
+      --label role=devbox
   fi
 
   add_firewall_rule udp 41641 "Tailscale direct WireGuard" 0.0.0.0/0 ::/0
-  add_firewall_rule tcp 80 "HTTP" 0.0.0.0/0 ::/0
-  add_firewall_rule tcp 443 "HTTPS" 0.0.0.0/0 ::/0
+  if is_truthy "$public_web"; then
+    add_firewall_rule tcp 80 "HTTP" 0.0.0.0/0 ::/0
+    add_firewall_rule tcp 443 "HTTPS" 0.0.0.0/0 ::/0
+  else
+    delete_firewall_rule tcp 80 "HTTP" 0.0.0.0/0 ::/0
+    delete_firewall_rule tcp 443 "HTTPS" 0.0.0.0/0 ::/0
+  fi
   add_firewall_rule tcp 22 "$bootstrap_ssh_description" "$cidr"
 }
 
@@ -280,7 +275,7 @@ add_firewall_rule() {
   local description="$3"
   shift 3
 
-  local args output_text
+  local args output_text source_ip
   args=(firewall add-rule --direction in --protocol "$protocol" --port "$port" --description "$description")
   for source_ip in "$@"; do
     args+=(--source-ips "$source_ip")
@@ -309,7 +304,7 @@ delete_firewall_rule() {
   local description="$3"
   shift 3
 
-  local args output_text
+  local args output_text source_ip
   args=(firewall delete-rule --direction in --protocol "$protocol" --port "$port" --description "$description")
   for source_ip in "$@"; do
     args+=(--source-ips "$source_ip")
@@ -333,6 +328,8 @@ delete_firewall_rule() {
 }
 
 create_server_if_needed() {
+  local user_data_file="$1"
+
   if server_exists; then
     log "server already exists: $server_name"
     return
@@ -346,10 +343,10 @@ create_server_if_needed() {
     --location "$server_location" \
     --ssh-key "$ssh_key_name" \
     --firewall "$firewall_name" \
-    --label purpose=nexus-dev \
+    --label purpose=devbox \
     --label environment=dev \
-    --label role=combined-nexus-dev \
-    --user-data-from-file "$output"
+    --label role=devbox \
+    --user-data-from-file "$user_data_file"
 }
 
 ensure_ssh_include_enabled() {
@@ -412,7 +409,78 @@ remove_known_hosts() {
 }
 
 ssh_devbox() {
-  ssh -o BatchMode=yes -o ConnectTimeout=10 "$server_name" "$@"
+  ssh -T -o RequestTTY=no -o BatchMode=yes -o ConnectTimeout=10 "$server_name" "$@"
+}
+
+quote_remote_args() {
+  local quoted="" arg escaped
+
+  for arg in "$@"; do
+    printf -v escaped '%q' "$arg"
+    quoted+="$escaped "
+  done
+  printf '%s' "$quoted"
+}
+
+ssh_sudo() {
+  local quoted
+  quoted="$(quote_remote_args "$@")"
+  ssh_devbox "sudo -n -- $quoted"
+}
+
+ssh_sudo_sh() {
+  [[ $# -eq 1 ]] || die "ssh_sudo_sh expects exactly one shell script argument"
+  ssh_sudo bash -o pipefail -lc "$1"
+}
+
+remote_user_sh() {
+  [[ $# -eq 1 ]] || die "remote_user_sh expects exactly one shell script argument"
+  local script_q
+  printf -v script_q '%q' "$1"
+  ssh_devbox "bash -o pipefail -lc $script_q"
+}
+
+ensure_server_github_key_registered() {
+  if is_truthy "${DEVBOX_SKIP_GITHUB_SSH_KEY:-0}"; then
+    warn "skipping GitHub SSH public key registration because DEVBOX_SKIP_GITHUB_SSH_KEY=1"
+    return 0
+  fi
+
+  if ! command -v gh >/dev/null 2>&1; then
+    warn "gh missing locally; cannot register server GitHub public key"
+    return 0
+  fi
+
+  if ! gh auth status -h github.com >/dev/null 2>&1; then
+    warn "gh is not authenticated for github.com; run gh auth login, then ./devbox converge"
+    return 0
+  fi
+
+  local pub_key existing_keys key_file key_title add_output
+  pub_key="$(ssh_devbox "cat '/home/$server_user/.ssh/id_ed25519_github.pub' 2>/dev/null" || true)"
+  if [[ -z "$pub_key" ]]; then
+    warn "server GitHub public key is not available yet"
+    return 0
+  fi
+
+  existing_keys="$(gh api user/keys --jq '.[].key' 2>/dev/null || true)"
+  if printf '%s\n' "$existing_keys" | grep -Fxq "$pub_key"; then
+    log "server GitHub public key already registered"
+    return 0
+  fi
+
+  key_file="$(mktemp "${TMPDIR:-/tmp}/devbox-github-key.XXXXXX")"
+  chmod 600 "$key_file"
+  printf '%s\n' "$pub_key" > "$key_file"
+  key_title="${DEVBOX_GITHUB_SSH_KEY_TITLE:-$server_name $(date -u +%Y-%m-%d)}"
+
+  if add_output="$(gh ssh-key add "$key_file" --title "$key_title" 2>&1)"; then
+    log "registered server GitHub public key: $key_title"
+  else
+    [[ -n "$add_output" ]] && printf '%s\n' "$add_output" >&2
+    warn "failed to register server GitHub public key; run: ssh $server_name cat ~/.ssh/id_ed25519_github.pub"
+  fi
+  rm -f "$key_file"
 }
 
 wait_for_ssh() {
@@ -432,9 +500,9 @@ wait_for_ssh() {
 
 wait_for_cloud_init() {
   log "waiting for cloud-init"
-  if ! ssh_devbox 'sudo cloud-init status --wait'; then
+  if ! ssh_sudo cloud-init status --wait; then
     warn "cloud-init failed; last bootstrap output follows"
-    ssh_devbox 'sudo tail -n 200 /var/log/cloud-init-output.log' || true
+    ssh_sudo tail -n 200 /var/log/cloud-init-output.log || true
     return 1
   fi
 
@@ -464,10 +532,26 @@ lockdown_impl() {
   validate_ipv4_cidr "$cidr" || die "cannot delete temporary SSH rule without a valid source CIDR"
 
   log "running host public SSH lockdown"
-  ssh_devbox 'sudo /usr/local/sbin/devbox-lockdown-public-ssh.sh'
+  ssh_sudo /usr/local/sbin/devbox-lockdown-public-ssh.sh
+
+  if is_truthy "$public_web"; then
+    log "ensuring host public web rules are present"
+    ssh_sudo_sh 'ufw allow 80/tcp && ufw allow 443/tcp && ufw reload'
+  else
+    log "ensuring host public web rules are absent"
+    ssh_sudo_sh 'ufw --force delete allow 80/tcp || true; ufw --force delete allow 443/tcp || true; ufw reload'
+  fi
 
   log "removing temporary Hetzner public SSH rule"
   delete_firewall_rule tcp 22 "$bootstrap_ssh_description" "$cidr"
+
+  if is_truthy "$public_web"; then
+    add_firewall_rule tcp 80 "HTTP" 0.0.0.0/0 ::/0
+    add_firewall_rule tcp 443 "HTTPS" 0.0.0.0/0 ::/0
+  else
+    delete_firewall_rule tcp 80 "HTTP" 0.0.0.0/0 ::/0
+    delete_firewall_rule tcp 443 "HTTPS" 0.0.0.0/0 ::/0
+  fi
 
   if [[ -n "$public_ip" ]]; then
     log "verifying public SSH is closed"
@@ -478,10 +562,9 @@ lockdown_impl() {
       -o UserKnownHostsFile=/dev/null \
       -i "$ssh_identity" \
       "$server_user@$public_ip" true >/dev/null 2>&1; then
-      warn "public SSH still succeeded for $public_ip"
-    else
-      log "public SSH is closed"
+      die "public SSH still succeeded for $public_ip"
     fi
+    log "public SSH is closed"
   fi
 }
 
@@ -489,12 +572,30 @@ cmd_render() {
   preflight_render
   load_state
 
-  local cidr ts_key
+  local cidr ts_key render_output cleanup_output
   cidr="$(bootstrap_ssh_cidr)"
   ts_key="$(tailscale_auth_key)"
 
-  render_cloud_init "$cidr" "$ts_key"
-  validate_rendered_cloud_init
+  if [[ -n "${DEVBOX_RENDER_OUTPUT:-}" ]]; then
+    render_output="$DEVBOX_RENDER_OUTPUT"
+    cleanup_output=0
+  else
+    render_output="$(mktemp "${TMPDIR:-/tmp}/devbox-cloud-init.XXXXXX")"
+    cleanup_output=1
+  fi
+
+  if (( cleanup_output )); then
+    trap 'rm -f "$render_output"' EXIT
+  fi
+
+  render_cloud_init "$cidr" "$ts_key" "$render_output"
+  validate_rendered_cloud_init "$render_output"
+
+  if (( cleanup_output )); then
+    rm -f "$render_output"
+    log "removed temporary rendered cloud-init"
+    trap - EXIT
+  fi
 }
 
 cmd_up() {
@@ -503,21 +604,36 @@ cmd_up() {
   require_tailscale_auth_key
   preflight_hcloud_create
 
-  local cidr ts_key public_ip tailscale_ip
+  local cidr ts_key public_ip tailscale_ip render_output server_preexisted
   cidr="$(bootstrap_ssh_cidr)"
   ts_key="$(tailscale_auth_key)"
+  render_output="$(mktemp "${TMPDIR:-/tmp}/devbox-cloud-init.XXXXXX")"
+  trap 'rm -f "$render_output"' EXIT
 
-  render_cloud_init "$cidr" "$ts_key"
-  validate_rendered_cloud_init
+  if server_exists; then
+    server_preexisted=1
+  else
+    server_preexisted=0
+  fi
+
+  render_cloud_init "$cidr" "$ts_key" "$render_output"
+  validate_rendered_cloud_init "$render_output"
   ensure_firewall "$cidr"
-  create_server_if_needed
+  create_server_if_needed "$render_output"
+  rm -f "$render_output"
+  trap - EXIT
 
   public_ip="$(server_public_ip)"
   save_state "$cidr" "$public_ip" "${STATE_TAILSCALE_IP:-}"
-  write_ssh_include "$public_ip" "$public_ip"
-  remove_known_hosts "$server_name" "$public_ip"
 
-  wait_for_ssh "public bootstrap"
+  if (( server_preexisted )) && ssh_devbox 'true' >/dev/null 2>&1; then
+    log "server exists; current SSH alias works"
+  else
+    write_ssh_include "$public_ip" "$public_ip"
+    remove_known_hosts "$server_name" "$public_ip"
+    wait_for_ssh "public bootstrap"
+  fi
+
   wait_for_cloud_init
 
   tailscale_ip="$(wait_for_tailscale_ip)"
@@ -532,8 +648,33 @@ cmd_up() {
     warn "skipping public SSH lockdown because DEVBOX_SKIP_LOCKDOWN=1"
   fi
 
+  if [[ "${DEVBOX_SKIP_CONVERGE:-0}" != "1" ]]; then
+    cmd_converge
+  else
+    warn "skipping Ansible convergence because DEVBOX_SKIP_CONVERGE=1"
+  fi
+
+  if [[ "${DEVBOX_SKIP_DOCTOR:-0}" != "1" ]]; then
+    cmd_doctor
+  else
+    warn "skipping doctor because DEVBOX_SKIP_DOCTOR=1"
+  fi
+
   log "dev box ready: ssh $server_name"
-  log "remaining human auth: gh, Codex personal/work, Claude personal/work"
+}
+
+cmd_converge() {
+  load_state
+  [[ -f "$ansible_inventory" ]] || die "missing Ansible inventory: $ansible_inventory"
+  [[ -f "$ansible_converge_playbook" ]] || die "missing Ansible playbook: $ansible_converge_playbook"
+
+  if [[ -z "${DEVBOX_BOOTSTRAP_SSH_CIDR:-}" && -n "${STATE_BOOTSTRAP_SSH_CIDR:-}" ]]; then
+    export DEVBOX_BOOTSTRAP_SSH_CIDR="$STATE_BOOTSTRAP_SSH_CIDR"
+  fi
+
+  log "running Ansible convergence"
+  run_ansible_playbook -i "$ansible_inventory" -u "$server_user" "$ansible_converge_playbook"
+  ensure_server_github_key_registered
 }
 
 cmd_lockdown() {
@@ -541,7 +682,7 @@ cmd_lockdown() {
   preflight_hcloud
   load_state
 
-  local cidr public_ip
+  local cidr public_ip tailscale_ip
   cidr="$(lockdown_bootstrap_ssh_cidr)"
 
   public_ip="${STATE_PUBLIC_IP:-}"
@@ -549,8 +690,14 @@ cmd_lockdown() {
     public_ip="$(server_public_ip)"
   fi
 
-  if [[ -n "${STATE_TAILSCALE_IP:-}" ]]; then
-    write_ssh_include "$STATE_TAILSCALE_IP" "$public_ip"
+  tailscale_ip="${STATE_TAILSCALE_IP:-}"
+  if [[ -z "$tailscale_ip" ]] && ssh_devbox 'true' >/dev/null 2>&1; then
+    tailscale_ip="$(ssh_devbox 'tailscale ip -4 2>/dev/null | head -n 1' || true)"
+  fi
+
+  if [[ -n "$tailscale_ip" ]]; then
+    write_ssh_include "$tailscale_ip" "$public_ip"
+    save_state "$cidr" "$public_ip" "$tailscale_ip"
   fi
 
   wait_for_ssh "current SSH config"
@@ -600,10 +747,169 @@ cmd_rebuild() {
   cmd_up
 }
 
+doctor_pass() {
+  printf 'pass  %-28s %s\n' "$1" "$2"
+}
+
+doctor_warn() {
+  doctor_warnings=$((doctor_warnings + 1))
+  printf 'warn  %-28s %s\n' "$1" "$2"
+}
+
+doctor_fail() {
+  doctor_failures=$((doctor_failures + 1))
+  printf 'fail  %-28s %s\n' "$1" "$2"
+}
+
+doctor_local_cmd() {
+  local id="$1"
+  local message="$2"
+  local cmd="$3"
+  local output
+
+  if output="$(bash -o pipefail -lc "$cmd" 2>&1)"; then
+    doctor_pass "$id" "${output:-$message}"
+  else
+    doctor_fail "$id" "${output:-failed: $message}"
+  fi
+}
+
+doctor_remote_cmd() {
+  local id="$1"
+  local message="$2"
+  local cmd="$3"
+  local output
+
+  if output="$(remote_user_sh "$cmd" 2>&1)"; then
+    doctor_pass "$id" "${output:-$message}"
+  else
+    doctor_fail "$id" "${output:-failed: $message}"
+  fi
+}
+
+doctor_remote_sudo_cmd() {
+  local id="$1"
+  local message="$2"
+  local cmd="$3"
+  local output
+
+  if output="$(ssh_sudo bash -o pipefail -lc "$cmd" 2>&1)"; then
+    doctor_pass "$id" "${output:-$message}"
+  else
+    doctor_fail "$id" "${output:-failed: $message}"
+  fi
+}
+
+firewall_has_ingress() {
+  local firewall_json="$1"
+  local protocol="$2"
+  local port="$3"
+  local source="${4:-}"
+
+  FIREWALL_JSON="$firewall_json" ruby -rjson -e '
+    fw = JSON.parse(ENV.fetch("FIREWALL_JSON"))
+    protocol, port, source = ARGV
+    rules = fw["rules"] || fw["Rules"] || []
+    found = rules.any? do |r|
+      next false unless (r["direction"] || r["Direction"]) == "in"
+      next false unless (r["protocol"] || r["Protocol"]).to_s == protocol
+      next false unless (r["port"] || r["Port"]).to_s == port
+      source.empty? || ((r["source_ips"] || r["SourceIPs"] || r["sourceIPs"] || []).include?(source))
+    end
+    exit(found ? 0 : 1)
+  ' "$protocol" "$port" "$source"
+}
+
+doctor_hcloud() {
+  if ! command -v hcloud >/dev/null 2>&1; then
+    doctor_fail local.hcloud "hcloud missing"
+    return
+  fi
+  doctor_pass local.hcloud "hcloud present"
+
+  if ! server_exists; then
+    doctor_fail hcloud.server "server does not exist: $server_name"
+    return
+  fi
+  doctor_pass hcloud.server "server exists"
+
+  local backup_window firewall_json
+  backup_window="$(hcloud_cmd server describe "$server_name" -o 'format={{.BackupWindow}}' 2>/dev/null || true)"
+  case "$backup_window" in
+    ""|"<nil>"|"null"|"-")
+      doctor_pass hcloud.backups "Hetzner paid backups not enabled"
+      ;;
+    *)
+      doctor_fail hcloud.backups "Hetzner paid backups enabled: $backup_window"
+      ;;
+  esac
+
+  if ! firewall_json="$(hcloud_cmd firewall describe "$firewall_name" -o json 2>/dev/null)"; then
+    doctor_warn hcloud.firewall "could not inspect $firewall_name"
+    return
+  fi
+
+  if firewall_has_ingress "$firewall_json" udp 41641 "0.0.0.0/0" &&
+     firewall_has_ingress "$firewall_json" udp 41641 "::/0"; then
+    doctor_pass hcloud.tailscale "UDP 41641 open for Tailscale direct connections"
+  else
+    doctor_warn hcloud.tailscale "UDP 41641 rule missing or incomplete"
+  fi
+
+  if firewall_has_ingress "$firewall_json" tcp 22 "0.0.0.0/0" ||
+     firewall_has_ingress "$firewall_json" tcp 22 "::/0"; then
+    doctor_fail hcloud.public-ssh "world-open SSH rule exists"
+  elif firewall_has_ingress "$firewall_json" tcp 22; then
+    doctor_fail hcloud.public-ssh "temporary SSH rule still exists"
+  else
+    doctor_pass hcloud.public-ssh "no public SSH ingress"
+  fi
+
+  if is_truthy "$public_web"; then
+    if firewall_has_ingress "$firewall_json" tcp 80 "0.0.0.0/0" &&
+       firewall_has_ingress "$firewall_json" tcp 443 "0.0.0.0/0"; then
+      doctor_pass hcloud.public-web "public web enabled"
+    else
+      doctor_fail hcloud.public-web "DEVBOX_PUBLIC_WEB=1 but HTTP/HTTPS rules are missing"
+    fi
+  else
+    if firewall_has_ingress "$firewall_json" tcp 80 ||
+       firewall_has_ingress "$firewall_json" tcp 443; then
+      doctor_fail hcloud.public-web "HTTP/HTTPS rules exist without DEVBOX_PUBLIC_WEB=1"
+    else
+      doctor_pass hcloud.public-web "no public web ingress"
+    fi
+  fi
+}
+
+doctor_remote() {
+  if ! ssh_devbox 'true' >/dev/null 2>&1; then
+    doctor_fail remote.ssh "ssh $server_name failed"
+    return
+  fi
+  doctor_pass remote.ssh "ssh $server_name works"
+
+  doctor_remote_sudo_cmd remote.cloud-init "cloud-init done" "cloud-init status --long | sed -n '1,3p'; cloud-init status --wait >/dev/null"
+  doctor_remote_cmd remote.tailscale "Tailscale IPv4 present" "tailscale ip -4 | head -n 1 | grep -q '^100[.]' && tailscale ip -4 | head -n 1"
+  doctor_remote_sudo_cmd remote.ufw "UFW active" "ufw status | grep -q '^Status: active' && ufw status | sed -n '1,8p'"
+  doctor_remote_sudo_cmd remote.public-ssh "host public SSH closed" "! ufw status numbered | grep -Eq '22/tcp.*ALLOW IN'"
+  doctor_remote_cmd remote.disk "root disk below 90%" "pct=\$(df -P / | awk 'NR==2 {gsub(/%/, \"\", \$5); print \$5}'); test \"\$pct\" -lt 90; printf '/ usage %s%%\\n' \"\$pct\""
+  doctor_remote_cmd remote.tools "AI tools available" "codex --version && claude --version && gh --version | head -n 1"
+
+  if is_truthy "$rootful_docker"; then
+    doctor_remote_sudo_cmd docker.rootful "rootful Docker active" "systemctl is-active --quiet docker && docker info >/dev/null && docker compose version"
+  else
+    doctor_remote_cmd docker.rootless "rootless Docker active" "uid=\$(id -u); export XDG_RUNTIME_DIR=/run/user/\$uid DOCKER_HOST=unix:///run/user/\$uid/docker.sock; systemctl --user is-active --quiet docker && docker info >/dev/null && docker compose version"
+    doctor_remote_sudo_cmd docker.rootful-off "rootful Docker inactive" "! systemctl is-active --quiet docker"
+  fi
+}
+
 cmd_doctor() {
+  [[ $# -eq 0 ]] || die "Usage: ./devbox doctor"
   preflight_common
-  preflight_hcloud
   load_state
+  doctor_failures=0
+  doctor_warnings=0
 
   log "configuration"
   printf 'server: %s\n' "$server_name"
@@ -611,33 +917,53 @@ cmd_doctor() {
   printf 'firewall: %s\n' "$firewall_name"
   printf 'ssh include: %s\n' "$ssh_include"
   printf 'state file: %s\n' "$state_file"
+  printf 'public web: %s\n' "$public_web"
+  printf 'docker mode: %s\n' "$(is_truthy "$rootful_docker" && printf rootful || printf rootless)"
 
-  if [[ -f "$output" ]]; then
-    validate_rendered_cloud_init
+  if command -v ansible-playbook >/dev/null 2>&1 || command -v uvx >/dev/null 2>&1; then
+    doctor_pass local.ansible "Ansible or uvx fallback present"
   else
-    warn "rendered cloud-init missing: $output"
+    doctor_fail local.ansible "ansible-playbook missing and uvx fallback unavailable"
   fi
 
-  if server_exists; then
-    local public_ip
-    public_ip="$(server_public_ip)"
-    printf 'public IPv4: %s\n' "$public_ip"
+  doctor_local_cmd local.ssh-config "SSH alias resolves" "ssh -G '$server_name' >/dev/null"
+
+  if [[ -f "$default_output" ]]; then
+    if grep -Eq 'OPENSSH PRIVATE KEY|tskey-auth|__TAILSCALE_AUTH_KEY_B64__' "$default_output"; then
+      doctor_fail local.rendered-cloud-init "stale secret-bearing $default_output exists"
+    else
+      doctor_warn local.rendered-cloud-init "stale $default_output exists"
+    fi
   else
-    warn "server does not exist: $server_name"
-    return
+    doctor_pass local.rendered-cloud-init "no persistent rendered cloud-init"
   fi
+
+  doctor_hcloud
 
   if [[ -f "$ssh_include" ]]; then
-    ssh -G "$server_name" | awk '/^(hostname|user|identityfile) / {print}'
+    local ssh_hostname
+    ssh_hostname="$(ssh -G "$server_name" 2>/dev/null | awk '/^hostname / {print $2; exit}')"
+    case "$ssh_hostname" in
+      100.*) doctor_pass local.ssh-alias "points at Tailscale IPv4: $ssh_hostname" ;;
+      *) doctor_warn local.ssh-alias "does not point at Tailscale IPv4: ${ssh_hostname:-unknown}" ;;
+    esac
   else
-    warn "SSH include missing: $ssh_include"
+    doctor_fail local.ssh-alias "SSH include missing: $ssh_include"
   fi
 
-  if ssh_devbox 'true' >/dev/null 2>&1; then
-    ssh_devbox 'set -e; hostname; whoami; cloud-init status --long; tailscale ip -4 || true; systemctl is-active docker tailscaled earlyoom; df -h /; free -h; sudo ufw status verbose'
-  else
-    warn "ssh $server_name failed"
+  doctor_remote
+
+  if (( doctor_failures > 0 )); then
+    printf 'doctor: fail (%d failure(s), %d warning(s))\n' "$doctor_failures" "$doctor_warnings" >&2
+    return 1
   fi
+
+  if (( doctor_warnings > 0 )); then
+    printf 'doctor: warn (%d warning(s))\n' "$doctor_warnings" >&2
+    return 0
+  fi
+
+  printf 'doctor: pass\n'
 }
 
 main() {
@@ -647,6 +973,7 @@ main() {
   case "$command" in
     up) cmd_up "$@" ;;
     rebuild) cmd_rebuild "$@" ;;
+    converge) cmd_converge "$@" ;;
     lockdown) cmd_lockdown "$@" ;;
     doctor) cmd_doctor "$@" ;;
     render) cmd_render "$@" ;;

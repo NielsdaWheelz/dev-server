@@ -20,6 +20,10 @@ for _devbox_path_dir in "$HOME/.local/share/mise/shims" "$HOME/.local/bin" "$HOM
 done
 unset _devbox_path_dir
 
+if [[ -r "$HOME/.config/devbox-docker-env" ]]; then
+  source "$HOME/.config/devbox-docker-env"
+fi
+
 HISTFILE="$HOME/.zsh_history"
 HISTSIZE=50000
 SAVEHIST=50000

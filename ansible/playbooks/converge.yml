@@ -1,0 +1,30 @@
+---
+- name: Converge devbox
+  hosts: devbox
+  gather_facts: true
+  become: true
+  vars_files:
+    - ../group_vars/devbox.yml
+  roles:
+    - role: base
+    - role: security
+    - role: shell
+    - role: ai_tools
+    - role: rootless_docker
+  post_tasks:
+    - name: Ensure devbox state directory exists
+      ansible.builtin.file:
+        path: /var/lib/devbox
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Record successful convergence timestamp
+      ansible.builtin.shell: |
+        set -euo pipefail
+        date -u +%Y-%m-%dT%H:%M:%SZ > /var/lib/devbox/converged-at
+        chmod 0644 /var/lib/devbox/converged-at
+      args:
+        executable: /bin/bash
+      changed_when: false

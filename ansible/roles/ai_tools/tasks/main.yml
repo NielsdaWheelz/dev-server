@@ -1,0 +1,243 @@
+---
+- name: Install Codex wrapper
+  ansible.builtin.copy:
+    dest: "/home/{{ devbox_user }}/bin/codex"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      personal_home="${CODEX_HOME_PERSONAL:-$HOME/.codex-personal}"
+      work_home="${CODEX_HOME_WORK:-$HOME/.codex-work}"
+      work_root="${AI_WORK_ROOT:-$HOME/src/work}"
+      personal_context="${AI_CONTEXT_PERSONAL:-personal}"
+      work_context="${AI_CONTEXT_WORK:-work}"
+
+      resolve_path() {
+        local target="${1:-$PWD}"
+        if [[ "$target" != /* ]]; then
+          target="$PWD/$target"
+        fi
+        if [[ -d "$target" ]]; then
+          (cd "$target" && pwd -P)
+        else
+          printf '%s\n' "$target"
+        fi
+      }
+
+      find_real_codex() {
+        local self dir candidate resolved_candidate
+        self="$(readlink -f "$0")"
+        IFS=: read -r -a path_parts <<< "$PATH"
+        for dir in "${path_parts[@]}"; do
+          candidate="$dir/codex"
+          [[ -x "$candidate" ]] || continue
+          resolved_candidate="$(readlink -f "$candidate")"
+          if [[ "$resolved_candidate" != "$self" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+          fi
+        done
+        return 1
+      }
+
+      if [[ -n "${CODEX_BIN:-}" ]]; then
+        real_codex="$CODEX_BIN"
+      elif [[ -x /usr/bin/codex ]]; then
+        real_codex="/usr/bin/codex"
+      else
+        real_codex="$(find_real_codex || true)"
+      fi
+      if [[ -z "$real_codex" ]]; then
+        printf 'codex binary not found\n' >&2
+        exit 127
+      fi
+
+      if [[ "${CODEX_HOME_LOCKED:-}" == "1" && -n "${CODEX_HOME:-}" ]]; then
+        if [[ "${CODEX_WRAPPER_PRINT_HOME:-}" == "1" ]]; then
+          printf '%s\n' "$CODEX_HOME"
+          exit 0
+        fi
+        exec "$real_codex" "$@"
+      fi
+
+      target="$PWD"
+      next_is_cd=0
+      for arg in "$@"; do
+        if (( next_is_cd )); then
+          target="$arg"
+          next_is_cd=0
+          continue
+        fi
+        case "$arg" in
+          -C|--cd) next_is_cd=1 ;;
+          --cd=*) target="${arg#--cd=}" ;;
+        esac
+      done
+
+      target="$(resolve_path "$target")"
+      work_root="$(resolve_path "$work_root")"
+
+      case "${AI_CONTEXT:-}" in
+        "$work_context") export CODEX_HOME="$work_home" ;;
+        "$personal_context") export CODEX_HOME="$personal_home" ;;
+        "")
+          case "$target" in
+            "$work_root"|"$work_root"/*) export CODEX_HOME="$work_home" ;;
+            *) export CODEX_HOME="$personal_home" ;;
+          esac
+          ;;
+        *)
+          printf "Unsupported AI_CONTEXT '%s' (expected %s or %s)\n" "$AI_CONTEXT" "$personal_context" "$work_context" >&2
+          exit 1
+          ;;
+      esac
+
+      if [[ "${CODEX_WRAPPER_PRINT_HOME:-}" == "1" ]]; then
+        printf '%s\n' "$CODEX_HOME"
+        exit 0
+      fi
+
+      exec "$real_codex" "$@"
+
+- name: Install explicit Codex home wrappers
+  ansible.builtin.copy:
+    dest: "/home/{{ devbox_user }}/bin/{{ item.name }}"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      export CODEX_HOME="{{ '${' }}{{ item.env }}:-{{ item.home }}{{ '}' }}"
+      export CODEX_HOME_LOCKED=1
+      exec "$HOME/bin/codex" "$@"
+  loop:
+    - { name: codex-personal, env: "CODEX_HOME_PERSONAL", home: "$HOME/.codex-personal" }
+    - { name: codex-work, env: "CODEX_HOME_WORK", home: "$HOME/.codex-work" }
+
+- name: Link Codex wrappers into /usr/local/bin
+  ansible.builtin.file:
+    src: "/home/{{ devbox_user }}/bin/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+    force: true
+  loop:
+    - codex
+    - codex-personal
+    - codex-work
+
+- name: Configure npm user prefix
+  ansible.builtin.command: npm config set prefix /home/{{ devbox_user }}/.local
+  become: true
+  become_user: "{{ devbox_user }}"
+  changed_when: false
+
+- name: Check whether mise is installed
+  ansible.builtin.command: test -x /home/{{ devbox_user }}/.local/bin/mise
+  register: devbox_mise_installed
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ devbox_user }}"
+
+- name: Install mise
+  ansible.builtin.shell: |
+    set -euo pipefail
+    curl -fsSL https://mise.run | sh
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: "{{ devbox_user }}"
+  when: devbox_mise_installed.rc != 0
+
+- name: Install mise-managed tools
+  ansible.builtin.command: >
+    /home/{{ devbox_user }}/.local/bin/mise use -g -y
+    atuin@latest
+    eza@latest
+    delta@latest
+    lazygit@latest
+    yazi@latest
+  become: true
+  become_user: "{{ devbox_user }}"
+  environment:
+    MISE_YES: "1"
+    PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
+  changed_when: false
+
+- name: Inspect legacy Claude shim
+  ansible.builtin.stat:
+    path: "/home/{{ devbox_user }}/.local/bin/claude"
+    follow: false
+  register: devbox_claude_shim
+
+- name: Remove legacy standalone Claude shim before npm install
+  ansible.builtin.file:
+    path: "/home/{{ devbox_user }}/.local/bin/claude"
+    state: absent
+  when:
+    - devbox_claude_shim.stat.islnk | default(false)
+    - devbox_claude_shim.stat.lnk_source is search('/home/' ~ devbox_user ~ '/.local/share/claude/versions/')
+
+- name: Stop if Claude shim is unmanaged
+  ansible.builtin.fail:
+    msg: "/home/{{ devbox_user }}/.local/bin/claude exists and is not the known legacy standalone Claude symlink; inspect it before replacing."
+  when:
+    - devbox_claude_shim.stat.exists | default(false)
+    - not (devbox_claude_shim.stat.islnk | default(false) and devbox_claude_shim.stat.lnk_source is search('/home/' ~ devbox_user ~ '/.local/share/claude/versions/'))
+    - not (devbox_claude_shim.stat.islnk | default(false) and devbox_claude_shim.stat.lnk_source is search('(^|/)lib/node_modules/@anthropic-ai/claude-code/|^\\.\\./lib/node_modules/@anthropic-ai/claude-code/'))
+
+- name: Install AI npm globals
+  ansible.builtin.command: >
+    npm install -g
+    @openai/codex
+    @anthropic-ai/claude-code
+  become: true
+  become_user: "{{ devbox_user }}"
+  environment:
+    PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
+  changed_when: false
+
+- name: Enable corepack shims
+  ansible.builtin.command: corepack enable --install-directory /home/{{ devbox_user }}/.local/bin
+  become: true
+  become_user: "{{ devbox_user }}"
+  environment:
+    PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
+  changed_when: false
+  failed_when: false
+
+- name: Generate server GitHub SSH key when absent
+  ansible.builtin.command: ssh-keygen -t ed25519 -C '{{ devbox_user }}-dev-server-github' -f /home/{{ devbox_user }}/.ssh/id_ed25519_github -N ''
+  args:
+    creates: "/home/{{ devbox_user }}/.ssh/id_ed25519_github"
+  become: true
+  become_user: "{{ devbox_user }}"
+
+- name: Ensure GitHub SSH config file exists
+  ansible.builtin.copy:
+    dest: "/home/{{ devbox_user }}/.ssh/config"
+    content: ""
+    force: false
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0600"
+
+- name: Install GitHub SSH config block
+  ansible.builtin.blockinfile:
+    path: "/home/{{ devbox_user }}/.ssh/config"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0600"
+    marker: "# {mark} DEVBOX GITHUB SSH"
+    block: |
+      Host github.com
+        HostName github.com
+        User git
+        IdentityFile ~/.ssh/id_ed25519_github
+        IdentitiesOnly yes
+        AddKeysToAgent no
+        StrictHostKeyChecking accept-new

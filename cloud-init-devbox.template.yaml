@@ -3,15 +3,12 @@ timezone: America/Los_Angeles
 package_update: true
 package_upgrade: true
 
-groups:
-  - docker
-
 users:
-  - name: niels
-    gecos: Niels Dev
+  - name: __SERVER_USER__
+    gecos: Devbox User
     shell: /bin/bash
     sudo: ALL=(ALL) NOPASSWD:ALL
-    groups: [sudo, docker]
+    groups: [sudo]
     ssh_authorized_keys:
       - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwDGkyG3cNfQLY1UYYkxznFfUwkf51pNW1DfHyANAft
 
@@ -26,252 +23,12 @@ write_files:
       PubkeyAuthentication yes
       PermitRootLogin no
       X11Forwarding no
-      AllowUsers niels
-  - path: /home/niels/.tmux.conf
-    owner: niels:niels
-    permissions: "0644"
-    defer: true
-    content: |
-      set -g mouse on
-      set -g history-limit 50000
-      set -g renumber-windows on
-      set -g base-index 1
-      setw -g pane-base-index 1
-      set -g status-interval 5
-      set -g status-left '[#S] '
-      set -g status-right '#H %Y-%m-%d %H:%M'
-      # tpm + session persistence across reboots (auto-restore via tmux-continuum)
-      set -g @plugin 'tmux-plugins/tpm'
-      set -g @plugin 'tmux-plugins/tmux-resurrect'
-      set -g @plugin 'tmux-plugins/tmux-continuum'
-      set -g @continuum-restore 'on'
-      run '~/.tmux/plugins/tpm/tpm'
-  - path: /etc/systemd/journald.conf.d/00-devbox-persistent.conf
-    permissions: "0644"
-    content: |
-      # Persistent journald with a 512M cap so we can post-mortem OOMs and
-      # crashes without letting logs crowd the cpx21's 80 GB disk.
-      [Journal]
-      Storage=persistent
-      SystemMaxUse=512M
-      MaxRetentionSec=14day
-  - path: /etc/docker/daemon.json
-    permissions: "0644"
-    content: |
-      {
-        "log-driver": "json-file",
-        "log-opts": { "max-size": "20m", "max-file": "3" }
-      }
-  - path: /etc/default/earlyoom
-    permissions: "0644"
-    content: |
-      EARLYOOM_ARGS="-r 60 -m 10 -s 20 --avoid '^(systemd|sshd|tailscaled|tmux|init|caddy|dockerd|containerd|postgres)$' --prefer '^(chrome|node|codex|claude|cursor-server|python|java|ruby)$'"
-  - path: /home/niels/.gitignore_global
-    owner: niels:niels
-    permissions: "0644"
-    defer: true
-    content: |
-      .DS_Store
-      .env
-      .env.*
-      .ai-images/
-      .claude/
-      .codex/
-      .codex-personal/
-      .codex-work/
-  - path: /home/niels/.zsh_helpers
-    owner: niels:niels
-    permissions: "0644"
-    defer: true
-    encoding: b64
-    content: __ZSH_HELPERS_B64__
-  - path: /home/niels/.zshrc
-    owner: niels:niels
-    permissions: "0644"
-    defer: true
-    encoding: b64
-    content: __ZSHRC_B64__
-  - path: /home/niels/.p10k.zsh
-    owner: niels:niels
-    permissions: "0644"
-    defer: true
-    encoding: b64
-    content: __P10K_ZSH_B64__
+      AllowUsers __SERVER_USER__
   - path: /root/.devbox-tailscale-auth-key
     owner: root:root
     permissions: "0600"
     encoding: b64
     content: "__TAILSCALE_AUTH_KEY_B64__"
-  - path: /home/niels/bin/codex
-    owner: niels:niels
-    permissions: "0755"
-    defer: true
-    content: |
-      #!/usr/bin/env bash
-      set -euo pipefail
-
-      personal_home="${CODEX_HOME_PERSONAL:-$HOME/.codex-personal}"
-      work_home="${CODEX_HOME_WORK:-$HOME/.codex-work}"
-      work_root="${AI_WORK_ROOT:-$HOME/src/work}"
-      personal_context="${AI_CONTEXT_PERSONAL:-personal}"
-      work_context="${AI_CONTEXT_WORK:-work}"
-
-      resolve_path() {
-        local target="${1:-$PWD}"
-
-        if [[ "$target" != /* ]]; then
-          target="$PWD/$target"
-        fi
-
-        if [[ -d "$target" ]]; then
-          (cd "$target" && pwd -P)
-        else
-          printf '%s\n' "$target"
-        fi
-      }
-
-      find_real_codex() {
-        local self
-        local dir
-        local candidate
-        local resolved_candidate
-        self="$(readlink -f "$0")"
-
-        IFS=: read -r -a path_parts <<< "$PATH"
-        for dir in "${path_parts[@]}"; do
-          candidate="$dir/codex"
-          if [[ ! -x "$candidate" ]]; then
-            continue
-          fi
-
-          resolved_candidate="$(readlink -f "$candidate")"
-          if [[ "$resolved_candidate" != "$self" ]]; then
-            printf '%s\n' "$candidate"
-            return 0
-          fi
-        done
-
-        return 1
-      }
-
-      if [[ -n "${CODEX_BIN:-}" ]]; then
-        real_codex="$CODEX_BIN"
-      elif [[ -x /usr/bin/codex ]]; then
-        real_codex="/usr/bin/codex"
-      else
-        real_codex="$(find_real_codex || true)"
-      fi
-      if [[ -z "$real_codex" ]]; then
-        printf 'codex binary not found\n' >&2
-        exit 127
-      fi
-
-      if [[ "${CODEX_HOME_LOCKED:-}" == "1" && -n "${CODEX_HOME:-}" ]]; then
-        if [[ "${CODEX_WRAPPER_PRINT_HOME:-}" == "1" ]]; then
-          printf '%s\n' "$CODEX_HOME"
-          exit 0
-        fi
-
-        exec "$real_codex" "$@"
-      fi
-
-      target="$PWD"
-      next_is_cd=0
-      for arg in "$@"; do
-        if (( next_is_cd )); then
-          target="$arg"
-          next_is_cd=0
-          continue
-        fi
-
-        case "$arg" in
-          -C|--cd)
-            next_is_cd=1
-            ;;
-          --cd=*)
-            target="${arg#--cd=}"
-            ;;
-        esac
-      done
-
-      target="$(resolve_path "$target")"
-      work_root="$(resolve_path "$work_root")"
-
-      case "${AI_CONTEXT:-}" in
-        "$work_context")
-          export CODEX_HOME="$work_home"
-          ;;
-        "$personal_context")
-          export CODEX_HOME="$personal_home"
-          ;;
-        "")
-          case "$target" in
-            "$work_root"|"$work_root"/*)
-              export CODEX_HOME="$work_home"
-              ;;
-            *)
-              export CODEX_HOME="$personal_home"
-              ;;
-          esac
-          ;;
-        *)
-          printf "Unsupported AI_CONTEXT '%s' (expected %s or %s)\n" "$AI_CONTEXT" "$personal_context" "$work_context" >&2
-          exit 1
-          ;;
-      esac
-
-      if [[ "${CODEX_WRAPPER_PRINT_HOME:-}" == "1" ]]; then
-        printf '%s\n' "$CODEX_HOME"
-        exit 0
-      fi
-
-      exec "$real_codex" "$@"
-  - path: /home/niels/bin/codex-personal
-    owner: niels:niels
-    permissions: "0755"
-    defer: true
-    content: |
-      #!/usr/bin/env bash
-      set -euo pipefail
-
-      export CODEX_HOME="${CODEX_HOME_PERSONAL:-$HOME/.codex-personal}"
-      export CODEX_HOME_LOCKED=1
-      exec "$HOME/bin/codex" "$@"
-  - path: /home/niels/bin/codex-work
-    owner: niels:niels
-    permissions: "0755"
-    defer: true
-    content: |
-      #!/usr/bin/env bash
-      set -euo pipefail
-
-      export CODEX_HOME="${CODEX_HOME_WORK:-$HOME/.codex-work}"
-      export CODEX_HOME_LOCKED=1
-      exec "$HOME/bin/codex" "$@"
-  - path: /home/niels/.ssh/config
-    owner: niels:niels
-    permissions: "0600"
-    defer: true
-    content: |
-      Host github.com
-        HostName github.com
-        User git
-        IdentityFile ~/.ssh/id_ed25519_github
-        IdentitiesOnly yes
-        AddKeysToAgent no
-        StrictHostKeyChecking accept-new
-  - path: /home/niels/.ssh/id_ed25519_github
-    owner: niels:niels
-    permissions: "0600"
-    defer: true
-    encoding: b64
-    content: __GITHUB_SSH_PRIVATE_KEY_B64__
-  - path: /home/niels/.ssh/id_ed25519_github.pub
-    owner: niels:niels
-    permissions: "0644"
-    defer: true
-    encoding: b64
-    content: __GITHUB_SSH_PUBLIC_KEY_B64__
   - path: /usr/local/sbin/devbox-bootstrap.sh
     owner: root:root
     permissions: "0755"
@@ -280,189 +37,51 @@ write_files:
       set -euxo pipefail
       export DEBIAN_FRONTEND=noninteractive
 
-      # cpx21 has 4 GB RAM. Keep a modest swapfile for short agent/build
-      # bursts, while earlyoom still kills the worst process before a full
-      # system wedge.
-      if ! swapon --show=NAME --noheadings | grep -qx /swapfile; then
-        if [ ! -f /swapfile ]; then
-          fallocate -l 4G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=4096
-          chmod 600 /swapfile
-          mkswap /swapfile
-        fi
-        swapon /swapfile
-      fi
-      grep -qE '^[^#].*[[:space:]]/swapfile[[:space:]]' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
-      cat > /etc/sysctl.d/99-devbox-swap.conf <<'SYSCTL'
-      vm.swappiness=20
-      SYSCTL
-      sysctl --system >/dev/null
-
       apt-get update
       apt-get install -y \
-        apt-transport-https \
-        bat \
-        build-essential \
         ca-certificates \
         curl \
-        direnv \
-        earlyoom \
-        fail2ban \
-        fd-find \
-        git \
         gnupg \
-        htop \
-        jq \
-        lsb-release \
-        mosh \
-        ncdu \
-        ripgrep \
-        rsync \
-        software-properties-common \
-        tmux \
-        ufw \
-        unattended-upgrades \
-        unzip \
-        vim \
-        zsh \
-        fzf \
-        zoxide \
-        zsh-autosuggestions \
-        zsh-syntax-highlighting
+        openssh-server \
+        python3 \
+        python3-apt \
+        sudo \
+        ufw
 
-      install -m 0755 -d /etc/apt/keyrings
-
-      curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-      chmod a+r /etc/apt/keyrings/docker.asc
-      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" > /etc/apt/sources.list.d/docker.list
-
-      curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg
-      chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
-
+      install -m 0755 -d /usr/share/keyrings
       curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg -o /usr/share/keyrings/tailscale-archive-keyring.gpg
       curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list -o /etc/apt/sources.list.d/tailscale.list
-
-      curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/nodesource_setup.sh
-      bash /tmp/nodesource_setup.sh
-
       apt-get update
-      apt-get install -y \
-        containerd.io \
-        docker-buildx-plugin \
-        docker-ce \
-        docker-ce-cli \
-        docker-compose-plugin \
-        gh \
-        nodejs \
-        tailscale
+      apt-get install -y tailscale
 
-      ln -sf /usr/bin/batcat /usr/local/bin/bat
-      ln -sf /usr/bin/fdfind /usr/local/bin/fd
-
-      # Persistent journald: /etc/systemd/journald.conf.d/00-devbox-persistent.conf
-      # sets Storage=persistent + SystemMaxUse=512M. The dir must exist for it to
-      # actually persist across reboots.
-      mkdir -p /var/log/journal
-      systemd-tmpfiles --create --prefix /var/log/journal
-      systemctl restart systemd-journald
-
-      systemctl enable --now docker
-      systemctl restart docker
       systemctl enable --now tailscaled
       if [ -s /root/.devbox-tailscale-auth-key ]; then
         set +e +x
-        tailscale_auth_key="$(tr -d '\r\n' < /root/.devbox-tailscale-auth-key)"
-        if [ -n "$tailscale_auth_key" ]; then
-          tailscale up --auth-key "$tailscale_auth_key" --ssh --hostname=__SERVER_NAME__ --operator=__SERVER_USER__
+        if tr -d '\r\n' < /root/.devbox-tailscale-auth-key | grep -q .; then
+          tailscale up --auth-key file:/root/.devbox-tailscale-auth-key --ssh --hostname=__SERVER_NAME__ --operator=__SERVER_USER__
           tailscale_status=$?
         else
           tailscale_status=0
         fi
-        unset tailscale_auth_key
         shred -u /root/.devbox-tailscale-auth-key 2>/dev/null || rm -f /root/.devbox-tailscale-auth-key
         set -e -x
         if [ "$tailscale_status" -ne 0 ]; then
           exit "$tailscale_status"
         fi
       fi
-      systemctl enable --now fail2ban
-      systemctl enable --now unattended-upgrades
-      # earlyoom: kill the heaviest process before the whole VM wedges
-      systemctl enable --now earlyoom
 
-      usermod -aG docker niels
-
-      mkdir -p /home/niels/src/work /home/niels/src/personal /home/niels/.ai-images /home/niels/bin /home/niels/.local/bin /home/niels/.npm /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work /home/niels/.codex-personal /home/niels/.codex-work /home/niels/.zsh
-      if [ -d /home/niels/.codex ] && [ ! -L /home/niels/.codex ]; then
-        mv /home/niels/.codex "/home/niels/.codex-default-archive-$(date +%Y%m%d-%H%M%S)"
-      fi
-      if [ ! -e /home/niels/.codex ]; then
-        ln -s .codex-personal /home/niels/.codex
-      fi
-      rm -f /home/niels/.bash_aliases
-      rm -rf /home/niels/.oh-my-zsh
-      chown -R niels:niels /home/niels/src /home/niels/.ai-images /home/niels/bin /home/niels/.local /home/niels/.npm /home/niels/.config /home/niels/.ssh /home/niels/.claude-personal /home/niels/.claude-work /home/niels/.codex-personal /home/niels/.codex-work /home/niels/.zsh
-      chown -h niels:niels /home/niels/.codex || true
-      chmod 700 /home/niels/.ssh
-      chmod 700 /home/niels/.claude-personal /home/niels/.claude-work
-      chmod 700 /home/niels/.codex-personal /home/niels/.codex-work
-
-      # apt owns stable distro tools like fd, bat, and direnv. mise owns newer
-      # single-user tools that Ubuntu lacks or tends to ship stale.
-      sudo -H -u niels sh -c 'curl -fsSL https://mise.run | sh'
-      sudo -H -u niels env PATH="/home/niels/.local/bin:$PATH" MISE_YES=1 mise use -g -y --pin atuin@latest eza@latest delta@latest lazygit@latest yazi@latest
-
-      sudo -H -u niels npm config set prefix /home/niels/.local
-      sudo -H -u niels env PATH="/home/niels/.local/bin:$PATH" npm install -g @openai/codex @anthropic-ai/claude-code
-      sudo -H -u niels env PATH="/home/niels/.local/bin:$PATH" corepack enable --install-directory /home/niels/.local/bin || true
-
-      ln -sf /home/niels/bin/codex /usr/local/bin/codex
-      ln -sf /home/niels/bin/codex-personal /usr/local/bin/codex-personal
-      ln -sf /home/niels/bin/codex-work /usr/local/bin/codex-work
-
-      if [ ! -d /home/niels/.zsh/fzf-tab/.git ]; then
-        rm -rf /home/niels/.zsh/fzf-tab
-        sudo -u niels git clone --depth 1 https://github.com/Aloxaf/fzf-tab /home/niels/.zsh/fzf-tab
-      fi
-      if [ ! -d /home/niels/.zsh/powerlevel10k/.git ]; then
-        rm -rf /home/niels/.zsh/powerlevel10k
-        sudo -u niels git clone --depth 1 https://github.com/romkatv/powerlevel10k.git /home/niels/.zsh/powerlevel10k
-      fi
-
-      # tpm for tmux-resurrect + tmux-continuum (session persistence across reboots)
-      sudo -u niels mkdir -p /home/niels/.tmux/plugins
-      if [ ! -d /home/niels/.tmux/plugins/tpm/.git ]; then
-        rm -rf /home/niels/.tmux/plugins/tpm
-        sudo -u niels git clone --depth 1 https://github.com/tmux-plugins/tpm /home/niels/.tmux/plugins/tpm
-      fi
-      # Headless plugin install so resurrect/continuum are present on first login
-      sudo -u niels /home/niels/.tmux/plugins/tpm/bin/install_plugins || true
-
-      chsh -s /usr/bin/zsh niels
-
-      if [ ! -s /home/niels/.ssh/id_ed25519_github ]; then
-        sudo -u niels ssh-keygen -t ed25519 -C 'niels-dev-server-github' -f /home/niels/.ssh/id_ed25519_github -N ''
-      fi
-      chmod 600 /home/niels/.ssh/id_ed25519_github
-      chmod 644 /home/niels/.ssh/id_ed25519_github.pub
-
-      sudo -u niels git config --global core.excludesfile /home/niels/.gitignore_global
-      sudo -u niels git config --global init.defaultBranch main
-      sudo -u niels git config --global core.pager delta
-      sudo -u niels git config --global interactive.diffFilter 'delta --color-only'
-      sudo -u niels git config --global delta.navigate true
-      sudo -u niels git config --global delta.side-by-side false
-      sudo -u niels git config --global merge.conflictStyle zdiff3
-      sudo -u niels git config --global --add url."git@github.com:".insteadOf "https://github.com/"
-      sudo -u niels git config --global --add url."git@github.com:".insteadOf "gh:"
-
-      # Temporary first-boot SSH. After Tailscale enrollment, run
-      # /usr/local/sbin/devbox-lockdown-public-ssh.sh and remove the temporary
-      # Hetzner Cloud Firewall SSH rule.
       bootstrap_ssh_cidr="__BOOTSTRAP_SSH_CIDR__"
+      public_web="__PUBLIC_WEB__"
+      ufw default deny incoming
+      ufw default allow outgoing
       ufw allow from "$bootstrap_ssh_cidr" to any port 22 proto tcp
-      ufw allow 80/tcp
-      ufw allow 443/tcp
+      if [ "$public_web" = "1" ]; then
+        ufw allow 80/tcp
+        ufw allow 443/tcp
+      else
+        ufw --force delete allow 80/tcp || true
+        ufw --force delete allow 443/tcp || true
+      fi
       ufw allow in on tailscale0
       ufw --force enable
 
@@ -471,31 +90,10 @@ write_files:
       {
         date
         uname -a
-        node --version
-        npm --version
-        git --version
-        gh --version | head -n 1
-        tmux -V
-        zsh --version
-        fzf --version
-        zoxide --version
-        rg --version | head -n 1
-        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" fd --version | head -n 1
-        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" bat --version
-        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" eza --version | head -n 1
-        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" delta --version
-        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" lazygit --version | head -n 1
-        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" yazi --version | head -n 1
-        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" mise --version
-        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" direnv version
-        sudo -H -u niels env PATH="/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" atuin --version
-        docker --version
-        docker compose version
+        python3 --version
         tailscale version | head -n 1
-        sudo -H -u niels env PATH="/home/niels/bin:/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" codex --version
-        sudo -H -u niels env PATH="/home/niels/bin:/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" CODEX_WRAPPER_PRINT_HOME=1 /home/niels/bin/codex --cd /home/niels/src/personal
-        sudo -H -u niels env PATH="/home/niels/bin:/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" CODEX_WRAPPER_PRINT_HOME=1 /home/niels/bin/codex --cd /home/niels/src/work
-        sudo -H -u niels env PATH="/home/niels/bin:/home/niels/.local/share/mise/shims:/home/niels/.local/bin:$PATH" claude --version || true
+        tailscale ip -4 || true
+        ufw status verbose
       } > /etc/devbox-bootstrap.log
   - path: /usr/local/sbin/devbox-lockdown-public-ssh.sh
     owner: root:root
@@ -505,10 +103,16 @@ write_files:
       set -euxo pipefail
 
       bootstrap_ssh_cidr="__BOOTSTRAP_SSH_CIDR__"
+      public_web="__PUBLIC_WEB__"
       ufw --force delete allow from "$bootstrap_ssh_cidr" to any port 22 proto tcp || true
       ufw --force delete allow 22/tcp || true
-      ufw allow 80/tcp
-      ufw allow 443/tcp
+      if [ "$public_web" = "1" ]; then
+        ufw allow 80/tcp
+        ufw allow 443/tcp
+      else
+        ufw --force delete allow 80/tcp || true
+        ufw --force delete allow 443/tcp || true
+      fi
       ufw allow in on tailscale0
       ufw reload
       ufw status verbose

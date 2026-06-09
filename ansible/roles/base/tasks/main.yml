@@ -1,0 +1,312 @@
+---
+- name: Install apt keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Docker apt key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install GitHub CLI apt key
+  ansible.builtin.get_url:
+    url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    dest: /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install Tailscale apt key
+  ansible.builtin.get_url:
+    url: https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg
+    dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install NodeSource apt key
+  ansible.builtin.get_url:
+    url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+    dest: /etc/apt/keyrings/nodesource.gpg.key
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Configure Docker apt repo
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/docker.list
+    owner: root
+    group: root
+    mode: "0644"
+    content: "deb [arch={{ ansible_facts['architecture'] | regex_replace('x86_64', 'amd64') | regex_replace('aarch64', 'arm64') }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_facts['distribution_release'] }} stable\n"
+  register: devbox_docker_repo
+
+- name: Configure GitHub CLI apt repo
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/github-cli.list
+    owner: root
+    group: root
+    mode: "0644"
+    content: "deb [arch={{ ansible_facts['architecture'] | regex_replace('x86_64', 'amd64') | regex_replace('aarch64', 'arm64') }} signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\n"
+  register: devbox_gh_repo
+
+- name: Configure Tailscale apt repo
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/tailscale.list
+    owner: root
+    group: root
+    mode: "0644"
+    content: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu {{ ansible_facts['distribution_release'] }} main\n"
+  register: devbox_tailscale_repo
+
+- name: Remove legacy NodeSource deb822 repo that conflicts with managed keyring
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/nodesource.sources
+    state: absent
+  register: devbox_legacy_nodesource_repo
+
+- name: Configure NodeSource apt repo
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/nodesource.list
+    owner: root
+    group: root
+    mode: "0644"
+    content: "deb [signed-by=/etc/apt/keyrings/nodesource.gpg.key] https://deb.nodesource.com/node_{{ devbox_node_major }}.x nodistro main\n"
+  register: devbox_nodesource_repo
+
+- name: Update apt cache when repo files changed
+  ansible.builtin.apt:
+    update_cache: true
+  when: devbox_docker_repo.changed or devbox_gh_repo.changed or devbox_tailscale_repo.changed or devbox_legacy_nodesource_repo.changed or devbox_nodesource_repo.changed
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - bat
+      - build-essential
+      - ca-certificates
+      - containerd.io
+      - curl
+      - dbus-user-session
+      - direnv
+      - docker-buildx-plugin
+      - docker-ce
+      - docker-ce-cli
+      - docker-ce-rootless-extras
+      - docker-compose-plugin
+      - earlyoom
+      - fail2ban
+      - fd-find
+      - fuse-overlayfs
+      - gh
+      - git
+      - gnupg
+      - htop
+      - jq
+      - locales
+      - lsb-release
+      - mosh
+      - ncdu
+      - nodejs
+      - python3
+      - python3-apt
+      - ripgrep
+      - rsync
+      - slirp4netns
+      - software-properties-common
+      - tailscale
+      - tmux
+      - uidmap
+      - ufw
+      - unattended-upgrades
+      - unzip
+      - vim
+      - zoxide
+      - zsh
+      - zsh-autosuggestions
+      - zsh-syntax-highlighting
+    state: present
+    update_cache: true
+
+- name: Read current timezone
+  ansible.builtin.command: timedatectl show -p Timezone --value
+  register: devbox_current_timezone
+  changed_when: false
+  failed_when: false
+
+- name: Configure timezone
+  ansible.builtin.command: "timedatectl set-timezone {{ devbox_timezone }}"
+  when:
+    - devbox_timezone | length > 0
+    - devbox_current_timezone.stdout != devbox_timezone
+
+- name: Enable managed locale generation
+  ansible.builtin.lineinfile:
+    path: /etc/locale.gen
+    regexp: "^#?\\s*{{ devbox_locale | regex_escape() }}\\s+UTF-8\\s*$"
+    line: "{{ devbox_locale }} UTF-8"
+  register: devbox_locale_gen
+  when: devbox_locale | length > 0
+
+- name: Generate managed locale
+  ansible.builtin.command: "locale-gen {{ devbox_locale }}"
+  when:
+    - devbox_locale | length > 0
+    - devbox_locale_gen.changed
+
+- name: Configure system locale
+  ansible.builtin.copy:
+    dest: /etc/default/locale
+    owner: root
+    group: root
+    mode: "0644"
+    content: "LANG={{ devbox_locale }}\n"
+  when: devbox_locale | length > 0
+
+- name: Ensure bat command name exists
+  ansible.builtin.file:
+    src: /usr/bin/batcat
+    dest: /usr/local/bin/bat
+    state: link
+
+- name: Ensure fd command name exists
+  ansible.builtin.file:
+    src: /usr/bin/fdfind
+    dest: /usr/local/bin/fd
+    state: link
+
+- name: Create swapfile when absent
+  ansible.builtin.command: fallocate -l 4G /swapfile
+  args:
+    creates: /swapfile
+  register: devbox_swapfile_created
+
+- name: Set swapfile permissions
+  ansible.builtin.file:
+    path: /swapfile
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Format swapfile when newly created
+  ansible.builtin.command: mkswap /swapfile
+  when: devbox_swapfile_created.changed
+
+- name: Ensure swapfile is in fstab
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^[^#].*\s/swapfile\s'
+    line: "/swapfile none swap sw 0 0"
+
+- name: Ensure swapfile is enabled
+  ansible.builtin.command: swapon /swapfile
+  register: devbox_swapon
+  changed_when: devbox_swapon.rc == 0
+  failed_when: devbox_swapon.rc not in [0, 255]
+
+- name: Configure swap swappiness
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-devbox-swap.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: "vm.swappiness=20\n"
+  notify: Reload sysctl
+
+- name: Ensure journald drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure persistent journald
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/00-devbox-persistent.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Journal]
+      Storage=persistent
+      SystemMaxUse=512M
+      MaxRetentionSec=14day
+  notify: Restart journald
+
+- name: Ensure persistent journal directory exists
+  ansible.builtin.file:
+    path: /var/log/journal
+    state: directory
+    owner: root
+    group: systemd-journal
+    mode: "2755"
+
+- name: Configure earlyoom
+  ansible.builtin.copy:
+    dest: /etc/default/earlyoom
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      EARLYOOM_ARGS="-r 60 -m 10 -s 20 --avoid '^(systemd|sshd|tailscaled|tmux|init|caddy|dockerd|containerd|postgres)$' --prefer '^(chrome|node|codex|claude|cursor-server|python|java|ruby)$'"
+  notify: Restart earlyoom
+
+- name: Ensure core services are enabled
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - tailscaled
+    - fail2ban
+    - unattended-upgrades
+    - earlyoom
+
+- name: Ensure dev directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0755"
+  loop:
+    - "/home/{{ devbox_user }}/src/work"
+    - "/home/{{ devbox_user }}/src/personal"
+    - "/home/{{ devbox_user }}/.ai-images"
+    - "/home/{{ devbox_user }}/bin"
+    - "/home/{{ devbox_user }}/.local/bin"
+    - "/home/{{ devbox_user }}/.npm"
+    - "/home/{{ devbox_user }}/.config"
+    - "/home/{{ devbox_user }}/.ssh"
+    - "/home/{{ devbox_user }}/.zsh"
+
+- name: Ensure private AI state dirs exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0700"
+  loop:
+    - "/home/{{ devbox_user }}/.claude-personal"
+    - "/home/{{ devbox_user }}/.claude-work"
+    - "/home/{{ devbox_user }}/.codex-personal"
+    - "/home/{{ devbox_user }}/.codex-work"
+
+- name: Create compatibility Codex symlink
+  ansible.builtin.file:
+    src: .codex-personal
+    dest: "/home/{{ devbox_user }}/.codex"
+    state: link
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    force: false
