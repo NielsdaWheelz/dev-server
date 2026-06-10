@@ -74,6 +74,32 @@
     append: true
   when: not devbox_rootless_docker_enabled
 
+- name: Ensure rootful Docker config directory exists
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: not devbox_rootless_docker_enabled
+
+- name: Configure rootful Docker log rotation
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "{{ devbox_docker_log_max_size }}",
+          "max-file": "{{ devbox_docker_log_max_file }}"
+        }
+      }
+  register: devbox_rootful_docker_config
+  when: not devbox_rootless_docker_enabled
+
 - name: Enable linger for rootless Docker user service
   ansible.builtin.command: "loginctl enable-linger {{ devbox_user }}"
   changed_when: false
@@ -102,6 +128,32 @@
     XDG_RUNTIME_DIR: "/run/user/{{ devbox_user_uid.stdout }}"
   when: devbox_rootless_docker_enabled
 
+- name: Ensure rootless Docker config directory exists
+  ansible.builtin.file:
+    path: "/home/{{ devbox_user }}/.config/docker"
+    state: directory
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0755"
+  when: devbox_rootless_docker_enabled
+
+- name: Configure rootless Docker log rotation
+  ansible.builtin.copy:
+    dest: "/home/{{ devbox_user }}/.config/docker/daemon.json"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0644"
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "{{ devbox_docker_log_max_size }}",
+          "max-file": "{{ devbox_docker_log_max_file }}"
+        }
+      }
+  register: devbox_rootless_docker_config
+  when: devbox_rootless_docker_enabled
+
 - name: Enable rootless Docker user service
   ansible.builtin.command: systemctl --user enable --now docker.service
   become: true
@@ -111,6 +163,19 @@
     DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ devbox_user_uid.stdout }}/bus"
   changed_when: false
   when: devbox_rootless_docker_enabled
+
+- name: Restart rootless Docker when log policy changed
+  ansible.builtin.command: systemctl --user restart docker.service
+  become: true
+  become_user: "{{ devbox_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ devbox_user_uid.stdout }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ devbox_user_uid.stdout }}/bus"
+  changed_when: true
+  when:
+    - devbox_rootless_docker_enabled
+    - devbox_rootless_docker_config is defined
+    - devbox_rootless_docker_config.changed
 
 - name: Disable rootful Docker service when rootless mode is enabled
   ansible.builtin.systemd:
@@ -125,6 +190,15 @@
     enabled: true
     state: started
   when: not devbox_rootless_docker_enabled
+
+- name: Restart rootful Docker when log policy changed
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  when:
+    - not devbox_rootless_docker_enabled
+    - devbox_rootful_docker_config is defined
+    - devbox_rootful_docker_config.changed
 
 - name: Disable rootless Docker user service when rootful mode is explicit
   ansible.builtin.command: systemctl --user disable --now docker.service

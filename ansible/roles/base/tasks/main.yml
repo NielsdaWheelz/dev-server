@@ -122,6 +122,7 @@
       - rsync
       - slirp4netns
       - software-properties-common
+      - sysstat
       - tailscale
       - tmux
       - uidmap
@@ -249,6 +250,24 @@
     owner: root
     group: systemd-journal
     mode: "2755"
+
+- name: Enable sysstat collection
+  ansible.builtin.copy:
+    dest: /etc/default/sysstat
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      ENABLED="true"
+
+- name: Ensure sysstat timers are enabled
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - sysstat-collect.timer
+    - sysstat-summary.timer
 
 - name: Configure earlyoom
   ansible.builtin.copy:
