@@ -19,7 +19,6 @@ ssh_include="${DEVBOX_SSH_INCLUDE:-$ssh_include_dir/$server_name}"
 state_file="${DEVBOX_STATE_FILE:-$base_dir/secrets/devbox-state.env}"
 tailscale_auth_key_file="${DEVBOX_TAILSCALE_AUTH_KEY_FILE:-$base_dir/secrets/tailscale-auth-key}"
 public_web="${DEVBOX_PUBLIC_WEB:-0}"
-rootful_docker="${DEVBOX_ROOTFUL_DOCKER:-0}"
 journal_warn_mb="${DEVBOX_JOURNAL_WARN_MB:-384}"
 journal_fail_mb="${DEVBOX_JOURNAL_FAIL_MB:-512}"
 docker_disk_warn_gb="${DEVBOX_DOCKER_DISK_WARN_GB:-20}"
@@ -64,7 +63,6 @@ Useful env:
   DEVBOX_TAILSCALE_AUTH_KEY_FILE  Defaults to secrets/tailscale-auth-key.
   DEVBOX_BOOTSTRAP_SSH_CIDR       Temporary public SSH CIDR; defaults to current IPv4 /32.
   DEVBOX_PUBLIC_WEB=1             Keep public HTTP/HTTPS open.
-  DEVBOX_ROOTFUL_DOCKER=1         Use rootful Docker for existing rootful boxes.
   DEVBOX_JOURNAL_WARN_MB=384      Warn when persistent journal usage reaches this.
   DEVBOX_DOCKER_DISK_WARN_GB=20   Warn when Docker data reaches this.
   DEVBOX_SKIP_LOCKDOWN=1          Leave temporary public SSH open after up.
@@ -931,7 +929,7 @@ doctor_remote() {
   fi
   doctor_pass remote.ssh "ssh $server_name works"
 
-  local journal_cmd docker_disk_cmd docker_log_policy_cmd docker_container_logs_cmd docker_user_env
+  local journal_cmd docker_disk_cmd docker_container_logs_cmd docker_user_env codex_cmd
 
   doctor_remote_sudo_cmd remote.cloud-init "cloud-init done" "cloud-init status --long | sed -n '1,3p'; cloud-init status --wait >/dev/null"
   doctor_remote_sudo_cmd remote.systemd-failed "no failed systemd units" "failed_units=\$(systemctl --failed --no-legend --plain); test -z \"\$failed_units\" || { printf '%s\n' \"\$failed_units\"; exit 1; }"
@@ -941,25 +939,56 @@ doctor_remote() {
   doctor_remote_sudo_cmd remote.ufw "UFW active" "ufw status | grep -q '^Status: active' && ufw status | sed -n '1,8p'"
   doctor_remote_sudo_cmd remote.public-ssh "host public SSH closed" "! ufw status numbered | grep -Eq '22/tcp.*ALLOW IN'"
   doctor_remote_cmd remote.disk "root disk below 90%" "pct=\$(df -P / | awk 'NR==2 {gsub(/%/, \"\", \$5); print \$5}'); test \"\$pct\" -lt 90; printf '/ usage %s%%\\n' \"\$pct\""
-  doctor_remote_cmd remote.tools "AI tools available" "codex --version && claude --version && gh --version | head -n 1"
+  codex_cmd="$(cat <<'REMOTE'
+set -euo pipefail
+expected="$HOME/.local/bin/codex"
+if [[ ! -x "$expected" ]]; then
+  printf 'missing managed Codex binary: %s\n' "$expected"
+  exit 1
+fi
+
+for wrapper in "$HOME/bin/codex" "$HOME/bin/codex-personal" "$HOME/bin/codex-work"; do
+  if [[ ! -x "$wrapper" ]]; then
+    printf 'missing Codex wrapper: %s\n' "$wrapper"
+    exit 1
+  fi
+  actual="$(CODEX_WRAPPER_PRINT_BIN=1 "$wrapper")"
+  if [[ "$actual" != "$expected" ]]; then
+    printf '%s resolves to %s, expected %s\n' "$wrapper" "$actual" "$expected"
+    exit 1
+  fi
+done
+
+wrapper_version="$("$HOME/bin/codex" --version)"
+managed_version="$("$expected" --version)"
+if [[ "$wrapper_version" != "$managed_version" ]]; then
+  printf 'Codex wrapper version mismatch: wrapper=%s managed=%s\n' "$wrapper_version" "$managed_version"
+  exit 1
+fi
+
+printf '%s via %s\n' "$wrapper_version" "$expected"
+if [[ -e /usr/bin/codex ]]; then
+  system_version="$(/usr/bin/codex --version 2>/dev/null || true)"
+  if [[ -n "$system_version" ]]; then
+    printf 'ignored /usr/bin/codex (%s)\n' "$system_version"
+  else
+    printf 'ignored /usr/bin/codex\n'
+  fi
+fi
+REMOTE
+)"
+  doctor_remote_cmd remote.codex "Codex uses managed binary" "$codex_cmd"
+  doctor_remote_cmd remote.tools "Claude and GitHub CLI available" "claude --version && gh --version | head -n 1"
 
   docker_disk_cmd="warn_gb=$docker_disk_warn_gb; fail_gb=$docker_disk_fail_gb; [[ \"\$warn_gb\" =~ ^[0-9]+\$ && \"\$fail_gb\" =~ ^[0-9]+\$ ]] || { printf 'invalid Docker disk thresholds: warn=%s fail=%s\n' \"\$warn_gb\" \"\$fail_gb\"; exit 1; }; warn_mb=\$((warn_gb * 1024)); fail_mb=\$((fail_gb * 1024)); total_mb=0; for path in /var/lib/docker /var/lib/containerd \"\$HOME/.local/share/docker\"; do if [[ -e \"\$path\" ]]; then path_mb=\$(du -sm \"\$path\" 2>/dev/null | awk '{print \$1}'); total_mb=\$((total_mb + path_mb)); fi; done; docker system df 2>/dev/null || true; printf 'Docker data %s MiB (warn %s GiB, fail %s GiB)\n' \"\$total_mb\" \"\$warn_gb\" \"\$fail_gb\"; if (( total_mb >= fail_mb )); then exit 1; fi; if (( total_mb >= warn_mb )); then exit 2; fi"
-  docker_log_policy_cmd="test -r /etc/docker/daemon.json && grep -q '\"log-driver\": \"json-file\"' /etc/docker/daemon.json && grep -q '\"max-size\":' /etc/docker/daemon.json && grep -q '\"max-file\":' /etc/docker/daemon.json"
   docker_container_logs_cmd="containers=\$(docker ps -q); if [[ -z \"\$containers\" ]]; then printf 'no running containers\n'; exit 0; fi; bad=\$(docker inspect \$containers | jq -r '.[] | select(.HostConfig.LogConfig.Type == \"json-file\" and ((.HostConfig.LogConfig.Config[\"max-size\"] // \"\") == \"\" or (.HostConfig.LogConfig.Config[\"max-file\"] // \"\") == \"\")) | .Name'); if [[ -n \"\$bad\" ]]; then printf 'running json-file containers without caps:\n%s\n' \"\$bad\"; exit 2; fi; printf 'running containers have capped json-file logs or non-json log drivers\n'"
-
-  if is_truthy "$rootful_docker"; then
-    doctor_remote_sudo_cmd docker.rootful "rootful Docker active" "systemctl is-active --quiet docker && docker info >/dev/null && docker compose version"
-    doctor_remote_sudo_cmd docker.log-policy "rootful Docker log rotation configured" "$docker_log_policy_cmd"
-    doctor_remote_sudo_threshold_cmd docker.container-logs "running container logs capped" "$docker_container_logs_cmd"
-    doctor_remote_sudo_threshold_cmd docker.disk "Docker disk usage below threshold" "$docker_disk_cmd"
-  else
-    docker_user_env="uid=\$(id -u); export XDG_RUNTIME_DIR=/run/user/\$uid DOCKER_HOST=unix:///run/user/\$uid/docker.sock; "
-    doctor_remote_cmd docker.rootless "rootless Docker active" "${docker_user_env}systemctl --user is-active --quiet docker && docker info >/dev/null && docker compose version"
-    doctor_remote_cmd docker.log-policy "rootless Docker log rotation configured" "test -r \"\$HOME/.config/docker/daemon.json\" && grep -q '\"log-driver\": \"json-file\"' \"\$HOME/.config/docker/daemon.json\" && grep -q '\"max-size\":' \"\$HOME/.config/docker/daemon.json\" && grep -q '\"max-file\":' \"\$HOME/.config/docker/daemon.json\""
-    doctor_remote_threshold_cmd docker.container-logs "running container logs capped" "${docker_user_env}${docker_container_logs_cmd}"
-    doctor_remote_threshold_cmd docker.disk "Docker disk usage below threshold" "${docker_user_env}${docker_disk_cmd}"
-    doctor_remote_sudo_cmd docker.rootful-off "rootful Docker inactive" "! systemctl is-active --quiet docker"
-  fi
+  docker_user_env="uid=\$(id -u); export XDG_RUNTIME_DIR=/run/user/\$uid DOCKER_HOST=unix:///run/user/\$uid/docker.sock; "
+  doctor_remote_cmd docker.rootless "rootless Docker active" "${docker_user_env}systemctl --user is-active --quiet docker && docker info >/dev/null && docker compose version"
+  doctor_remote_cmd docker.log-policy "rootless Docker log rotation configured" "test -r \"\$HOME/.config/docker/daemon.json\" && grep -q '\"log-driver\": \"json-file\"' \"\$HOME/.config/docker/daemon.json\" && grep -q '\"max-size\":' \"\$HOME/.config/docker/daemon.json\" && grep -q '\"max-file\":' \"\$HOME/.config/docker/daemon.json\""
+  doctor_remote_threshold_cmd docker.container-logs "running container logs capped" "${docker_user_env}${docker_container_logs_cmd}"
+  doctor_remote_threshold_cmd docker.disk "Docker disk usage below threshold" "${docker_user_env}${docker_disk_cmd}"
+  doctor_remote_sudo_cmd docker.rootful-off "rootful Docker inactive" "! systemctl is-active --quiet docker && ! systemctl is-active --quiet docker.socket && ! systemctl is-active --quiet containerd"
+  doctor_remote_sudo_cmd docker.rootful-state "rootful Docker state absent" "test ! -e /var/lib/docker && test ! -e /var/lib/containerd"
 }
 
 cmd_doctor() {
@@ -976,7 +1005,7 @@ cmd_doctor() {
   printf 'ssh include: %s\n' "$ssh_include"
   printf 'state file: %s\n' "$state_file"
   printf 'public web: %s\n' "$public_web"
-  printf 'docker mode: %s\n' "$(is_truthy "$rootful_docker" && printf rootful || printf rootless)"
+  printf 'docker mode: rootless\n'
 
   if command -v ansible-playbook >/dev/null 2>&1 || command -v uvx >/dev/null 2>&1; then
     doctor_pass local.ansible "Ansible or uvx fallback present"

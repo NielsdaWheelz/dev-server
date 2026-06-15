@@ -15,108 +15,56 @@
   register: devbox_user_groups
   changed_when: false
 
-- name: Detect rootful Docker containers
-  ansible.builtin.command: docker ps -aq
-  register: devbox_rootful_containers
-  changed_when: false
-  failed_when: false
-  when: devbox_rootless_docker_enabled
+- name: Disable rootful Docker socket
+  ansible.builtin.systemd:
+    name: docker.socket
+    enabled: false
+    state: stopped
 
-- name: Detect rootful Docker images
-  ansible.builtin.command: docker images -q
-  register: devbox_rootful_images
-  changed_when: false
-  failed_when: false
-  when: devbox_rootless_docker_enabled
+- name: Disable rootful Docker service
+  ansible.builtin.systemd:
+    name: docker
+    enabled: false
+    state: stopped
 
-- name: Detect rootful Docker container directories
-  ansible.builtin.find:
-    paths: /var/lib/docker/containers
-    file_type: directory
-    recurse: false
-  register: devbox_rootful_container_dirs
-  failed_when: false
-  when: devbox_rootless_docker_enabled
+- name: Disable rootful containerd service
+  ansible.builtin.systemd:
+    name: containerd
+    enabled: false
+    state: stopped
 
-- name: Detect rootful Docker image metadata without daemon
-  ansible.builtin.shell: |
-    set -euo pipefail
-    find /var/lib/docker/image -type f -name repositories.json -size +2c -print -quit 2>/dev/null
-  args:
-    executable: /bin/bash
-  register: devbox_rootful_image_metadata
-  changed_when: false
-  failed_when: false
-  when: devbox_rootless_docker_enabled
+- name: Remove rootful Docker state
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/docker
+    - /var/lib/containerd
 
-- name: Stop before rootless mode would strand rootful Docker state
-  ansible.builtin.fail:
-    msg: "Rootful Docker state exists. Rootless Docker is clean-rebuild-only; rebuild the box or run converge with DEVBOX_ROOTFUL_DOCKER=1."
-  when:
-    - devbox_rootless_docker_enabled
-    - >-
-      (devbox_rootful_containers.stdout | default('') | length > 0)
-      or (devbox_rootful_images.stdout | default('') | length > 0)
-      or (devbox_rootful_container_dirs.matched | default(0) | int > 0)
-      or (devbox_rootful_image_metadata.stdout | default('') | length > 0)
+- name: Remove rootful Docker daemon config
+  ansible.builtin.file:
+    path: /etc/docker/daemon.json
+    state: absent
 
-- name: Remove user from rootful docker group by default
+- name: Remove user from rootful docker group
   ansible.builtin.command: "gpasswd --delete {{ devbox_user }} docker"
   changed_when: true
-  when:
-    - devbox_rootless_docker_enabled
-    - "' docker ' in (' ' ~ devbox_user_groups.stdout ~ ' ')"
-
-- name: Ensure user remains in docker group when rootful mode is explicit
-  ansible.builtin.user:
-    name: "{{ devbox_user }}"
-    groups: docker
-    append: true
-  when: not devbox_rootless_docker_enabled
-
-- name: Ensure rootful Docker config directory exists
-  ansible.builtin.file:
-    path: /etc/docker
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  when: not devbox_rootless_docker_enabled
-
-- name: Configure rootful Docker log rotation
-  ansible.builtin.copy:
-    dest: /etc/docker/daemon.json
-    owner: root
-    group: root
-    mode: "0644"
-    content: |
-      {
-        "log-driver": "json-file",
-        "log-opts": {
-          "max-size": "{{ devbox_docker_log_max_size }}",
-          "max-file": "{{ devbox_docker_log_max_file }}"
-        }
-      }
-  register: devbox_rootful_docker_config
-  when: not devbox_rootless_docker_enabled
+  when: "' docker ' in (' ' ~ devbox_user_groups.stdout ~ ' ')"
 
 - name: Enable linger for rootless Docker user service
   ansible.builtin.command: "loginctl enable-linger {{ devbox_user }}"
   changed_when: false
-  when: devbox_rootless_docker_enabled
 
 - name: Start user systemd manager for rootless Docker
   ansible.builtin.systemd:
     name: "user@{{ devbox_user_uid.stdout }}.service"
     state: started
-  when: devbox_rootless_docker_enabled
 
 - name: Wait for user D-Bus socket
   ansible.builtin.wait_for:
     path: "/run/user/{{ devbox_user_uid.stdout }}/bus"
     state: present
     timeout: 30
-  when: devbox_rootless_docker_enabled
 
 - name: Install rootless Docker service
   ansible.builtin.command: dockerd-rootless-setuptool.sh install
@@ -126,7 +74,6 @@
   become_user: "{{ devbox_user }}"
   environment:
     XDG_RUNTIME_DIR: "/run/user/{{ devbox_user_uid.stdout }}"
-  when: devbox_rootless_docker_enabled
 
 - name: Ensure rootless Docker config directory exists
   ansible.builtin.file:
@@ -135,7 +82,6 @@
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: "0755"
-  when: devbox_rootless_docker_enabled
 
 - name: Configure rootless Docker log rotation
   ansible.builtin.copy:
@@ -152,7 +98,6 @@
         }
       }
   register: devbox_rootless_docker_config
-  when: devbox_rootless_docker_enabled
 
 - name: Enable rootless Docker user service
   ansible.builtin.command: systemctl --user enable --now docker.service
@@ -162,7 +107,6 @@
     XDG_RUNTIME_DIR: "/run/user/{{ devbox_user_uid.stdout }}"
     DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ devbox_user_uid.stdout }}/bus"
   changed_when: false
-  when: devbox_rootless_docker_enabled
 
 - name: Restart rootless Docker when log policy changed
   ansible.builtin.command: systemctl --user restart docker.service
@@ -173,43 +117,8 @@
     DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ devbox_user_uid.stdout }}/bus"
   changed_when: true
   when:
-    - devbox_rootless_docker_enabled
     - devbox_rootless_docker_config is defined
     - devbox_rootless_docker_config.changed
-
-- name: Disable rootful Docker service when rootless mode is enabled
-  ansible.builtin.systemd:
-    name: docker
-    enabled: false
-    state: stopped
-  when: devbox_rootless_docker_enabled
-
-- name: Keep rootful Docker service enabled when explicitly requested
-  ansible.builtin.systemd:
-    name: docker
-    enabled: true
-    state: started
-  when: not devbox_rootless_docker_enabled
-
-- name: Restart rootful Docker when log policy changed
-  ansible.builtin.systemd:
-    name: docker
-    state: restarted
-  when:
-    - not devbox_rootless_docker_enabled
-    - devbox_rootful_docker_config is defined
-    - devbox_rootful_docker_config.changed
-
-- name: Disable rootless Docker user service when rootful mode is explicit
-  ansible.builtin.command: systemctl --user disable --now docker.service
-  become: true
-  become_user: "{{ devbox_user }}"
-  environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ devbox_user_uid.stdout }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ devbox_user_uid.stdout }}/bus"
-  changed_when: false
-  failed_when: false
-  when: not devbox_rootless_docker_enabled
 
 - name: Install rootless Docker shell environment
   ansible.builtin.copy:
@@ -220,10 +129,3 @@
     content: |
       export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/{{ devbox_user_uid.stdout }}}"
       export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/{{ devbox_user_uid.stdout }}/docker.sock}"
-  when: devbox_rootless_docker_enabled
-
-- name: Remove rootless Docker shell environment when rootful mode is explicit
-  ansible.builtin.file:
-    path: "/home/{{ devbox_user }}/.config/devbox-docker-env"
-    state: absent
-  when: not devbox_rootless_docker_enabled

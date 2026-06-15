@@ -59,15 +59,10 @@ DEVBOX_RENDER_OUTPUT=cloud-init-devbox.yaml ./devbox render
 
 ## Docker
 
-Rootless Docker is the default on a clean rebuild.
-
-Existing boxes with rootful Docker containers/images are not migrated. Either:
-
-```sh
-DEVBOX_ROOTFUL_DOCKER=1 ./devbox converge
-```
-
-or rebuild the box and let rootless Docker become the default.
+Rootless Docker is the only supported Docker posture. `./devbox converge`
+stops rootful Docker and system containerd, removes their state, and enables the
+user's rootless Docker service. Do not keep long-lived state only in Docker on
+this box.
 
 ## Philosophy
 

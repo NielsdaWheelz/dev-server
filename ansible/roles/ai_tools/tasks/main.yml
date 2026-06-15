@@ -27,32 +27,24 @@
         fi
       }
 
-      find_real_codex() {
-        local self dir candidate resolved_candidate
-        self="$(readlink -f "$0")"
-        IFS=: read -r -a path_parts <<< "$PATH"
-        for dir in "${path_parts[@]}"; do
-          candidate="$dir/codex"
-          [[ -x "$candidate" ]] || continue
-          resolved_candidate="$(readlink -f "$candidate")"
-          if [[ "$resolved_candidate" != "$self" ]]; then
-            printf '%s\n' "$candidate"
-            return 0
-          fi
-        done
-        return 1
-      }
-
+      managed_codex="$HOME/.local/bin/codex"
       if [[ -n "${CODEX_BIN:-}" ]]; then
         real_codex="$CODEX_BIN"
-      elif [[ -x /usr/bin/codex ]]; then
-        real_codex="/usr/bin/codex"
       else
-        real_codex="$(find_real_codex || true)"
+        real_codex="$managed_codex"
       fi
-      if [[ -z "$real_codex" ]]; then
-        printf 'codex binary not found\n' >&2
+      if [[ ! -x "$real_codex" ]]; then
+        if [[ -n "${CODEX_BIN:-}" ]]; then
+          printf 'codex binary not executable: %s\n' "$real_codex" >&2
+        else
+          printf 'managed codex binary not found or not executable: %s\n' "$managed_codex" >&2
+        fi
         exit 127
+      fi
+
+      if [[ "${CODEX_WRAPPER_PRINT_BIN:-}" == "1" ]]; then
+        printf '%s\n' "$real_codex"
+        exit 0
       fi
 
       if [[ "${CODEX_HOME_LOCKED:-}" == "1" && -n "${CODEX_HOME:-}" ]]; then
@@ -199,6 +191,25 @@
   become_user: "{{ devbox_user }}"
   environment:
     PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
+  changed_when: false
+
+- name: Verify managed Codex wrapper
+  ansible.builtin.shell: |
+    set -euo pipefail
+    expected="/home/{{ devbox_user }}/.local/bin/codex"
+    test -x "$expected"
+    for wrapper in \
+      "/home/{{ devbox_user }}/bin/codex" \
+      "/home/{{ devbox_user }}/bin/codex-personal" \
+      "/home/{{ devbox_user }}/bin/codex-work"; do
+      actual="$(CODEX_WRAPPER_PRINT_BIN=1 "$wrapper")"
+      test "$actual" = "$expected"
+    done
+    "/home/{{ devbox_user }}/bin/codex" --version
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: "{{ devbox_user }}"
   changed_when: false
 
 - name: Enable corepack shims

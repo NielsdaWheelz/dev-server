@@ -9,4 +9,3 @@ devbox_docker_log_max_size: "{{ lookup('env', 'DEVBOX_DOCKER_LOG_MAX_SIZE') | de
 devbox_docker_log_max_file: "{{ lookup('env', 'DEVBOX_DOCKER_LOG_MAX_FILE') | default('3', true) }}"
 
 devbox_public_web: "{{ (lookup('env', 'DEVBOX_PUBLIC_WEB') | default('0', true)) in ['1', 'true', 'TRUE', 'yes', 'YES', 'on', 'ON'] }}"
-devbox_rootless_docker_enabled: "{{ (lookup('env', 'DEVBOX_ROOTFUL_DOCKER') | default('0', true)) not in ['1', 'true', 'TRUE', 'yes', 'YES', 'on', 'ON'] }}"
