@@ -27,19 +27,6 @@
   changed_when: "'Skipping' not in devbox_ufw_tailscale.stdout"
   register: devbox_ufw_tailscale
 
-- name: Remove world-open SSH rule
-  ansible.builtin.command: ufw --force delete allow 22/tcp
-  register: devbox_ufw_delete_ssh
-  changed_when: "'Rule deleted' in devbox_ufw_delete_ssh.stdout"
-  failed_when: false
-
-- name: Remove source-restricted bootstrap SSH rule
-  ansible.builtin.command: "ufw --force delete allow from {{ devbox_bootstrap_ssh_cidr }} to any port 22 proto tcp"
-  register: devbox_ufw_delete_bootstrap_ssh
-  changed_when: "'Rule deleted' in devbox_ufw_delete_bootstrap_ssh.stdout"
-  failed_when: false
-  when: devbox_bootstrap_ssh_cidr | length > 0
-
 - name: Allow public HTTP when enabled
   ansible.builtin.command: ufw allow 80/tcp
   register: devbox_ufw_allow_http
@@ -51,20 +38,6 @@
   register: devbox_ufw_allow_https
   changed_when: "'Skipping' not in devbox_ufw_allow_https.stdout"
   when: devbox_public_web
-
-- name: Remove public HTTP when disabled
-  ansible.builtin.command: ufw --force delete allow 80/tcp
-  register: devbox_ufw_delete_http
-  changed_when: "'Rule deleted' in devbox_ufw_delete_http.stdout"
-  failed_when: false
-  when: not devbox_public_web
-
-- name: Remove public HTTPS when disabled
-  ansible.builtin.command: ufw --force delete allow 443/tcp
-  register: devbox_ufw_delete_https
-  changed_when: "'Rule deleted' in devbox_ufw_delete_https.stdout"
-  failed_when: false
-  when: not devbox_public_web
 
 - name: Enable UFW
   ansible.builtin.command: ufw --force enable

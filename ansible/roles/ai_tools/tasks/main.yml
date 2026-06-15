@@ -23,18 +23,6 @@
     group: "{{ devbox_user }}"
     mode: "0755"
 
-- name: Reject unsupported default Claude state
-  ansible.builtin.shell: |
-    set -euo pipefail
-    path="/home/{{ devbox_user }}/.claude"
-    if [[ -e "$path" || -L "$path" ]]; then
-      printf '%s is unsupported; use .claude-personal or .claude-work\n' "$path"
-      exit 1
-    fi
-  args:
-    executable: /bin/bash
-  changed_when: false
-
 - name: Link Codex command shortcuts
   ansible.builtin.file:
     src: "/home/{{ devbox_user }}/.local/libexec/codex-router"

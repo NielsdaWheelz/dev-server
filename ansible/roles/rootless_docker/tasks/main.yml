@@ -10,52 +10,6 @@
     groups: sudo
     append: true
 
-- name: Inspect devbox user groups
-  ansible.builtin.command: "id -nG {{ devbox_user }}"
-  register: devbox_user_groups
-  changed_when: false
-
-- name: Disable rootful Docker socket
-  ansible.builtin.systemd:
-    name: docker.socket
-    enabled: false
-    state: stopped
-
-- name: Disable rootful Docker service
-  ansible.builtin.systemd:
-    name: docker
-    enabled: false
-    state: stopped
-
-- name: Disable rootful containerd service
-  ansible.builtin.systemd:
-    name: containerd
-    enabled: false
-    state: stopped
-
-- name: Remove stale rootful Docker socket
-  ansible.builtin.file:
-    path: /var/run/docker.sock
-    state: absent
-
-- name: Remove rootful Docker state
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /var/lib/docker
-    - /var/lib/containerd
-
-- name: Remove rootful Docker daemon config
-  ansible.builtin.file:
-    path: /etc/docker/daemon.json
-    state: absent
-
-- name: Remove user from rootful docker group
-  ansible.builtin.command: "gpasswd --delete {{ devbox_user }} docker"
-  changed_when: true
-  when: "' docker ' in (' ' ~ devbox_user_groups.stdout ~ ' ')"
-
 - name: Enable linger for rootless Docker user service
   ansible.builtin.command: "loginctl enable-linger {{ devbox_user }}"
   changed_when: false

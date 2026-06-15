@@ -25,7 +25,6 @@ docker_disk_warn_gb="${DEVBOX_DOCKER_DISK_WARN_GB:-20}"
 docker_disk_fail_gb="${DEVBOX_DOCKER_DISK_FAIL_GB:-35}"
 
 template="$base_dir/cloud-init-devbox.template.yaml"
-default_output="$base_dir/cloud-init-devbox.yaml"
 ansible_inventory="$base_dir/ansible/inventory/devbox.yml"
 ansible_converge_playbook="$base_dir/ansible/playbooks/converge.yml"
 
@@ -861,16 +860,7 @@ doctor_hcloud() {
   fi
   doctor_pass hcloud.server "server exists"
 
-  local backup_window firewall_json
-  backup_window="$(hcloud_cmd server describe "$server_name" -o 'format={{.BackupWindow}}' 2>/dev/null || true)"
-  case "$backup_window" in
-    ""|"<nil>"|"null"|"-")
-      doctor_pass hcloud.backups "Hetzner paid backups not enabled"
-      ;;
-    *)
-      doctor_fail hcloud.backups "Hetzner paid backups enabled: $backup_window"
-      ;;
-  esac
+  local firewall_json
 
   if ! firewall_json="$(hcloud_cmd firewall describe "$firewall_name" -o json 2>/dev/null)"; then
     doctor_warn hcloud.firewall "could not inspect $firewall_name"
@@ -884,28 +874,12 @@ doctor_hcloud() {
     doctor_warn hcloud.tailscale "UDP 41641 rule missing or incomplete"
   fi
 
-  if firewall_has_ingress "$firewall_json" tcp 22 "0.0.0.0/0" ||
-     firewall_has_ingress "$firewall_json" tcp 22 "::/0"; then
-    doctor_fail hcloud.public-ssh "world-open SSH rule exists"
-  elif firewall_has_ingress "$firewall_json" tcp 22; then
-    doctor_fail hcloud.public-ssh "temporary SSH rule still exists"
-  else
-    doctor_pass hcloud.public-ssh "no public SSH ingress"
-  fi
-
   if is_truthy "$public_web"; then
     if firewall_has_ingress "$firewall_json" tcp 80 "0.0.0.0/0" &&
        firewall_has_ingress "$firewall_json" tcp 443 "0.0.0.0/0"; then
       doctor_pass hcloud.public-web "public web enabled"
     else
       doctor_fail hcloud.public-web "DEVBOX_PUBLIC_WEB=1 but HTTP/HTTPS rules are missing"
-    fi
-  else
-    if firewall_has_ingress "$firewall_json" tcp 80 ||
-       firewall_has_ingress "$firewall_json" tcp 443; then
-      doctor_fail hcloud.public-web "HTTP/HTTPS rules exist without DEVBOX_PUBLIC_WEB=1"
-    else
-      doctor_pass hcloud.public-web "no public web ingress"
     fi
   fi
 }
@@ -920,12 +894,10 @@ doctor_remote() {
   local journal_cmd docker_disk_cmd docker_container_logs_cmd docker_user_env codex_cmd claude_cmd
 
   doctor_remote_sudo_cmd remote.cloud-init "cloud-init done" "cloud-init status --long | sed -n '1,3p'; cloud-init status --wait >/dev/null"
-  doctor_remote_sudo_cmd remote.systemd-failed "no failed systemd units" "failed_units=\$(systemctl --failed --no-legend --plain); test -z \"\$failed_units\" || { printf '%s\n' \"\$failed_units\"; exit 1; }"
   journal_cmd="warn_mb=$journal_warn_mb; fail_mb=$journal_fail_mb; [[ \"\$warn_mb\" =~ ^[0-9]+\$ && \"\$fail_mb\" =~ ^[0-9]+\$ ]] || { printf 'invalid journal thresholds: warn=%s fail=%s\n' \"\$warn_mb\" \"\$fail_mb\"; exit 1; }; test -d /var/log/journal || { printf 'persistent journal directory missing\n'; exit 1; }; journal_mb=\$(du -sm /var/log/journal | awk '{print \$1}'); summary=\$(journalctl --disk-usage 2>&1 || true); printf '%s; /var/log/journal %s MiB (warn %s, fail %s)\n' \"\$summary\" \"\$journal_mb\" \"\$warn_mb\" \"\$fail_mb\"; if (( journal_mb >= fail_mb )); then exit 1; fi; if (( journal_mb >= warn_mb )); then exit 2; fi"
   doctor_remote_sudo_threshold_cmd remote.journal "journal usage below threshold" "$journal_cmd"
   doctor_remote_cmd remote.tailscale "Tailscale IPv4 present" "tailscale ip -4 | head -n 1 | grep -q '^100[.]' && tailscale ip -4 | head -n 1"
   doctor_remote_sudo_cmd remote.ufw "UFW active" "ufw status | grep -q '^Status: active' && ufw status | sed -n '1,8p'"
-  doctor_remote_sudo_cmd remote.public-ssh "host public SSH closed" "! ufw status numbered | grep -Eq '22/tcp.*ALLOW IN'"
   doctor_remote_cmd remote.disk "root disk below 90%" "pct=\$(df -P / | awk 'NR==2 {gsub(/%/, \"\", \$5); print \$5}'); test \"\$pct\" -lt 90; printf '/ usage %s%%\\n' \"\$pct\""
   codex_cmd="$(cat <<'REMOTE'
 set -euo pipefail
@@ -969,23 +941,6 @@ if [[ "$(CODEX_ROUTER_PRINT_HOME=1 "$HOME/bin/codex-work")" != "$HOME/.codex-wor
   printf 'codex-work resolves to the wrong CODEX_HOME\n'
   exit 1
 fi
-if [[ -L "$HOME/.codex" ]]; then
-  printf 'unsupported default Codex symlink exists: %s\n' "$HOME/.codex"
-  exit 1
-elif [[ -e "$HOME/.codex" ]]; then
-  if [[ ! -d "$HOME/.codex" ]]; then
-    printf 'unsupported default Codex path exists: %s\n' "$HOME/.codex"
-    exit 1
-  fi
-  mapfile -t codex_default_entries < <(find "$HOME/.codex" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
-  if (( ${#codex_default_entries[@]} != 0 )) &&
-     { (( ${#codex_default_entries[@]} != 1 )) || [[ "${codex_default_entries[0]}" != "tmp" ]]; }; then
-    printf 'unsupported default Codex state under %s:\n' "$HOME/.codex"
-    printf '%s\n' "${codex_default_entries[@]}"
-    exit 1
-  fi
-fi
-
 wrapper_version="$("$HOME/bin/codex" --version)"
 managed_version="$("$expected" --version)"
 if [[ "$wrapper_version" != "$managed_version" ]]; then
@@ -1039,11 +994,6 @@ if [[ "$(CLAUDE_ROUTER_PRINT_HOME=1 "$HOME/bin/claude-work")" != "$HOME/.claude-
   printf 'claude-work resolves to the wrong CLAUDE_CONFIG_DIR\n'
   exit 1
 fi
-if [[ -e "$HOME/.claude" || -L "$HOME/.claude" ]]; then
-  printf 'unsupported default Claude state exists: %s\n' "$HOME/.claude"
-  exit 1
-fi
-
 router_version="$("$HOME/bin/claude" --version)"
 managed_version="$("$expected" --version)"
 if [[ "$router_version" != "$managed_version" ]]; then
@@ -1057,15 +1007,13 @@ REMOTE
   doctor_remote_cmd remote.claude "Claude uses managed binary" "$claude_cmd"
   doctor_remote_cmd remote.tools "GitHub CLI available" "gh --version | head -n 1"
 
-  docker_disk_cmd="warn_gb=$docker_disk_warn_gb; fail_gb=$docker_disk_fail_gb; [[ \"\$warn_gb\" =~ ^[0-9]+\$ && \"\$fail_gb\" =~ ^[0-9]+\$ ]] || { printf 'invalid Docker disk thresholds: warn=%s fail=%s\n' \"\$warn_gb\" \"\$fail_gb\"; exit 1; }; warn_mb=\$((warn_gb * 1024)); fail_mb=\$((fail_gb * 1024)); total_mb=0; for path in /var/lib/docker /var/lib/containerd \"\$HOME/.local/share/docker\"; do if [[ -e \"\$path\" ]]; then path_mb=\$(du -sm \"\$path\" 2>/dev/null | awk '{print \$1}'); total_mb=\$((total_mb + path_mb)); fi; done; docker system df 2>/dev/null || true; printf 'Docker data %s MiB (warn %s GiB, fail %s GiB)\n' \"\$total_mb\" \"\$warn_gb\" \"\$fail_gb\"; if (( total_mb >= fail_mb )); then exit 1; fi; if (( total_mb >= warn_mb )); then exit 2; fi"
+  docker_disk_cmd="warn_gb=$docker_disk_warn_gb; fail_gb=$docker_disk_fail_gb; [[ \"\$warn_gb\" =~ ^[0-9]+\$ && \"\$fail_gb\" =~ ^[0-9]+\$ ]] || { printf 'invalid Docker disk thresholds: warn=%s fail=%s\n' \"\$warn_gb\" \"\$fail_gb\"; exit 1; }; warn_mb=\$((warn_gb * 1024)); fail_mb=\$((fail_gb * 1024)); path=\"\$HOME/.local/share/docker\"; total_mb=0; if [[ -e \"\$path\" ]]; then total_mb=\$(du -sm \"\$path\" 2>/dev/null | awk '{print \$1}'); fi; docker system df 2>/dev/null || true; printf 'Rootless Docker data %s MiB (warn %s GiB, fail %s GiB)\n' \"\$total_mb\" \"\$warn_gb\" \"\$fail_gb\"; if (( total_mb >= fail_mb )); then exit 1; fi; if (( total_mb >= warn_mb )); then exit 2; fi"
   docker_container_logs_cmd="containers=\$(docker ps -q); if [[ -z \"\$containers\" ]]; then printf 'no running containers\n'; exit 0; fi; bad=\$(docker inspect \$containers | jq -r '.[] | select(.HostConfig.LogConfig.Type == \"json-file\" and ((.HostConfig.LogConfig.Config[\"max-size\"] // \"\") == \"\" or (.HostConfig.LogConfig.Config[\"max-file\"] // \"\") == \"\")) | .Name'); if [[ -n \"\$bad\" ]]; then printf 'running json-file containers without caps:\n%s\n' \"\$bad\"; exit 2; fi; printf 'running containers have capped json-file logs or non-json log drivers\n'"
   docker_user_env="uid=\$(id -u); export XDG_RUNTIME_DIR=/run/user/\$uid DOCKER_HOST=unix:///run/user/\$uid/docker.sock; "
   doctor_remote_cmd docker.rootless "rootless Docker active" "${docker_user_env}systemctl --user is-active --quiet docker && docker info >/dev/null && docker compose version"
   doctor_remote_cmd docker.log-policy "rootless Docker log rotation configured" "test -r \"\$HOME/.config/docker/daemon.json\" && grep -q '\"log-driver\": \"json-file\"' \"\$HOME/.config/docker/daemon.json\" && grep -q '\"max-size\":' \"\$HOME/.config/docker/daemon.json\" && grep -q '\"max-file\":' \"\$HOME/.config/docker/daemon.json\""
   doctor_remote_threshold_cmd docker.container-logs "running container logs capped" "${docker_user_env}${docker_container_logs_cmd}"
   doctor_remote_threshold_cmd docker.disk "Docker disk usage below threshold" "${docker_user_env}${docker_disk_cmd}"
-  doctor_remote_sudo_cmd docker.rootful-off "rootful Docker inactive" "! systemctl is-active --quiet docker && ! systemctl is-active --quiet docker.socket && ! systemctl is-active --quiet containerd"
-  doctor_remote_sudo_cmd docker.rootful-state "rootful Docker state absent" "test ! -e /var/lib/docker && test ! -e /var/lib/containerd"
 }
 
 cmd_doctor() {
@@ -1091,16 +1039,6 @@ cmd_doctor() {
   fi
 
   doctor_local_cmd local.ssh-config "SSH alias resolves" "ssh -G '$server_name' >/dev/null 2>&1"
-
-  if [[ -f "$default_output" ]]; then
-    if grep -Eq 'OPENSSH PRIVATE KEY|tskey-auth|__TAILSCALE_AUTH_KEY_B64__' "$default_output"; then
-      doctor_fail local.rendered-cloud-init "stale secret-bearing $default_output exists"
-    else
-      doctor_warn local.rendered-cloud-init "stale $default_output exists"
-    fi
-  else
-    doctor_pass local.rendered-cloud-init "no persistent rendered cloud-init"
-  fi
 
   doctor_hcloud
 

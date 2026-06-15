@@ -32,8 +32,8 @@ Then run:
 ```
 
 `up` renders cloud-init to a temporary file, creates or reuses the Hetzner VPS,
-waits for Tailscale, rewrites the SSH alias to the Tailscale IP, removes public
-SSH, runs Ansible, and runs a lightweight doctor.
+waits for Tailscale, rewrites the SSH alias to the Tailscale IP, runs lockdown,
+runs Ansible, and runs a lightweight doctor.
 
 ## Daily Commands
 
@@ -49,19 +49,22 @@ DEVBOX_RENDER_OUTPUT=cloud-init-devbox.yaml ./devbox render
 
 - Public SSH is temporary. After Tailscale is up, `lockdown` removes host and
   Hetzner SSH ingress.
-- Public HTTP/HTTPS is closed unless `DEVBOX_PUBLIC_WEB=1` is set.
-- Hetzner paid backups are intentionally not used. `doctor` fails if a Hetzner
-  `BackupWindow` is present.
+- Public HTTP/HTTPS is managed by `up` and `lockdown`; set
+  `DEVBOX_PUBLIC_WEB=1` before running them to open it.
+- `converge` installs and updates the desired packages, services, shell config,
+  and AI-tool shortcuts. It does not clean unrelated drift; rebuild or clean the
+  box manually when that is what you want.
+- `doctor` checks the health of required pieces. It does not audit for the
+  absence of unrelated state.
 - Generated cloud-init is secret-bearing. Normal commands use temporary files;
   keep `cloud-init-devbox.yaml` out of git.
 - The `secrets/` directory is ignored and should stay local.
 
 ## Docker
 
-Rootless Docker is the only supported Docker posture. `./devbox converge`
-stops rootful Docker and system containerd, removes their state, and enables the
-user's rootless Docker service. Do not keep long-lived state only in Docker on
-this box.
+Rootless Docker is the configured default. `./devbox converge` installs the
+rootless service, log policy, and shell environment. Do not keep long-lived
+state only in Docker on this box.
 
 ## Philosophy
 
