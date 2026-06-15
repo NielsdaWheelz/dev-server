@@ -89,13 +89,8 @@ hcloud_cmd() {
 }
 
 run_ansible_playbook() {
-  if command -v ansible-playbook >/dev/null 2>&1; then
-    ansible-playbook "$@"
-  elif command -v uvx >/dev/null 2>&1; then
-    uvx --from ansible-core ansible-playbook "$@"
-  else
-    die "missing ansible-playbook. Install Ansible or install uv for uvx fallback."
-  fi
+  require_cmd uvx
+  uvx --from ansible-core ansible-playbook "$@"
 }
 
 load_state() {
@@ -450,24 +445,16 @@ ensure_server_github_key_registered() {
     return 0
   fi
 
-  if ! command -v gh >/dev/null 2>&1; then
-    warn "gh missing locally; cannot register server GitHub public key"
-    return 0
-  fi
-
-  if ! gh auth status -h github.com >/dev/null 2>&1; then
-    warn "gh is not authenticated for github.com; run gh auth login, then ./devbox converge"
-    return 0
-  fi
+  require_cmd gh
+  gh auth status -h github.com >/dev/null 2>&1 || die "gh is not authenticated for github.com; run gh auth login, then ./devbox converge"
 
   local pub_key existing_keys key_file key_title add_output
-  pub_key="$(ssh_devbox "cat '/home/$server_user/.ssh/id_ed25519_github.pub' 2>/dev/null" || true)"
+  pub_key="$(ssh_devbox "awk '{print \$1 \" \" \$2}' '/home/$server_user/.ssh/id_ed25519_github.pub'")"
   if [[ -z "$pub_key" ]]; then
-    warn "server GitHub public key is not available yet"
-    return 0
+    die "server GitHub public key is not available yet"
   fi
 
-  existing_keys="$(gh api user/keys --jq '.[].key' 2>/dev/null || true)"
+  existing_keys="$(gh api user/keys --jq '.[].key')"
   if printf '%s\n' "$existing_keys" | grep -Fxq "$pub_key"; then
     log "server GitHub public key already registered"
     return 0
@@ -482,7 +469,8 @@ ensure_server_github_key_registered() {
     log "registered server GitHub public key: $key_title"
   else
     [[ -n "$add_output" ]] && printf '%s\n' "$add_output" >&2
-    warn "failed to register server GitHub public key; run: ssh $server_name cat ~/.ssh/id_ed25519_github.pub"
+    rm -f "$key_file"
+    die "failed to register server GitHub public key"
   fi
   rm -f "$key_file"
 }
@@ -981,9 +969,21 @@ if [[ "$(CODEX_ROUTER_PRINT_HOME=1 "$HOME/bin/codex-work")" != "$HOME/.codex-wor
   printf 'codex-work resolves to the wrong CODEX_HOME\n'
   exit 1
 fi
-if [[ -e "$HOME/.codex" || -L "$HOME/.codex" ]]; then
-  printf 'unsupported default Codex config path exists: %s\n' "$HOME/.codex"
+if [[ -L "$HOME/.codex" ]]; then
+  printf 'unsupported default Codex symlink exists: %s\n' "$HOME/.codex"
   exit 1
+elif [[ -e "$HOME/.codex" ]]; then
+  if [[ ! -d "$HOME/.codex" ]]; then
+    printf 'unsupported default Codex path exists: %s\n' "$HOME/.codex"
+    exit 1
+  fi
+  mapfile -t codex_default_entries < <(find "$HOME/.codex" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+  if (( ${#codex_default_entries[@]} != 0 )) &&
+     { (( ${#codex_default_entries[@]} != 1 )) || [[ "${codex_default_entries[0]}" != "tmp" ]]; }; then
+    printf 'unsupported default Codex state under %s:\n' "$HOME/.codex"
+    printf '%s\n' "${codex_default_entries[@]}"
+    exit 1
+  fi
 fi
 
 wrapper_version="$("$HOME/bin/codex" --version)"
@@ -1040,7 +1040,7 @@ if [[ "$(CLAUDE_ROUTER_PRINT_HOME=1 "$HOME/bin/claude-work")" != "$HOME/.claude-
   exit 1
 fi
 if [[ -e "$HOME/.claude" || -L "$HOME/.claude" ]]; then
-  printf 'unsupported default Claude config path exists: %s\n' "$HOME/.claude"
+  printf 'unsupported default Claude state exists: %s\n' "$HOME/.claude"
   exit 1
 fi
 
@@ -1084,13 +1084,13 @@ cmd_doctor() {
   printf 'public web: %s\n' "$public_web"
   printf 'docker mode: rootless\n'
 
-  if command -v ansible-playbook >/dev/null 2>&1 || command -v uvx >/dev/null 2>&1; then
-    doctor_pass local.ansible "Ansible or uvx fallback present"
+  if command -v uvx >/dev/null 2>&1; then
+    doctor_pass local.ansible "uvx present for ansible-core"
   else
-    doctor_fail local.ansible "ansible-playbook missing and uvx fallback unavailable"
+    doctor_fail local.ansible "uvx missing"
   fi
 
-  doctor_local_cmd local.ssh-config "SSH alias resolves" "ssh -G '$server_name' >/dev/null"
+  doctor_local_cmd local.ssh-config "SSH alias resolves" "ssh -G '$server_name' >/dev/null 2>&1"
 
   if [[ -f "$default_output" ]]; then
     if grep -Eq 'OPENSSH PRIVATE KEY|tskey-auth|__TAILSCALE_AUTH_KEY_B64__' "$default_output"; then

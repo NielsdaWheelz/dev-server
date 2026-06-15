@@ -63,7 +63,7 @@ write_files:
         else
           tailscale_status=0
         fi
-        shred -u /root/.devbox-tailscale-auth-key 2>/dev/null || rm -f /root/.devbox-tailscale-auth-key
+        rm -f /root/.devbox-tailscale-auth-key
         set -e -x
         if [ "$tailscale_status" -ne 0 ]; then
           exit "$tailscale_status"

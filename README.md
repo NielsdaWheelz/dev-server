@@ -12,7 +12,6 @@ is expected to be rebuilt when it drifts too far.
   and the temporary host firewall.
 - `ansible/`: ongoing package, shell, AI-tool, security, and Docker setup.
 - `zshrc`, `zsh_helpers`, `p10k.zsh`: managed shell environment.
-- `scripts/doctor-local.sh`: compatibility wrapper for `./devbox doctor`.
 
 ## One Command
 

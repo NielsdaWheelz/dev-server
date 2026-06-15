@@ -112,8 +112,6 @@ if [[ -r "$HOME/.zsh/powerlevel10k/powerlevel10k.zsh-theme" ]]; then
 
   if [[ -r "$HOME/.p10k.zsh" ]]; then
     source "$HOME/.p10k.zsh"
-  elif [[ -r "$HOME/.zsh/powerlevel10k/config/p10k-lean.zsh" ]]; then
-    source "$HOME/.zsh/powerlevel10k/config/p10k-lean.zsh"
   fi
 else
   PROMPT='%F{green}%n@%m%f:%F{blue}%~%f%F{yellow}$(_dev_server_git_branch)%f %# '

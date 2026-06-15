@@ -66,12 +66,6 @@
     content: "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu {{ ansible_facts['distribution_release'] }} main\n"
   register: devbox_tailscale_repo
 
-- name: Remove legacy NodeSource deb822 repo that conflicts with managed keyring
-  ansible.builtin.file:
-    path: /etc/apt/sources.list.d/nodesource.sources
-    state: absent
-  register: devbox_legacy_nodesource_repo
-
 - name: Configure NodeSource apt repo
   ansible.builtin.copy:
     dest: /etc/apt/sources.list.d/nodesource.list
@@ -84,7 +78,7 @@
 - name: Update apt cache when repo files changed
   ansible.builtin.apt:
     update_cache: true
-  when: devbox_docker_repo.changed or devbox_gh_repo.changed or devbox_tailscale_repo.changed or devbox_legacy_nodesource_repo.changed or devbox_nodesource_repo.changed
+  when: devbox_docker_repo.changed or devbox_gh_repo.changed or devbox_tailscale_repo.changed or devbox_nodesource_repo.changed
 
 - name: Install base packages
   ansible.builtin.apt:
@@ -141,7 +135,6 @@
   ansible.builtin.command: timedatectl show -p Timezone --value
   register: devbox_current_timezone
   changed_when: false
-  failed_when: false
 
 - name: Configure timezone
   ansible.builtin.command: "timedatectl set-timezone {{ devbox_timezone }}"
@@ -239,8 +232,8 @@
     content: |
       [Journal]
       Storage=persistent
-      SystemMaxUse=512M
-      MaxRetentionSec=14day
+      SystemMaxUse=256M
+      MaxRetentionSec=7day
   notify: Restart journald
 
 - name: Ensure persistent journal directory exists
@@ -321,23 +314,31 @@
     - "/home/{{ devbox_user }}/.codex-personal"
     - "/home/{{ devbox_user }}/.codex-work"
 
-- name: Inspect unsupported default Codex config path
-  ansible.builtin.stat:
-    path: "/home/{{ devbox_user }}/.codex"
-    follow: false
-  register: devbox_default_codex_config
-
-- name: Remove unsupported default Codex config symlink
-  ansible.builtin.file:
-    path: "/home/{{ devbox_user }}/.codex"
-    follow: false
-    state: absent
-  when:
-    - devbox_default_codex_config.stat.islnk | default(false)
-
-- name: Stop if unsupported default Codex config directory exists
-  ansible.builtin.fail:
-    msg: "/home/{{ devbox_user }}/.codex is unsupported; use /home/{{ devbox_user }}/.codex-personal or /home/{{ devbox_user }}/.codex-work."
-  when:
-    - devbox_default_codex_config.stat.exists | default(false)
-    - not (devbox_default_codex_config.stat.islnk | default(false))
+- name: Reject unsupported default Codex state
+  ansible.builtin.shell: |
+    set -euo pipefail
+    path="/home/{{ devbox_user }}/.codex"
+    if [[ -L "$path" ]]; then
+      printf '%s is a symlink; use .codex-personal or .codex-work\n' "$path"
+      exit 1
+    fi
+    if [[ ! -e "$path" ]]; then
+      exit 0
+    fi
+    if [[ ! -d "$path" ]]; then
+      printf '%s is unsupported; use .codex-personal or .codex-work\n' "$path"
+      exit 1
+    fi
+    entries="$(find "$path" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)"
+    if [[ -z "$entries" ]]; then
+      exit 0
+    fi
+    if [[ "$entries" == "tmp" ]]; then
+      exit 0
+    fi
+    printf 'unsupported entries under %s:\n' "$path"
+    printf '%s\n' "$entries"
+    exit 1
+  args:
+    executable: /bin/bash
+  changed_when: false

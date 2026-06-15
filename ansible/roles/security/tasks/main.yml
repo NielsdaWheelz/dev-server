@@ -27,7 +27,7 @@
   changed_when: "'Skipping' not in devbox_ufw_tailscale.stdout"
   register: devbox_ufw_tailscale
 
-- name: Remove public SSH fallback rule
+- name: Remove world-open SSH rule
   ansible.builtin.command: ufw --force delete allow 22/tcp
   register: devbox_ufw_delete_ssh
   changed_when: "'Rule deleted' in devbox_ufw_delete_ssh.stdout"

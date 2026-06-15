@@ -87,7 +87,6 @@
   become: true
   become_user: "{{ devbox_user }}"
   changed_when: false
-  failed_when: false
 
 - name: Set user shell to zsh
   ansible.builtin.user:
