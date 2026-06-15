@@ -929,7 +929,7 @@ doctor_remote() {
   fi
   doctor_pass remote.ssh "ssh $server_name works"
 
-  local journal_cmd docker_disk_cmd docker_container_logs_cmd docker_user_env codex_cmd
+  local journal_cmd docker_disk_cmd docker_container_logs_cmd docker_user_env codex_cmd claude_cmd
 
   doctor_remote_sudo_cmd remote.cloud-init "cloud-init done" "cloud-init status --long | sed -n '1,3p'; cloud-init status --wait >/dev/null"
   doctor_remote_sudo_cmd remote.systemd-failed "no failed systemd units" "failed_units=\$(systemctl --failed --no-legend --plain); test -z \"\$failed_units\" || { printf '%s\n' \"\$failed_units\"; exit 1; }"
@@ -942,43 +942,120 @@ doctor_remote() {
   codex_cmd="$(cat <<'REMOTE'
 set -euo pipefail
 expected="$HOME/.local/bin/codex"
+router="$HOME/.local/libexec/codex-router"
 if [[ ! -x "$expected" ]]; then
   printf 'missing managed Codex binary: %s\n' "$expected"
   exit 1
 fi
+if [[ ! -x "$router" ]]; then
+  printf 'missing Codex router: %s\n' "$router"
+  exit 1
+fi
 
-for wrapper in "$HOME/bin/codex" "$HOME/bin/codex-personal" "$HOME/bin/codex-work"; do
-  if [[ ! -x "$wrapper" ]]; then
-    printf 'missing Codex wrapper: %s\n' "$wrapper"
+for shortcut in "$HOME/bin/codex" "$HOME/bin/codex-personal" "$HOME/bin/codex-work"; do
+  if [[ ! -x "$shortcut" ]]; then
+    printf 'missing Codex shortcut: %s\n' "$shortcut"
     exit 1
   fi
-  actual="$(CODEX_WRAPPER_PRINT_BIN=1 "$wrapper")"
+  if [[ ! -L "$shortcut" ]]; then
+    printf 'Codex shortcut is not a symlink: %s\n' "$shortcut"
+    exit 1
+  fi
+  shortcut_target="$(readlink "$shortcut")"
+  if [[ "$shortcut_target" != "$router" ]]; then
+    printf '%s links to %s, expected %s\n' "$shortcut" "$shortcut_target" "$router"
+    exit 1
+  fi
+  actual="$(CODEX_ROUTER_PRINT_BIN=1 "$shortcut")"
   if [[ "$actual" != "$expected" ]]; then
-    printf '%s resolves to %s, expected %s\n' "$wrapper" "$actual" "$expected"
+    printf '%s resolves to %s, expected %s\n' "$shortcut" "$actual" "$expected"
     exit 1
   fi
 done
 
-wrapper_version="$("$HOME/bin/codex" --version)"
-managed_version="$("$expected" --version)"
-if [[ "$wrapper_version" != "$managed_version" ]]; then
-  printf 'Codex wrapper version mismatch: wrapper=%s managed=%s\n' "$wrapper_version" "$managed_version"
+if [[ "$(CODEX_ROUTER_PRINT_HOME=1 "$HOME/bin/codex-personal")" != "$HOME/.codex-personal" ]]; then
+  printf 'codex-personal resolves to the wrong CODEX_HOME\n'
+  exit 1
+fi
+if [[ "$(CODEX_ROUTER_PRINT_HOME=1 "$HOME/bin/codex-work")" != "$HOME/.codex-work" ]]; then
+  printf 'codex-work resolves to the wrong CODEX_HOME\n'
+  exit 1
+fi
+if [[ -e "$HOME/.codex" || -L "$HOME/.codex" ]]; then
+  printf 'unsupported default Codex config path exists: %s\n' "$HOME/.codex"
   exit 1
 fi
 
-printf '%s via %s\n' "$wrapper_version" "$expected"
-if [[ -e /usr/bin/codex ]]; then
-  system_version="$(/usr/bin/codex --version 2>/dev/null || true)"
-  if [[ -n "$system_version" ]]; then
-    printf 'ignored /usr/bin/codex (%s)\n' "$system_version"
-  else
-    printf 'ignored /usr/bin/codex\n'
-  fi
+wrapper_version="$("$HOME/bin/codex" --version)"
+managed_version="$("$expected" --version)"
+if [[ "$wrapper_version" != "$managed_version" ]]; then
+  printf 'Codex router version mismatch: router=%s managed=%s\n' "$wrapper_version" "$managed_version"
+  exit 1
 fi
+
+printf '%s via %s -> %s\n' "$wrapper_version" "$router" "$expected"
 REMOTE
 )"
   doctor_remote_cmd remote.codex "Codex uses managed binary" "$codex_cmd"
-  doctor_remote_cmd remote.tools "Claude and GitHub CLI available" "claude --version && gh --version | head -n 1"
+  claude_cmd="$(cat <<'REMOTE'
+set -euo pipefail
+expected="$HOME/.local/bin/claude"
+router="$HOME/.local/libexec/claude-router"
+if [[ ! -x "$expected" ]]; then
+  printf 'missing managed Claude binary: %s\n' "$expected"
+  exit 1
+fi
+if [[ ! -x "$router" ]]; then
+  printf 'missing Claude router: %s\n' "$router"
+  exit 1
+fi
+
+for shortcut in "$HOME/bin/claude" "$HOME/bin/claude-personal" "$HOME/bin/claude-work"; do
+  if [[ ! -x "$shortcut" ]]; then
+    printf 'missing Claude shortcut: %s\n' "$shortcut"
+    exit 1
+  fi
+  if [[ ! -L "$shortcut" ]]; then
+    printf 'Claude shortcut is not a symlink: %s\n' "$shortcut"
+    exit 1
+  fi
+  shortcut_target="$(readlink "$shortcut")"
+  if [[ "$shortcut_target" != "$router" ]]; then
+    printf '%s links to %s, expected %s\n' "$shortcut" "$shortcut_target" "$router"
+    exit 1
+  fi
+  actual="$(CLAUDE_ROUTER_PRINT_BIN=1 "$shortcut")"
+  if [[ "$actual" != "$expected" ]]; then
+    printf '%s resolves to %s, expected %s\n' "$shortcut" "$actual" "$expected"
+    exit 1
+  fi
+done
+
+if [[ "$(CLAUDE_ROUTER_PRINT_HOME=1 "$HOME/bin/claude-personal")" != "$HOME/.claude-personal" ]]; then
+  printf 'claude-personal resolves to the wrong CLAUDE_CONFIG_DIR\n'
+  exit 1
+fi
+if [[ "$(CLAUDE_ROUTER_PRINT_HOME=1 "$HOME/bin/claude-work")" != "$HOME/.claude-work" ]]; then
+  printf 'claude-work resolves to the wrong CLAUDE_CONFIG_DIR\n'
+  exit 1
+fi
+if [[ -e "$HOME/.claude" || -L "$HOME/.claude" ]]; then
+  printf 'unsupported default Claude config path exists: %s\n' "$HOME/.claude"
+  exit 1
+fi
+
+router_version="$("$HOME/bin/claude" --version)"
+managed_version="$("$expected" --version)"
+if [[ "$router_version" != "$managed_version" ]]; then
+  printf 'Claude router version mismatch: router=%s managed=%s\n' "$router_version" "$managed_version"
+  exit 1
+fi
+
+printf '%s via %s -> %s\n' "$router_version" "$router" "$expected"
+REMOTE
+)"
+  doctor_remote_cmd remote.claude "Claude uses managed binary" "$claude_cmd"
+  doctor_remote_cmd remote.tools "GitHub CLI available" "gh --version | head -n 1"
 
   docker_disk_cmd="warn_gb=$docker_disk_warn_gb; fail_gb=$docker_disk_fail_gb; [[ \"\$warn_gb\" =~ ^[0-9]+\$ && \"\$fail_gb\" =~ ^[0-9]+\$ ]] || { printf 'invalid Docker disk thresholds: warn=%s fail=%s\n' \"\$warn_gb\" \"\$fail_gb\"; exit 1; }; warn_mb=\$((warn_gb * 1024)); fail_mb=\$((fail_gb * 1024)); total_mb=0; for path in /var/lib/docker /var/lib/containerd \"\$HOME/.local/share/docker\"; do if [[ -e \"\$path\" ]]; then path_mb=\$(du -sm \"\$path\" 2>/dev/null | awk '{print \$1}'); total_mb=\$((total_mb + path_mb)); fi; done; docker system df 2>/dev/null || true; printf 'Docker data %s MiB (warn %s GiB, fail %s GiB)\n' \"\$total_mb\" \"\$warn_gb\" \"\$fail_gb\"; if (( total_mb >= fail_mb )); then exit 1; fi; if (( total_mb >= warn_mb )); then exit 2; fi"
   docker_container_logs_cmd="containers=\$(docker ps -q); if [[ -z \"\$containers\" ]]; then printf 'no running containers\n'; exit 0; fi; bad=\$(docker inspect \$containers | jq -r '.[] | select(.HostConfig.LogConfig.Type == \"json-file\" and ((.HostConfig.LogConfig.Config[\"max-size\"] // \"\") == \"\" or (.HostConfig.LogConfig.Config[\"max-file\"] // \"\") == \"\")) | .Name'); if [[ -n \"\$bad\" ]]; then printf 'running json-file containers without caps:\n%s\n' \"\$bad\"; exit 2; fi; printf 'running containers have capped json-file logs or non-json log drivers\n'"

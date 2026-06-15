@@ -55,8 +55,6 @@
       .env
       .env.*
       .ai-images/
-      .claude/
-      .codex/
       .codex-personal/
       .codex-work/
 

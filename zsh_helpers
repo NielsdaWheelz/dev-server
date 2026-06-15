@@ -26,6 +26,8 @@ alias work='cd ~/src/work'
 alias personal='cd ~/src/personal'
 alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
 
+# Later entries are prepended, so command shortcuts in ~/bin win over package
+# manager binaries in ~/.local/bin while npm still owns the real executables.
 for _devbox_path_dir in "$HOME/.local/share/mise/shims" "$HOME/.local/bin" "$HOME/bin"; do
   case ":$PATH:" in
     *":$_devbox_path_dir:"*) ;;
@@ -36,196 +38,54 @@ unset _devbox_path_dir
 
 # Directory-aware AI account routing.
 #
-# The state directory is the auth/config/history boundary. Normal `codex` and
-# `claude` calls resolve personal vs work from the current directory. Explicit
-# override commands exist for debugging and one-off use. The Codex functions
-# deliberately re-resolve the home even when CODEX_HOME is inherited; only the
-# explicit wrappers set CODEX_HOME_LOCKED=1.
-export AI_PERSONAL_ROOT="${AI_PERSONAL_ROOT:-$HOME/src/personal}"
-export AI_WORK_ROOT="${AI_WORK_ROOT:-$HOME/src/work}"
+# The state directory is the auth/config/history boundary. Command files in
+# ~/bin are symlinks to routers under ~/.local/libexec; npm owns the real
+# binaries under ~/.local/bin.
+_ai_codex_router() {
+  local router="$HOME/bin/codex"
 
-export CODEX_HOME_PERSONAL="${CODEX_HOME_PERSONAL:-$HOME/.codex-personal}"
-export CODEX_HOME_WORK="${CODEX_HOME_WORK:-$HOME/.codex-work}"
-
-export CLAUDE_CONFIG_DIR_PERSONAL="${CLAUDE_CONFIG_DIR_PERSONAL:-$HOME/.claude-personal}"
-export CLAUDE_CONFIG_DIR_WORK="${CLAUDE_CONFIG_DIR_WORK:-$HOME/.claude-work}"
-
-_ai_abspath() {
-  local target="${1:-$PWD}"
-
-  if [[ "$target" = /* ]]; then
-    if [[ -d "$target" ]]; then
-      (cd "$target" && pwd -P)
-    else
-      printf '%s\n' "$target"
-    fi
-  else
-    if [[ -d "$PWD/$target" ]]; then
-      (cd "$PWD/$target" && pwd -P)
-    else
-      printf '%s/%s\n' "$PWD" "$target"
-    fi
-  fi
+  [[ -x "$router" ]] || return 1
+  printf '%s\n' "$router"
 }
 
-_ai_context_for_path() {
-  local dir
-  local work_root
-  dir="$(_ai_abspath "${1:-$PWD}")"
-  work_root="$(_ai_abspath "$AI_WORK_ROOT")"
+_ai_claude_router() {
+  local router="$HOME/bin/claude"
 
-  case "$dir" in
-    "$work_root"|"$work_root"/*)
-      printf 'work\n'
-      ;;
-    *)
-      printf 'personal\n'
-      ;;
-  esac
-}
-
-_ai_codex_target_from_args() {
-  local target="$PWD"
-  local arg
-  local next_is_cd=0
-
-  for arg in "$@"; do
-    if (( next_is_cd )); then
-      target="$arg"
-      next_is_cd=0
-      continue
-    fi
-
-    case "$arg" in
-      -C|--cd)
-        next_is_cd=1
-        ;;
-      --cd=*)
-        target="${arg#--cd=}"
-        ;;
-    esac
-  done
-
-  printf '%s\n' "$target"
-}
-
-_ai_codex_context_for_args() {
-  _ai_context_for_path "$(_ai_codex_target_from_args "$@")"
-}
-
-_ai_codex_home_for_context() {
-  case "$1" in
-    work) printf '%s\n' "$CODEX_HOME_WORK" ;;
-    personal) printf '%s\n' "$CODEX_HOME_PERSONAL" ;;
-    *) return 1 ;;
-  esac
-}
-
-_ai_claude_config_dir_for_context() {
-  case "$1" in
-    work) printf '%s\n' "$CLAUDE_CONFIG_DIR_WORK" ;;
-    personal) printf '%s\n' "$CLAUDE_CONFIG_DIR_PERSONAL" ;;
-    *) return 1 ;;
-  esac
-}
-
-_ai_real_bin() {
-  local name="$1"
-
-  if command -v whence >/dev/null 2>&1; then
-    whence -p "$name"
-  elif type -P "$name" >/dev/null 2>&1; then
-    type -P "$name"
-  else
-    command -v "$name"
-  fi
-}
-
-_ai_codex_bin() {
-  local real_codex
-  real_codex="${CODEX_BIN:-$HOME/.local/bin/codex}"
-
-  [[ -x "$real_codex" ]] || return 1
-  printf '%s\n' "$real_codex"
+  [[ -x "$router" ]] || return 1
+  printf '%s\n' "$router"
 }
 
 ai-context() {
-  _ai_context_for_path "$PWD"
+  CODEX_ROUTER_PRINT_CONTEXT=1 "$(_ai_codex_router)" "$@"
 }
 
 codex-home() {
-  _ai_codex_home_for_context "$(_ai_codex_context_for_args "$@")"
+  CODEX_ROUTER_PRINT_HOME=1 "$(_ai_codex_router)" "$@"
+}
+
+codex-bin() {
+  CODEX_ROUTER_PRINT_BIN=1 "$(_ai_codex_router)" "$@"
 }
 
 claude-home() {
-  _ai_claude_config_dir_for_context "$(_ai_context_for_path "$PWD")"
+  CLAUDE_ROUTER_PRINT_HOME=1 "$(_ai_claude_router)" "$@"
 }
 
-codex() {
-  local real_codex
-
-  if ! real_codex="$(_ai_codex_bin)"; then
-    if [[ -n "${CODEX_BIN:-}" ]]; then
-      printf 'codex binary not executable: %s\n' "$CODEX_BIN" >&2
-    else
-      printf 'managed codex binary not found or not executable: %s\n' "$HOME/.local/bin/codex" >&2
-    fi
-    return 127
-  fi
-
-  if [[ "${CODEX_WRAPPER_PRINT_BIN:-}" = "1" ]]; then
-    printf '%s\n' "$real_codex"
-    return 0
-  fi
-
-  if [[ "${CODEX_HOME_LOCKED:-}" = "1" && -n "${CODEX_HOME:-}" ]]; then
-    CODEX_HOME="$CODEX_HOME" CODEX_HOME_LOCKED=1 "$real_codex" "$@"
-  else
-    CODEX_HOME="$(codex-home "$@")" CODEX_HOME_LOCKED=1 "$real_codex" "$@"
-  fi
-}
-
-claude() {
-  local real_claude
-  real_claude="${CLAUDE_BIN:-$(_ai_real_bin claude)}"
-
-  if [[ -z "$real_claude" ]]; then
-    printf 'claude binary not found\n' >&2
-    return 127
-  fi
-
-  if [[ -n "${CLAUDE_CONFIG_DIR:-}" ]]; then
-    "$real_claude" "$@"
-  else
-    CLAUDE_CONFIG_DIR="$(claude-home)" "$real_claude" "$@"
-  fi
-}
-
-codex-personal() {
-  CODEX_HOME="$CODEX_HOME_PERSONAL" CODEX_HOME_LOCKED=1 codex "$@"
-}
-
-codex-work() {
-  CODEX_HOME="$CODEX_HOME_WORK" CODEX_HOME_LOCKED=1 codex "$@"
-}
-
-claude-personal() {
-  CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR_PERSONAL" claude "$@"
-}
-
-claude-work() {
-  CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR_WORK" claude "$@"
+claude-bin() {
+  CLAUDE_ROUTER_PRINT_BIN=1 "$(_ai_claude_router)" "$@"
 }
 
 ai-whoami() {
   local context
   local codex_bin
   local codex_home
+  local claude_bin
   local claude_dir
 
   context="$(ai-context)"
-  codex_bin="$(_ai_codex_bin 2>/dev/null || true)"
+  codex_bin="$(codex-bin 2>/dev/null || true)"
   codex_home="$(codex-home)"
+  claude_bin="$(claude-bin 2>/dev/null || true)"
   claude_dir="$(claude-home)"
 
   printf 'cwd: %s\n' "$PWD"
@@ -237,6 +97,11 @@ ai-whoami() {
   else
     printf 'codex status: binary missing\n'
   fi
+  printf 'claude binary: %s\n' "${claude_bin:-missing}"
   printf 'claude config: %s\n' "$claude_dir"
-  CLAUDE_CONFIG_DIR="$claude_dir" "${CLAUDE_BIN:-$(_ai_real_bin claude)}" auth status 2>&1 | sed 's/^/claude status: /'
+  if [[ -n "$claude_bin" ]]; then
+    CLAUDE_CONFIG_DIR="$claude_dir" "$claude_bin" auth status 2>&1 | sed 's/^/claude status: /'
+  else
+    printf 'claude status: binary missing\n'
+  fi
 }

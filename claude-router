@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+personal_context="personal"
+work_context="work"
+personal_config_dir="$HOME/.claude-personal"
+work_config_dir="$HOME/.claude-work"
+work_patterns="$HOME/src/work:$HOME/src/work/*:$HOME/Documents/code/codapt*:$HOME/Documents/code/niels-mac-pi-kvm*"
+real_claude="$HOME/.local/bin/claude"
+
+fail() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+canonical_path() {
+  local target="$1"
+  local dir
+  local base
+
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$target" 2>/dev/null && return
+  fi
+
+  dir="$(dirname "$target")"
+  base="$(basename "$target")"
+  if [[ -d "$dir" ]]; then
+    (cd "$dir" && printf '%s/%s\n' "$(pwd -P)" "$base")
+  else
+    printf '%s\n' "$target"
+  fi
+}
+
+resolve_path() {
+  local target="${1:-$PWD}"
+  local dir
+  local base
+
+  if [[ "$target" != /* ]]; then
+    target="$PWD/$target"
+  fi
+
+  if [[ -d "$target" ]]; then
+    (cd "$target" && pwd -P)
+    return
+  fi
+
+  dir="$(dirname "$target")"
+  base="$(basename "$target")"
+  if [[ -d "$dir" ]]; then
+    (cd "$dir" && printf '%s/%s\n' "$(pwd -P)" "$base")
+  else
+    printf '%s\n' "$target"
+  fi
+}
+
+claude_target_from_args() {
+  local target="$PWD"
+  local arg
+  local next_is_cd=0
+
+  for arg in "$@"; do
+    if (( next_is_cd )); then
+      target="$arg"
+      next_is_cd=0
+      continue
+    fi
+
+    case "$arg" in
+      -C|--cd)
+        next_is_cd=1
+        ;;
+      --cd=*)
+        target="${arg#--cd=}"
+        ;;
+    esac
+  done
+
+  printf '%s\n' "$target"
+}
+
+context_for_path() {
+  local target
+  local pattern
+  local old_ifs
+  local patterns
+
+  target="$(resolve_path "${1:-$PWD}")"
+
+  old_ifs="$IFS"
+  IFS=:
+  read -r -a patterns <<< "$work_patterns"
+  IFS="$old_ifs"
+
+  for pattern in "${patterns[@]}"; do
+    [[ -n "$pattern" ]] || continue
+    # shellcheck disable=SC2053
+    if [[ "$target" == $pattern ]]; then
+      printf '%s\n' "$work_context"
+      return
+    fi
+  done
+
+  printf '%s\n' "$personal_context"
+}
+
+context_from_command() {
+  case "$(basename "$0")" in
+    claude-personal) printf '%s\n' "$personal_context" ;;
+    claude-work) printf '%s\n' "$work_context" ;;
+    *) return 1 ;;
+  esac
+}
+
+config_dir_for_context() {
+  case "$1" in
+    "$personal_context") printf '%s\n' "$personal_config_dir" ;;
+    "$work_context") printf '%s\n' "$work_config_dir" ;;
+    *) fail "Unsupported AI_CONTEXT '$1' (expected $personal_context or $work_context)" ;;
+  esac
+}
+
+select_context() {
+  local target
+
+  if context_from_command; then
+    return
+  fi
+
+  case "${AI_CONTEXT:-}" in
+    "$personal_context"|"$work_context")
+      printf '%s\n' "$AI_CONTEXT"
+      return
+      ;;
+    "")
+      ;;
+    *)
+      fail "Unsupported AI_CONTEXT '$AI_CONTEXT' (expected $personal_context or $work_context)"
+      ;;
+  esac
+
+  target="$(claude_target_from_args "$@")"
+  context_for_path "$target"
+}
+
+router_path="$(canonical_path "$HOME/.local/libexec/claude-router")"
+real_path="$(canonical_path "$real_claude")"
+if [[ "$real_path" == "$router_path" ]]; then
+  fail "Claude binary resolves to the router itself: $real_claude"
+fi
+
+if [[ ! -x "$real_claude" ]]; then
+  fail "Claude binary not executable: $real_claude"
+fi
+
+if [[ "${CLAUDE_ROUTER_PRINT_BIN:-}" == "1" ]]; then
+  printf '%s\n' "$real_claude"
+  exit 0
+fi
+
+context="$(select_context "$@")"
+claude_config_dir="$(config_dir_for_context "$context")"
+
+if [[ "${CLAUDE_ROUTER_PRINT_CONTEXT:-}" == "1" ]]; then
+  printf '%s\n' "$context"
+  exit 0
+fi
+
+if [[ "${CLAUDE_ROUTER_PRINT_HOME:-}" == "1" ]]; then
+  printf '%s\n' "$claude_config_dir"
+  exit 0
+fi
+
+if [[ ! -d "$claude_config_dir" ]]; then
+  fail "Claude config dir does not exist: $claude_config_dir"
+fi
+
+export CLAUDE_CONFIG_DIR="$claude_config_dir"
+exec "$real_claude" "$@"

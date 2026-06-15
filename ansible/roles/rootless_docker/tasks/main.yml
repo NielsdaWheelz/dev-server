@@ -33,6 +33,11 @@
     enabled: false
     state: stopped
 
+- name: Remove stale rootful Docker socket
+  ansible.builtin.file:
+    path: /var/run/docker.sock
+    state: absent
+
 - name: Remove rootful Docker state
   ansible.builtin.file:
     path: "{{ item }}"

@@ -321,11 +321,23 @@
     - "/home/{{ devbox_user }}/.codex-personal"
     - "/home/{{ devbox_user }}/.codex-work"
 
-- name: Create compatibility Codex symlink
+- name: Inspect unsupported default Codex config path
+  ansible.builtin.stat:
+    path: "/home/{{ devbox_user }}/.codex"
+    follow: false
+  register: devbox_default_codex_config
+
+- name: Remove unsupported default Codex config symlink
   ansible.builtin.file:
-    src: .codex-personal
-    dest: "/home/{{ devbox_user }}/.codex"
-    state: link
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    force: false
+    path: "/home/{{ devbox_user }}/.codex"
+    follow: false
+    state: absent
+  when:
+    - devbox_default_codex_config.stat.islnk | default(false)
+
+- name: Stop if unsupported default Codex config directory exists
+  ansible.builtin.fail:
+    msg: "/home/{{ devbox_user }}/.codex is unsupported; use /home/{{ devbox_user }}/.codex-personal or /home/{{ devbox_user }}/.codex-work."
+  when:
+    - devbox_default_codex_config.stat.exists | default(false)
+    - not (devbox_default_codex_config.stat.islnk | default(false))

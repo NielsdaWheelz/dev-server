@@ -1,116 +1,78 @@
 ---
-- name: Install Codex wrapper
-  ansible.builtin.copy:
-    dest: "/home/{{ devbox_user }}/bin/codex"
+- name: Ensure AI tool libexec directory exists
+  ansible.builtin.file:
+    path: "/home/{{ devbox_user }}/.local/libexec"
+    state: directory
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: "0755"
-    content: |
-      #!/usr/bin/env bash
-      set -euo pipefail
 
-      personal_home="${CODEX_HOME_PERSONAL:-$HOME/.codex-personal}"
-      work_home="${CODEX_HOME_WORK:-$HOME/.codex-work}"
-      work_root="${AI_WORK_ROOT:-$HOME/src/work}"
-      personal_context="${AI_CONTEXT_PERSONAL:-personal}"
-      work_context="${AI_CONTEXT_WORK:-work}"
-
-      resolve_path() {
-        local target="${1:-$PWD}"
-        if [[ "$target" != /* ]]; then
-          target="$PWD/$target"
-        fi
-        if [[ -d "$target" ]]; then
-          (cd "$target" && pwd -P)
-        else
-          printf '%s\n' "$target"
-        fi
-      }
-
-      managed_codex="$HOME/.local/bin/codex"
-      if [[ -n "${CODEX_BIN:-}" ]]; then
-        real_codex="$CODEX_BIN"
-      else
-        real_codex="$managed_codex"
-      fi
-      if [[ ! -x "$real_codex" ]]; then
-        if [[ -n "${CODEX_BIN:-}" ]]; then
-          printf 'codex binary not executable: %s\n' "$real_codex" >&2
-        else
-          printf 'managed codex binary not found or not executable: %s\n' "$managed_codex" >&2
-        fi
-        exit 127
-      fi
-
-      if [[ "${CODEX_WRAPPER_PRINT_BIN:-}" == "1" ]]; then
-        printf '%s\n' "$real_codex"
-        exit 0
-      fi
-
-      if [[ "${CODEX_HOME_LOCKED:-}" == "1" && -n "${CODEX_HOME:-}" ]]; then
-        if [[ "${CODEX_WRAPPER_PRINT_HOME:-}" == "1" ]]; then
-          printf '%s\n' "$CODEX_HOME"
-          exit 0
-        fi
-        exec "$real_codex" "$@"
-      fi
-
-      target="$PWD"
-      next_is_cd=0
-      for arg in "$@"; do
-        if (( next_is_cd )); then
-          target="$arg"
-          next_is_cd=0
-          continue
-        fi
-        case "$arg" in
-          -C|--cd) next_is_cd=1 ;;
-          --cd=*) target="${arg#--cd=}" ;;
-        esac
-      done
-
-      target="$(resolve_path "$target")"
-      work_root="$(resolve_path "$work_root")"
-
-      case "${AI_CONTEXT:-}" in
-        "$work_context") export CODEX_HOME="$work_home" ;;
-        "$personal_context") export CODEX_HOME="$personal_home" ;;
-        "")
-          case "$target" in
-            "$work_root"|"$work_root"/*) export CODEX_HOME="$work_home" ;;
-            *) export CODEX_HOME="$personal_home" ;;
-          esac
-          ;;
-        *)
-          printf "Unsupported AI_CONTEXT '%s' (expected %s or %s)\n" "$AI_CONTEXT" "$personal_context" "$work_context" >&2
-          exit 1
-          ;;
-      esac
-
-      if [[ "${CODEX_WRAPPER_PRINT_HOME:-}" == "1" ]]; then
-        printf '%s\n' "$CODEX_HOME"
-        exit 0
-      fi
-
-      exec "$real_codex" "$@"
-
-- name: Install explicit Codex home wrappers
+- name: Install Codex router
   ansible.builtin.copy:
-    dest: "/home/{{ devbox_user }}/bin/{{ item.name }}"
+    src: "{{ playbook_dir }}/../../codex-router"
+    dest: "/home/{{ devbox_user }}/.local/libexec/codex-router"
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: "0755"
-    content: |
-      #!/usr/bin/env bash
-      set -euo pipefail
-      export CODEX_HOME="{{ '${' }}{{ item.env }}:-{{ item.home }}{{ '}' }}"
-      export CODEX_HOME_LOCKED=1
-      exec "$HOME/bin/codex" "$@"
+
+- name: Install Claude router
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../claude-router"
+    dest: "/home/{{ devbox_user }}/.local/libexec/claude-router"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0755"
+
+- name: Inspect unsupported default Claude config path
+  ansible.builtin.stat:
+    path: "/home/{{ devbox_user }}/.claude"
+    follow: false
+  register: devbox_default_claude_config
+
+- name: Remove unsupported default Claude config symlink
+  ansible.builtin.file:
+    dest: "/home/{{ devbox_user }}/.claude"
+    follow: false
+    state: absent
+  when:
+    - devbox_default_claude_config.stat.islnk | default(false)
+
+- name: Stop if unsupported default Claude config directory exists
+  ansible.builtin.fail:
+    msg: "/home/{{ devbox_user }}/.claude is unsupported; use /home/{{ devbox_user }}/.claude-personal or /home/{{ devbox_user }}/.claude-work."
+  when:
+    - devbox_default_claude_config.stat.exists | default(false)
+    - not (devbox_default_claude_config.stat.islnk | default(false))
+
+- name: Link Codex command shortcuts
+  ansible.builtin.file:
+    src: "/home/{{ devbox_user }}/.local/libexec/codex-router"
+    dest: "/home/{{ devbox_user }}/bin/{{ item }}"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    follow: false
+    state: link
+    force: true
   loop:
-    - { name: codex-personal, env: "CODEX_HOME_PERSONAL", home: "$HOME/.codex-personal" }
-    - { name: codex-work, env: "CODEX_HOME_WORK", home: "$HOME/.codex-work" }
+    - codex
+    - codex-personal
+    - codex-work
 
-- name: Link Codex wrappers into /usr/local/bin
+- name: Link Claude command shortcuts
+  ansible.builtin.file:
+    src: "/home/{{ devbox_user }}/.local/libexec/claude-router"
+    dest: "/home/{{ devbox_user }}/bin/{{ item }}"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    follow: false
+    state: link
+    force: true
+  loop:
+    - claude
+    - claude-personal
+    - claude-work
+
+- name: Link Codex shortcuts into /usr/local/bin
   ansible.builtin.file:
     src: "/home/{{ devbox_user }}/bin/{{ item }}"
     dest: "/usr/local/bin/{{ item }}"
@@ -120,6 +82,17 @@
     - codex
     - codex-personal
     - codex-work
+
+- name: Link Claude shortcuts into /usr/local/bin
+  ansible.builtin.file:
+    src: "/home/{{ devbox_user }}/bin/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+    force: true
+  loop:
+    - claude
+    - claude-personal
+    - claude-work
 
 - name: Configure npm user prefix
   ansible.builtin.command: npm config set prefix /home/{{ devbox_user }}/.local
@@ -160,28 +133,6 @@
     PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
   changed_when: false
 
-- name: Inspect legacy Claude shim
-  ansible.builtin.stat:
-    path: "/home/{{ devbox_user }}/.local/bin/claude"
-    follow: false
-  register: devbox_claude_shim
-
-- name: Remove legacy standalone Claude shim before npm install
-  ansible.builtin.file:
-    path: "/home/{{ devbox_user }}/.local/bin/claude"
-    state: absent
-  when:
-    - devbox_claude_shim.stat.islnk | default(false)
-    - devbox_claude_shim.stat.lnk_source is search('/home/' ~ devbox_user ~ '/.local/share/claude/versions/')
-
-- name: Stop if Claude shim is unmanaged
-  ansible.builtin.fail:
-    msg: "/home/{{ devbox_user }}/.local/bin/claude exists and is not the known legacy standalone Claude symlink; inspect it before replacing."
-  when:
-    - devbox_claude_shim.stat.exists | default(false)
-    - not (devbox_claude_shim.stat.islnk | default(false) and devbox_claude_shim.stat.lnk_source is search('/home/' ~ devbox_user ~ '/.local/share/claude/versions/'))
-    - not (devbox_claude_shim.stat.islnk | default(false) and devbox_claude_shim.stat.lnk_source is search('(^|/)lib/node_modules/@anthropic-ai/claude-code/|^\\.\\./lib/node_modules/@anthropic-ai/claude-code/'))
-
 - name: Install AI npm globals
   ansible.builtin.command: >
     npm install -g
@@ -193,19 +144,50 @@
     PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
   changed_when: false
 
-- name: Verify managed Codex wrapper
+- name: Verify managed Codex router
   ansible.builtin.shell: |
     set -euo pipefail
     expected="/home/{{ devbox_user }}/.local/bin/codex"
+    router="/home/{{ devbox_user }}/.local/libexec/codex-router"
     test -x "$expected"
-    for wrapper in \
+    test -x "$router"
+    for shortcut in \
       "/home/{{ devbox_user }}/bin/codex" \
       "/home/{{ devbox_user }}/bin/codex-personal" \
       "/home/{{ devbox_user }}/bin/codex-work"; do
-      actual="$(CODEX_WRAPPER_PRINT_BIN=1 "$wrapper")"
+      test -L "$shortcut"
+      test "$(readlink "$shortcut")" = "$router"
+      actual="$(CODEX_ROUTER_PRINT_BIN=1 "$shortcut")"
       test "$actual" = "$expected"
     done
+    test "$(CODEX_ROUTER_PRINT_HOME=1 "/home/{{ devbox_user }}/bin/codex-personal")" = "/home/{{ devbox_user }}/.codex-personal"
+    test "$(CODEX_ROUTER_PRINT_HOME=1 "/home/{{ devbox_user }}/bin/codex-work")" = "/home/{{ devbox_user }}/.codex-work"
     "/home/{{ devbox_user }}/bin/codex" --version
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: "{{ devbox_user }}"
+  changed_when: false
+
+- name: Verify managed Claude router
+  ansible.builtin.shell: |
+    set -euo pipefail
+    expected="/home/{{ devbox_user }}/.local/bin/claude"
+    router="/home/{{ devbox_user }}/.local/libexec/claude-router"
+    test -x "$expected"
+    test -x "$router"
+    for shortcut in \
+      "/home/{{ devbox_user }}/bin/claude" \
+      "/home/{{ devbox_user }}/bin/claude-personal" \
+      "/home/{{ devbox_user }}/bin/claude-work"; do
+      test -L "$shortcut"
+      test "$(readlink "$shortcut")" = "$router"
+      actual="$(CLAUDE_ROUTER_PRINT_BIN=1 "$shortcut")"
+      test "$actual" = "$expected"
+    done
+    test "$(CLAUDE_ROUTER_PRINT_HOME=1 "/home/{{ devbox_user }}/bin/claude-personal")" = "/home/{{ devbox_user }}/.claude-personal"
+    test "$(CLAUDE_ROUTER_PRINT_HOME=1 "/home/{{ devbox_user }}/bin/claude-work")" = "/home/{{ devbox_user }}/.claude-work"
+    "/home/{{ devbox_user }}/bin/claude" --version
   args:
     executable: /bin/bash
   become: true
