@@ -1,0 +1,28 @@
+---
+- name: Ensure shared dev-server directory exists
+  ansible.builtin.file:
+    path: "/home/{{ devbox_user }}/.local/share/dev-server/{{ item }}"
+    state: directory
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0755"
+  loop:
+    - ""
+    - lib
+    - assets
+
+- name: Install shared library files
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../lib/"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/lib/"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: preserve
+
+- name: Install shared asset files
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: preserve

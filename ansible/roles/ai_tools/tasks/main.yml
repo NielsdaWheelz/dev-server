@@ -1,84 +1,4 @@
 ---
-- name: Ensure AI tool libexec directory exists
-  ansible.builtin.file:
-    path: "/home/{{ devbox_user }}/.local/libexec"
-    state: directory
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    mode: "0755"
-
-- name: Install Codex router
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../codex-router"
-    dest: "/home/{{ devbox_user }}/.local/libexec/codex-router"
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    mode: "0755"
-
-- name: Install Claude router
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../claude-router"
-    dest: "/home/{{ devbox_user }}/.local/libexec/claude-router"
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    mode: "0755"
-
-- name: Link Codex command shortcuts
-  ansible.builtin.file:
-    src: "/home/{{ devbox_user }}/.local/libexec/codex-router"
-    dest: "/home/{{ devbox_user }}/bin/{{ item }}"
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    follow: false
-    state: link
-    force: true
-  loop:
-    - codex
-    - codex-personal
-    - codex-work
-
-- name: Link Claude command shortcuts
-  ansible.builtin.file:
-    src: "/home/{{ devbox_user }}/.local/libexec/claude-router"
-    dest: "/home/{{ devbox_user }}/bin/{{ item }}"
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    follow: false
-    state: link
-    force: true
-  loop:
-    - claude
-    - claude-personal
-    - claude-work
-
-- name: Link Codex shortcuts into /usr/local/bin
-  ansible.builtin.file:
-    src: "/home/{{ devbox_user }}/bin/{{ item }}"
-    dest: "/usr/local/bin/{{ item }}"
-    state: link
-    force: true
-  loop:
-    - codex
-    - codex-personal
-    - codex-work
-
-- name: Link Claude shortcuts into /usr/local/bin
-  ansible.builtin.file:
-    src: "/home/{{ devbox_user }}/bin/{{ item }}"
-    dest: "/usr/local/bin/{{ item }}"
-    state: link
-    force: true
-  loop:
-    - claude
-    - claude-personal
-    - claude-work
-
-- name: Configure npm user prefix
-  ansible.builtin.command: npm config set prefix /home/{{ devbox_user }}/.local
-  become: true
-  become_user: "{{ devbox_user }}"
-  changed_when: false
-
 - name: Check whether mise is installed
   ansible.builtin.command: test -x /home/{{ devbox_user }}/.local/bin/mise
   register: devbox_mise_installed
@@ -112,72 +32,38 @@
     PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
   changed_when: false
 
-- name: Install AI npm globals
-  ansible.builtin.command: >
-    npm install -g
-    @openai/codex
-    @anthropic-ai/claude-code
+- name: Install AI npm globals and routers
+  ansible.builtin.shell: |
+    set -euo pipefail
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/ai-tools.sh"
+    ai_install
+  args:
+    executable: /bin/bash
   become: true
   become_user: "{{ devbox_user }}"
   environment:
+    DEV_SERVER_HOME: "/home/{{ devbox_user }}"
+    DEV_SERVER_ASSETS_DIR: "/home/{{ devbox_user }}/.local/share/dev-server/assets"
     PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
   changed_when: false
 
-- name: Verify managed Codex router
+- name: Verify managed AI tools
   ansible.builtin.shell: |
     set -euo pipefail
-    expected="/home/{{ devbox_user }}/.local/bin/codex"
-    router="/home/{{ devbox_user }}/.local/libexec/codex-router"
-    test -x "$expected"
-    test -x "$router"
-    for shortcut in \
-      "/home/{{ devbox_user }}/bin/codex" \
-      "/home/{{ devbox_user }}/bin/codex-personal" \
-      "/home/{{ devbox_user }}/bin/codex-work"; do
-      test -L "$shortcut"
-      test "$(readlink "$shortcut")" = "$router"
-      actual="$(CODEX_ROUTER_PRINT_BIN=1 "$shortcut")"
-      test "$actual" = "$expected"
-    done
-    test "$(CODEX_ROUTER_PRINT_HOME=1 "/home/{{ devbox_user }}/bin/codex-personal")" = "/home/{{ devbox_user }}/.codex-personal"
-    test "$(CODEX_ROUTER_PRINT_HOME=1 "/home/{{ devbox_user }}/bin/codex-work")" = "/home/{{ devbox_user }}/.codex-work"
-    "/home/{{ devbox_user }}/bin/codex" --version
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/doctor.sh"
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/ai-tools.sh"
+    doctor_reset
+    ai_doctor
+    doctor_summary "ai-tools"
   args:
     executable: /bin/bash
-  become: true
-  become_user: "{{ devbox_user }}"
-  changed_when: false
-
-- name: Verify managed Claude router
-  ansible.builtin.shell: |
-    set -euo pipefail
-    expected="/home/{{ devbox_user }}/.local/bin/claude"
-    router="/home/{{ devbox_user }}/.local/libexec/claude-router"
-    test -x "$expected"
-    test -x "$router"
-    for shortcut in \
-      "/home/{{ devbox_user }}/bin/claude" \
-      "/home/{{ devbox_user }}/bin/claude-personal" \
-      "/home/{{ devbox_user }}/bin/claude-work"; do
-      test -L "$shortcut"
-      test "$(readlink "$shortcut")" = "$router"
-      actual="$(CLAUDE_ROUTER_PRINT_BIN=1 "$shortcut")"
-      test "$actual" = "$expected"
-    done
-    test "$(CLAUDE_ROUTER_PRINT_HOME=1 "/home/{{ devbox_user }}/bin/claude-personal")" = "/home/{{ devbox_user }}/.claude-personal"
-    test "$(CLAUDE_ROUTER_PRINT_HOME=1 "/home/{{ devbox_user }}/bin/claude-work")" = "/home/{{ devbox_user }}/.claude-work"
-    "/home/{{ devbox_user }}/bin/claude" --version
-  args:
-    executable: /bin/bash
-  become: true
-  become_user: "{{ devbox_user }}"
-  changed_when: false
-
-- name: Enable corepack shims
-  ansible.builtin.command: corepack enable --install-directory /home/{{ devbox_user }}/.local/bin
   become: true
   become_user: "{{ devbox_user }}"
   environment:
+    DEV_SERVER_HOME: "/home/{{ devbox_user }}"
+    DEV_SERVER_ASSETS_DIR: "/home/{{ devbox_user }}/.local/share/dev-server/assets"
     PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
   changed_when: false
 

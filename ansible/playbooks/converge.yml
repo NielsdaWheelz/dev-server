@@ -7,6 +7,7 @@
     - ../group_vars/devbox.yml
   roles:
     - role: base
+    - role: workspace_assets
     - role: security
     - role: shell
     - role: ai_tools

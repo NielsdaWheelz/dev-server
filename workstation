@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=lib/common.sh
+source "$base_dir/lib/common.sh"
+# shellcheck source=lib/doctor.sh
+source "$base_dir/lib/doctor.sh"
+# shellcheck source=lib/dotfiles.sh
+source "$base_dir/lib/dotfiles.sh"
+# shellcheck source=lib/ai-tools.sh
+source "$base_dir/lib/ai-tools.sh"
+
+usage() {
+  cat <<EOF
+Usage: ./workstation <command>
+
+Commands:
+  converge   Install packages, dotfiles, AI tools, then doctor.
+  packages   Install native platform packages only.
+  dotfiles   Install managed shell, tmux, and git config only.
+  ai-tools   Install Codex/Claude npm globals and routers only.
+  doctor     Run local positive health checks.
+EOF
+}
+
+platform_id() {
+  case "$(uname -s)" in
+    Darwin)
+      printf 'macos\n'
+      ;;
+    Linux)
+      if [[ -f /etc/arch-release ]]; then
+        printf 'arch\n'
+      else
+        die "unsupported Linux platform; workstation supports Arch only"
+      fi
+      ;;
+    *)
+      die "unsupported platform: $(uname -s)"
+      ;;
+  esac
+}
+
+source_platform_packages() {
+  case "$(platform_id)" in
+    macos)
+      # shellcheck source=lib/packages-macos.sh
+      source "$base_dir/lib/packages-macos.sh"
+      ;;
+    arch)
+      # shellcheck source=lib/packages-arch.sh
+      source "$base_dir/lib/packages-arch.sh"
+      ;;
+  esac
+}
+
+cmd_packages() {
+  source_platform_packages
+  packages_install
+}
+
+cmd_dotfiles() {
+  dotfiles_install
+}
+
+cmd_ai_tools() {
+  ai_install
+}
+
+cmd_doctor() {
+  doctor_reset
+  log "configuration"
+  printf 'platform: %s\n' "$(platform_id)"
+  printf 'home: %s\n' "$(dev_server_home)"
+  printf 'assets: %s\n' "$(dev_server_assets_dir)"
+
+  source_platform_packages
+  packages_doctor
+  dotfiles_doctor
+  ai_doctor
+  doctor_summary
+}
+
+cmd_converge() {
+  cmd_packages
+  cmd_dotfiles
+  cmd_ai_tools
+  cmd_doctor
+}
+
+main() {
+  local command="${1:-}"
+  shift || true
+
+  case "$command" in
+    converge) [[ $# -eq 0 ]] || die "Usage: ./workstation converge"; cmd_converge ;;
+    packages) [[ $# -eq 0 ]] || die "Usage: ./workstation packages"; cmd_packages ;;
+    dotfiles) [[ $# -eq 0 ]] || die "Usage: ./workstation dotfiles"; cmd_dotfiles ;;
+    ai-tools) [[ $# -eq 0 ]] || die "Usage: ./workstation ai-tools"; cmd_ai_tools ;;
+    doctor) [[ $# -eq 0 ]] || die "Usage: ./workstation doctor"; cmd_doctor ;;
+    -h|--help|help|"")
+      usage
+      ;;
+    *)
+      usage >&2
+      return 1
+      ;;
+  esac
+}
+
+main "$@"

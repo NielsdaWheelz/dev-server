@@ -76,13 +76,27 @@ if command -v atuin >/dev/null 2>&1; then
 fi
 
 if [[ -o interactive && -t 0 && -t 1 ]]; then
-  if [[ -r /usr/share/doc/fzf/examples/key-bindings.zsh ]]; then
-    source /usr/share/doc/fzf/examples/key-bindings.zsh
-  fi
+  for _devbox_fzf_keybindings in \
+    /usr/share/doc/fzf/examples/key-bindings.zsh \
+    /opt/homebrew/opt/fzf/shell/key-bindings.zsh \
+    /usr/local/opt/fzf/shell/key-bindings.zsh; do
+    if [[ -r "$_devbox_fzf_keybindings" ]]; then
+      source "$_devbox_fzf_keybindings"
+      break
+    fi
+  done
+  unset _devbox_fzf_keybindings
 
-  if [[ -r /usr/share/doc/fzf/examples/completion.zsh ]]; then
-    source /usr/share/doc/fzf/examples/completion.zsh
-  fi
+  for _devbox_fzf_completion in \
+    /usr/share/doc/fzf/examples/completion.zsh \
+    /opt/homebrew/opt/fzf/shell/completion.zsh \
+    /usr/local/opt/fzf/shell/completion.zsh; do
+    if [[ -r "$_devbox_fzf_completion" ]]; then
+      source "$_devbox_fzf_completion"
+      break
+    fi
+  done
+  unset _devbox_fzf_completion
 
   if [[ -r "$HOME/.zsh/fzf-tab/fzf-tab.zsh" ]]; then
     source "$HOME/.zsh/fzf-tab/fzf-tab.zsh"
@@ -90,10 +104,17 @@ if [[ -o interactive && -t 0 && -t 1 ]]; then
     zstyle ':fzf-tab:*' switch-group '<' '>'
   fi
 
-  if [[ -r /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh ]]; then
-    source /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
-    ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=8'
-  fi
+  for _devbox_autosuggestions in \
+    /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh \
+    /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh \
+    /usr/local/share/zsh-autosuggestions/zsh-autosuggestions.zsh; do
+    if [[ -r "$_devbox_autosuggestions" ]]; then
+      source "$_devbox_autosuggestions"
+      ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=8'
+      break
+    fi
+  done
+  unset _devbox_autosuggestions
 fi
 
 if [[ -r "$HOME/.zsh_helpers" ]]; then
@@ -118,6 +139,15 @@ else
 fi
 
 # zsh-syntax-highlighting should be sourced after widgets and completions.
-if [[ -o interactive && -t 0 && -t 1 && -r /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh ]]; then
-  source /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+if [[ -o interactive && -t 0 && -t 1 ]]; then
+  for _devbox_syntax_highlighting in \
+    /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh \
+    /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh \
+    /usr/local/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh; do
+    if [[ -r "$_devbox_syntax_highlighting" ]]; then
+      source "$_devbox_syntax_highlighting"
+      break
+    fi
+  done
+  unset _devbox_syntax_highlighting
 fi

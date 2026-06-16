@@ -1,17 +1,25 @@
 # Dev Server
 
-One-command provisioner for a disposable single-user Hetzner dev box.
+Personal machine bootstrap for a disposable Hetzner dev box and local
+workstations.
 
-The goal is a fast, malleable coding machine, not a compliance framework. The box
-is expected to be rebuilt when it drifts too far.
+The goal is fast, malleable coding machines, not a compliance framework. Remote
+boxes are expected to be rebuilt when they drift too far. Local machines use
+their native package managers and shared repo-owned dotfiles.
 
 ## Files
 
-- `devbox`: create, rebuild, converge, lock down, render, and doctor.
+- `devbox`: create, rebuild, converge, lock down, render, and doctor the
+  Hetzner dev box.
+- `workstation`: converge, doctor, and install packages/dotfiles/AI tools on a
+  local macOS or Arch machine.
+- `lib/`: shared shell libraries for logging, doctors, dotfiles, AI tools, and
+  platform package commands.
+- `assets/`: managed routers and dotfiles.
+- `packages/`: native package manifests for Homebrew and Arch.
 - `cloud-init-devbox.template.yaml`: first-boot bootstrap for SSH, Tailscale,
   and the temporary host firewall.
-- `ansible/`: ongoing package, shell, AI-tool, security, and Docker setup.
-- `zshrc`, `zsh_helpers`, `p10k.zsh`: managed shell environment.
+- `ansible/`: Ubuntu system setup for the remote dev box.
 
 ## One Command
 
@@ -45,6 +53,16 @@ DEVBOX_CONFIRM_REBUILD=dev-server ./devbox rebuild
 DEVBOX_RENDER_OUTPUT=cloud-init-devbox.yaml ./devbox render
 ```
 
+Local workstation commands:
+
+```sh
+./workstation doctor
+./workstation converge
+./workstation packages
+./workstation dotfiles
+./workstation ai-tools
+```
+
 ## Guardrails
 
 - Public SSH is temporary. After Tailscale is up, `lockdown` removes host and
@@ -56,6 +74,12 @@ DEVBOX_RENDER_OUTPUT=cloud-init-devbox.yaml ./devbox render
   box manually when that is what you want.
 - `doctor` checks the health of required pieces. It does not audit for the
   absence of unrelated state.
+- Local workstation packages are native: Homebrew on macOS, pacman plus an
+  explicit AUR list on Arch.
+- AI tool shortcuts are shared across platforms. `~/bin/codex`,
+  `~/bin/codex-personal`, `~/bin/codex-work`, `~/bin/claude`,
+  `~/bin/claude-personal`, and `~/bin/claude-work` all point at one managed
+  router under `~/.local/libexec/ai-router`.
 - Generated cloud-init is secret-bearing. Normal commands use temporary files;
   keep `cloud-init-devbox.yaml` out of git.
 - The `secrets/` directory is ignored and should stay local.
