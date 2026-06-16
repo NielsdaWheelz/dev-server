@@ -21,8 +21,8 @@ and shared repo-owned dotfiles.
 
 ## One Command
 
-Create a short-lived, reusable, non-ephemeral Tailscale auth key and either export
-it or place it in `secrets/tailscale-auth-key`:
+Create a short-lived, reusable, non-ephemeral Tailscale auth key and place it in
+`secrets/tailscale-auth-key`:
 
 ```sh
 mkdir -p secrets
@@ -59,8 +59,6 @@ Local workstation commands:
 
 - Public SSH is temporary. After Tailscale is up, `converge` removes host and
   Hetzner SSH ingress.
-- Public HTTP/HTTPS is managed by `converge`; set `DEVBOX_PUBLIC_WEB=1` before
-  running it to open it.
 - `converge` installs and updates the desired packages, services, shell config,
   and AI-tool shortcuts. It does not clean unrelated drift or delete/recreate
   the server.

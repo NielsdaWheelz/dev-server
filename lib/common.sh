@@ -2,6 +2,8 @@
 
 dev_server_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 dev_server_root="$(cd "$dev_server_lib_dir/.." && pwd)"
+dev_server_home_dir="$HOME"
+dev_server_assets_root="$dev_server_root/assets"
 
 log() {
   printf '==> %s\n' "$*"
@@ -18,13 +20,6 @@ die() {
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
-}
-
-is_truthy() {
-  case "${1:-}" in
-    1|true|TRUE|yes|YES|on|ON) return 0 ;;
-    *) return 1 ;;
-  esac
 }
 
 canonical_path() {
@@ -69,9 +64,9 @@ resolve_path() {
 }
 
 dev_server_assets_dir() {
-  printf '%s\n' "${DEV_SERVER_ASSETS_DIR:-$dev_server_root/assets}"
+  printf '%s\n' "$dev_server_assets_root"
 }
 
 dev_server_home() {
-  printf '%s\n' "${DEV_SERVER_HOME:-$HOME}"
+  printf '%s\n' "$dev_server_home_dir"
 }

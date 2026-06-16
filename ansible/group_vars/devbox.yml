@@ -1,11 +1,7 @@
 ---
-devbox_user: "{{ lookup('env', 'DEVBOX_USER') | default('niels', true) }}"
-devbox_server_name: "{{ lookup('env', 'DEVBOX_SERVER_NAME') | default('dev-server', true) }}"
-devbox_bootstrap_ssh_cidr: "{{ lookup('env', 'DEVBOX_BOOTSTRAP_SSH_CIDR') | default('', true) }}"
-devbox_timezone: "{{ lookup('env', 'DEVBOX_TIMEZONE') | default('America/Los_Angeles', true) }}"
-devbox_locale: "{{ lookup('env', 'DEVBOX_LOCALE') | default('en_US.UTF-8', true) }}"
-devbox_node_major: "{{ lookup('env', 'DEVBOX_NODE_MAJOR') | default('22', true) }}"
-devbox_docker_log_max_size: "{{ lookup('env', 'DEVBOX_DOCKER_LOG_MAX_SIZE') | default('50m', true) }}"
-devbox_docker_log_max_file: "{{ lookup('env', 'DEVBOX_DOCKER_LOG_MAX_FILE') | default('3', true) }}"
-
-devbox_public_web: "{{ (lookup('env', 'DEVBOX_PUBLIC_WEB') | default('0', true)) in ['1', 'true', 'TRUE', 'yes', 'YES', 'on', 'ON'] }}"
+devbox_user: niels
+devbox_timezone: America/Los_Angeles
+devbox_locale: en_US.UTF-8
+devbox_node_major: "22"
+devbox_docker_log_max_size: "50m"
+devbox_docker_log_max_file: "3"

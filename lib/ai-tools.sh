@@ -101,27 +101,16 @@ ai_install() {
   ai_install_npm_globals
 }
 
-ai_router_print_env() {
-  case "$1" in
-    codex) printf 'CODEX_ROUTER' ;;
-    claude) printf 'CLAUDE_ROUTER' ;;
-    *) die "unknown AI tool: $1" ;;
-  esac
-}
-
 ai_doctor_tool() {
   local tool="$1"
-  local env_prefix
   local expected
   local router
   local home
   local context
   local shortcut
   local shortcut_target
-  local actual
   local version
 
-  env_prefix="$(ai_router_print_env "$tool")"
   expected="$(ai_tool_real_binary "$tool")"
   router="$(ai_router_dest)"
   home="$(dev_server_home)"
@@ -150,17 +139,11 @@ ai_doctor_tool() {
       doctor_fail "ai.$tool" "$shortcut links to $shortcut_target, expected $router"
       return
     fi
-    actual="$(env "${env_prefix}_PRINT_BIN=1" "$shortcut")"
-    if [[ "$actual" != "$expected" ]]; then
-      doctor_fail "ai.$tool" "$shortcut resolves to $actual, expected $expected"
-      return
-    fi
   done
 
   for context in $(ai_contexts); do
-    actual="$(env "${env_prefix}_PRINT_HOME=1" "$home/bin/$tool-$context")"
-    if [[ "$actual" != "$(ai_tool_home "$tool" "$context")" ]]; then
-      doctor_fail "ai.$tool" "$tool-$context resolves to wrong state dir: $actual"
+    if [[ ! -d "$(ai_tool_home "$tool" "$context")" ]]; then
+      doctor_fail "ai.$tool" "missing state dir: $(ai_tool_home "$tool" "$context")"
       return
     fi
   done

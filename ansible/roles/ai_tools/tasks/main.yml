@@ -36,6 +36,8 @@
   ansible.builtin.shell: |
     set -euo pipefail
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
+    dev_server_home_dir="/home/{{ devbox_user }}"
+    dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/ai-tools.sh"
     ai_install
   args:
@@ -43,8 +45,6 @@
   become: true
   become_user: "{{ devbox_user }}"
   environment:
-    DEV_SERVER_HOME: "/home/{{ devbox_user }}"
-    DEV_SERVER_ASSETS_DIR: "/home/{{ devbox_user }}/.local/share/dev-server/assets"
     PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
   changed_when: false
 
@@ -52,6 +52,8 @@
   ansible.builtin.shell: |
     set -euo pipefail
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
+    dev_server_home_dir="/home/{{ devbox_user }}"
+    dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/doctor.sh"
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/ai-tools.sh"
     doctor_reset
@@ -62,8 +64,6 @@
   become: true
   become_user: "{{ devbox_user }}"
   environment:
-    DEV_SERVER_HOME: "/home/{{ devbox_user }}"
-    DEV_SERVER_ASSETS_DIR: "/home/{{ devbox_user }}/.local/share/dev-server/assets"
     PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
   changed_when: false
 

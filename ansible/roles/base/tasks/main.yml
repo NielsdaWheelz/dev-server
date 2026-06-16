@@ -138,9 +138,7 @@
 
 - name: Configure timezone
   ansible.builtin.command: "timedatectl set-timezone {{ devbox_timezone }}"
-  when:
-    - devbox_timezone | length > 0
-    - devbox_current_timezone.stdout != devbox_timezone
+  when: devbox_current_timezone.stdout != devbox_timezone
 
 - name: Enable managed locale generation
   ansible.builtin.lineinfile:
@@ -148,13 +146,10 @@
     regexp: "^#?\\s*{{ devbox_locale | regex_escape() }}\\s+UTF-8\\s*$"
     line: "{{ devbox_locale }} UTF-8"
   register: devbox_locale_gen
-  when: devbox_locale | length > 0
 
 - name: Generate managed locale
   ansible.builtin.command: "locale-gen {{ devbox_locale }}"
-  when:
-    - devbox_locale | length > 0
-    - devbox_locale_gen.changed
+  when: devbox_locale_gen.changed
 
 - name: Configure system locale
   ansible.builtin.copy:
@@ -163,7 +158,6 @@
     group: root
     mode: "0644"
     content: "LANG={{ devbox_locale }}\n"
-  when: devbox_locale | length > 0
 
 - name: Ensure bat command name exists
   ansible.builtin.file:

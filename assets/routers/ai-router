@@ -3,7 +3,6 @@ set -euo pipefail
 
 personal_context="personal"
 work_context="work"
-work_patterns="${AI_WORK_PATTERNS:-}"
 
 fail() {
   printf '%s\n' "$*" >&2
@@ -51,14 +50,12 @@ resolve_path() {
   fi
 }
 
-if [[ -z "$work_patterns" ]]; then
-  home_physical="$(canonical_path "$HOME")"
-  work_patterns="$HOME/src/work:$HOME/src/work/*:$HOME/Documents/code/codapt*:$HOME/Documents/code/niels-mac-pi-kvm*"
-  if [[ "$home_physical" != "$HOME" ]]; then
-    work_patterns+=":$home_physical/src/work:$home_physical/src/work/*:$home_physical/Documents/code/codapt*:$home_physical/Documents/code/niels-mac-pi-kvm*"
-  fi
-  unset home_physical
+home_physical="$(canonical_path "$HOME")"
+work_patterns="$HOME/src/work:$HOME/src/work/*:$HOME/Documents/code/codapt*:$HOME/Documents/code/niels-mac-pi-kvm*"
+if [[ "$home_physical" != "$HOME" ]]; then
+  work_patterns+=":$home_physical/src/work:$home_physical/src/work/*:$home_physical/Documents/code/codapt*:$home_physical/Documents/code/niels-mac-pi-kvm*"
 fi
+unset home_physical
 
 tool_from_command() {
   case "$(basename "$0")" in
@@ -133,18 +130,6 @@ select_context() {
     return
   fi
 
-  case "${AI_CONTEXT:-}" in
-    "$personal_context"|"$work_context")
-      printf '%s\n' "$AI_CONTEXT"
-      return
-      ;;
-    "")
-      ;;
-    *)
-      fail "Unsupported AI_CONTEXT '$AI_CONTEXT' (expected $personal_context or $work_context)"
-      ;;
-  esac
-
   target="$(target_from_args "$@")"
   context_for_path "$target"
 }
@@ -162,22 +147,10 @@ state_dir_for_context() {
   esac
 }
 
-print_env_prefix() {
-  case "$1" in
-    codex) printf 'CODEX_ROUTER' ;;
-    claude) printf 'CLAUDE_ROUTER' ;;
-    *) fail "Unsupported AI tool: $1" ;;
-  esac
-}
-
 tool="$(tool_from_command)"
 real_binary="$HOME/.local/bin/$tool"
 router_path="$(canonical_path "$HOME/.local/libexec/ai-router")"
 real_path="$(canonical_path "$real_binary")"
-env_prefix="$(print_env_prefix "$tool")"
-print_bin_var="${env_prefix}_PRINT_BIN"
-print_context_var="${env_prefix}_PRINT_CONTEXT"
-print_home_var="${env_prefix}_PRINT_HOME"
 
 if [[ "$real_path" == "$router_path" ]]; then
   fail "$tool binary resolves to the router itself: $real_binary"
@@ -187,23 +160,8 @@ if [[ ! -x "$real_binary" ]]; then
   fail "$tool binary not executable: $real_binary"
 fi
 
-if [[ "${!print_bin_var:-}" == "1" ]]; then
-  printf '%s\n' "$real_binary"
-  exit 0
-fi
-
 context="$(select_context "$@")"
 state_dir="$(state_dir_for_context "$tool" "$context")"
-
-if [[ "${!print_context_var:-}" == "1" ]]; then
-  printf '%s\n' "$context"
-  exit 0
-fi
-
-if [[ "${!print_home_var:-}" == "1" ]]; then
-  printf '%s\n' "$state_dir"
-  exit 0
-fi
 
 if [[ ! -d "$state_dir" ]]; then
   fail "$tool state directory does not exist: $state_dir"

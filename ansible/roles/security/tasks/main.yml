@@ -27,18 +27,6 @@
   changed_when: "'Skipping' not in devbox_ufw_tailscale.stdout"
   register: devbox_ufw_tailscale
 
-- name: Allow public HTTP when enabled
-  ansible.builtin.command: ufw allow 80/tcp
-  register: devbox_ufw_allow_http
-  changed_when: "'Skipping' not in devbox_ufw_allow_http.stdout"
-  when: devbox_public_web
-
-- name: Allow public HTTPS when enabled
-  ansible.builtin.command: ufw allow 443/tcp
-  register: devbox_ufw_allow_https
-  changed_when: "'Skipping' not in devbox_ufw_allow_https.stdout"
-  when: devbox_public_web
-
 - name: Enable UFW
   ansible.builtin.command: ufw --force enable
   changed_when: false
