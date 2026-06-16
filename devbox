@@ -42,12 +42,8 @@ usage() {
 Usage: ./devbox <command>
 
 Commands:
-  up        Create or update the VPS, enroll Tailscale, lock down SSH, converge, and doctor.
-  rebuild   Delete and recreate the VPS, then run up.
-  converge  Run Ansible against the current dev-server SSH alias.
-  lockdown  Remove temporary public SSH access.
+  converge  Create or update the VPS, lock down SSH, install managed config, and doctor.
   doctor    Run a lightweight local and remote smoke check.
-  render    Render and validate cloud-init only.
 
 Useful env:
   DEVBOX_TAILSCALE_AUTH_KEY       Short-lived Tailscale auth key for first boot.
@@ -56,11 +52,6 @@ Useful env:
   DEVBOX_PUBLIC_WEB=1             Keep public HTTP/HTTPS open.
   DEVBOX_JOURNAL_WARN_MB=384      Warn when persistent journal usage reaches this.
   DEVBOX_DOCKER_DISK_WARN_GB=20   Warn when Docker data reaches this.
-  DEVBOX_SKIP_LOCKDOWN=1          Leave temporary public SSH open after up.
-  DEVBOX_SKIP_CONVERGE=1          Skip Ansible after up.
-  DEVBOX_SKIP_DOCTOR=1            Skip doctor after up.
-  DEVBOX_SKIP_GITHUB_SSH_KEY=1    Do not auto-register the server GitHub public key.
-  DEVBOX_CONFIRM_REBUILD=dev-server
 EOF
 }
 
@@ -98,18 +89,6 @@ bootstrap_ssh_cidr() {
   local cidr="${DEVBOX_BOOTSTRAP_SSH_CIDR:-}"
 
   if [[ -z "$cidr" ]]; then
-    cidr="$(current_public_ipv4)/32"
-  fi
-
-  validate_ipv4_cidr "$cidr" || die "bootstrap SSH CIDR must be IPv4 CIDR, got: $cidr"
-  printf '%s\n' "$cidr"
-}
-
-lockdown_bootstrap_ssh_cidr() {
-  local cidr="${DEVBOX_BOOTSTRAP_SSH_CIDR:-${STATE_BOOTSTRAP_SSH_CIDR:-}}"
-
-  if [[ -z "$cidr" ]]; then
-    warn "no saved bootstrap CIDR; falling back to current public IPv4"
     cidr="$(current_public_ipv4)/32"
   fi
 
@@ -405,11 +384,6 @@ remote_user_sh() {
 }
 
 ensure_server_github_key_registered() {
-  if is_truthy "${DEVBOX_SKIP_GITHUB_SSH_KEY:-0}"; then
-    warn "skipping GitHub SSH public key registration because DEVBOX_SKIP_GITHUB_SSH_KEY=1"
-    return 0
-  fi
-
   require_cmd gh
   gh auth status -h github.com >/dev/null 2>&1 || die "gh is not authenticated for github.com; run gh auth login, then ./devbox converge"
 
@@ -469,7 +443,7 @@ wait_for_cloud_init() {
 wait_for_tailscale_ip() {
   local _attempt ip
 
-  log "waiting for Tailscale IPv4"
+  log "waiting for Tailscale IPv4" >&2
   for _attempt in {1..60}; do
     ip="$(ssh_devbox 'tailscale ip -4 2>/dev/null | head -n 1' || true)"
     if [[ -n "$ip" ]]; then
@@ -525,63 +499,54 @@ lockdown_impl() {
   fi
 }
 
-cmd_render() {
-  preflight_render
-  load_state
+run_ansible_convergence() {
+  [[ -f "$ansible_inventory" ]] || die "missing Ansible inventory: $ansible_inventory"
+  [[ -f "$ansible_converge_playbook" ]] || die "missing Ansible playbook: $ansible_converge_playbook"
 
-  local cidr ts_key render_output cleanup_output
-  cidr="$(bootstrap_ssh_cidr)"
-  ts_key="$(tailscale_auth_key)"
-
-  if [[ -n "${DEVBOX_RENDER_OUTPUT:-}" ]]; then
-    render_output="$DEVBOX_RENDER_OUTPUT"
-    cleanup_output=0
-  else
-    render_output="$(mktemp "${TMPDIR:-/tmp}/devbox-cloud-init.XXXXXX")"
-    cleanup_output=1
+  if [[ -z "${DEVBOX_BOOTSTRAP_SSH_CIDR:-}" && -n "${STATE_BOOTSTRAP_SSH_CIDR:-}" ]]; then
+    export DEVBOX_BOOTSTRAP_SSH_CIDR="$STATE_BOOTSTRAP_SSH_CIDR"
   fi
 
-  if (( cleanup_output )); then
-    trap 'rm -f "$render_output"' EXIT
-  fi
-
-  render_cloud_init "$cidr" "$ts_key" "$render_output"
-  validate_rendered_cloud_init "$render_output"
-
-  if (( cleanup_output )); then
-    rm -f "$render_output"
-    log "removed temporary rendered cloud-init"
-    trap - EXIT
-  fi
+  log "running Ansible convergence"
+  run_ansible_playbook -i "$ansible_inventory" -u "$server_user" "$ansible_converge_playbook"
+  ensure_server_github_key_registered
 }
 
-cmd_up() {
+cmd_converge() {
   preflight_render
   load_state
-  require_tailscale_auth_key
-  preflight_hcloud_create
+  preflight_hcloud
 
   local cidr ts_key public_ip tailscale_ip render_output server_preexisted
   cidr="$(bootstrap_ssh_cidr)"
-  ts_key="$(tailscale_auth_key)"
-  render_output="$(mktemp "${TMPDIR:-/tmp}/devbox-cloud-init.XXXXXX")"
-  trap 'rm -f "$render_output"' EXIT
 
   if server_exists; then
     server_preexisted=1
   else
     server_preexisted=0
+    require_tailscale_auth_key
+    preflight_hcloud_create
   fi
 
-  render_cloud_init "$cidr" "$ts_key" "$render_output"
-  validate_rendered_cloud_init "$render_output"
   ensure_firewall "$cidr"
-  create_server_if_needed "$render_output"
-  rm -f "$render_output"
-  trap - EXIT
+
+  if (( ! server_preexisted )); then
+    ts_key="$(tailscale_auth_key)"
+    render_output="$(mktemp "${TMPDIR:-/tmp}/devbox-cloud-init.XXXXXX")"
+    trap 'rm -f "$render_output"' EXIT
+    render_cloud_init "$cidr" "$ts_key" "$render_output"
+    validate_rendered_cloud_init "$render_output"
+    create_server_if_needed "$render_output"
+    rm -f "$render_output"
+    trap - EXIT
+  fi
 
   public_ip="$(server_public_ip)"
   save_state "$cidr" "$public_ip" "${STATE_TAILSCALE_IP:-}"
+
+  if (( server_preexisted )) && ! ssh_devbox 'true' >/dev/null 2>&1 && [[ -n "${STATE_TAILSCALE_IP:-}" ]]; then
+    write_ssh_include "$STATE_TAILSCALE_IP" "$public_ip"
+  fi
 
   if (( server_preexisted )) && ssh_devbox 'true' >/dev/null 2>&1; then
     log "server exists; current SSH alias works"
@@ -599,109 +564,11 @@ cmd_up() {
   remove_known_hosts "$server_name" "$tailscale_ip"
   wait_for_ssh "Tailscale"
 
-  if [[ "${DEVBOX_SKIP_LOCKDOWN:-0}" != "1" ]]; then
-    lockdown_impl "$cidr" "$public_ip"
-  else
-    warn "skipping public SSH lockdown because DEVBOX_SKIP_LOCKDOWN=1"
-  fi
-
-  if [[ "${DEVBOX_SKIP_CONVERGE:-0}" != "1" ]]; then
-    cmd_converge
-  else
-    warn "skipping Ansible convergence because DEVBOX_SKIP_CONVERGE=1"
-  fi
-
-  if [[ "${DEVBOX_SKIP_DOCTOR:-0}" != "1" ]]; then
-    cmd_doctor
-  else
-    warn "skipping doctor because DEVBOX_SKIP_DOCTOR=1"
-  fi
+  lockdown_impl "$cidr" "$public_ip"
+  run_ansible_convergence
+  cmd_doctor
 
   log "dev box ready: ssh $server_name"
-}
-
-cmd_converge() {
-  load_state
-  [[ -f "$ansible_inventory" ]] || die "missing Ansible inventory: $ansible_inventory"
-  [[ -f "$ansible_converge_playbook" ]] || die "missing Ansible playbook: $ansible_converge_playbook"
-
-  if [[ -z "${DEVBOX_BOOTSTRAP_SSH_CIDR:-}" && -n "${STATE_BOOTSTRAP_SSH_CIDR:-}" ]]; then
-    export DEVBOX_BOOTSTRAP_SSH_CIDR="$STATE_BOOTSTRAP_SSH_CIDR"
-  fi
-
-  log "running Ansible convergence"
-  run_ansible_playbook -i "$ansible_inventory" -u "$server_user" "$ansible_converge_playbook"
-  ensure_server_github_key_registered
-}
-
-cmd_lockdown() {
-  preflight_common
-  preflight_hcloud
-  load_state
-
-  local cidr public_ip tailscale_ip
-  cidr="$(lockdown_bootstrap_ssh_cidr)"
-
-  public_ip="${STATE_PUBLIC_IP:-}"
-  if [[ -z "$public_ip" ]] && server_exists; then
-    public_ip="$(server_public_ip)"
-  fi
-
-  tailscale_ip="${STATE_TAILSCALE_IP:-}"
-  if [[ -z "$tailscale_ip" ]] && ssh_devbox 'true' >/dev/null 2>&1; then
-    tailscale_ip="$(ssh_devbox 'tailscale ip -4 2>/dev/null | head -n 1' || true)"
-  fi
-
-  if [[ -n "$tailscale_ip" ]]; then
-    write_ssh_include "$tailscale_ip" "$public_ip"
-    save_state "$cidr" "$public_ip" "$tailscale_ip"
-  fi
-
-  wait_for_ssh "current SSH config"
-  lockdown_impl "$cidr" "$public_ip"
-}
-
-confirm_rebuild() {
-  if [[ "${DEVBOX_CONFIRM_REBUILD:-}" == "$server_name" ]]; then
-    return
-  fi
-
-  printf 'This will delete and recreate Hetzner server %s. Type %s to continue: ' "$server_name" "$server_name" >&2
-  local answer
-  read -r answer
-  [[ "$answer" == "$server_name" ]] || die "rebuild cancelled"
-}
-
-wait_for_server_deleted() {
-  local _attempt
-
-  for _attempt in {1..60}; do
-    if ! server_exists; then
-      return
-    fi
-    sleep 3
-  done
-
-  die "server still exists after delete request"
-}
-
-cmd_rebuild() {
-  preflight_render
-  require_tailscale_auth_key
-  preflight_hcloud_create
-  confirm_rebuild
-
-  if server_exists; then
-    log "disabling delete/rebuild protection if present"
-    hcloud_cmd server disable-protection "$server_name" delete rebuild || true
-    log "deleting $server_name"
-    hcloud_cmd server delete "$server_name"
-    wait_for_server_deleted
-  fi
-
-  rm -f "$state_file"
-  unset STATE_BOOTSTRAP_SSH_CIDR STATE_PUBLIC_IP STATE_TAILSCALE_IP
-  cmd_up
 }
 
 doctor_remote_cmd() {
@@ -906,12 +773,8 @@ main() {
   shift || true
 
   case "$command" in
-    up) cmd_up "$@" ;;
-    rebuild) cmd_rebuild "$@" ;;
     converge) cmd_converge "$@" ;;
-    lockdown) cmd_lockdown "$@" ;;
     doctor) cmd_doctor "$@" ;;
-    render) cmd_render "$@" ;;
     -h|--help|help|"") usage ;;
     *) usage >&2; die "unknown command: $command" ;;
   esac

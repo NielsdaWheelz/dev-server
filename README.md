@@ -4,15 +4,13 @@ Personal machine bootstrap for a disposable Hetzner dev box and local
 workstations.
 
 The goal is fast, malleable coding machines, not a compliance framework. Remote
-boxes are expected to be rebuilt when they drift too far. Local machines use
-their native package managers and shared repo-owned dotfiles.
+boxes are converged in place. Local machines use their native package managers
+and shared repo-owned dotfiles.
 
 ## Files
 
-- `devbox`: create, rebuild, converge, lock down, render, and doctor the
-  Hetzner dev box.
-- `workstation`: converge, doctor, and install packages/dotfiles/AI tools on a
-  local macOS or Arch machine.
+- `devbox`: converge and doctor the Hetzner dev box.
+- `workstation`: converge and doctor a local macOS or Arch machine.
 - `lib/`: shared shell libraries for logging, doctors, dotfiles, AI tools, and
   platform package commands.
 - `assets/`: managed routers and dotfiles.
@@ -36,42 +34,36 @@ chmod 600 secrets/tailscale-auth-key
 Then run:
 
 ```sh
-./devbox up
+./devbox converge
 ```
 
-`up` renders cloud-init to a temporary file, creates or reuses the Hetzner VPS,
-waits for Tailscale, rewrites the SSH alias to the Tailscale IP, runs lockdown,
-runs Ansible, and runs a lightweight doctor.
+`converge` creates the Hetzner VPS if it is missing, reuses it when it already
+exists, waits for Tailscale, rewrites the SSH alias to the Tailscale IP, locks
+down public SSH, runs Ansible, and runs a lightweight doctor.
 
 ## Daily Commands
 
 ```sh
-./devbox doctor
 ./devbox converge
-./devbox lockdown
-DEVBOX_CONFIRM_REBUILD=dev-server ./devbox rebuild
-DEVBOX_RENDER_OUTPUT=cloud-init-devbox.yaml ./devbox render
+./devbox doctor
 ```
 
 Local workstation commands:
 
 ```sh
-./workstation doctor
 ./workstation converge
-./workstation packages
-./workstation dotfiles
-./workstation ai-tools
+./workstation doctor
 ```
 
 ## Guardrails
 
-- Public SSH is temporary. After Tailscale is up, `lockdown` removes host and
+- Public SSH is temporary. After Tailscale is up, `converge` removes host and
   Hetzner SSH ingress.
-- Public HTTP/HTTPS is managed by `up` and `lockdown`; set
-  `DEVBOX_PUBLIC_WEB=1` before running them to open it.
+- Public HTTP/HTTPS is managed by `converge`; set `DEVBOX_PUBLIC_WEB=1` before
+  running it to open it.
 - `converge` installs and updates the desired packages, services, shell config,
-  and AI-tool shortcuts. It does not clean unrelated drift; rebuild or clean the
-  box manually when that is what you want.
+  and AI-tool shortcuts. It does not clean unrelated drift or delete/recreate
+  the server.
 - `doctor` checks the health of required pieces. It does not audit for the
   absence of unrelated state.
 - Local workstation packages are native: Homebrew on macOS, pacman plus an
@@ -93,5 +85,6 @@ state only in Docker on this box.
 ## Philosophy
 
 This is a one-user prototype machine. Prefer small shell and Ansible that are easy
-to read and edit. Rebuild instead of carrying migration machinery. Add heavier
-systems only when the box has a real repeated failure mode.
+to read and edit. Destructive server replacement is intentionally manual because
+server identity and pricing can matter. Add heavier systems only when the box has
+a real repeated failure mode.
