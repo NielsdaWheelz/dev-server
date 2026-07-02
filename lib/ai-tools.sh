@@ -16,6 +16,18 @@ ai_tool_package() {
   esac
 }
 
+ai_tool_install_method() {
+  case "$1" in
+    codex) printf 'npm\n' ;;
+    claude) printf 'native\n' ;;
+    *) die "unknown AI tool: $1" ;;
+  esac
+}
+
+ai_native_channel() {
+  printf '%s\n' "${CLAUDE_NATIVE_CHANNEL:-stable}"
+}
+
 ai_tool_real_binary() {
   printf '%s/.local/bin/%s\n' "$(dev_server_home)" "$1"
 }
@@ -83,11 +95,17 @@ ai_install_npm_globals() {
   local packages=()
   local tool
 
-  require_cmd npm
-  npm config set prefix "$(dev_server_home)/.local"
   for tool in $(ai_tools); do
+    [[ "$(ai_tool_install_method "$tool")" == "npm" ]] || continue
     packages+=("$(ai_tool_package "$tool")")
   done
+
+  if (( ${#packages[@]} == 0 )); then
+    return 0
+  fi
+
+  require_cmd npm
+  npm config set prefix "$(dev_server_home)/.local"
   npm install -g "${packages[@]}"
 
   if command -v corepack >/dev/null 2>&1; then
@@ -95,10 +113,42 @@ ai_install_npm_globals() {
   fi
 }
 
+ai_install_native_tool() {
+  local tool="$1"
+  local pkg
+
+  case "$tool" in
+    claude) ;;
+    *) die "no native installer defined for AI tool: $tool" ;;
+  esac
+
+  require_cmd curl
+
+  # Retire any npm-managed copy so the native launcher owns ~/.local/bin/<tool>.
+  pkg="$(ai_tool_package "$tool")"
+  if command -v npm >/dev/null 2>&1 && npm ls -g --depth=0 "$pkg" >/dev/null 2>&1; then
+    log "removing npm-managed $tool ($pkg); native install supersedes it"
+    npm uninstall -g "$pkg" >/dev/null 2>&1 || warn "failed to uninstall npm $pkg; continuing"
+  fi
+
+  log "installing native $tool ($(ai_native_channel))"
+  curl -fsSL https://claude.ai/install.sh | bash -s -- "$(ai_native_channel)"
+}
+
+ai_install_native() {
+  local tool
+
+  for tool in $(ai_tools); do
+    [[ "$(ai_tool_install_method "$tool")" == "native" ]] || continue
+    ai_install_native_tool "$tool"
+  done
+}
+
 ai_install() {
   ai_install_dirs
   ai_install_router
   ai_install_npm_globals
+  ai_install_native
 }
 
 ai_doctor_tool() {
@@ -149,7 +199,7 @@ ai_doctor_tool() {
   done
 
   version="$("$home/bin/$tool" --version)"
-  doctor_pass "ai.$tool" "$version via $router -> $expected"
+  doctor_pass "ai.$tool" "[$(ai_tool_install_method "$tool")] $version via $router -> $expected"
 }
 
 ai_doctor() {
