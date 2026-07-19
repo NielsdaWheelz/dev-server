@@ -66,13 +66,59 @@ Local workstation commands:
   absence of unrelated state.
 - Local workstation packages are native: Homebrew on macOS, pacman plus an
   explicit AUR list on Arch.
-- AI tool shortcuts are shared across platforms. `~/bin/codex`,
-  `~/bin/codex-personal`, `~/bin/codex-work`, `~/bin/claude`,
-  `~/bin/claude-personal`, and `~/bin/claude-work` all point at one managed
-  router under `~/.local/libexec/ai-router`.
+- AI tool shortcuts are shared across platforms. Codex and Claude use the
+  managed router under `~/.local/libexec/ai-router` for separate personal and
+  work state. OpenCode uses the direct `~/bin/opencode` shortcut and its native
+  state locations; it does not pretend to provide isolated contexts.
 - Generated cloud-init is secret-bearing. Normal commands use temporary files;
   keep `cloud-init-devbox.yaml` out of git.
 - The `secrets/` directory is ignored and should stay local.
+
+## OpenCode with Kimi K3
+
+Convergence installs OpenCode, makes `kimi-for-coding/k3` the default model at
+max reasoning effort, disables session sharing and self-updates, and installs a
+guarded permission policy without weakening OpenCode's read-only Plan and
+Explore agents. Build stays fluid inside the current workspace, while direct
+reads and edits of environment credentials and `secrets/` paths are blocked;
+`.env.example` remains usable. Every shell command requires approval, including
+commands launched by OpenCode's built-in agents. On the Ubuntu dev box, the
+guardrail policy is also installed under `/etc/opencode/` at OpenCode's
+highest-precedence managed tier. Workstations receive the same policy as a
+user-wide default.
+
+Treat the permission policy as an interactive guardrail, not a process
+sandbox. Review project-local OpenCode config and custom agents before using an
+untrusted repository, and do not use `opencode --auto` there: auto mode approves
+actions which would otherwise prompt.
+
+The managed model limit is the conservative 256K context available with a
+Moderato membership. Kimi advertises up to 1M only for Allegretto and higher;
+raise `provider.kimi-for-coding.models.k3.limit.context` to `1048576` in the
+`assets/opencode/opencode.json` asset if the subscription is upgraded.
+
+The Kimi Code credential is intentionally not provisioned. Kimi Code membership
+keys and Kimi Open Platform keys use different services and are not
+interchangeable. After convergence, enroll a Kimi Code key interactively:
+
+```sh
+ssh dev-server
+opencode auth login --provider kimi-for-coding
+opencode auth list
+opencode models kimi-for-coding
+opencode
+```
+
+Create the key in the [Kimi Code Console](https://www.kimi.com/code/console),
+paste it only into OpenCode's credential prompt, and select **Kimi For Coding**
+if OpenCode asks for a provider. The credential stays in OpenCode's user data;
+do not put it in this repo, Ansible variables, shell startup files, or
+screenshots.
+
+The first production check should use a fresh session. Confirm the status bar
+shows Kimi K3 and `max`, exercise a read/edit/shell tool loop, reject and approve
+a permission prompt, then resume the session with `opencode --continue`. Also
+exercise compaction on a long session before relying on K3 for unattended work.
 
 ## Docker
 

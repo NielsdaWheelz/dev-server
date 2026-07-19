@@ -32,6 +32,22 @@
     PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
   changed_when: false
 
+- name: Ensure managed OpenCode configuration directory exists
+  ansible.builtin.file:
+    path: /etc/opencode
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install managed OpenCode guardrail policy
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/opencode/managed.json"
+    dest: /etc/opencode/opencode.json
+    owner: root
+    group: root
+    mode: "0644"
+
 - name: Install AI npm globals and routers
   ansible.builtin.shell: |
     set -euo pipefail

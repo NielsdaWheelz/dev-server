@@ -1,0 +1,61 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled",
+  "default_agent": "build",
+  "server": {
+    "hostname": "127.0.0.1",
+    "mdns": false
+  },
+  "permission": {
+    "read": {
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow",
+      "secrets/**": "deny",
+      "**/secrets/**": "deny"
+    },
+    "edit": {
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "secrets/**": "deny",
+      "**/secrets/**": "deny"
+    },
+    "bash": "ask",
+    "external_directory": {
+      "*": "ask",
+      "~/.local/share/opencode/plans/*": "allow",
+      "~/.local/share/opencode/tool-output/*": "allow",
+      "/tmp/opencode/*": "allow"
+    },
+    "doom_loop": "ask"
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": "ask",
+        "edit": {
+          "*.env.example": "allow"
+        }
+      }
+    },
+    "plan": {
+      "permission": {
+        "bash": "ask"
+      }
+    },
+    "general": {
+      "permission": {
+        "bash": "ask",
+        "edit": {
+          "*.env.example": "allow"
+        }
+      }
+    },
+    "explore": {
+      "permission": {
+        "bash": "ask",
+        "edit": "deny"
+      }
+    }
+  }
+}
