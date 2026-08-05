@@ -67,12 +67,48 @@ Local workstation commands:
 - Local workstation packages are native: Homebrew on macOS, pacman plus an
   explicit AUR list on Arch.
 - AI tool shortcuts are shared across platforms. Codex and Claude use the
-  managed router under `~/.local/libexec/ai-router` for separate personal and
-  work state. OpenCode uses the direct `~/bin/opencode` shortcut and its native
-  state locations; it does not pretend to provide isolated contexts.
+  managed router under `~/.local/libexec/ai-router` for separate account state.
+  OpenCode uses the direct `~/bin/opencode` shortcut and its native state
+  locations; it does not pretend to provide isolated contexts.
 - Generated cloud-init is secret-bearing. Normal commands use temporary files;
   keep `cloud-init-devbox.yaml` out of git.
 - The `secrets/` directory is ignored and should stay local.
+
+## Codex account shortcuts
+
+Convergence installs one Codex binary with three isolated account homes:
+
+- `codex-personal` uses `~/.codex-personal`.
+- `codex-work` uses `~/.codex-work`.
+- `codex-work2` uses `~/.codex-work2`.
+
+Plain `codex` continues to select personal or work state from the target path.
+The second work account is explicit-only and is never selected by path. Each
+home is a complete `CODEX_HOME`, so authentication, configuration, sessions,
+skills, plugins, logs, and other Codex state remain separate.
+
+Credentials are intentionally not provisioned. After the first convergence on
+a local machine, authenticate the new ChatGPT subscription in a private browser
+session so an existing account is not selected accidentally:
+
+```sh
+codex-work2 login
+codex-work2 login status
+```
+
+On the headless dev box, first enable device-code login in the new account's
+ChatGPT security settings, then enroll that machine separately:
+
+```sh
+ssh dev-server
+codex-work2 login --device-auth
+codex-work2 login status
+```
+
+`login status` confirms the authentication method, not the account identity.
+Verify the new account in the browser flow. Use ChatGPT login for subscription
+access; API-key login is usage-billed separately. Never put `auth.json`, access
+tokens, or device codes in this repo, Ansible, shell startup files, or chat.
 
 ## OpenCode with Kimi K3
 

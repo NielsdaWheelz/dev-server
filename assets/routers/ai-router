@@ -3,6 +3,7 @@ set -euo pipefail
 
 personal_context="personal"
 work_context="work"
+work2_context="work2"
 
 fail() {
   printf '%s\n' "$*" >&2
@@ -59,7 +60,7 @@ unset home_physical
 
 tool_from_command() {
   case "$(basename "$0")" in
-    codex|codex-personal|codex-work) printf 'codex\n' ;;
+    codex|codex-personal|codex-work|codex-work2) printf 'codex\n' ;;
     claude|claude-personal|claude-work) printf 'claude\n' ;;
     *) fail "Unsupported AI router command name: $(basename "$0")" ;;
   esac
@@ -118,6 +119,7 @@ context_for_path() {
 context_from_command() {
   case "$(basename "$0")" in
     *-personal) printf '%s\n' "$personal_context" ;;
+    *-work2) printf '%s\n' "$work2_context" ;;
     *-work) printf '%s\n' "$work_context" ;;
     *) return 1 ;;
   esac
@@ -141,6 +143,7 @@ state_dir_for_context() {
   case "$tool:$context" in
     codex:personal) printf '%s\n' "$HOME/.codex-personal" ;;
     codex:work) printf '%s\n' "$HOME/.codex-work" ;;
+    codex:work2) printf '%s\n' "$HOME/.codex-work2" ;;
     claude:personal) printf '%s\n' "$HOME/.claude-personal" ;;
     claude:work) printf '%s\n' "$HOME/.claude-work" ;;
     *) fail "Unsupported AI context: $tool/$context" ;;

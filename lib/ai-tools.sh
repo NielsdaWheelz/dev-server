@@ -12,8 +12,12 @@ ai_direct_tools() {
   printf 'opencode\n'
 }
 
-ai_contexts() {
-  printf 'personal work\n'
+ai_tool_contexts() {
+  case "$1" in
+    codex) printf 'personal work work2\n' ;;
+    claude) printf 'personal work\n' ;;
+    *) die "unknown routed AI tool: $1" ;;
+  esac
 }
 
 ai_tool_package() {
@@ -49,6 +53,7 @@ ai_tool_home() {
   case "$tool:$context" in
     codex:personal) printf '%s/.codex-personal\n' "$(dev_server_home)" ;;
     codex:work) printf '%s/.codex-work\n' "$(dev_server_home)" ;;
+    codex:work2) printf '%s/.codex-work2\n' "$(dev_server_home)" ;;
     claude:personal) printf '%s/.claude-personal\n' "$(dev_server_home)" ;;
     claude:work) printf '%s/.claude-work\n' "$(dev_server_home)" ;;
     *) die "unknown AI tool/context: $tool/$context" ;;
@@ -89,7 +94,7 @@ ai_install_dirs() {
   install -d -m 0700 "$home/.config/opencode" "$home/.cache/opencode" \
     "$home/.local/share/opencode" "$home/.local/state/opencode"
   for tool in $(ai_routed_tools); do
-    for context in $(ai_contexts); do
+    for context in $(ai_tool_contexts "$tool"); do
       install -d -m 0700 "$(ai_tool_home "$tool" "$context")"
     done
   done
@@ -112,7 +117,7 @@ ai_install_router() {
 
   for tool in $(ai_routed_tools); do
     ln -sfn "$router_dest" "$home/bin/$tool"
-    for context in $(ai_contexts); do
+    for context in $(ai_tool_contexts "$tool"); do
       shortcut="$home/bin/$tool-$context"
       ln -sfn "$router_dest" "$shortcut"
     done
@@ -254,6 +259,7 @@ ai_doctor_tool() {
   local context
   local shortcut
   local shortcut_target
+  local shortcuts=()
   local version
 
   case "$tool" in
@@ -277,7 +283,12 @@ ai_doctor_tool() {
     return
   fi
 
-  for shortcut in "$home/bin/$tool" "$home/bin/$tool-personal" "$home/bin/$tool-work"; do
+  shortcuts+=("$home/bin/$tool")
+  for context in $(ai_tool_contexts "$tool"); do
+    shortcuts+=("$home/bin/$tool-$context")
+  done
+
+  for shortcut in "${shortcuts[@]}"; do
     if [[ ! -x "$shortcut" ]]; then
       doctor_fail "ai.$tool" "missing shortcut: $shortcut"
       return
@@ -293,7 +304,7 @@ ai_doctor_tool() {
     fi
   done
 
-  for context in $(ai_contexts); do
+  for context in $(ai_tool_contexts "$tool"); do
     if [[ ! -d "$(ai_tool_home "$tool" "$context")" ]]; then
       doctor_fail "ai.$tool" "missing state dir: $(ai_tool_home "$tool" "$context")"
       return
@@ -302,6 +313,31 @@ ai_doctor_tool() {
 
   version="$("$home/bin/$tool" --version)"
   doctor_pass "ai.$tool" "[$(ai_tool_install_method "$tool")] $version via $router -> $expected"
+}
+
+ai_doctor_codex_auth() {
+  local context
+  local home
+  local output
+  local shortcut
+  local status_line
+
+  home="$(dev_server_home)"
+  for context in $(ai_tool_contexts codex); do
+    shortcut="$home/bin/codex-$context"
+    [[ -x "$shortcut" ]] || continue
+
+    if output="$("$shortcut" login status 2>&1)"; then
+      doctor_pass "ai.codex.auth.$context" "credential cache present"
+    else
+      status_line="${output##*$'\n'}"
+      if [[ "$status_line" == "Not logged in" ]]; then
+        doctor_warn "ai.codex.auth.$context" "not enrolled; run: codex-$context login"
+      else
+        doctor_fail "ai.codex.auth.$context" "login status failed; run: codex-$context login status"
+      fi
+    fi
+  done
 }
 
 ai_doctor_opencode() {
@@ -432,5 +468,6 @@ ai_doctor() {
   for tool in $(ai_tools); do
     ai_doctor_tool "$tool"
   done
+  ai_doctor_codex_auth
   ai_doctor_opencode
 }

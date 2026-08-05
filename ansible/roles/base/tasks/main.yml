@@ -307,3 +307,4 @@
     - "/home/{{ devbox_user }}/.claude-work"
     - "/home/{{ devbox_user }}/.codex-personal"
     - "/home/{{ devbox_user }}/.codex-work"
+    - "/home/{{ devbox_user }}/.codex-work2"
