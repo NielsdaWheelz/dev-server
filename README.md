@@ -79,6 +79,10 @@ to include AUR updates through `yay`, and keeps local-NVMe dracut images free
 of unneeded network storage modules. The normal Arch kernel remains the
 systemd-boot default while LTS stays available as a fallback.
 
+Firmware metadata, SMART disk health, package-file indexes, and package-cache
+cleanup run automatically. XFCE also gets persistent searchable clipboard
+history on `Super+V` and a Los Angeles solar schedule for Gammastep night color.
+
 Arch convergence installs Cursor from the explicit AUR manifest and adds
 Anysphere's Remote SSH extension. The `dev-server` and `macbook` aliases are
 preclassified as Linux and macOS remotes. A remote repository can be opened

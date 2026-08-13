@@ -31,6 +31,10 @@ packages_arch_aur_helper() {
   return 1
 }
 
+packages_arch_package_installed_exact() {
+  [[ "$(pacman -Qq "$1" 2>/dev/null || true)" == "$1" ]]
+}
+
 packages_arch_reboot_pending() {
   [[ ! -d "/usr/lib/modules/$(uname -r)" ]]
 }
@@ -157,7 +161,7 @@ packages_arch_remove_packages() {
 
   mapfile -t declared_packages < <(packages_non_comment_lines "$(packages_arch_remove_file)")
   for package in "${declared_packages[@]}"; do
-    pacman -Q "$package" >/dev/null 2>&1 && installed_packages+=("$package")
+    packages_arch_package_installed_exact "$package" && installed_packages+=("$package")
   done
 
   if ((${#installed_packages[@]} > 0)); then
@@ -272,6 +276,30 @@ packages_arch_configure_systemd_boot() {
   sudo install -D -m 0644 "$source" "$(packages_arch_systemd_boot_config_dest)"
 }
 
+packages_arch_configure_maintenance() {
+  if pacman -Q fwupd >/dev/null 2>&1; then
+    sudo systemctl enable --now fwupd-refresh.timer
+  fi
+
+  if pacman -Q smartmontools >/dev/null 2>&1; then
+    sudo systemctl enable --now smartd.service
+  fi
+
+  if pacman -Q pkgfile >/dev/null 2>&1; then
+    sudo systemctl start pkgfile-update.service
+    sudo systemctl enable --now pkgfile-update.timer
+  fi
+
+  if pacman -Q pacman-contrib >/dev/null 2>&1; then
+    sudo systemctl enable --now paccache.timer
+    sudo paccache -ruk0
+  fi
+
+  if command -v tldr >/dev/null 2>&1; then
+    tldr --update || warn "failed to refresh the tealdeer page cache"
+  fi
+}
+
 packages_install() {
   local pacman_packages=()
   local aur_packages=()
@@ -283,6 +311,7 @@ packages_install() {
   mapfile -t aur_packages < <(packages_non_comment_lines "$(packages_arch_aur_file)")
 
   packages_arch_configure_dracut
+  packages_arch_remove_packages
 
   if ((${#pacman_packages[@]} > 0)); then
     sudo pacman -Syu --needed "${pacman_packages[@]}"
@@ -293,7 +322,6 @@ packages_install() {
     "$aur_helper" -S --needed "${aur_packages[@]}"
   fi
 
-  packages_arch_remove_packages
   packages_arch_configure_touchpad
   packages_arch_configure_docker
   packages_arch_configure_zram
@@ -303,6 +331,7 @@ packages_install() {
   packages_arch_configure_reflector
   packages_arch_configure_eos_update
   packages_arch_configure_systemd_boot
+  packages_arch_configure_maintenance
 }
 
 packages_doctor() {
@@ -332,7 +361,7 @@ packages_doctor() {
 
   mapfile -t removed_packages < <(packages_non_comment_lines "$(packages_arch_remove_file)")
   for package in "${removed_packages[@]}"; do
-    pacman -Q "$package" >/dev/null 2>&1 && present_packages+=("$package")
+    packages_arch_package_installed_exact "$package" && present_packages+=("$package")
   done
   if ((${#present_packages[@]} == 0)); then
     doctor_pass package.removals "declared unwanted packages absent"
@@ -445,6 +474,43 @@ packages_doctor() {
       doctor_pass package.reflector "regional health-ranked mirror policy and weekly timer active"
     else
       doctor_fail package.reflector "reflector policy or weekly timer is not active"
+    fi
+  fi
+
+  if pacman -Q fwupd >/dev/null 2>&1; then
+    if systemctl is-enabled --quiet fwupd-refresh.timer &&
+      systemctl is-active --quiet fwupd-refresh.timer; then
+      doctor_pass package.firmware-refresh "fwupd metadata refresh timer active"
+    else
+      doctor_fail package.firmware-refresh "fwupd metadata refresh timer is not active"
+    fi
+  fi
+
+  if pacman -Q smartmontools >/dev/null 2>&1; then
+    if systemctl is-enabled --quiet smartd.service &&
+      systemctl is-active --quiet smartd.service; then
+      doctor_pass package.smart "SMART disk monitoring active"
+    else
+      doctor_fail package.smart "SMART disk monitoring is not active"
+    fi
+  fi
+
+  if pacman -Q pkgfile >/dev/null 2>&1; then
+    if systemctl is-enabled --quiet pkgfile-update.timer &&
+      systemctl is-active --quiet pkgfile-update.timer &&
+      pkgfile -b sh >/dev/null 2>&1; then
+      doctor_pass package.pkgfile "pkgfile database present and daily refresh timer active"
+    else
+      doctor_fail package.pkgfile "pkgfile database or daily refresh timer is not active"
+    fi
+  fi
+
+  if pacman -Q pacman-contrib >/dev/null 2>&1; then
+    if systemctl is-enabled --quiet paccache.timer &&
+      systemctl is-active --quiet paccache.timer; then
+      doctor_pass package.cache-maintenance "weekly package-cache cleanup active"
+    else
+      doctor_fail package.cache-maintenance "weekly package-cache cleanup is not active"
     fi
   fi
 

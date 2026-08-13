@@ -76,6 +76,10 @@ if command -v atuin >/dev/null 2>&1; then
 fi
 
 if [[ -o interactive ]]; then
+  if [[ -r /usr/share/doc/pkgfile/command-not-found.zsh ]]; then
+    source /usr/share/doc/pkgfile/command-not-found.zsh
+  fi
+
   for _devbox_fzf_keybindings in \
     /usr/share/fzf/key-bindings.zsh \
     /usr/share/doc/fzf/examples/key-bindings.zsh \
