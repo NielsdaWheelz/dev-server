@@ -55,6 +55,46 @@ Local workstation commands:
 ./workstation doctor
 ```
 
+Arch convergence installs Mosh and Tailscale, enables `tailscaled`, and leaves
+the one-time tailnet login to
+`sudo tailscale up --operator="$(id -un)"`. macOS convergence installs Mosh,
+reuses an existing Tailscale app or installs the recommended standalone app
+when missing, and leaves its one-time system-extension approval and login to
+the app.
+
+On the Huawei MACH-WX9, workstation convergence installs a device-matched
+libinput preset for the `SYNA1D31` touchpad. It uses a custom curve with
+low/medium/moderately-fast/fast motion gains of approximately
+`1.0x`/`8.0x`/`9.0x`/`15.0x`, natural two-finger scrolling, clickfinger
+buttons, tap-to-click, and disable-while-typing. The custom profile affects
+pointer motion only. It is applied immediately under X11 and stored under
+`/etc/X11/xorg.conf.d/` for subsequent sessions.
+
+On EndeavourOS, workstation convergence also installs an LTS fallback kernel,
+an 8 GiB zram policy, firmware and NVMe tooling, shell linters, and package
+maintenance tools. It removes the installer onboarding applications and stale
+Electron runtimes, disables public-zone SSH access, enables weekly mirror
+refreshes using health-ranked US and Canadian mirrors, configures `eos-update`
+to include AUR updates through `yay`, and keeps local-NVMe dracut images free
+of unneeded network storage modules. The normal Arch kernel remains the
+systemd-boot default while LTS stays available as a fallback.
+
+Arch convergence installs Cursor from the explicit AUR manifest and adds
+Anysphere's Remote SSH extension. The `dev-server` and `macbook` aliases are
+preclassified as Linux and macOS remotes. A remote repository can be opened
+directly from a shell with a folder URI:
+
+```sh
+cursor --folder-uri 'vscode-remote://ssh-remote+dev-server/home/niels/src/personal/dev-server'
+cursor --folder-uri 'vscode-remote://ssh-remote+macbook/Users/nnandal/Documents/code/dev-server'
+```
+
+Arch convergence also installs Ghostty from the official repositories and
+makes it XFCE's preferred terminal while retaining XFCE Terminal as a fallback.
+The managed Ghostty profile uses the existing Meslo Nerd Font, dark native UI,
+automatic zsh integration, five-minute background reuse, and desktop
+notifications for commands that finish after 30 seconds while unfocused.
+
 ## Guardrails
 
 - Public SSH is temporary. After Tailscale is up, `converge` removes host and
@@ -161,6 +201,13 @@ exercise compaction on a long session before relying on K3 for unattended work.
 Rootless Docker is the configured default. `./devbox converge` installs the
 rootless service, log policy, and shell environment. Do not keep long-lived
 state only in Docker on this box.
+
+The Arch workstation uses the distribution Docker service. Convergence enables
+it and adds the workstation user to the `docker` group, which grants
+root-equivalent access. Log out and back in before first use. If a full system
+upgrade replaced the running kernel, convergence leaves Docker enabled, reports
+a doctor warning, and waits for the required reboot instead of aborting the rest
+of workstation setup.
 
 ## Philosophy
 

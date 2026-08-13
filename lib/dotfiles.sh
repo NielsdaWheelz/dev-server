@@ -60,6 +60,91 @@ dotfiles_install_tmux_plugins() {
   fi
 }
 
+dotfiles_current_login_shell() {
+  case "$(uname -s)" in
+    Darwin)
+      dscl . -read "/Users/$(id -un)" UserShell | awk '{print $2}'
+      ;;
+    Linux)
+      getent passwd "$(id -un)" | cut -d: -f7
+      ;;
+  esac
+}
+
+dotfiles_configure_login_shell() {
+  local current_shell
+  local zsh_path
+
+  require_cmd zsh
+  zsh_path="$(command -v zsh)"
+  current_shell="$(dotfiles_current_login_shell)"
+  if [[ "$current_shell" != "$zsh_path" ]]; then
+    log "setting login shell to $zsh_path"
+    sudo chsh -s "$zsh_path" "$(id -un)"
+  fi
+}
+
+dotfiles_configure_xfce_terminal() {
+  local current_font
+  local font_size
+
+  [[ "$(uname -s)" == "Linux" ]] || return
+  [[ "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]] || return
+  command -v xfconf-query >/dev/null 2>&1 || return
+
+  current_font="$(xfconf-query -c xfce4-terminal -p /font-name 2>/dev/null || printf 'Monospace 10')"
+  font_size="${current_font##* }"
+  [[ "$font_size" =~ ^[0-9]+$ ]] || font_size=10
+  if xfconf-query -c xfce4-terminal -p /font-use-system >/dev/null 2>&1; then
+    xfconf-query -c xfce4-terminal -p /font-use-system -s false
+  else
+    xfconf-query -c xfce4-terminal -p /font-use-system -n -t bool -s false
+  fi
+  if xfconf-query -c xfce4-terminal -p /font-name >/dev/null 2>&1; then
+    xfconf-query -c xfce4-terminal -p /font-name -s "MesloLGS Nerd Font Mono $font_size"
+  else
+    xfconf-query -c xfce4-terminal -p /font-name -n -t string -s "MesloLGS Nerd Font Mono $font_size"
+  fi
+}
+
+dotfiles_configure_ghostty() {
+  local home
+  local helpers_file
+
+  [[ "$(uname -s)" == "Linux" ]] || return
+  command -v ghostty >/dev/null 2>&1 || return
+
+  home="$(dev_server_home)"
+  install -d -m 0755 "$home/.config/ghostty"
+  dotfiles_install_file "$(dotfiles_asset ghostty.config)" "$home/.config/ghostty/config.ghostty"
+
+  if [[ "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]]; then
+    install -d -m 0755 "$home/.local/share/xfce4/helpers" "$home/.config/xfce4"
+    dotfiles_install_file \
+      "$(dotfiles_asset ghostty-xfce-helper.desktop)" \
+      "$home/.local/share/xfce4/helpers/ghostty.desktop"
+    helpers_file="$home/.config/xfce4/helpers.rc"
+    git config --file "$helpers_file" Helpers.TerminalEmulator ghostty
+  fi
+
+  systemctl --user enable --now app-com.mitchellh.ghostty.service
+}
+
+dotfiles_configure_xfce_theme() {
+  [[ "$(uname -s)" == "Linux" ]] || return
+  [[ "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]] || return
+  command -v xfconf-query >/dev/null 2>&1 || return
+
+  xfconf-query -c xsettings -p /Net/ThemeName -s Arc-Dark
+  xfconf-query -c xsettings -p /Net/IconThemeName -s Qogir-Dark
+  xfconf-query -c xfce4-panel -p /panels/dark-mode -s true
+
+  if command -v gsettings >/dev/null 2>&1; then
+    gsettings set org.gnome.desktop.interface gtk-theme Arc-Dark
+    gsettings set org.gnome.desktop.interface color-scheme prefer-dark
+  fi
+}
+
 dotfiles_configure_git() {
   local home
 
@@ -72,9 +157,9 @@ dotfiles_configure_git() {
   git config --global delta.navigate true
   git config --global delta.side-by-side false
   git config --global merge.conflictStyle zdiff3
+  # Retire the old global rewrite. Each remote should retain the transport used
+  # when it was cloned, including gh's authenticated HTTPS default.
   git config --global --unset-all url.git@github.com:.insteadOf || true
-  git config --global --add url.git@github.com:.insteadOf https://github.com/
-  git config --global --add url.git@github.com:.insteadOf gh:
 }
 
 dotfiles_install() {
@@ -82,6 +167,7 @@ dotfiles_install() {
 
   home="$(dev_server_home)"
   dotfiles_install_dirs
+  dotfiles_install_file "$(dotfiles_asset zshenv)" "$home/.zshenv"
   dotfiles_install_file "$(dotfiles_asset zshrc)" "$home/.zshrc"
   dotfiles_install_file "$(dotfiles_asset zsh_helpers)" "$home/.zsh_helpers"
   dotfiles_install_file "$(dotfiles_asset p10k.zsh)" "$home/.p10k.zsh"
@@ -89,6 +175,10 @@ dotfiles_install() {
   dotfiles_install_file "$(dotfiles_asset gitignore_global)" "$home/.gitignore_global"
   dotfiles_install_shell_repos
   dotfiles_install_tmux_plugins
+  dotfiles_configure_login_shell
+  dotfiles_configure_xfce_theme
+  dotfiles_configure_ghostty
+  dotfiles_configure_xfce_terminal
   dotfiles_configure_git
 }
 
@@ -99,7 +189,7 @@ dotfiles_doctor() {
   local branch
 
   home="$(dev_server_home)"
-  for file in .zshrc .zsh_helpers .p10k.zsh .tmux.conf .gitignore_global; do
+  for file in .zshenv .zshrc .zsh_helpers .p10k.zsh .tmux.conf .gitignore_global; do
     id="dotfiles.${file#.}"
     if [[ -f "$home/$file" ]]; then
       doctor_pass "$id" "$home/$file"
@@ -109,9 +199,57 @@ dotfiles_doctor() {
   done
 
   if command -v zsh >/dev/null 2>&1; then
-    doctor_local_cmd dotfiles.zsh "zsh config parses" "zsh -n '$home/.zshrc' && zsh -n '$home/.zsh_helpers'"
+    doctor_local_cmd dotfiles.zsh "zsh config parses" "zsh -n '$home/.zshenv' && zsh -n '$home/.zshrc' && zsh -n '$home/.zsh_helpers'"
+    if [[ "$(dotfiles_current_login_shell)" == "$(command -v zsh)" ]]; then
+      doctor_pass dotfiles.login-shell "zsh is the login shell"
+    else
+      doctor_fail dotfiles.login-shell "login shell is $(dotfiles_current_login_shell), expected $(command -v zsh)"
+    fi
   else
     doctor_fail dotfiles.zsh "zsh missing"
+    doctor_fail dotfiles.login-shell "zsh missing"
+  fi
+
+  if [[ "$(uname -s)" == "Linux" && "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]] &&
+    command -v xfconf-query >/dev/null 2>&1; then
+    if [[ "$(xfconf-query -c xsettings -p /Net/ThemeName 2>/dev/null)" == "Arc-Dark" ]] &&
+      [[ "$(xfconf-query -c xsettings -p /Net/IconThemeName 2>/dev/null)" == "Qogir-Dark" ]] &&
+      [[ "$(xfconf-query -c xfce4-panel -p /panels/dark-mode 2>/dev/null)" == "true" ]] &&
+      [[ "$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null)" == "'prefer-dark'" ]]; then
+      doctor_pass dotfiles.desktop-theme "Arc-Dark desktop and dark application preference active"
+    else
+      doctor_fail dotfiles.desktop-theme "dark desktop theme is not fully active"
+    fi
+
+    if [[ "$(xfconf-query -c xfce4-terminal -p /font-use-system 2>/dev/null)" == "false" ]] &&
+      [[ "$(xfconf-query -c xfce4-terminal -p /font-name 2>/dev/null)" == "MesloLGS Nerd Font Mono "* ]]; then
+      doctor_pass dotfiles.terminal-font "XFCE Terminal uses MesloLGS Nerd Font Mono"
+    else
+      doctor_fail dotfiles.terminal-font "XFCE Terminal is not using the managed Nerd Font"
+    fi
+  fi
+
+  if [[ "$(uname -s)" == "Linux" ]] && command -v ghostty >/dev/null 2>&1; then
+    if [[ -f "$home/.config/ghostty/config.ghostty" ]] &&
+      cmp -s "$(dotfiles_asset ghostty.config)" "$home/.config/ghostty/config.ghostty" &&
+      ghostty +show-config --changes-only >/dev/null 2>&1; then
+      doctor_pass dotfiles.ghostty-config "managed Ghostty configuration installed"
+    else
+      doctor_fail dotfiles.ghostty-config "Ghostty configuration is missing or invalid"
+    fi
+
+    if [[ "${XDG_CURRENT_DESKTOP:-}" != *XFCE* ]] ||
+      [[ "$(xfce4-mime-helper -q TerminalEmulator 2>/dev/null)" == "ghostty" ]]; then
+      doctor_pass dotfiles.ghostty-default "Ghostty is the preferred terminal"
+    else
+      doctor_fail dotfiles.ghostty-default "Ghostty is not the preferred XFCE terminal"
+    fi
+
+    if systemctl --user is-enabled --quiet app-com.mitchellh.ghostty.service; then
+      doctor_pass dotfiles.ghostty-service "Ghostty user service enabled"
+    else
+      doctor_fail dotfiles.ghostty-service "Ghostty user service is not enabled"
+    fi
   fi
 
   branch="$(git config --global init.defaultBranch || true)"
