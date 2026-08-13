@@ -145,6 +145,79 @@ dotfiles_configure_xfce_theme() {
   fi
 }
 
+dotfiles_xfconf_set() {
+  local channel="$1"
+  local property="$2"
+  local type="$3"
+  local value="$4"
+
+  if xfconf-query -c "$channel" -p "$property" >/dev/null 2>&1; then
+    xfconf-query -c "$channel" -p "$property" -s "$value"
+  else
+    xfconf-query -c "$channel" -p "$property" -n -t "$type" -s "$value"
+  fi
+}
+
+dotfiles_configure_xfce_qol() {
+  local home
+  local shortcut
+
+  [[ "$(uname -s)" == "Linux" ]] || return
+  [[ "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]] || return
+  command -v xfconf-query >/dev/null 2>&1 || return
+
+  home="$(dev_server_home)"
+  if command -v xfce4-clipman >/dev/null 2>&1; then
+    install -d -m 0755 "$home/.config/autostart"
+    rm -f "$home/.config/autostart/xfce4-clipman.desktop"
+    rm -f "$home/.config/systemd/user/xfce4-clipman.service"
+    dotfiles_install_file \
+      "$(dotfiles_asset xfce4-clipman-autostart.desktop)" \
+      "$home/.config/autostart/xfce4-clipman-plugin-autostart.desktop"
+    dotfiles_xfconf_set xfce4-panel \
+      /plugins/clipman/settings/history-ignore-primary-clipboard bool true
+    dotfiles_xfconf_set xfce4-panel \
+      /plugins/clipman/settings/max-images-in-history uint 5
+    dotfiles_xfconf_set xfce4-panel \
+      /plugins/clipman/settings/max-texts-in-history uint 50
+    dotfiles_xfconf_set xfce4-panel \
+      /plugins/clipman/settings/save-on-quit bool true
+    dotfiles_xfconf_set xfce4-panel \
+      /plugins/clipman/tweaks/reorder-items bool true
+
+    shortcut='/commands/custom/<Super>v'
+    dotfiles_xfconf_set xfce4-keyboard-shortcuts "$shortcut" string \
+      /usr/bin/xfce4-clipman-history
+
+    if ! busctl --user status org.xfce.clipman >/dev/null 2>&1; then
+      systemd-run --user --quiet --collect /usr/bin/xfce4-clipman
+      for _ in {1..20}; do
+        busctl --user status org.xfce.clipman >/dev/null 2>&1 && break
+        sleep 0.1
+      done
+    fi
+  fi
+
+  if command -v gammastep >/dev/null 2>&1; then
+    install -d -m 0755 \
+      "$home/.config/autostart" \
+      "$home/.config/gammastep" \
+      "$home/.config/systemd/user"
+    dotfiles_install_file \
+      "$(dotfiles_asset gammastep-autostart.desktop)" \
+      "$home/.config/autostart/gammastep.desktop"
+    dotfiles_install_file \
+      "$(dotfiles_asset gammastep.config)" \
+      "$home/.config/gammastep/config.ini"
+    dotfiles_install_file \
+      "$(dev_server_assets_dir)/systemd-user/gammastep.service" \
+      "$home/.config/systemd/user/gammastep.service"
+    systemctl --user daemon-reload
+    systemctl --user disable gammastep.service >/dev/null 2>&1 || true
+    systemctl --user restart gammastep.service
+  fi
+}
+
 dotfiles_configure_git() {
   local home
 
@@ -177,6 +250,7 @@ dotfiles_install() {
   dotfiles_install_tmux_plugins
   dotfiles_configure_login_shell
   dotfiles_configure_xfce_theme
+  dotfiles_configure_xfce_qol
   dotfiles_configure_ghostty
   dotfiles_configure_xfce_terminal
   dotfiles_configure_git
@@ -226,6 +300,34 @@ dotfiles_doctor() {
       doctor_pass dotfiles.terminal-font "XFCE Terminal uses MesloLGS Nerd Font Mono"
     else
       doctor_fail dotfiles.terminal-font "XFCE Terminal is not using the managed Nerd Font"
+    fi
+
+    if command -v xfce4-clipman >/dev/null 2>&1; then
+      if [[ -f "$home/.config/autostart/xfce4-clipman-plugin-autostart.desktop" ]] &&
+        grep -Eq '^Exec=(/usr/bin/)?xfce4-clipman$' \
+          "$home/.config/autostart/xfce4-clipman-plugin-autostart.desktop" &&
+        grep -Fqx 'Hidden=false' \
+          "$home/.config/autostart/xfce4-clipman-plugin-autostart.desktop" &&
+        busctl --user status org.xfce.clipman >/dev/null 2>&1 &&
+        [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/commands/custom/<Super>v' 2>/dev/null)" == "/usr/bin/xfce4-clipman-history" ]] &&
+        [[ "$(xfconf-query -c xfce4-panel -p /plugins/clipman/settings/max-texts-in-history 2>/dev/null)" == "50" ]]; then
+        doctor_pass dotfiles.clipboard-history "Clipman active with 50-item history and Super+V search"
+      else
+        doctor_fail dotfiles.clipboard-history "Clipman history or Super+V shortcut is not active"
+      fi
+    fi
+
+    if command -v gammastep >/dev/null 2>&1; then
+      if [[ -f "$home/.config/gammastep/config.ini" ]] &&
+        cmp -s "$(dotfiles_asset gammastep.config)" "$home/.config/gammastep/config.ini" &&
+        [[ -f "$home/.config/autostart/gammastep.desktop" ]] &&
+        cmp -s "$(dotfiles_asset gammastep-autostart.desktop)" \
+          "$home/.config/autostart/gammastep.desktop" &&
+        systemctl --user is-active --quiet gammastep.service; then
+        doctor_pass dotfiles.night-color "Gammastep active with Los Angeles solar schedule"
+      else
+        doctor_fail dotfiles.night-color "Gammastep configuration or user service is not active"
+      fi
     fi
   fi
 

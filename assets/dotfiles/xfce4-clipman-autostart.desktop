@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Clipman
+Comment=Keep and search clipboard history
+Exec=/usr/bin/xfce4-clipman
+Icon=xfce4-clipman-plugin
+OnlyShowIn=XFCE;
+Terminal=false
+NoDisplay=true
+Hidden=false
+X-GNOME-Autostart-enabled=true

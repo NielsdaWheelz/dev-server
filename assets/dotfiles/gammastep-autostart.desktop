@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Gammastep
+Comment=Adjust screen color temperature for time of day
+Exec=/usr/bin/systemctl --user restart gammastep.service
+Icon=gammastep
+OnlyShowIn=XFCE;
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true

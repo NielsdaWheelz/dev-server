@@ -1,6 +1,7 @@
 atuin
 base-devel
 bat
+btop
 curl
 direnv
 docker
@@ -10,6 +11,7 @@ eza
 fd
 firewalld
 fzf
+gammastep
 fwupd
 github-cli
 git
@@ -27,14 +29,18 @@ nvme-cli
 npm
 openssh
 pacman-contrib
+pkgfile
 rebuild-detector
 reflector
 ripgrep
 shellcheck
 shfmt
+smartmontools
 tailscale
+tealdeer
 tmux
 ttf-meslo-nerd
+xfce4-clipman-plugin
 yazi
 zram-generator
 zoxide

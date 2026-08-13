@@ -4,4 +4,5 @@ electron42
 eos-apps-info
 eos-packagelist
 eos-quickstart
+tldr
 welcome
