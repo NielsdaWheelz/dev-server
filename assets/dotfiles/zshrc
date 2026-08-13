@@ -75,8 +75,9 @@ if command -v atuin >/dev/null 2>&1; then
   eval "$(atuin init zsh)"
 fi
 
-if [[ -o interactive && -t 0 && -t 1 ]]; then
+if [[ -o interactive ]]; then
   for _devbox_fzf_keybindings in \
+    /usr/share/fzf/key-bindings.zsh \
     /usr/share/doc/fzf/examples/key-bindings.zsh \
     /opt/homebrew/opt/fzf/shell/key-bindings.zsh \
     /usr/local/opt/fzf/shell/key-bindings.zsh; do
@@ -88,6 +89,7 @@ if [[ -o interactive && -t 0 && -t 1 ]]; then
   unset _devbox_fzf_keybindings
 
   for _devbox_fzf_completion in \
+    /usr/share/fzf/completion.zsh \
     /usr/share/doc/fzf/examples/completion.zsh \
     /opt/homebrew/opt/fzf/shell/completion.zsh \
     /usr/local/opt/fzf/shell/completion.zsh; do
@@ -105,6 +107,7 @@ if [[ -o interactive && -t 0 && -t 1 ]]; then
   fi
 
   for _devbox_autosuggestions in \
+    /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh \
     /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh \
     /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh \
     /usr/local/share/zsh-autosuggestions/zsh-autosuggestions.zsh; do
@@ -139,8 +142,9 @@ else
 fi
 
 # zsh-syntax-highlighting should be sourced after widgets and completions.
-if [[ -o interactive && -t 0 && -t 1 ]]; then
+if [[ -o interactive ]]; then
   for _devbox_syntax_highlighting in \
+    /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh \
     /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh \
     /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh \
     /usr/local/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh; do

@@ -160,6 +160,7 @@ ai_install_opencode_config() {
 }
 
 ai_install_npm_globals() {
+  local install_args=(-g)
   local packages=()
   local tool
 
@@ -174,7 +175,10 @@ ai_install_npm_globals() {
 
   require_cmd npm
   npm config set prefix "$(dev_server_home)/.local"
-  npm install -g "${packages[@]}"
+  if npm install --help | grep -Fq -- '--allow-scripts'; then
+    install_args+=(--allow-scripts=opencode-ai)
+  fi
+  npm install "${install_args[@]}" "${packages[@]}"
 
   if command -v corepack >/dev/null 2>&1; then
     corepack enable --install-directory "$(dev_server_home)/.local/bin"
