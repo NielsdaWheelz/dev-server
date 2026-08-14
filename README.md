@@ -81,7 +81,8 @@ systemd-boot default while LTS stays available as a fallback.
 
 Firmware metadata, SMART disk health, package-file indexes, and package-cache
 cleanup run automatically. XFCE also gets persistent searchable clipboard
-history on `Super+V` and a Los Angeles solar schedule for Gammastep night color.
+history on `Super+V`, a hardware-scaled 1% minimum screen brightness, and a Los
+Angeles solar schedule for Gammastep night color.
 
 Arch convergence installs Cursor from the explicit AUR manifest and adds
 Anysphere's Remote SSH extension. The `dev-server` and `macbook` aliases are

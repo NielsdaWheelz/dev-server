@@ -158,7 +158,26 @@ dotfiles_xfconf_set() {
   fi
 }
 
+dotfiles_xfce_brightness_floor_value() {
+  local backlight
+  local max_brightness
+
+  for backlight in /sys/class/backlight/*; do
+    [[ -r "$backlight/max_brightness" ]] || continue
+    read -r max_brightness <"$backlight/max_brightness"
+    [[ "$max_brightness" =~ ^[0-9]+$ ]] || continue
+    ((max_brightness > 0)) || continue
+
+    # Keep the panel visible while allowing XFCE below its default 10% floor.
+    printf '%d\n' "$(((max_brightness + 99) / 100))"
+    return 0
+  done
+
+  return 1
+}
+
 dotfiles_configure_xfce_qol() {
+  local brightness_floor
   local home
   local shortcut
 
@@ -167,6 +186,11 @@ dotfiles_configure_xfce_qol() {
   command -v xfconf-query >/dev/null 2>&1 || return
 
   home="$(dev_server_home)"
+  if brightness_floor="$(dotfiles_xfce_brightness_floor_value)"; then
+    dotfiles_xfconf_set xfce4-power-manager \
+      /xfce4-power-manager/brightness-slider-min-level int "$brightness_floor"
+  fi
+
   if command -v xfce4-clipman >/dev/null 2>&1; then
     install -d -m 0755 "$home/.config/autostart"
     rm -f "$home/.config/autostart/xfce4-clipman.desktop"
@@ -257,6 +281,7 @@ dotfiles_install() {
 }
 
 dotfiles_doctor() {
+  local brightness_floor
   local home
   local file
   local id
@@ -293,6 +318,14 @@ dotfiles_doctor() {
       doctor_pass dotfiles.desktop-theme "Arc-Dark desktop and dark application preference active"
     else
       doctor_fail dotfiles.desktop-theme "dark desktop theme is not fully active"
+    fi
+
+    if brightness_floor="$(dotfiles_xfce_brightness_floor_value)"; then
+      if [[ "$(xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/brightness-slider-min-level 2>/dev/null)" == "$brightness_floor" ]]; then
+        doctor_pass dotfiles.display-brightness "XFCE minimum backlight is 1% ($brightness_floor)"
+      else
+        doctor_fail dotfiles.display-brightness "XFCE minimum backlight is not set to 1% ($brightness_floor)"
+      fi
     fi
 
     if [[ "$(xfconf-query -c xfce4-terminal -p /font-use-system 2>/dev/null)" == "false" ]] &&
