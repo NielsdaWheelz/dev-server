@@ -99,21 +99,28 @@ packages_arch_reflector_config_dest() {
 }
 
 packages_arch_apply_touchpad_x11() {
-  local device
+  local device motion_points_string motion_step source
+  local -a motion_points
 
   [[ "${XDG_SESSION_TYPE:-}" == "x11" ]] || return
   command -v xinput >/dev/null 2>&1 || return
   device="$(xinput list --id-only 'SYNA1D31:00 06CB:CD48 Touchpad' 2>/dev/null || true)"
   [[ -n "$device" ]] || return
 
-  xinput set-prop "$device" --type=float --format=32 \
+  source="$(packages_arch_touchpad_config_source)"
+  motion_points_string="$(awk -F '"' '$2 == "AccelPointsMotion" { print $4; exit }' "$source")"
+  motion_step="$(awk -F '"' '$2 == "AccelStepMotion" { print $4; exit }' "$source")"
+  read -r -a motion_points <<<"$motion_points_string"
+  [[ "${#motion_points[@]}" -ge 2 && -n "$motion_step" ]] ||
+    die "invalid touchpad motion curve in $source"
+
+  xinput set-prop --type=float --format=32 "$device" \
     'libinput Accel Custom Fallback Points' 0.0 1.0
   xinput set-prop "$device" 'libinput Accel Custom Fallback Step' 1.0
-  xinput set-prop "$device" --type=float --format=32 \
-    'libinput Accel Custom Motion Points' \
-    0.0 1.0 9.0 24.0 34.0 45.0 61.2 79.8 100.8 124.2 150.0
-  xinput set-prop "$device" 'libinput Accel Custom Motion Step' 1.0
-  xinput set-prop "$device" --type=float --format=32 \
+  xinput set-prop --type=float --format=32 "$device" \
+    'libinput Accel Custom Motion Points' "${motion_points[@]}"
+  xinput set-prop "$device" 'libinput Accel Custom Motion Step' "$motion_step"
+  xinput set-prop --type=float --format=32 "$device" \
     'libinput Accel Custom Scroll Points' 0.0 1.0
   xinput set-prop "$device" 'libinput Accel Custom Scroll Step' 1.0
   xinput set-prop "$device" 'libinput Accel Profile Enabled' 0 0 1
@@ -561,12 +568,14 @@ packages_doctor() {
       if xinput list-props 'SYNA1D31:00 06CB:CD48 Touchpad' 2>/dev/null |
         grep -Eq 'libinput Accel Profile Enabled \([0-9]+\):[[:space:]]+0, 0, 1' &&
         xinput list-props 'SYNA1D31:00 06CB:CD48 Touchpad' 2>/dev/null |
-        grep -Eq 'libinput Accel Custom Motion Points \([0-9]+\):[[:space:]]+0\.000000, 1\.000000, 9\.000000, 24\.000000' &&
+        grep -Eq 'libinput Accel Custom Motion Points \([0-9]+\):[[:space:]]+0\.000000, 0\.042000, 0\.184013, 0\.276020' &&
+        xinput list-props 'SYNA1D31:00 06CB:CD48 Touchpad' 2>/dev/null |
+        grep -Eq 'libinput Accel Custom Motion Step \([0-9]+\):[[:space:]]+0\.105000' &&
         xinput list-props 'SYNA1D31:00 06CB:CD48 Touchpad' 2>/dev/null |
         grep -Eq 'libinput Natural Scrolling Enabled \([0-9]+\):[[:space:]]+1' &&
         xinput list-props 'SYNA1D31:00 06CB:CD48 Touchpad' 2>/dev/null |
         grep -Eq 'libinput Click Method Enabled \([0-9]+\):[[:space:]]+0, 1'; then
-        doctor_pass package.touchpad-runtime "custom 1.0x/8.0x/9.0x/15.0x curve, natural scroll, and clickfinger active"
+        doctor_pass package.touchpad-runtime "smooth 0.4x-to-20x curve, natural scroll, and clickfinger active"
       else
         doctor_fail package.touchpad-runtime "Huawei touchpad runtime preset is not active"
       fi

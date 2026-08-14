@@ -64,8 +64,8 @@ the app.
 
 On the Huawei MACH-WX9, workstation convergence installs a device-matched
 libinput preset for the `SYNA1D31` touchpad. It uses a custom curve with
-low/medium/moderately-fast/fast motion gains of approximately
-`1.0x`/`8.0x`/`9.0x`/`15.0x`, natural two-finger scrolling, clickfinger
+libinput's precise low-speed response and a proportional 64-point ramp from
+approximately `0.4x` to `20x`, natural two-finger scrolling, clickfinger
 buttons, tap-to-click, and disable-while-typing. The custom profile affects
 pointer motion only. It is applied immediately under X11 and stored under
 `/etc/X11/xorg.conf.d/` for subsequent sessions.
