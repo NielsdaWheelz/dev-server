@@ -162,6 +162,15 @@ dotfiles_xfconf_set() {
   fi
 }
 
+dotfiles_xfwm_shortcut_set() {
+  local property="$1"
+  local action="$2"
+
+  # Xfwm can retain a stale X11 key grab when an existing binding is rewritten.
+  xfconf-query -c xfce4-keyboard-shortcuts -p "$property" -r 2>/dev/null || true
+  dotfiles_xfconf_set xfce4-keyboard-shortcuts "$property" string "$action"
+}
+
 dotfiles_xfce_brightness_floor_value() {
   local backlight
   local max_brightness
@@ -225,19 +234,19 @@ dotfiles_configure_xfce_qol() {
   dotfiles_xfconf_set xfce4-keyboard-shortcuts \
     '/commands/custom/<Shift><Super>s' string 'xfce4-screenshooter -r'
 
-  dotfiles_xfconf_set xfce4-keyboard-shortcuts \
-    '/xfwm4/custom/<Super>Left' string tile_left_key
-  dotfiles_xfconf_set xfce4-keyboard-shortcuts \
-    '/xfwm4/custom/<Super>Right' string tile_right_key
-  dotfiles_xfconf_set xfce4-keyboard-shortcuts \
-    '/xfwm4/custom/<Super>Up' string maximize_window_key
-  dotfiles_xfconf_set xfce4-keyboard-shortcuts \
-    '/xfwm4/custom/<Super>Down' string hide_window_key
+  dotfiles_xfwm_shortcut_set \
+    '/xfwm4/custom/<Super>Left' tile_left_key
+  dotfiles_xfwm_shortcut_set \
+    '/xfwm4/custom/<Super>Right' tile_right_key
+  dotfiles_xfwm_shortcut_set \
+    '/xfwm4/custom/<Super>Up' maximize_window_key
+  dotfiles_xfwm_shortcut_set \
+    '/xfwm4/custom/<Super>Down' hide_window_key
   for shortcut in 1 2 3 4; do
-    dotfiles_xfconf_set xfce4-keyboard-shortcuts \
-      "/xfwm4/custom/<Super>$shortcut" string "workspace_${shortcut}_key"
-    dotfiles_xfconf_set xfce4-keyboard-shortcuts \
-      "/xfwm4/custom/<Shift><Super>$shortcut" string \
+    dotfiles_xfwm_shortcut_set \
+      "/xfwm4/custom/<Super>$shortcut" "workspace_${shortcut}_key"
+    dotfiles_xfwm_shortcut_set \
+      "/xfwm4/custom/<Shift><Super>$shortcut" \
       "move_window_workspace_${shortcut}_key"
   done
 
