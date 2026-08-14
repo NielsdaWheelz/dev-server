@@ -46,6 +46,10 @@ packages_arch_is_huawei_mach_wx9() {
     [[ "$(</sys/class/dmi/id/product_name)" == "MACH-WX9" ]]
 }
 
+packages_arch_is_intel_cpu() {
+  grep -Eqm1 '^vendor_id[[:space:]]*:?[[:space:]]+GenuineIntel$' /proc/cpuinfo
+}
+
 packages_arch_touchpad_config_source() {
   printf '%s/assets/xorg/90-dev-server-huawei-touchpad.conf\n' "$dev_server_root"
 }
@@ -285,6 +289,10 @@ packages_arch_configure_maintenance() {
     sudo systemctl enable --now smartd.service
   fi
 
+  if pacman -Q thermald >/dev/null 2>&1 && packages_arch_is_intel_cpu; then
+    sudo systemctl enable --now thermald.service
+  fi
+
   if pacman -Q pkgfile >/dev/null 2>&1; then
     sudo systemctl start pkgfile-update.service
     sudo systemctl enable --now pkgfile-update.timer
@@ -492,6 +500,15 @@ packages_doctor() {
       doctor_pass package.smart "SMART disk monitoring active"
     else
       doctor_fail package.smart "SMART disk monitoring is not active"
+    fi
+  fi
+
+  if pacman -Q thermald >/dev/null 2>&1 && packages_arch_is_intel_cpu; then
+    if systemctl is-enabled --quiet thermald.service &&
+      systemctl is-active --quiet thermald.service; then
+      doctor_pass package.thermal-management "Intel thermald service enabled and active"
+    else
+      doctor_fail package.thermal-management "Intel thermald service is not enabled and active"
     fi
   fi
 

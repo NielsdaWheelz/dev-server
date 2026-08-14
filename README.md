@@ -71,18 +71,20 @@ pointer motion only. It is applied immediately under X11 and stored under
 `/etc/X11/xorg.conf.d/` for subsequent sessions.
 
 On EndeavourOS, workstation convergence also installs an LTS fallback kernel,
-an 8 GiB zram policy, firmware and NVMe tooling, shell linters, and package
-maintenance tools. It removes the installer onboarding applications and stale
-Electron runtimes, disables public-zone SSH access, enables weekly mirror
-refreshes using health-ranked US and Canadian mirrors, configures `eos-update`
-to include AUR updates through `yay`, and keeps local-NVMe dracut images free
-of unneeded network storage modules. The normal Arch kernel remains the
-systemd-boot default while LTS stays available as a fallback.
+an 8 GiB zram policy, Intel thermal management, firmware and NVMe tooling,
+shell linters, and package maintenance tools. It removes the installer
+onboarding applications and stale Electron runtimes, disables public-zone SSH
+access, enables weekly mirror refreshes using health-ranked US and Canadian
+mirrors, configures `eos-update` to include AUR updates through `yay`, and keeps
+local-NVMe dracut images free of unneeded network storage modules. The normal
+Arch kernel remains the systemd-boot default while LTS stays available as a
+fallback.
 
 Firmware metadata, SMART disk health, package-file indexes, and package-cache
 cleanup run automatically. XFCE also gets persistent searchable clipboard
-history on `Super+V`, a hardware-scaled 1% minimum screen brightness, and a Los
-Angeles solar schedule for Gammastep night color.
+history on `Super+V`, a hardware-scaled 1% minimum screen brightness, balanced
+AC and power-saver battery profiles, a Qogir-Dark cursor, workspace and window
+shortcuts, and a San Francisco solar schedule for Gammastep night color.
 
 Arch convergence installs Cursor from the explicit AUR manifest and adds
 Anysphere's Remote SSH extension. The `dev-server` and `macbook` aliases are

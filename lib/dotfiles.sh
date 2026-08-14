@@ -137,11 +137,15 @@ dotfiles_configure_xfce_theme() {
 
   xfconf-query -c xsettings -p /Net/ThemeName -s Arc-Dark
   xfconf-query -c xsettings -p /Net/IconThemeName -s Qogir-Dark
+  xfconf-query -c xsettings -p /Gtk/CursorThemeName -s Qogir-Dark
+  xfconf-query -c xsettings -p /Gtk/CursorThemeSize -s 32
   xfconf-query -c xfce4-panel -p /panels/dark-mode -s true
 
   if command -v gsettings >/dev/null 2>&1; then
     gsettings set org.gnome.desktop.interface gtk-theme Arc-Dark
     gsettings set org.gnome.desktop.interface color-scheme prefer-dark
+    gsettings set org.gnome.desktop.interface cursor-theme Qogir-Dark
+    gsettings set org.gnome.desktop.interface cursor-size 32
   fi
 }
 
@@ -176,6 +180,24 @@ dotfiles_xfce_brightness_floor_value() {
   return 1
 }
 
+dotfiles_xfce_shortcuts_configured() {
+  [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/commands/custom/<Super>Return' 2>/dev/null)" == "exo-open --launch TerminalEmulator" ]] &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/commands/custom/<Super>l' 2>/dev/null)" == "xflock4" ]] &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/commands/custom/<Shift><Super>s' 2>/dev/null)" == "xfce4-screenshooter -r" ]] &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/xfwm4/custom/<Super>Left' 2>/dev/null)" == "tile_left_key" ]] &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/xfwm4/custom/<Super>Right' 2>/dev/null)" == "tile_right_key" ]] &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/xfwm4/custom/<Super>Up' 2>/dev/null)" == "maximize_window_key" ]] &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/xfwm4/custom/<Super>Down' 2>/dev/null)" == "hide_window_key" ]] &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/xfwm4/custom/<Super>1' 2>/dev/null)" == "workspace_1_key" ]] &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/xfwm4/custom/<Super>2' 2>/dev/null)" == "workspace_2_key" ]] &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/xfwm4/custom/<Super>3' 2>/dev/null)" == "workspace_3_key" ]] &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/xfwm4/custom/<Super>4' 2>/dev/null)" == "workspace_4_key" ]] &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/xfwm4/custom/<Shift><Super>1' 2>/dev/null)" == "move_window_workspace_1_key" ]] &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/xfwm4/custom/<Shift><Super>2' 2>/dev/null)" == "move_window_workspace_2_key" ]] &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/xfwm4/custom/<Shift><Super>3' 2>/dev/null)" == "move_window_workspace_3_key" ]] &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/xfwm4/custom/<Shift><Super>4' 2>/dev/null)" == "move_window_workspace_4_key" ]]
+}
+
 dotfiles_configure_xfce_qol() {
   local brightness_floor
   local home
@@ -190,6 +212,34 @@ dotfiles_configure_xfce_qol() {
     dotfiles_xfconf_set xfce4-power-manager \
       /xfce4-power-manager/brightness-slider-min-level int "$brightness_floor"
   fi
+
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/profile-on-ac string balanced
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/profile-on-battery string power-saver
+
+  dotfiles_xfconf_set xfce4-keyboard-shortcuts \
+    '/commands/custom/<Super>Return' string 'exo-open --launch TerminalEmulator'
+  dotfiles_xfconf_set xfce4-keyboard-shortcuts \
+    '/commands/custom/<Super>l' string xflock4
+  dotfiles_xfconf_set xfce4-keyboard-shortcuts \
+    '/commands/custom/<Shift><Super>s' string 'xfce4-screenshooter -r'
+
+  dotfiles_xfconf_set xfce4-keyboard-shortcuts \
+    '/xfwm4/custom/<Super>Left' string tile_left_key
+  dotfiles_xfconf_set xfce4-keyboard-shortcuts \
+    '/xfwm4/custom/<Super>Right' string tile_right_key
+  dotfiles_xfconf_set xfce4-keyboard-shortcuts \
+    '/xfwm4/custom/<Super>Up' string maximize_window_key
+  dotfiles_xfconf_set xfce4-keyboard-shortcuts \
+    '/xfwm4/custom/<Super>Down' string hide_window_key
+  for shortcut in 1 2 3 4; do
+    dotfiles_xfconf_set xfce4-keyboard-shortcuts \
+      "/xfwm4/custom/<Super>$shortcut" string "workspace_${shortcut}_key"
+    dotfiles_xfconf_set xfce4-keyboard-shortcuts \
+      "/xfwm4/custom/<Shift><Super>$shortcut" string \
+      "move_window_workspace_${shortcut}_key"
+  done
 
   if command -v xfce4-clipman >/dev/null 2>&1; then
     install -d -m 0755 "$home/.config/autostart"
@@ -313,11 +363,27 @@ dotfiles_doctor() {
     command -v xfconf-query >/dev/null 2>&1; then
     if [[ "$(xfconf-query -c xsettings -p /Net/ThemeName 2>/dev/null)" == "Arc-Dark" ]] &&
       [[ "$(xfconf-query -c xsettings -p /Net/IconThemeName 2>/dev/null)" == "Qogir-Dark" ]] &&
+      [[ "$(xfconf-query -c xsettings -p /Gtk/CursorThemeName 2>/dev/null)" == "Qogir-Dark" ]] &&
+      [[ "$(xfconf-query -c xsettings -p /Gtk/CursorThemeSize 2>/dev/null)" == "32" ]] &&
       [[ "$(xfconf-query -c xfce4-panel -p /panels/dark-mode 2>/dev/null)" == "true" ]] &&
-      [[ "$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null)" == "'prefer-dark'" ]]; then
-      doctor_pass dotfiles.desktop-theme "Arc-Dark desktop and dark application preference active"
+      [[ "$(gsettings get org.gnome.desktop.interface color-scheme 2>/dev/null)" == "'prefer-dark'" ]] &&
+      [[ "$(gsettings get org.gnome.desktop.interface cursor-theme 2>/dev/null)" == "'Qogir-Dark'" ]]; then
+      doctor_pass dotfiles.desktop-theme "Arc-Dark desktop with Qogir icons and cursor active"
     else
       doctor_fail dotfiles.desktop-theme "dark desktop theme is not fully active"
+    fi
+
+    if [[ "$(xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/profile-on-ac 2>/dev/null)" == "balanced" ]] &&
+      [[ "$(xfconf-query -c xfce4-power-manager -p /xfce4-power-manager/profile-on-battery 2>/dev/null)" == "power-saver" ]]; then
+      doctor_pass dotfiles.power-profiles "balanced on AC and power-saver on battery"
+    else
+      doctor_fail dotfiles.power-profiles "XFCE power profiles are not fully configured"
+    fi
+
+    if dotfiles_xfce_shortcuts_configured; then
+      doctor_pass dotfiles.desktop-shortcuts "terminal, lock, screenshot, tiling, and workspace shortcuts active"
+    else
+      doctor_fail dotfiles.desktop-shortcuts "managed XFCE shortcut layer is incomplete"
     fi
 
     if brightness_floor="$(dotfiles_xfce_brightness_floor_value)"; then
@@ -357,7 +423,7 @@ dotfiles_doctor() {
         cmp -s "$(dotfiles_asset gammastep-autostart.desktop)" \
           "$home/.config/autostart/gammastep.desktop" &&
         systemctl --user is-active --quiet gammastep.service; then
-        doctor_pass dotfiles.night-color "Gammastep active with Los Angeles solar schedule"
+        doctor_pass dotfiles.night-color "Gammastep active with San Francisco solar schedule"
       else
         doctor_fail dotfiles.night-color "Gammastep configuration or user service is not active"
       fi

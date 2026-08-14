@@ -38,6 +38,7 @@ shfmt
 smartmontools
 tailscale
 tealdeer
+thermald
 tmux
 ttf-meslo-nerd
 xfce4-clipman-plugin
