@@ -22,11 +22,15 @@ ai_tool_contexts() {
 
 ai_tool_package() {
   case "$1" in
-    codex) printf '@openai/codex\n' ;;
+    codex) printf '@openai/codex@0.149.1\n' ;;
     claude) printf '@anthropic-ai/claude-code\n' ;;
     opencode) printf 'opencode-ai\n' ;;
     *) die "unknown AI tool: $1" ;;
   esac
+}
+
+ai_codex_version() {
+  printf 'codex-cli 0.149.1\n'
 }
 
 ai_tool_install_method() {
@@ -316,6 +320,10 @@ ai_doctor_tool() {
   done
 
   version="$("$home/bin/$tool" --version)"
+  if [[ "$tool" == codex && "$version" != "$(ai_codex_version)" ]]; then
+    doctor_fail "ai.$tool" "version $version, expected $(ai_codex_version)"
+    return
+  fi
   doctor_pass "ai.$tool" "[$(ai_tool_install_method "$tool")] $version via $router -> $expected"
 }
 

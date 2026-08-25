@@ -4,11 +4,22 @@ set -euo pipefail
 personal_context="personal"
 work_context="work"
 work2_context="work2"
+skidbladnir_seam_token='Skidbladnir.Router.V1'
+skidbladnir_marker='/home/niels/.local/state/skidbladnir/router/enabled'
+skidbladnir_launcher='/home/niels/.local/bin/skidbladnir'
 
 fail() {
   printf '%s\n' "$*" >&2
   exit 1
 }
+
+if [[ "$(basename "$0")" == ai-router ]]; then
+  if [[ $# -eq 1 && "$1" == --skidbladnir-seam-version ]]; then
+    printf '%s\n' "$skidbladnir_seam_token"
+    exit 0
+  fi
+  fail "Unsupported AI router query"
+fi
 
 canonical_path() {
   local target="$1"
@@ -150,6 +161,160 @@ state_dir_for_context() {
   esac
 }
 
+actual_tmux_pane() {
+  local pane
+  local tty_path
+
+  [[ -n "${TMUX:-}" && "${TMUX_PANE:-}" =~ ^%[0-9]+$ ]] || return 1
+  command -v tmux >/dev/null 2>&1 || return 1
+  tty_path="$(tty 2>/dev/null)" || return 1
+  pane="$(tmux display-message -p -t "$TMUX_PANE" '#{pane_id}|#{pane_tty}' 2>/dev/null)" || return 1
+  [[ "$pane" == "$TMUX_PANE|$tty_path" ]]
+}
+
+codex_route_kind() {
+  local arg
+  local images=0
+  local needs_value=0
+  local route=root
+
+  while (( $# > 0 )); do
+    arg="$1"
+    shift
+
+    if (( needs_value )); then
+      needs_value=0
+      continue
+    fi
+
+    if (( images )); then
+      if [[ "$arg" != -* || "$arg" == "-" ]]; then
+        continue
+      fi
+      images=0
+    fi
+
+    if [[ "$route" == resume ]]; then
+      case "$arg" in
+        --)
+          break
+          ;;
+        -h|--help|-V|--version)
+          printf 'other\n'
+          return
+          ;;
+        -c|--config|--enable|--disable|--remote|--remote-auth-token-env|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-C|--cd|--add-dir|-a|--ask-for-approval)
+          needs_value=1
+          ;;
+        -i|--image)
+          images=1
+          ;;
+        -i?*)
+          images=1
+          ;;
+      esac
+      continue
+    fi
+
+    case "$arg" in
+      --)
+        printf 'root\n'
+        return
+        ;;
+      -h|--help|-V|--version)
+        printf 'other\n'
+        return
+        ;;
+      -c|--config|--enable|--disable|--remote|--remote-auth-token-env|-m|--model|--local-provider|-p|--profile|-s|--sandbox|-C|--cd|--add-dir|-a|--ask-for-approval)
+        needs_value=1
+        ;;
+      -i|--image)
+        images=1
+        ;;
+      -i?*)
+        images=1
+        ;;
+      -c?*|-m?*|-p?*|-s?*|-C?*|-a?*|--config=*|--enable=*|--disable=*|--remote=*|--remote-auth-token-env=*|--image=*|--model=*|--local-provider=*|--profile=*|--sandbox=*|--cd=*|--add-dir=*|--ask-for-approval=*)
+        ;;
+      --strict-config|--oss|--approve-for-me|--dangerously-bypass-approvals-and-sandbox|--dangerously-bypass-hook-trust|--search|--no-alt-screen)
+        ;;
+      resume)
+        route=resume
+        ;;
+      agents|exec|e|review|login|logout|mcp|plugin|mcp-server|app-server|remote-control|completion|update|doctor|sandbox|debug|apply|a|queue|archive|delete|migrate-rollouts|unarchive|fork|cloud|exec-server|features|help)
+        printf 'other\n'
+        return
+        ;;
+      -* )
+        # Unknown options belong to the managed path so the pinned launcher can
+        # reject them rather than accidentally bypassing policy.
+        printf 'root\n'
+        return
+        ;;
+    esac
+  done
+
+  printf '%s\n' "$route"
+}
+
+skidbladnir_marker_present() {
+  [[ -e "$skidbladnir_marker" || -L "$skidbladnir_marker" ]]
+}
+
+skidbladnir_marker_valid() {
+  local marker_dir
+  local uid
+  local framed
+
+  marker_dir="$(dirname "$skidbladnir_marker")"
+  uid="$(id -u)"
+  [[ -d "$marker_dir" && ! -L "$marker_dir" ]] || return 1
+  [[ "$(stat -c %a "$marker_dir" 2>/dev/null)" == 700 ]] || return 1
+  [[ "$(stat -c %u "$marker_dir" 2>/dev/null)" == "$uid" ]] || return 1
+  [[ -f "$skidbladnir_marker" && ! -L "$skidbladnir_marker" ]] || return 1
+  [[ "$(stat -c %a "$skidbladnir_marker" 2>/dev/null)" == 600 ]] || return 1
+  [[ "$(stat -c %u "$skidbladnir_marker" 2>/dev/null)" == "$uid" ]] || return 1
+  framed="$(cat -- "$skidbladnir_marker"; printf .)" || return 1
+  [[ "$framed" == "$skidbladnir_seam_token"$'\n.' ]]
+}
+
+skidbladnir_launcher_compatible() {
+  local expected
+  local stdout_file
+  local stderr_file
+  local status=0
+
+  [[ -f "$skidbladnir_launcher" && ! -L "$skidbladnir_launcher" && -x "$skidbladnir_launcher" ]] || return 1
+  stdout_file="$(mktemp "${TMPDIR:-/tmp}/ai-router-launcher-stdout.XXXXXX")" || return 1
+  stderr_file="$(mktemp "${TMPDIR:-/tmp}/ai-router-launcher-stderr.XXXXXX")" || {
+    rm -f -- "$stdout_file"
+    return 1
+  }
+  expected="$(mktemp "${TMPDIR:-/tmp}/ai-router-launcher-expected.XXXXXX")" || {
+    rm -f -- "$stdout_file" "$stderr_file"
+    return 1
+  }
+  printf '%s\n' "$skidbladnir_seam_token" > "$expected"
+  "$skidbladnir_launcher" launcher --router-seam-version > "$stdout_file" 2> "$stderr_file" || status=$?
+  if (( status != 0 )) || [[ -s "$stderr_file" ]] || ! cmp -s "$expected" "$stdout_file"; then
+    rm -f -- "$expected" "$stdout_file" "$stderr_file"
+    return 1
+  fi
+  rm -f -- "$expected" "$stdout_file" "$stderr_file"
+}
+
+maybe_exec_skidbladnir() {
+  local profile="$1"
+  shift
+
+  skidbladnir_marker_present || return 0
+  [[ "$(codex_route_kind "$@")" != other ]] || return 0
+  actual_tmux_pane || return 0
+  skidbladnir_marker_valid || fail "Skidbladnir router marker is incompatible"
+  skidbladnir_launcher_compatible || fail "Skidbladnir launcher is unavailable or incompatible"
+  exec "$skidbladnir_launcher" launcher --profile "$profile" -- "$@"
+}
+
 tool="$(tool_from_command)"
 real_binary="$HOME/.local/bin/$tool"
 router_path="$(canonical_path "$HOME/.local/libexec/ai-router")"
@@ -173,6 +338,7 @@ fi
 case "$tool" in
   codex)
     export CODEX_HOME="$state_dir"
+    maybe_exec_skidbladnir "$context" "$@"
     ;;
   claude)
     export CLAUDE_CONFIG_DIR="$state_dir"
