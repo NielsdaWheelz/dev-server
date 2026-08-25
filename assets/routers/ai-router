@@ -217,8 +217,7 @@ codex_route_kind() {
         -i|--image)
           images=1
           ;;
-        -i?*)
-          images=1
+        -i?*|--image=*)
           ;;
       esac
       continue
@@ -239,11 +238,7 @@ codex_route_kind() {
       -i|--image)
         images=1
         ;;
-      -i?*)
-        images=1
-        ;;
-      --image=*)
-        images=1
+      -i?*|--image=*)
         ;;
       -c?*|-m?*|-p?*|-s?*|-C?*|-a?*|--config=*|--enable=*|--disable=*|--remote=*|--remote-auth-token-env=*|--model=*|--local-provider=*|--profile=*|--sandbox=*|--cd=*|--add-dir=*|--ask-for-approval=*)
         ;;
