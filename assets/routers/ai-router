@@ -244,7 +244,7 @@ codex_route_kind() {
       resume)
         route=resume
         ;;
-      agents|exec|e|review|login|logout|mcp|plugin|mcp-server|app-server|remote-control|completion|update|doctor|sandbox|debug|apply|a|queue|archive|delete|migrate-rollouts|unarchive|fork|cloud|exec-server|features|help)
+      agents|exec|e|review|login|logout|mcp|plugin|mcp-server|app-server|remote-control|completion|update|doctor|sandbox|debug|apply|a|queue|archive|delete|migrate-rollouts|unarchive|fork|cloud|exec-server|execpolicy|cloud-tasks|responses-api-proxy|stdio-to-uds|features|help)
         printf 'other\n'
         return
         ;;

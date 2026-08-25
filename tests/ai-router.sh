@@ -295,6 +295,10 @@ test_grammar() {
     'fork --fake'
     'cloud --fake'
     'exec-server --fake'
+    'execpolicy --help'
+    'cloud-tasks --help'
+    'responses-api-proxy --help'
+    'stdio-to-uds --help'
     'features --fake'
     'help --fake'
   )
