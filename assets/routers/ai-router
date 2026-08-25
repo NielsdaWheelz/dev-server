@@ -234,7 +234,10 @@ codex_route_kind() {
       -i?*)
         images=1
         ;;
-      -c?*|-m?*|-p?*|-s?*|-C?*|-a?*|--config=*|--enable=*|--disable=*|--remote=*|--remote-auth-token-env=*|--image=*|--model=*|--local-provider=*|--profile=*|--sandbox=*|--cd=*|--add-dir=*|--ask-for-approval=*)
+      --image=*)
+        images=1
+        ;;
+      -c?*|-m?*|-p?*|-s?*|-C?*|-a?*|--config=*|--enable=*|--disable=*|--remote=*|--remote-auth-token-env=*|--model=*|--local-provider=*|--profile=*|--sandbox=*|--cd=*|--add-dir=*|--ask-for-approval=*)
         ;;
       --strict-config|--oss|--approve-for-me|--dangerously-bypass-approvals-and-sandbox|--dangerously-bypass-hook-trust|--search|--no-alt-screen)
         ;;
@@ -295,7 +298,8 @@ skidbladnir_launcher_compatible() {
     return 1
   }
   printf '%s\n' "$skidbladnir_seam_token" > "$expected"
-  "$skidbladnir_launcher" launcher --router-seam-version > "$stdout_file" 2> "$stderr_file" || status=$?
+  /usr/bin/timeout --signal=TERM --kill-after=1s 5s \
+    "$skidbladnir_launcher" launcher --router-seam-version > "$stdout_file" 2> "$stderr_file" || status=$?
   if (( status != 0 )) || [[ -s "$stderr_file" ]] || ! cmp -s "$expected" "$stdout_file"; then
     rm -f -- "$expected" "$stdout_file" "$stderr_file"
     return 1
