@@ -84,14 +84,22 @@ target_from_args() {
 
   for arg in "$@"; do
     if (( next_is_cd )); then
+      [[ "$arg" != -- ]] || break
       target="$arg"
       next_is_cd=0
       continue
     fi
 
     case "$arg" in
+      --)
+        break
+        ;;
       -C|--cd)
         next_is_cd=1
+        ;;
+      -C?*)
+        target="${arg#-C}"
+        target="${target#=}"
         ;;
       --cd=*)
         target="${arg#--cd=}"

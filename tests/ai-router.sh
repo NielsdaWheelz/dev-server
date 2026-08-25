@@ -338,6 +338,44 @@ test_outside_and_stale_tmux() {
   assert_record_kind real
   assert_eq "$test_home/.codex-personal" "${fields[1]}" 'bare codex personal CODEX_HOME'
 
+  invoke codex outside "-C$test_home/src/work/project" exec --fake
+  assert_status 0 'bare codex attached-short work inference'
+  assert_record_kind real
+  assert_eq "$test_home/.codex-work" "${fields[1]}" 'bare codex attached-short work CODEX_HOME'
+  invoke codex outside "-C=$test_home/src/work/project" exec --fake
+  assert_status 0 'bare codex equals-short work inference'
+  assert_record_kind real
+  assert_eq "$test_home/.codex-work" "${fields[1]}" 'bare codex equals-short work CODEX_HOME'
+  invoke codex outside "--cd=$test_home/src/work/project" exec --fake
+  assert_status 0 'bare codex attached-long work inference'
+  assert_record_kind real
+  assert_eq "$test_home/.codex-work" "${fields[1]}" 'bare codex attached-long work CODEX_HOME'
+  invoke codex outside --cd "$test_home/src/work/project" exec --fake
+  assert_status 0 'bare codex separate-long work inference'
+  assert_record_kind real
+  assert_eq "$test_home/.codex-work" "${fields[1]}" 'bare codex separate-long work CODEX_HOME'
+
+  invoke codex outside ordinary-prompt "--cd=$test_home/src/work/project"
+  assert_status 0 'bare codex post-prompt flag inference'
+  assert_record_kind real
+  assert_eq "$test_home/.codex-work" "${fields[1]}" 'bare codex post-prompt flag CODEX_HOME'
+
+  invoke codex outside -C "$test_home/src/personal/project" resume \
+    "-C$test_home/src/work/project"
+  assert_status 0 'bare codex resume-scoped cwd precedence'
+  assert_record_kind real
+  assert_eq "$test_home/.codex-work" "${fields[1]}" 'bare codex resume-scoped cwd CODEX_HOME'
+  invoke codex outside -C "$test_home/src/work/project" resume \
+    "--cd=$test_home/src/personal/project"
+  assert_status 0 'bare codex resume-scoped personal cwd precedence'
+  assert_record_kind real
+  assert_eq "$test_home/.codex-personal" "${fields[1]}" 'bare codex resume-scoped personal cwd CODEX_HOME'
+
+  invoke codex outside -- "--cd=$test_home/src/work/project"
+  assert_status 0 'bare codex end-of-options prompt'
+  assert_record_kind real
+  assert_eq "$test_home/.codex-personal" "${fields[1]}" 'bare codex end-of-options prompt CODEX_HOME'
+
   FAKE_TMUX_VALID=0 invoke codex-work inside 'root prompt'
   assert_status 0 'stale tmux root'
   assert_record_kind real
