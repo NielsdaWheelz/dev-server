@@ -104,6 +104,7 @@ if [[ $# -eq 2 && "$1" == launcher && "$2" == --router-seam-version ]]; then
     framing) printf 'Skidbladnir.Router.V1\n\n' ;;
     stderr) printf 'Skidbladnir.Router.V1\n'; printf 'unexpected\n' >&2 ;;
     fail) exit 9 ;;
+    hang) sleep 30 ;;
   esac
   exit 0
 fi
@@ -190,6 +191,7 @@ assert_production_literals() {
   grep -Fxq "skidbladnir_seam_token='Skidbladnir.Router.V1'" "$repo_dir/assets/routers/ai-router" || fail 'missing frozen seam token'
   grep -Fxq "skidbladnir_marker='/home/niels/.local/state/skidbladnir/router/enabled'" "$repo_dir/assets/routers/ai-router" || fail 'missing frozen marker path'
   grep -Fxq "skidbladnir_launcher='/home/niels/.local/bin/skidbladnir'" "$repo_dir/assets/routers/ai-router" || fail 'missing frozen launcher path'
+  grep -Fxq "  printf '73dc5888888f411c1f0fa7b81d866e721dcc86b527ce8e3b2cf4708661e823ba\\n'" "$repo_dir/lib/ai-tools.sh" || fail 'missing frozen Codex platform digest'
   pass
 }
 
@@ -245,6 +247,7 @@ test_grammar() {
     'resume'
     '--strict-config resume 123e4567-e89b-42d3-a456-426614174000'
     '--image=image.png resume 123e4567-e89b-42d3-a456-426614174000'
+    '--image=image.png exec'
     'prefix resume 123e4567-e89b-42d3-a456-426614174000'
     '-- resume'
     '-m resume'
@@ -404,6 +407,7 @@ test_launcher_failures() {
   for mode in mismatch framing stderr fail; do
     FAKE_LAUNCHER_QUERY="$mode" assert_managed_failure "launcher query $mode"
   done
+  FAKE_LAUNCHER_QUERY=hang assert_managed_failure 'launcher query hang'
   unset FAKE_LAUNCHER_QUERY
   pass
 }
@@ -418,6 +422,14 @@ test_pin_doctor_and_convergence() {
   doctor_fail() { doctor_result=fail; }
   # shellcheck disable=SC1091
   source "$repo_dir/lib/ai-tools.sh"
+
+  local fixture_platform_binary="$fixture/codex-platform"
+  local fixture_platform_digest
+  printf 'reviewed fake platform binary\n' > "$fixture_platform_binary"
+  chmod 0755 "$fixture_platform_binary"
+  fixture_platform_digest="$(sha256sum "$fixture_platform_binary" | awk '{print $1}')"
+  ai_codex_platform_binary() { printf '%s\n' "$fixture_platform_binary"; }
+  ai_codex_platform_sha256() { printf '%s\n' "$fixture_platform_digest"; }
 
   assert_eq '@openai/codex@0.149.1' "$(ai_tool_package codex)" 'Codex npm pin'
 
@@ -439,6 +451,11 @@ test_pin_doctor_and_convergence() {
   export FAKE_CODEX_VERSION='codex-cli 0.149.1'
   ai_doctor_tool codex
   assert_eq pass "$doctor_result" 'exact Codex doctor'
+  printf 'drift\n' >> "$fixture_platform_binary"
+  doctor_result=''
+  ai_doctor_tool codex
+  assert_eq fail "$doctor_result" 'wrong Codex platform digest doctor'
+  printf 'reviewed fake platform binary\n' > "$fixture_platform_binary"
   doctor_result=''
   export FAKE_CODEX_VERSION='codex-cli 0.149.2'
   ai_doctor_tool codex

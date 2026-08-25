@@ -33,6 +33,14 @@ ai_codex_version() {
   printf 'codex-cli 0.149.1\n'
 }
 
+ai_codex_platform_binary() {
+  printf '%s/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex\n' "$(dev_server_home)"
+}
+
+ai_codex_platform_sha256() {
+  printf '73dc5888888f411c1f0fa7b81d866e721dcc86b527ce8e3b2cf4708661e823ba\n'
+}
+
 ai_tool_install_method() {
   case "$1" in
     codex) printf 'npm\n' ;;
@@ -269,6 +277,8 @@ ai_doctor_tool() {
   local shortcut_target
   local shortcuts=()
   local version
+  local platform_binary
+  local platform_sha256
 
   case "$tool" in
     opencode)
@@ -323,6 +333,18 @@ ai_doctor_tool() {
   if [[ "$tool" == codex && "$version" != "$(ai_codex_version)" ]]; then
     doctor_fail "ai.$tool" "version $version, expected $(ai_codex_version)"
     return
+  fi
+  if [[ "$tool" == codex ]]; then
+    platform_binary="$(ai_codex_platform_binary)"
+    if [[ ! -f "$platform_binary" || -L "$platform_binary" || ! -x "$platform_binary" ]]; then
+      doctor_fail "ai.$tool" "missing exact Codex platform binary"
+      return
+    fi
+    platform_sha256="$(sha256sum "$platform_binary" | awk '{print $1}')"
+    if [[ "$platform_sha256" != "$(ai_codex_platform_sha256)" ]]; then
+      doctor_fail "ai.$tool" "platform binary digest differs from the pin"
+      return
+    fi
   fi
   doctor_pass "ai.$tool" "[$(ai_tool_install_method "$tool")] $version via $router -> $expected"
 }
