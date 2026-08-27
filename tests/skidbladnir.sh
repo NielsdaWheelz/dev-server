@@ -69,6 +69,124 @@ pass() {
   tests_run=$((tests_run + 1))
 }
 
+test_macos_tmux_pin_guard() {
+  local package_fixture="$fixture/macos-packages"
+  local package_root="$package_fixture/repo"
+  local package_bin="$package_fixture/bin"
+  local package_calls="$package_fixture/calls"
+  local package_pinned="$package_fixture/pinned"
+  local package_tmux_template="$package_fixture/tmux-template"
+  local package_tmux_version="$package_fixture/tmux-version"
+  local expected_calls="$package_fixture/expected-calls"
+  install -d -m 0755 \
+    "$package_root/assets/skidbladnir" "$package_root/packages" "$package_bin"
+  printf 'brew "tmux"\n' >"$package_root/packages/Brewfile"
+  jq -n --arg path "$package_bin/tmux" \
+    '{tmux:{path:$path,version:"tmux 3.7c"}}' \
+    >"$package_root/assets/skidbladnir/host-config-macbook.json"
+  cat >"$package_tmux_template" <<'EOF'
+#!/usr/bin/env bash
+printf 'tmux %s\n' "$(cat "$BREW_TEST_TMUX_VERSION")"
+EOF
+  cat >"$package_bin/brew" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  pin)
+    [[ "${2:-}" == --formula && "${3:-}" == tmux ]]
+    printf 'pin --formula tmux\n' >>"$BREW_TEST_CALLS"
+    : >"$BREW_TEST_PINNED"
+    ;;
+  bundle)
+    printf 'bundle\n' >>"$BREW_TEST_CALLS"
+    if [[ ! -f "$BREW_TEST_PINNED" ]]; then
+      cp "$BREW_TEST_TMUX_TEMPLATE" "$BREW_TEST_TMUX_PATH"
+      chmod 0755 "$BREW_TEST_TMUX_PATH"
+      printf '%s\n' "$BREW_TEST_BUNDLE_VERSION" >"$BREW_TEST_TMUX_VERSION"
+    fi
+    ;;
+  list)
+    [[ "${2:-}" == --pinned && "${3:-}" == --formula ]]
+    if [[ -f "$BREW_TEST_PINNED" ]]; then
+      printf 'tmux\n'
+    fi
+    ;;
+  *)
+    exit 64
+    ;;
+esac
+EOF
+  chmod 0755 "$package_tmux_template" "$package_bin/brew"
+
+  run_packages_install() {
+    (
+      export PATH="$package_bin:/usr/bin:/bin"
+      export BREW_TEST_CALLS="$package_calls"
+      export BREW_TEST_PINNED="$package_pinned"
+      export BREW_TEST_TMUX_TEMPLATE="$package_tmux_template"
+      export BREW_TEST_TMUX_PATH="$package_bin/tmux"
+      export BREW_TEST_TMUX_VERSION="$package_tmux_version"
+      export BREW_TEST_BUNDLE_VERSION="$1"
+      dev_server_root="$package_root"
+      require_cmd() { command -v "$1" >/dev/null 2>&1; }
+      # shellcheck source=lib/packages-macos.sh
+      source "$repo_dir/lib/packages-macos.sh"
+      packages_macos_configure_tailscale() { :; }
+      packages_install
+    )
+  }
+
+  cp "$package_tmux_template" "$package_bin/tmux"
+  chmod 0755 "$package_bin/tmux"
+  printf '3.7c\n' >"$package_tmux_version"
+  run_packages_install 3.7d
+  printf '%s\n' 'pin --formula tmux' bundle >"$expected_calls"
+  cmp -s "$expected_calls" "$package_calls" ||
+    fail 'macOS convergence did not pin exact tmux before Homebrew bundle'
+  assert_eq 'tmux 3.7c' "$(BREW_TEST_TMUX_VERSION="$package_tmux_version" "$package_bin/tmux" -V)" \
+    'Homebrew bundle changed the pinned exact tmux runtime'
+
+  rm -f -- "$package_bin/tmux" "$package_tmux_version" "$package_pinned" "$package_calls"
+  run_packages_install 3.7c
+  printf '%s\n' bundle 'pin --formula tmux' >"$expected_calls"
+  cmp -s "$expected_calls" "$package_calls" ||
+    fail 'fresh macOS convergence did not pin tmux after validating the installed version'
+  assert_eq 'tmux 3.7c' "$(BREW_TEST_TMUX_VERSION="$package_tmux_version" "$package_bin/tmux" -V)" \
+    'fresh macOS convergence installed the wrong tmux runtime'
+  [[ -f "$package_pinned" ]] || fail 'fresh exact tmux runtime was not left pinned'
+
+  rm -f -- "$package_bin/tmux" "$package_tmux_version" "$package_pinned" "$package_calls"
+  run_packages_install 3.7d
+  printf '%s\n' bundle >"$expected_calls"
+  cmp -s "$expected_calls" "$package_calls" ||
+    fail 'macOS convergence pinned an unreviewed tmux version'
+  [[ ! -f "$package_pinned" ]] || fail 'unreviewed tmux version was left pinned'
+
+  (
+    export PATH="$package_bin:/usr/bin:/bin"
+    export BREW_TEST_CALLS="$package_calls"
+    export BREW_TEST_PINNED="$package_pinned"
+    : >"$package_pinned"
+    dev_server_root="$package_root"
+    doctor_pass() { [[ "$1" != package.tmux-pin ]] || printf 'PASS %s %s\n' "$1" "$2"; }
+    doctor_fail() { [[ "$1" != package.tmux-pin ]] || printf 'FAIL %s %s\n' "$1" "$2"; }
+    doctor_local_cmd() { :; }
+    # shellcheck source=lib/packages-macos.sh
+    source "$repo_dir/lib/packages-macos.sh"
+    packages_macos_tailscale_cli() { return 1; }
+    packages_doctor
+    rm -f -- "$package_pinned"
+    packages_doctor
+  ) >"$package_fixture/doctor"
+  printf '%s\n' \
+    'PASS package.tmux-pin Homebrew tmux formula protected from unreviewed upgrades' \
+    'FAIL package.tmux-pin Homebrew tmux formula is not pinned; run ./workstation converge' \
+    >"$package_fixture/expected-doctor"
+  cmp -s "$package_fixture/expected-doctor" "$package_fixture/doctor" ||
+    fail 'macOS doctor did not distinguish pinned and unpinned tmux'
+  pass
+}
+
 test_assets_and_operator_copy() {
   local pin="$repo_dir/assets/skidbladnir/release-pin.json"
   assert_exact_line_once "$repo_dir/skidbladnir" 'source "$base_dir/lib/doctor.sh"'
@@ -90,7 +208,7 @@ test_assets_and_operator_copy() {
   for row in \
     'devbox Linux /usr/bin/tmux tmux_3.4 /home/niels' \
     'arch Linux /usr/bin/tmux tmux_3.7c /home/niels' \
-    'macbook Darwin /opt/homebrew/bin/tmux tmux_3.7b /Users/nnandal'; do
+    'macbook Darwin /opt/homebrew/bin/tmux tmux_3.7c /Users/nnandal'; do
     read -r config platform tmux_path tmux_version home <<<"$row"
     config="$repo_dir/assets/skidbladnir/host-config-$config.json"
     tmux_version="${tmux_version/_/ }"
@@ -1215,6 +1333,7 @@ test_reboot_acceptance_gate_contract() {
   pass
 }
 
+test_macos_tmux_pin_guard
 test_assets_and_operator_copy
 test_converge_and_doctor
 test_invite_success_and_fail_closed

@@ -1,6 +1,6 @@
 {
   "platform": "Darwin",
-  "tmux": {"path": "/opt/homebrew/bin/tmux", "version": "tmux 3.7b"},
+  "tmux": {"path": "/opt/homebrew/bin/tmux", "version": "tmux 3.7c"},
   "codexNodeEntrypoint": "/Users/nnandal/.local/bin/codex",
   "profiles": [
     {
