@@ -34,11 +34,34 @@ ai_codex_version() {
 }
 
 ai_codex_platform_binary() {
-  printf '%s/.local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex\n' "$(dev_server_home)"
+  local relative
+  case "$(uname -s):$(uname -m)" in
+    Linux:x86_64)
+      relative='codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex'
+      ;;
+    Darwin:arm64)
+      relative='codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex'
+      ;;
+    *)
+      die "unsupported Codex platform: $(uname -s) $(uname -m)"
+      ;;
+  esac
+  printf '%s/.local/lib/node_modules/@openai/codex/node_modules/@openai/%s\n' \
+    "$(dev_server_home)" "$relative"
 }
 
 ai_codex_platform_sha256() {
-  printf '73dc5888888f411c1f0fa7b81d866e721dcc86b527ce8e3b2cf4708661e823ba\n'
+  case "$(uname -s):$(uname -m)" in
+    Linux:x86_64)
+      printf '73dc5888888f411c1f0fa7b81d866e721dcc86b527ce8e3b2cf4708661e823ba\n'
+      ;;
+    Darwin:arm64)
+      printf 'f0d8762236594359b60cfbe17f4c7e945a3ce8d1c91e74778838c968d250fb6c\n'
+      ;;
+    *)
+      die "unsupported Codex platform: $(uname -s) $(uname -m)"
+      ;;
+  esac
 }
 
 ai_tool_install_method() {
