@@ -1,9 +1,9 @@
 {
-  "androidApkSha256": "PENDING",
-  "androidSigningCertAssetSha256": "PENDING",
-  "darwinArm64Sha256": "PENDING",
-  "linuxAmd64Sha256": "PENDING",
-  "sha256SumsAssetSha256": "PENDING",
-  "sourceSha": "PENDING",
-  "version": "PENDING"
+  "androidApkSha256": "200f4489942cbc2241e6e086085fd4b608ff838d574958546d35ab4da406ad40",
+  "androidSigningCertAssetSha256": "e25f20e491da5d659333a524bd8f33f3572d9851b2b4fab0cd251bcbd27fe0b5",
+  "darwinArm64Sha256": "9c939c7ade85b0f634140134b8cecbbfccd163a7cc28573e4d2d7ffecdbb376f",
+  "linuxAmd64Sha256": "98228fc30298cc4f7a208b48e3824e3113c8a1185627f19a7410479bc6f36a36",
+  "sha256SumsAssetSha256": "afba15f5152cd9ac38de84d799a9ba6e60425a57d91a727f9461c5aa6d0333b8",
+  "sourceSha": "7294d8be4802ae8ceeda7fa2335f4c51c9984c48",
+  "version": "v0.2.0"
 }
