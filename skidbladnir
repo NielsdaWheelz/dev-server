@@ -25,6 +25,10 @@ Commands:
                          Reconcile inventory and print three tmux lifetime hashes.
   accept-host <host> --allow-host-convergence --allow-inventory-reconciliation
                          Converge one exact host twice and prove preservation.
+  prepare-reboot <host> --allow-reboot-acceptance
+                         Record a digest-only checkpoint before a reboot.
+  verify-reboot <host> --allow-reboot-acceptance
+                         Prove persistence after the host has rebooted.
   outage <host>          Stop one gateway for a bounded outage proof.
   recover <host>         Start one gateway after the outage proof.
 
@@ -54,6 +58,13 @@ accept-host)
     die "Usage: ./skidbladnir accept-host <Local|DevServer|Arch> --allow-host-convergence --allow-inventory-reconciliation"
   fi
   skidbladnir_operator_accept_host "$2" "$3" "$4"
+  ;;
+prepare-reboot | verify-reboot)
+  if [[ $# -ne 3 ]]; then
+    printf 'NOT_RUN  skidbladnir.accept-host.reboot exact reboot acceptance authorization is required; no checkpoint was changed\n' >&2
+    die "Usage: ./skidbladnir <prepare-reboot|verify-reboot> <Local|DevServer|Arch> --allow-reboot-acceptance"
+  fi
+  skidbladnir_operator_reboot_acceptance "${1%-reboot}" "$2" "$3"
   ;;
 outage | recover)
   [[ $# -eq 2 ]] || die "Usage: ./skidbladnir $1 <Local|DevServer|Arch>"

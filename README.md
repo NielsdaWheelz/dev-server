@@ -105,6 +105,11 @@ The operator surface is deliberately closed:
 SKIDBLADNIR_ALLOW_HOST_ACCEPTANCE=host-acceptance-v1 \
   ./skidbladnir accept-host Arch \
   --allow-host-convergence --allow-inventory-reconciliation
+SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1 \
+  ./skidbladnir prepare-reboot Arch --allow-reboot-acceptance
+# Reboot only the named, separately approved host.
+SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1 \
+  ./skidbladnir verify-reboot Arch --allow-reboot-acceptance
 ./skidbladnir outage Arch
 ./skidbladnir recover Arch
 ```
@@ -125,9 +130,14 @@ local or SSH boundary. It validates existing credentials and reconciled
 lifetime, converges twice, requires a completely healthy doctor, requires the
 credentials and lifetime to remain unchanged, and checks the owned service
 definition plus boot/login intent. It proves an identity-preserving reinstall,
-not first installation. It prints the reboot/login persistence phase as
-`NOT_RUN`; complete that phase manually after the bounded automated gate. Run
-`./test` for the routine hermetic proof.
+not first installation. `prepare-reboot` then stores a user-owned mode-0600,
+digest-only checkpoint for that exact host. After the separately approved
+reboot, `verify-reboot` requires a changed boot identity, an unchanged release
+pin and credentials, plus a completely healthy doctor and service boot/login
+intent. It removes the checkpoint only after a pass. tmux intentionally starts
+a new lifetime after a machine reboot; the preceding `accept-host` gate proves
+that convergence itself preserved the old lifetime. Neither reboot command
+performs the reboot. Run `./test` for the routine hermetic proof.
 
 Arch convergence installs Mosh and Tailscale, enables `tailscaled`, and leaves
 the one-time tailnet login to
@@ -148,8 +158,9 @@ On EndeavourOS, workstation convergence also installs an LTS fallback kernel,
 an 8 GiB zram policy, Intel thermal management, firmware and NVMe tooling,
 shell linters, and package maintenance tools. It removes the installer
 onboarding applications and stale Electron runtimes, disables public-zone SSH
-access, enables weekly mirror refreshes using health-ranked US and Canadian
-mirrors, configures `eos-update` to include AUR updates through `yay`, and keeps
+access while enabling the SSH daemon for the fixed tailnet operator boundary,
+enables weekly mirror refreshes using health-ranked US and Canadian mirrors,
+configures `eos-update` to include AUR updates through `yay`, and keeps
 local-NVMe dracut images free of unneeded network storage modules. The normal
 Arch kernel remains the systemd-boot default while LTS stays available as a
 fallback.

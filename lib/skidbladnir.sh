@@ -6,16 +6,39 @@
 skidbladnir_release_values() {
   local platform="$1"
   local digest_field
+  local pin_bytes
+  local observed_keys
   case "$platform" in
   devbox | arch) digest_field=linuxAmd64Sha256 ;;
   macos) digest_field=darwinArm64Sha256 ;;
   *) die "unsupported Skidbladnir platform: $platform" ;;
   esac
 
+  [[ -f "$skidbladnir_release_pin_file" && ! -L "$skidbladnir_release_pin_file" ]] || return 1
+  pin_bytes="$(LC_ALL=C wc -c <"$skidbladnir_release_pin_file" | tr -d '[:space:]')"
+  [[ "$pin_bytes" =~ ^[1-9][0-9]{0,3}$ && "$pin_bytes" -le 4096 ]] || return 1
+  observed_keys="$(
+    jq --stream -er \
+      'select(length == 2 and (.[0] | length) == 1) | .[0][0]' \
+      "$skidbladnir_release_pin_file" | LC_ALL=C sort
+  )" || return 1
+  [[ "$observed_keys" == $'androidApkSha256\nandroidSigningCertAssetSha256\ndarwinArm64Sha256\nlinuxAmd64Sha256\nsha256SumsAssetSha256\nsourceSha\nversion' ]] || return 1
+
   jq -er --arg digest_field "$digest_field" '
     if type == "object" and
       (keys == ["androidApkSha256", "androidSigningCertAssetSha256", "darwinArm64Sha256", "linuxAmd64Sha256", "sha256SumsAssetSha256", "sourceSha", "version"]) and
-      (.version | type == "string" and test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+      (.version | type == "string" and test("^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$")) and
+      ((.version | capture("^v(?<major>0|[1-9][0-9]*)\\.(?<minor>0|[1-9][0-9]*)\\.(?<patch>0|[1-9][0-9]*)$")) as $semver |
+        ($semver.major | length) <= 4 and
+        ($semver.minor | length) <= 3 and
+        ($semver.patch | length) <= 3 and
+        ($semver.major | tonumber) <= 2100 and
+        ((($semver.major | tonumber) * 1000000) +
+          (($semver.minor | tonumber) * 1000) +
+          ($semver.patch | tonumber)) > 1 and
+        ((($semver.major | tonumber) * 1000000) +
+          (($semver.minor | tonumber) * 1000) +
+          ($semver.patch | tonumber)) <= 2100000000) and
       (.sourceSha | type == "string" and test("^[0-9a-f]{40}$")) and
       (.androidApkSha256 | type == "string" and test("^[0-9a-f]{64}$")) and
       (.androidSigningCertAssetSha256 | type == "string" and test("^[0-9a-f]{64}$")) and
@@ -53,6 +76,30 @@ skidbladnir_host_config_source() {
   esac
 }
 
+skidbladnir_preflight_tmux_runtime() {
+  local platform="$1"
+  local config tmux_path tmux_version
+  config="$(skidbladnir_host_config_source "$platform")"
+  tmux_path="$(jq -er '.tmux.path' "$config")" || die "Skidbladnir tmux path is invalid"
+  tmux_version="$(jq -er '.tmux.version' "$config")" || die "Skidbladnir tmux version is invalid"
+  if [[ -e "$tmux_path" || -L "$tmux_path" ]]; then
+    [[ -x "$tmux_path" &&
+      "$($tmux_path -V 2>/dev/null || true)" == "$tmux_version" ]] ||
+      die "Installed tmux differs from the exact Skidbladnir host-config version; resolve it before convergence"
+  fi
+}
+
+skidbladnir_require_tmux_runtime() {
+  local platform="$1"
+  local config tmux_path tmux_version
+  config="$(skidbladnir_host_config_source "$platform")"
+  tmux_path="$(jq -er '.tmux.path' "$config")" || die "Skidbladnir tmux path is invalid"
+  tmux_version="$(jq -er '.tmux.version' "$config")" || die "Skidbladnir tmux version is invalid"
+  [[ -x "$tmux_path" &&
+    "$($tmux_path -V 2>/dev/null || true)" == "$tmux_version" ]] ||
+    die "Package convergence did not produce the exact Skidbladnir tmux version"
+}
+
 skidbladnir_sha256() {
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$1" | awk '{print $1}'
@@ -69,6 +116,11 @@ skidbladnir_sha256_stream() {
   fi
 }
 
+skidbladnir_archive_member_sha256() (
+  set -o pipefail
+  tar -xOzf "$1" "$2" | skidbladnir_sha256_stream
+)
+
 skidbladnir_file_mode() {
   case "$(uname -s)" in
   Darwin) stat -f '%Lp' "$1" ;;
@@ -76,7 +128,8 @@ skidbladnir_file_mode() {
   esac
 }
 
-skidbladnir_secret_valid() {
+skidbladnir_secret_valid() (
+  set +x
   local path="$1"
   local pattern="$2"
   local value framed
@@ -87,19 +140,191 @@ skidbladnir_secret_valid() {
     printf .
   )" || return 1
   [[ "$framed" == "$value"$'\n.' && "$value" =~ $pattern ]]
-}
+)
+
+skidbladnir_authenticated_loopback() (
+  set +x
+  local config_dir="$1"
+  local endpoint="$2"
+  local url
+  case "$endpoint" in
+  pressure) url='http://127.0.0.1:7341/v1/pressure' ;;
+  sessions) url='http://127.0.0.1:7341/v1/sessions' ;;
+  *) return 64 ;;
+  esac
+  skidbladnir_secret_valid "$config_dir/machine-handle" '^mh-[0-9a-f]{32}$' || return 1
+  skidbladnir_secret_valid "$config_dir/bearer" '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$' || return 1
+  {
+    printf 'silent\nshow-error\nfail\nconnect-timeout = 2\nmax-time = 5\n'
+    printf 'header = "Authorization: Bearer %s"\n' "$(cat "$config_dir/bearer")"
+    printf 'header = "Skidbladnir-Machine: %s"\n' "$(cat "$config_dir/machine-handle")"
+    printf 'url = "%s"\n' "$url"
+  } | curl -q --noproxy '*' --config -
+)
 
 skidbladnir_install_owned() {
   local source="$1"
   local target="$2"
   local mode="$3"
   local expected_mode="${mode#0}"
+  local target_dir
+  local target_name
+  local temporary
+  [[ -f "$source" && ! -L "$source" ]] || die "Skidbladnir owned source is not a regular file: $source"
+  if [[ -e "$target" || -L "$target" ]]; then
+    [[ -f "$target" && ! -L "$target" ]] ||
+      die "Skidbladnir owned target is not a regular file: $target"
+  fi
   if [[ -f "$target" && ! -L "$target" ]] && cmp -s "$source" "$target" &&
     [[ "$(skidbladnir_file_mode "$target")" == "$expected_mode" ]]; then
     return
   fi
-  install -m "$mode" "$source" "$target"
+  target_dir="$(dirname "$target")"
+  target_name="$(basename "$target")"
+  temporary="$(mktemp "$target_dir/.$target_name.skidbladnir.XXXXXX")"
+  if ! install -m "$mode" "$source" "$temporary" ||
+    ! cmp -s "$source" "$temporary" ||
+    [[ "$(skidbladnir_file_mode "$temporary" 2>/dev/null)" != "$expected_mode" ]]; then
+    rm -f -- "$temporary"
+    die "Could not stage Skidbladnir owned target: $target"
+  fi
+  if ! mv -f -- "$temporary" "$target"; then
+    rm -f -- "$temporary"
+    die "Could not promote Skidbladnir owned target: $target"
+  fi
+  [[ -f "$target" && ! -L "$target" ]] && cmp -s "$source" "$target" &&
+    [[ "$(skidbladnir_file_mode "$target" 2>/dev/null)" == "$expected_mode" ]] ||
+    die "Promoted Skidbladnir owned target failed verification: $target"
   skidbladnir_changed=1
+}
+
+skidbladnir_release_transaction_remove() {
+  local share_dir="$1"
+  local transaction="$share_dir/.release-transaction"
+  [[ -d "$transaction" && ! -L "$transaction" ]] ||
+    die "Skidbladnir release transaction is not a private directory"
+  rm -R -- "$transaction"
+}
+
+skidbladnir_release_transaction_snapshot() {
+  local target="$1"
+  local backup="$2"
+  local expected_mode="$3"
+  if [[ -e "$target" || -L "$target" ]]; then
+    [[ -f "$target" && ! -L "$target" ]] ||
+      die "Skidbladnir release target is not a regular file: $target"
+    install -m "$expected_mode" "$target" "$backup"
+    cmp -s "$target" "$backup" || die "Could not snapshot Skidbladnir release target: $target"
+    : >"$backup.present"
+  else
+    : >"$backup.absent"
+  fi
+}
+
+skidbladnir_release_transaction_restore() {
+  local target="$1"
+  local backup="$2"
+  local mode="$3"
+  if [[ -f "$backup.present" && ! -L "$backup.present" &&
+    ! -e "$backup.absent" && ! -L "$backup.absent" ]]; then
+    [[ -f "$backup" && ! -L "$backup" ]] ||
+      die "Skidbladnir release transaction backup is missing: $backup"
+    skidbladnir_install_owned "$backup" "$target" "$mode"
+    cmp -s "$backup" "$target" || die "Could not restore Skidbladnir release target: $target"
+  elif [[ -f "$backup.absent" && ! -L "$backup.absent" &&
+    ! -e "$backup.present" && ! -L "$backup.present" ]]; then
+    if [[ -e "$target" || -L "$target" ]]; then
+      [[ -f "$target" && ! -L "$target" ]] ||
+        die "Skidbladnir release rollback target is not a regular file: $target"
+      /bin/unlink "$target"
+      skidbladnir_changed=1
+    fi
+  else
+    die "Skidbladnir release transaction marker is invalid: $backup"
+  fi
+}
+
+skidbladnir_recover_release_transaction() {
+  local home="$1"
+  local share_dir="$2"
+  local transaction="$share_dir/.release-transaction"
+  local state temporary_state
+  if [[ ! -e "$transaction" && ! -L "$transaction" ]]; then
+    return
+  fi
+  [[ -d "$transaction" && ! -L "$transaction" &&
+    "$(skidbladnir_file_mode "$transaction" 2>/dev/null)" == 700 ]] ||
+    die "Skidbladnir release transaction boundary is invalid"
+  state="$(cat "$transaction/state" 2>/dev/null || true)"
+  if [[ "$state" == preparing ]]; then
+    skidbladnir_release_transaction_remove "$share_dir"
+    return
+  fi
+  [[ "$state" == prepared || "$state" == recovering ]] ||
+    die "Skidbladnir release transaction state is invalid"
+  temporary_state="$transaction/.state.recovering"
+  printf 'recovering\n' >"$temporary_state"
+  mv -f -- "$temporary_state" "$transaction/state"
+  skidbladnir_release_transaction_restore \
+    "$home/.local/bin/skidbladnir" "$transaction/binary" 0755
+  skidbladnir_release_transaction_restore \
+    "$share_dir/characters.json" "$transaction/characters" 0644
+  skidbladnir_release_transaction_restore \
+    "$share_dir/release.json" "$transaction/manifest" 0644
+  skidbladnir_release_transaction_restore \
+    "$share_dir/release-bundle.tar.gz" "$transaction/bundle" 0644
+  skidbladnir_release_transaction_remove "$share_dir"
+}
+
+skidbladnir_begin_release_transaction() {
+  local home="$1"
+  local share_dir="$2"
+  local transaction="$share_dir/.release-transaction"
+  local prepared_state
+  [[ ! -e "$transaction" && ! -L "$transaction" ]] ||
+    die "Skidbladnir release transaction already exists"
+  install -d -m 0700 "$transaction"
+  printf 'preparing\n' >"$transaction/state"
+  skidbladnir_release_transaction_snapshot \
+    "$home/.local/bin/skidbladnir" "$transaction/binary" 0755
+  skidbladnir_release_transaction_snapshot \
+    "$share_dir/characters.json" "$transaction/characters" 0644
+  skidbladnir_release_transaction_snapshot \
+    "$share_dir/release.json" "$transaction/manifest" 0644
+  skidbladnir_release_transaction_snapshot \
+    "$share_dir/release-bundle.tar.gz" "$transaction/bundle" 0644
+  prepared_state="$transaction/.state.prepared"
+  printf 'prepared\n' >"$prepared_state"
+  mv -f -- "$prepared_state" "$transaction/state"
+}
+
+skidbladnir_commit_release_transaction() {
+  local home="$1"
+  local share_dir="$2"
+  local binary_source="$3"
+  local catalogue_source="$4"
+  local manifest_source="$5"
+  local bundle_source="$6"
+  cmp -s "$binary_source" "$home/.local/bin/skidbladnir" &&
+    cmp -s "$catalogue_source" "$share_dir/characters.json" &&
+    cmp -s "$manifest_source" "$share_dir/release.json" &&
+    cmp -s "$bundle_source" "$share_dir/release-bundle.tar.gz" ||
+    die "Skidbladnir promoted release tuple failed verification"
+  skidbladnir_release_transaction_remove "$share_dir"
+}
+
+# shellcheck disable=SC2329 # Invoked indirectly by the converge EXIT trap.
+skidbladnir_converge_cleanup() {
+  local converge_exit=$?
+  trap - EXIT
+  if [[ "${release_transaction_active:-0}" == 1 ]]; then
+    if ! skidbladnir_recover_release_transaction "$home" "$share_dir"; then
+      printf 'Could not restore the prior Skidbladnir release tuple\n' >&2
+      converge_exit=1
+    fi
+  fi
+  rm -R -- "$staging" || converge_exit=1
+  exit "$converge_exit"
 }
 
 skidbladnir_configure_codex_notify() {
@@ -151,6 +376,10 @@ skidbladnir_owned_config_matches() {
     hooks_source="$dev_server_root/assets/skidbladnir/status-hooks-linux.json"
     notify_source="$dev_server_root/assets/skidbladnir/skid-notify-linux"
   fi
+  [[ -f "$home/.local/bin/skidbladnir-launch" && ! -L "$home/.local/bin/skidbladnir-launch" ]] &&
+    cmp -s "$dev_server_root/assets/skidbladnir/skidbladnir-launch" \
+      "$home/.local/bin/skidbladnir-launch" &&
+    [[ "$(skidbladnir_file_mode "$home/.local/bin/skidbladnir-launch" 2>/dev/null)" == 755 ]] || return 1
   [[ -f "$home/.local/bin/skid-notify" && ! -L "$home/.local/bin/skid-notify" ]] &&
     cmp -s "$notify_source" "$home/.local/bin/skid-notify" &&
     [[ "$(skidbladnir_file_mode "$home/.local/bin/skid-notify" 2>/dev/null)" == 755 ]] || return 1
@@ -275,9 +504,11 @@ skidbladnir_converge() (
   umask 077
   local platform="$1"
   local home asset manifest_platform pin_line version source_sha archive_sha
-  local staging archive extracted_members binary_sha characters_sha release_sha
+  local staging archive extracted_members
   local config_source hooks_source notify_source
   local config_dir share_dir state_dir tailscale_cli context
+  local launcher_source service_source service_target
+  local release_transaction_active=0
 
   require_cmd curl
   require_cmd jq
@@ -289,7 +520,7 @@ skidbladnir_converge() (
   IFS=$'\t' read -r version source_sha archive_sha <<<"$pin_line"
 
   staging="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-skidbladnir.XXXXXX")"
-  trap 'rm -rf -- "$staging"' EXIT
+  trap skidbladnir_converge_cleanup EXIT
   archive="$staging/$asset"
   curl -fsSL "https://github.com/NielsdaWheelz/skidbladnir/releases/download/$version/$asset" -o "$archive"
   [[ "$(skidbladnir_sha256 "$archive")" == "$archive_sha" ]] || die "Skidbladnir release archive digest differs from the pin"
@@ -307,6 +538,7 @@ skidbladnir_converge() (
     type == "object" and keys == ["platform", "sourceSha", "version"] and
     .platform == $platform and .sourceSha == $source and .version == $version
   ' "$staging/release.json" >/dev/null || die "Skidbladnir release manifest differs from the pin"
+  skidbladnir_require_tmux_runtime "$platform"
 
   config_dir="$home/.config/skidbladnir"
   share_dir="$home/.local/share/skidbladnir"
@@ -314,6 +546,19 @@ skidbladnir_converge() (
   install -d -m 0700 "$config_dir" "$state_dir"
   install -d -m 0755 "$home/.local/bin" "$share_dir"
   skidbladnir_changed=0
+  skidbladnir_recover_release_transaction "$home" "$share_dir"
+
+  launcher_source="$dev_server_root/assets/skidbladnir/skidbladnir-launch"
+  skidbladnir_install_owned "$launcher_source" "$home/.local/bin/skidbladnir-launch" 0755
+  if [[ "$platform" == macos ]]; then
+    service_source="$dev_server_root/assets/skidbladnir/dev.niels.skidbladnir.plist"
+    service_target="$home/Library/LaunchAgents/dev.niels.skidbladnir.plist"
+  else
+    service_source="$dev_server_root/assets/skidbladnir/skidbladnir.service"
+    service_target="$home/.config/systemd/user/skidbladnir.service"
+  fi
+  install -d -m 0755 "$(dirname "$service_target")"
+  skidbladnir_install_owned "$service_source" "$service_target" 0644
 
   if [[ ! -e "$config_dir/machine-handle" && ! -L "$config_dir/machine-handle" ]]; then
     "$staging/skidbladnir" machine init --file="$config_dir/machine-handle" >/dev/null
@@ -324,20 +569,15 @@ skidbladnir_converge() (
   fi
   skidbladnir_secret_valid "$config_dir/bearer" '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$' || die "Skidbladnir bearer is invalid"
 
+  skidbladnir_begin_release_transaction "$home" "$share_dir"
+  release_transaction_active=1
   skidbladnir_install_owned "$staging/skidbladnir" "$home/.local/bin/skidbladnir" 0755
   skidbladnir_install_owned "$staging/characters.json" "$share_dir/characters.json" 0644
   skidbladnir_install_owned "$staging/release.json" "$share_dir/release.json" 0644
-  printf '%s\n' "$archive_sha" >"$staging/bundle.sha256"
-  skidbladnir_install_owned "$staging/bundle.sha256" "$share_dir/bundle.sha256" 0644
-  binary_sha="$(skidbladnir_sha256 "$staging/skidbladnir")"
-  printf '%s\n' "$binary_sha" >"$staging/binary.sha256"
-  skidbladnir_install_owned "$staging/binary.sha256" "$share_dir/binary.sha256" 0644
-  characters_sha="$(skidbladnir_sha256 "$staging/characters.json")"
-  printf '%s\n' "$characters_sha" >"$staging/characters.sha256"
-  skidbladnir_install_owned "$staging/characters.sha256" "$share_dir/characters.sha256" 0644
-  release_sha="$(skidbladnir_sha256 "$staging/release.json")"
-  printf '%s\n' "$release_sha" >"$staging/release.sha256"
-  skidbladnir_install_owned "$staging/release.sha256" "$share_dir/release.sha256" 0644
+  skidbladnir_install_owned "$archive" "$share_dir/release-bundle.tar.gz" 0644
+  skidbladnir_commit_release_transaction "$home" "$share_dir" \
+    "$staging/skidbladnir" "$staging/characters.json" "$staging/release.json" "$archive"
+  release_transaction_active=0
 
   config_source="$(skidbladnir_host_config_source "$platform")"
   skidbladnir_install_owned "$config_source" "$config_dir/host-config.json" 0600
@@ -370,8 +610,9 @@ skidbladnir_converge() (
 skidbladnir_doctor() {
   local platform="$1"
   local home config_dir share_dir binary config desired_config pin_line version source_sha archive_sha
-  local current_version recorded_binary_sha current_binary_sha recorded_characters_sha current_characters_sha
-  local recorded_release_sha current_release_sha tailscale_cli tmux_path tmux_version serve_status
+  local current_version current_binary_sha current_characters_sha current_release_sha
+  local expected_binary_sha expected_characters_sha expected_release_sha bundle bundle_members
+  local tailscale_cli tmux_path tmux_version serve_status
   local service_source service_target
   home="$(dev_server_home)"
   config_dir="$home/.config/skidbladnir"
@@ -387,7 +628,10 @@ skidbladnir_doctor() {
   else
     IFS=$'\t' read -r version source_sha archive_sha <<<"$pin_line"
     current_version="$($binary version 2>/dev/null || true)"
-    if [[ -x "$binary" && "$current_version" == "$version $source_sha" ]] &&
+    if [[ ! -e "$share_dir/.release-transaction" && ! -L "$share_dir/.release-transaction" &&
+      -f "$binary" && ! -L "$binary" && -x "$binary" &&
+      "$current_version" == "$version $source_sha" &&
+      -f "$share_dir/release.json" && ! -L "$share_dir/release.json" ]] &&
       jq -e --arg platform "$(skidbladnir_manifest_platform "$platform")" --arg source "$source_sha" --arg version "$version" '
         type == "object" and keys == ["platform", "sourceSha", "version"] and
         .platform == $platform and .sourceSha == $source and .version == $version
@@ -396,26 +640,44 @@ skidbladnir_doctor() {
     else
       skidbladnir_doctor_fail skidbladnir.artifact.version "installed artifact differs; run the platform converge command"
     fi
-    recorded_binary_sha="$(cat "$share_dir/binary.sha256" 2>/dev/null || true)"
+    bundle="$share_dir/release-bundle.tar.gz"
+    bundle_members=""
+    if [[ -f "$bundle" && ! -L "$bundle" &&
+      "$(skidbladnir_file_mode "$bundle" 2>/dev/null || true)" == 644 &&
+      "$(skidbladnir_sha256 "$bundle" 2>/dev/null || true)" == "$archive_sha" ]]; then
+      bundle_members="$(tar -tzf "$bundle" 2>/dev/null | LC_ALL=C sort || true)"
+    fi
+    expected_binary_sha=""
+    expected_characters_sha=""
+    expected_release_sha=""
+    if [[ "$bundle_members" == $'characters.json\nrelease.json\nskidbladnir' ]]; then
+      expected_binary_sha="$(skidbladnir_archive_member_sha256 "$bundle" skidbladnir 2>/dev/null || true)"
+      expected_characters_sha="$(skidbladnir_archive_member_sha256 "$bundle" characters.json 2>/dev/null || true)"
+      expected_release_sha="$(skidbladnir_archive_member_sha256 "$bundle" release.json 2>/dev/null || true)"
+    fi
     current_binary_sha=""
-    if [[ -f "$binary" && ! -L "$binary" && -x "$binary" ]]; then
+    if [[ -f "$binary" && ! -L "$binary" && -x "$binary" &&
+      "$(skidbladnir_file_mode "$binary" 2>/dev/null || true)" == 755 ]]; then
       current_binary_sha="$(skidbladnir_sha256 "$binary" 2>/dev/null || true)"
     fi
-    recorded_characters_sha="$(cat "$share_dir/characters.sha256" 2>/dev/null || true)"
     current_characters_sha=""
-    if [[ -f "$share_dir/characters.json" && ! -L "$share_dir/characters.json" ]]; then
+    if [[ -f "$share_dir/characters.json" && ! -L "$share_dir/characters.json" &&
+      "$(skidbladnir_file_mode "$share_dir/characters.json" 2>/dev/null || true)" == 644 ]]; then
       current_characters_sha="$(skidbladnir_sha256 "$share_dir/characters.json" 2>/dev/null || true)"
     fi
-    recorded_release_sha="$(cat "$share_dir/release.sha256" 2>/dev/null || true)"
     current_release_sha=""
-    if [[ -f "$share_dir/release.json" && ! -L "$share_dir/release.json" ]]; then
+    if [[ -f "$share_dir/release.json" && ! -L "$share_dir/release.json" &&
+      "$(skidbladnir_file_mode "$share_dir/release.json" 2>/dev/null || true)" == 644 ]]; then
       current_release_sha="$(skidbladnir_sha256 "$share_dir/release.json" 2>/dev/null || true)"
     fi
-    if [[ "$(cat "$share_dir/bundle.sha256" 2>/dev/null || true)" == "$archive_sha" &&
-    "$recorded_binary_sha" =~ ^[0-9a-f]{64}$ && "$current_binary_sha" == "$recorded_binary_sha" &&
-    "$recorded_characters_sha" =~ ^[0-9a-f]{64}$ && "$current_characters_sha" == "$recorded_characters_sha" &&
-    "$recorded_release_sha" =~ ^[0-9a-f]{64}$ && "$current_release_sha" == "$recorded_release_sha" ]]; then
-      skidbladnir_doctor_pass skidbladnir.artifact.digest "pinned archive and all installed release member digests match"
+    if [[ ! -e "$share_dir/.release-transaction" && ! -L "$share_dir/.release-transaction" &&
+      "$expected_binary_sha" =~ ^[0-9a-f]{64}$ &&
+      "$current_binary_sha" == "$expected_binary_sha" &&
+      "$expected_characters_sha" =~ ^[0-9a-f]{64}$ &&
+      "$current_characters_sha" == "$expected_characters_sha" &&
+      "$expected_release_sha" =~ ^[0-9a-f]{64}$ &&
+      "$current_release_sha" == "$expected_release_sha" ]]; then
+      skidbladnir_doctor_pass skidbladnir.artifact.digest "pinned archive and all installed release members match"
     else
       skidbladnir_doctor_fail skidbladnir.artifact.digest "artifact digest differs; run the platform converge command"
     fi
@@ -460,13 +722,7 @@ skidbladnir_doctor() {
     fi
   fi
 
-  if skidbladnir_secret_valid "$config_dir/machine-handle" '^mh-[0-9a-f]{32}$' &&
-    skidbladnir_secret_valid "$config_dir/bearer" '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$' && {
-    printf 'silent\nshow-error\nfail\nconnect-timeout = 2\nmax-time = 5\n'
-    printf 'header = "Authorization: Bearer %s"\n' "$(cat "$config_dir/bearer")"
-    printf 'header = "Skidbladnir-Machine: %s"\n' "$(cat "$config_dir/machine-handle")"
-    printf 'url = "http://127.0.0.1:7341/v1/pressure"\n'
-  } | curl --config - --output /dev/null 2>/dev/null; then
+  if skidbladnir_authenticated_loopback "$config_dir" pressure >/dev/null 2>&1; then
     skidbladnir_doctor_pass skidbladnir.loopback "authenticated tmux-free loopback pressure endpoint is healthy"
   else
     skidbladnir_doctor_fail skidbladnir.loopback "tmux-free loopback pressure endpoint is unhealthy; inspect the gateway service"
@@ -519,14 +775,7 @@ skidbladnir_reconciled_lifetime_digest_local() (
   local home config_dir
   home="$(dev_server_home)"
   config_dir="$home/.config/skidbladnir"
-  skidbladnir_secret_valid "$config_dir/machine-handle" '^mh-[0-9a-f]{32}$'
-  skidbladnir_secret_valid "$config_dir/bearer" '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$'
-  {
-    printf 'silent\nshow-error\nfail\nconnect-timeout = 2\nmax-time = 5\n'
-    printf 'header = "Authorization: Bearer %s"\n' "$(cat "$config_dir/bearer")"
-    printf 'header = "Skidbladnir-Machine: %s"\n' "$(cat "$config_dir/machine-handle")"
-    printf 'url = "http://127.0.0.1:7341/v1/sessions"\n'
-  } | curl --config - 2>/dev/null |
+  skidbladnir_authenticated_loopback "$config_dir" sessions 2>/dev/null |
     jq -ceS '
       if (
         type == "object" and
@@ -590,6 +839,170 @@ skidbladnir_acceptance_service_intent() {
   esac
 }
 
+skidbladnir_boot_identity_digest_local() (
+  set -euo pipefail
+  local boot_identity platform
+  platform="$(uname -s)"
+  case "$platform" in
+  Darwin)
+    boot_identity="$(/usr/sbin/sysctl -n kern.boottime)"
+    ;;
+  Linux)
+    [[ -r /proc/sys/kernel/random/boot_id ]] ||
+      die "Linux boot identity is unavailable"
+    boot_identity="$(tr -d '\n' </proc/sys/kernel/random/boot_id)"
+    [[ "$boot_identity" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
+      die "Linux boot identity is invalid"
+    ;;
+  *) die "unsupported reboot acceptance platform: $platform" ;;
+  esac
+  [[ -n "$boot_identity" && "${#boot_identity}" -le 256 ]] ||
+    die "boot identity is invalid"
+  {
+    printf 'skidbladnir-boot-identity-v1\0%s\0' "$platform"
+    printf '%s' "$boot_identity"
+  } | skidbladnir_sha256_stream
+)
+
+skidbladnir_reboot_acceptance_file() {
+  printf '%s/.local/state/skidbladnir/reboot-acceptance.json\n' "$(dev_server_home)"
+}
+
+skidbladnir_reboot_acceptance_require_capability() {
+  local label="$1"
+  if [[ "${SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE:-}" != reboot-acceptance-v1 ]]; then
+    printf 'NOT_RUN  skidbladnir.accept-host.reboot %s exact reboot acceptance capability is required; no checkpoint was changed\n' "$label" >&2
+    return 64
+  fi
+}
+
+skidbladnir_reboot_acceptance_validate_host() {
+  case "$1:$2" in
+  macos:Local | devbox:DevServer | arch:Arch) ;;
+  *) die "unsupported Skidbladnir reboot acceptance host: $2" ;;
+  esac
+}
+
+skidbladnir_reboot_acceptance_require_health() {
+  local platform="$1"
+  local label="$2"
+  doctor_reset
+  skidbladnir_doctor "$platform"
+  if ((doctor_failures != 0 || doctor_warnings != 0)); then
+    doctor_summary "$label Skidbladnir reboot acceptance" || true
+    die "Skidbladnir doctor is not completely healthy for reboot acceptance on $label"
+  fi
+  doctor_summary "$label Skidbladnir reboot acceptance"
+  skidbladnir_acceptance_service_intent "$platform" ||
+    die "Skidbladnir service boot/login intent failed on $label"
+}
+
+skidbladnir_prepare_reboot_local() (
+  set -euo pipefail
+  set +x
+  local platform="$1"
+  local label="$2"
+  local evidence state_dir temporary=""
+  local boot_digest credentials_digest release_pin_digest
+  skidbladnir_reboot_acceptance_require_capability "$label" || return
+  skidbladnir_reboot_acceptance_validate_host "$platform" "$label"
+  skidbladnir_release_values "$platform" >/dev/null ||
+    die "Skidbladnir release pin is pending or invalid on $label"
+  skidbladnir_reboot_acceptance_require_health "$platform" "$label"
+
+  boot_digest="$(skidbladnir_boot_identity_digest_local)"
+  credentials_digest="$(skidbladnir_credentials_digest_local)"
+  release_pin_digest="$(skidbladnir_sha256 "$skidbladnir_release_pin_file")"
+  [[ "$boot_digest" =~ ^[0-9a-f]{64}$ &&
+    "$credentials_digest" =~ ^[0-9a-f]{64}$ &&
+    "$release_pin_digest" =~ ^[0-9a-f]{64}$ ]] ||
+    die "Skidbladnir reboot checkpoint inputs are invalid on $label"
+
+  evidence="$(skidbladnir_reboot_acceptance_file)"
+  state_dir="$(dirname "$evidence")"
+  if [[ -e "$state_dir" || -L "$state_dir" ]]; then
+    [[ -d "$state_dir" && ! -L "$state_dir" && -O "$state_dir" &&
+      "$(skidbladnir_file_mode "$state_dir" 2>/dev/null || true)" == 700 ]] ||
+      die "Skidbladnir state directory is not a user-owned mode-0700 directory"
+  else
+    install -d -m 0700 "$state_dir"
+  fi
+  [[ ! -e "$evidence" && ! -L "$evidence" ]] ||
+    die "A reboot acceptance checkpoint already exists on $label; verify it before preparing another reboot"
+  temporary="$(mktemp "$state_dir/.reboot-acceptance.XXXXXX")"
+  trap '[[ -z "$temporary" ]] || /bin/unlink "$temporary" 2>/dev/null || true' EXIT
+  jq -nS --arg platform "$platform" --arg label "$label" \
+    --arg boot "$boot_digest" --arg credentials "$credentials_digest" \
+    --arg release_pin "$release_pin_digest" '
+      {
+        schemaVersion: 1,
+        platform: $platform,
+        label: $label,
+        bootDigest: $boot,
+        credentialsDigest: $credentials,
+        releasePinDigest: $release_pin
+      }
+    ' >"$temporary"
+  chmod 0600 "$temporary"
+  mv "$temporary" "$evidence"
+  temporary=""
+  trap - EXIT
+  printf 'PASS  skidbladnir.accept-host.reboot.prepare %s reboot checkpoint is ready\n' "$label"
+)
+
+skidbladnir_verify_reboot_local() (
+  set -euo pipefail
+  set +x
+  local platform="$1"
+  local label="$2"
+  local evidence evidence_bytes observed_keys values
+  local prior_boot prior_credentials prior_release_pin
+  local current_boot current_credentials current_release_pin
+  skidbladnir_reboot_acceptance_require_capability "$label" || return
+  skidbladnir_reboot_acceptance_validate_host "$platform" "$label"
+  evidence="$(skidbladnir_reboot_acceptance_file)"
+  [[ -f "$evidence" && ! -L "$evidence" && -O "$evidence" &&
+    "$(skidbladnir_file_mode "$evidence" 2>/dev/null || true)" == 600 ]] ||
+    die "Skidbladnir reboot checkpoint is not a user-owned mode-0600 regular file on $label"
+  evidence_bytes="$(LC_ALL=C wc -c <"$evidence" | tr -d '[:space:]')"
+  [[ "$evidence_bytes" =~ ^[1-9][0-9]{0,3}$ && "$evidence_bytes" -le 2048 ]] ||
+    die "Skidbladnir reboot checkpoint size is invalid on $label"
+  observed_keys="$(
+    jq --stream -er 'select(length == 2 and (.[0] | length) == 1) | .[0][0]' "$evidence" |
+      LC_ALL=C sort
+  )" || die "Skidbladnir reboot checkpoint JSON is invalid on $label"
+  [[ "$observed_keys" == $'bootDigest\ncredentialsDigest\nlabel\nplatform\nreleasePinDigest\nschemaVersion' ]] ||
+    die "Skidbladnir reboot checkpoint members are invalid on $label"
+  values="$(jq -er --arg platform "$platform" --arg label "$label" '
+    if type == "object" and
+      keys == ["bootDigest","credentialsDigest","label","platform","releasePinDigest","schemaVersion"] and
+      .schemaVersion == 1 and .platform == $platform and .label == $label and
+      (.bootDigest | type == "string" and test("^[0-9a-f]{64}$")) and
+      (.credentialsDigest | type == "string" and test("^[0-9a-f]{64}$")) and
+      (.releasePinDigest | type == "string" and test("^[0-9a-f]{64}$"))
+    then [.bootDigest, .credentialsDigest, .releasePinDigest] | @tsv
+    else error("invalid reboot checkpoint") end
+  ' "$evidence")" || die "Skidbladnir reboot checkpoint schema is invalid on $label"
+  IFS=$'\t' read -r prior_boot prior_credentials prior_release_pin <<<"$values"
+
+  current_boot="$(skidbladnir_boot_identity_digest_local)"
+  if [[ "$current_boot" == "$prior_boot" ]]; then
+    printf 'NOT_RUN  skidbladnir.accept-host.reboot %s boot identity has not changed; reboot before verification\n' "$label" >&2
+    return 65
+  fi
+  skidbladnir_release_values "$platform" >/dev/null ||
+    die "Skidbladnir release pin is pending or invalid on $label"
+  current_release_pin="$(skidbladnir_sha256 "$skidbladnir_release_pin_file")"
+  [[ "$current_release_pin" == "$prior_release_pin" ]] ||
+    die "Skidbladnir release pin changed across reboot on $label"
+  skidbladnir_reboot_acceptance_require_health "$platform" "$label"
+  current_credentials="$(skidbladnir_credentials_digest_local)"
+  [[ "$current_credentials" == "$prior_credentials" ]] ||
+    die "Skidbladnir credentials changed across reboot on $label"
+  /bin/unlink "$evidence"
+  printf 'PASS  skidbladnir.accept-host.reboot %s reboot/login persistence preserved release and credentials\n' "$label"
+)
+
 skidbladnir_accept_host_local() (
   set -euo pipefail
   set +x
@@ -628,5 +1041,5 @@ skidbladnir_accept_host_local() (
     die "Skidbladnir service boot/login intent failed on $label"
 
   printf 'PASS  skidbladnir.accept-host        %s identity-preserving reinstall converged twice; reconciled lifetime and service boot/login intent hold\n' "$label"
-  printf 'NOT_RUN  skidbladnir.accept-host.reboot %s reboot/login persistence remains a manual operator phase\n' "$label"
+  printf 'NOT_RUN  skidbladnir.accept-host.reboot %s run prepare-reboot before the approved reboot, then verify-reboot after login\n' "$label"
 )

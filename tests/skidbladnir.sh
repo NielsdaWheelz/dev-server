@@ -28,6 +28,24 @@ assert_contains() {
   grep -Fq -- "$2" "$1" || fail "$1 does not contain: $2"
 }
 
+assert_exact_line_once() {
+  local file="$1"
+  local line="$2"
+  [[ "$(grep -Fxc -- "$line" "$file" || true)" == 1 ]] ||
+    fail "$file must contain exactly once: $line"
+}
+
+plist_json() {
+  local file="$1"
+  if [[ "$(uname -s)" == Darwin ]]; then
+    /usr/bin/plutil -convert json -o - "$file"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import json, plistlib, sys; json.dump(plistlib.load(open(sys.argv[1], "rb")), sys.stdout)' "$file"
+  else
+    fail 'a plist parser (macOS plutil or Python 3) is required'
+  fi
+}
+
 assert_no_secret() {
   local file="$1"
   local secret
@@ -45,7 +63,7 @@ test_assets_and_operator_copy() {
   jq -e '
     type == "object" and keys == ["androidApkSha256", "androidSigningCertAssetSha256", "darwinArm64Sha256", "linuxAmd64Sha256", "sha256SumsAssetSha256", "sourceSha", "version"] and
     (([.[]] | all(. == "PENDING")) or
-      ((.version | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")) and
+      ((.version | test("^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$")) and
        (.sourceSha | test("^[0-9a-f]{40}$")) and
        (.androidApkSha256 | test("^[0-9a-f]{64}$")) and
        (.androidSigningCertAssetSha256 | test("^[0-9a-f]{64}$")) and
@@ -68,20 +86,49 @@ test_assets_and_operator_copy() {
       type == "object" and keys == ["codexNodeEntrypoint", "platform", "profiles", "tmux"] and
       .platform == $platform and .tmux == {path: $tmux_path, version: $tmux_version} and
       .codexNodeEntrypoint == ($home + "/.local/bin/codex") and
-      (.profiles | map(.key)) == ["personal", "work", "work2", "claude-personal", "claude-work"] and
-      (.profiles | map(.label)) == ["Codex · Personal", "Codex · Work", "Codex · Work 2", "Claude · Personal", "Claude · Work"] and
-      all(.profiles[];
-        type == "object" and
-        keys == ["arguments", "command", "environment", "foregroundSignatures", "key", "label"] and
-        (.command | startswith($home + "/bin/")) and
-        (.environment | type == "array" and length == 1) and
-        (.foregroundSignatures | type == "array" and length > 0) and
-        (.arguments | type == "array"))
+      .profiles == [
+        {key:"personal",label:"Codex · Personal",command:($home + "/bin/codex-personal"),environment:[{name:"CODEX_HOME",value:($home + "/.codex-personal")}],foregroundSignatures:[{executableBase:"codex"},{executableBase:"node",argument1:($home + "/.local/bin/codex")}],arguments:["--dangerously-bypass-approvals-and-sandbox"]},
+        {key:"work",label:"Codex · Work",command:($home + "/bin/codex-work"),environment:[{name:"CODEX_HOME",value:($home + "/.codex-work")}],foregroundSignatures:[{executableBase:"codex"},{executableBase:"node",argument1:($home + "/.local/bin/codex")}],arguments:["--dangerously-bypass-approvals-and-sandbox"]},
+        {key:"work2",label:"Codex · Work 2",command:($home + "/bin/codex-work2"),environment:[{name:"CODEX_HOME",value:($home + "/.codex-work2")}],foregroundSignatures:[{executableBase:"codex"},{executableBase:"node",argument1:($home + "/.local/bin/codex")}],arguments:["--dangerously-bypass-approvals-and-sandbox"]},
+        {key:"claude-personal",label:"Claude · Personal",command:($home + "/bin/claude-personal"),environment:[{name:"CLAUDE_CONFIG_DIR",value:($home + "/.claude-personal")}],foregroundSignatures:[{argument0:($home + "/.local/bin/claude")}],arguments:["--permission-mode","auto"]},
+        {key:"claude-work",label:"Claude · Work",command:($home + "/bin/claude-work"),environment:[{name:"CLAUDE_CONFIG_DIR",value:($home + "/.claude-work")}],foregroundSignatures:[{argument0:($home + "/.local/bin/claude")}],arguments:["--permission-mode","auto"]}
+      ]
     ' "$config" >/dev/null || fail "strict host config differs: $config"
   done
 
-  assert_contains "$repo_dir/assets/skidbladnir/skidbladnir.service" '--host-config=%h/.config/skidbladnir/host-config.json'
-  assert_contains "$repo_dir/assets/skidbladnir/dev.niels.skidbladnir.plist" '--host-config=/Users/nnandal/.config/skidbladnir/host-config.json'
+  local unit="$repo_dir/assets/skidbladnir/skidbladnir.service"
+  assert_exact_line_once "$unit" 'Type=simple'
+  assert_exact_line_once "$unit" 'UnsetEnvironment=TMUX TMUX_PANE TMUX_TMPDIR'
+  assert_exact_line_once "$unit" 'ExecStart=%h/.local/bin/skidbladnir-launch gateway --listen=127.0.0.1:7341 --bearer-file=%h/.config/skidbladnir/bearer --catalogue-path=%h/.local/share/skidbladnir/characters.json --machine-handle-file=%h/.config/skidbladnir/machine-handle --host-config=%h/.config/skidbladnir/host-config.json'
+  assert_exact_line_once "$unit" 'Restart=on-failure'
+  assert_exact_line_once "$unit" 'RestartSec=2s'
+  assert_exact_line_once "$unit" 'TimeoutStopSec=10s'
+  assert_exact_line_once "$unit" 'KillMode=process'
+  assert_exact_line_once "$unit" 'WantedBy=default.target'
+
+  plist_json "$repo_dir/assets/skidbladnir/dev.niels.skidbladnir.plist" |
+    jq -e '
+      keys == ["AbandonProcessGroup","EnvironmentVariables","ExitTimeOut","KeepAlive","Label","ProgramArguments","RunAtLoad","StandardErrorPath","StandardOutPath","ThrottleInterval","Umask","WorkingDirectory"] and
+      .Label == "dev.niels.skidbladnir" and
+      .ProgramArguments == [
+        "/Users/nnandal/.local/bin/skidbladnir-launch", "gateway",
+        "--listen=127.0.0.1:7341",
+        "--bearer-file=/Users/nnandal/.config/skidbladnir/bearer",
+        "--catalogue-path=/Users/nnandal/.local/share/skidbladnir/characters.json",
+        "--machine-handle-file=/Users/nnandal/.config/skidbladnir/machine-handle",
+        "--host-config=/Users/nnandal/.config/skidbladnir/host-config.json"
+      ] and
+      .EnvironmentVariables == {PATH:"/Users/nnandal/bin:/Users/nnandal/.local/bin:/Users/nnandal/.local/share/mise/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"} and
+      .WorkingDirectory == "/Users/nnandal" and .RunAtLoad == true and
+      .KeepAlive == {SuccessfulExit:false} and .AbandonProcessGroup == true and
+      .ThrottleInterval == 2 and .ExitTimeOut == 10 and .Umask == 18 and
+      .StandardOutPath == "/Users/nnandal/.local/state/skidbladnir/gateway.log" and
+      .StandardErrorPath == "/Users/nnandal/.local/state/skidbladnir/gateway.error.log"
+    ' >/dev/null || fail 'LaunchAgent definition differs from the closed host boundary'
+  [[ -x "$repo_dir/assets/skidbladnir/skidbladnir-launch" ]] ||
+    fail 'release transaction launcher must be executable'
+  assert_contains "$repo_dir/assets/skidbladnir/skidbladnir-launch" \
+    'if [[ -e "$transaction" || -L "$transaction" ]]; then'
   assert_contains "$repo_dir/lib/skidbladnir.sh" 'tailscale serve --bg --yes --https=8443 --set-path=/v1 http://127.0.0.1:7341/v1'
   assert_contains "$repo_dir/lib/skidbladnir.sh" 'tailscale serve --yes --https=8443 --set-path=/ off'
   ! grep -Fq 'tailscale serve reset' "$repo_dir/lib/skidbladnir.sh" || fail 'convergence resets unrelated Tailscale Serve state'
@@ -92,11 +139,20 @@ test_assets_and_operator_copy() {
   ! grep -Eq -- '--arg[^[:cntrl:]]*(token|result|response|bearer)' "$repo_dir/lib/skidbladnir-invite.sh" ||
     fail 'fleet invitation passes credential material in process arguments'
   assert_contains "$repo_dir/workstation" 'skidbladnir_converge "$(platform_id)"'
+  assert_contains "$repo_dir/workstation" 'skidbladnir_preflight_tmux_runtime "$(platform_id)"'
+  assert_contains "$repo_dir/workstation" 'skidbladnir_require_tmux_runtime "$(platform_id)"'
+  assert_contains "$repo_dir/lib/packages-arch.sh" 'pacman_arguments+=(--ignore tmux)'
+  assert_contains "$repo_dir/lib/packages-arch.sh" 'sudo systemctl enable --now sshd.service'
+  assert_contains "$repo_dir/lib/packages-arch.sh" 'doctor_pass package.ssh "OpenSSH enabled for fixed tailnet operator access"'
+  assert_contains "$repo_dir/lib/packages-macos.sh" 'HOMEBREW_NO_AUTO_UPDATE=1 brew bundle'
+  assert_contains "$repo_dir/ansible/roles/base/tasks/main.yml" "failed_when: devbox_tmux_version.stdout != 'tmux 3.4'"
   assert_contains "$repo_dir/devbox" 'skidbladnir_doctor devbox'
   assert_contains "$repo_dir/ansible/playbooks/converge.yml" 'role: skidbladnir'
   grep -Fxq 'reconcile-lifetime-digests)' "$repo_dir/skidbladnir" || fail 'exact reconciled lifetime command case missing'
   assert_contains "$repo_dir/skidbladnir" 'accept-host)'
   assert_contains "$repo_dir/lib/skidbladnir-operator.sh" 'SKIDBLADNIR_ALLOW_HOST_ACCEPTANCE=host-acceptance-v1'
+  assert_contains "$repo_dir/skidbladnir" 'prepare-reboot | verify-reboot)'
+  assert_contains "$repo_dir/lib/skidbladnir-operator.sh" 'SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1'
   assert_contains "$repo_dir/skidbladnir" 'outage | recover)'
   assert_contains "$repo_dir/skidbladnir" 'skidbladnir_operator_require_macbook'
   grep -Fxq 'brew "qrencode"' "$repo_dir/packages/Brewfile" || fail 'MacBook qrencode package missing'
@@ -160,10 +216,17 @@ write_runtime_boundaries() {
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ " $* " == *' --config - '* ]]; then
+  request_config="$(cat)"
+  if [[ "${1:-}" != -q || " $* " != *' --noproxy * '* ]]; then
+    printf '%s\n' "$request_config" >"$SKIDBLADNIR_TEST_CURL_LEAK"
+  fi
+  printf 'curl-args' >>"$SKIDBLADNIR_TEST_CALLS"
+  printf ' %q' "$@" >>"$SKIDBLADNIR_TEST_CALLS"
+  printf '\n' >>"$SKIDBLADNIR_TEST_CALLS"
   url_line=""
   while IFS= read -r line; do
     case "$line" in url\ =*) url_line="$line" ;; esac
-  done
+  done <<<"$request_config"
   printf 'curl-config %q\n' "$url_line" >>"$SKIDBLADNIR_TEST_CALLS"
   if [[ " $* " != *' --output /dev/null '* && -n "${SKIDBLADNIR_TEST_INVENTORY:-}" ]]; then
     printf '%s\n' "$SKIDBLADNIR_TEST_INVENTORY"
@@ -225,6 +288,18 @@ set -euo pipefail
 [[ "$1" == -V ]]
 printf 'tmux 3.7c\n'
 EOF
+  cat >"$test_bin/install" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+target="${!#}"
+if [[ -n "${SKIDBLADNIR_TEST_FAIL_INSTALL_TARGET:-}" &&
+  "$target" == *"${SKIDBLADNIR_TEST_FAIL_INSTALL_TARGET}"* &&
+  ! -e "$SKIDBLADNIR_TEST_FAIL_INSTALL_ONCE" ]]; then
+  : >"$SKIDBLADNIR_TEST_FAIL_INSTALL_ONCE"
+  exit 73
+fi
+exec /usr/bin/install "$@"
+EOF
   chmod 0755 "$test_bin"/*
 }
 
@@ -233,6 +308,7 @@ test_converge_and_doctor() {
   write_runtime_boundaries
   export SKIDBLADNIR_TEST_ARCHIVE="$fixture/skidbladnir-linux-amd64.tar.gz"
   export SKIDBLADNIR_TEST_CALLS="$fixture/runtime-calls"
+  export SKIDBLADNIR_TEST_CURL_LEAK="$fixture/ambient-curl-leak"
   export SKIDBLADNIR_TEST_SERVICE_STATE="$fixture/service-active"
   : >"$SKIDBLADNIR_TEST_CALLS"
 
@@ -250,6 +326,33 @@ test_converge_and_doctor() {
   skidbladnir_host_config_source() { printf '%s\n' "$fixture/host-config.json"; }
   skidbladnir_tailscale_cli() { printf '%s\n' "$test_bin/tailscale"; }
 
+  printf 'owned source\n' >"$fixture/owned-source"
+  printf 'unrelated target\n' >"$fixture/unrelated-target"
+  ln -s "$fixture/unrelated-target" "$fixture/owned-target"
+  # shellcheck disable=SC2034
+  skidbladnir_changed=0
+  if (skidbladnir_install_owned "$fixture/owned-source" \
+    "$fixture/owned-target" 0644) >/dev/null 2>&1; then
+    fail 'owned installation replaced an unexpected symlink target'
+  fi
+  assert_eq 'unrelated target' "$(cat "$fixture/unrelated-target")" \
+    'unexpected symlink referent preserved'
+  rm -f -- "$fixture/owned-target"
+
+  cp "$skidbladnir_release_pin_file" "$fixture/release-pin.valid.json"
+  jq '.version = "v01.2.3"' "$fixture/release-pin.valid.json" >"$skidbladnir_release_pin_file"
+  if skidbladnir_release_values arch >/dev/null 2>&1; then
+    fail 'release pin accepted a noncanonical leading-zero version'
+  fi
+  mv "$fixture/release-pin.valid.json" "$skidbladnir_release_pin_file"
+  cp "$skidbladnir_release_pin_file" "$fixture/release-pin.valid.json"
+  sed 's/"version": "v1.2.3"/"version": "v1.2.3", "version": "v1.2.3"/' \
+    "$fixture/release-pin.valid.json" >"$skidbladnir_release_pin_file"
+  if skidbladnir_release_values arch >/dev/null 2>&1; then
+    fail 'release pin accepted a duplicate version member'
+  fi
+  mv "$fixture/release-pin.valid.json" "$skidbladnir_release_pin_file"
+
   local old_path="$PATH"
   PATH="$test_bin:$PATH"
   export PATH
@@ -262,8 +365,8 @@ test_converge_and_doctor() {
   skidbladnir_converge arch
   assert_eq "$handle_before" "$(cat "$test_home/.config/skidbladnir/machine-handle")" 'preserved machine handle'
   assert_eq "$bearer_before" "$(cat "$test_home/.config/skidbladnir/bearer")" 'preserved bearer'
-  [[ -s "$test_home/.local/share/skidbladnir/characters.sha256" ]] || fail 'catalogue digest record missing'
-  [[ -s "$test_home/.local/share/skidbladnir/release.sha256" ]] || fail 'release manifest digest record missing'
+  [[ -s "$test_home/.local/share/skidbladnir/release-bundle.tar.gz" ]] ||
+    fail 'verified release bundle was not retained for doctor comparisons'
   ! grep -Fq 'serve reset' "$SKIDBLADNIR_TEST_CALLS" || fail 'runtime invoked Tailscale Serve reset'
   assert_contains "$SKIDBLADNIR_TEST_CALLS" 'tailscale serve --bg --yes --https=8443 --set-path=/v1 http://127.0.0.1:7341/v1'
   assert_contains "$SKIDBLADNIR_TEST_CALLS" 'systemctl --user enable --now skidbladnir.service'
@@ -281,7 +384,7 @@ test_converge_and_doctor() {
   assert_contains "$doctor_output" 'skidbladnir.artifact.version'
   assert_contains "$doctor_output" 'v1.2.3 at source 1111111111111111111111111111111111111111'
   assert_contains "$doctor_output" 'skidbladnir.artifact.digest'
-  assert_contains "$doctor_output" 'pinned archive and all installed release member digests match'
+  assert_contains "$doctor_output" 'pinned archive and all installed release members match'
   assert_contains "$doctor_output" 'skidbladnir.config'
   assert_contains "$doctor_output" 'strict arch host config, hooks, and notifier installed'
   assert_contains "$doctor_output" 'skidbladnir.secrets'
@@ -297,10 +400,31 @@ test_converge_and_doctor() {
   assert_contains "$doctor_output" 'skidbladnir.tailscale'
   assert_contains "$doctor_output" 'Tailscale is signed in'
   assert_contains "$SKIDBLADNIR_TEST_CALLS" 'curl-config url\ =\ \"http://127.0.0.1:7341/v1/pressure\"'
+  [[ ! -e "$SKIDBLADNIR_TEST_CURL_LEAK" ]] || fail 'credential-bearing curl honored ambient config or proxy state'
   ! grep -Fq '/v1/sessions' "$SKIDBLADNIR_TEST_CALLS" || fail 'doctor reached the normalizing inventory endpoint'
   bearer="$bearer_before"
   arch_token="" devbox_token="" local_token=""
   assert_no_secret "$doctor_output"
+  local xtrace_output="$fixture/doctor-xtrace"
+  {
+    set -x
+    doctor_reset
+    skidbladnir_doctor arch >/dev/null
+    set +x
+  } 2>"$xtrace_output"
+  assert_no_secret "$xtrace_output"
+
+  printf '\n# locally replaced after convergence\n' >>"$test_home/.local/bin/skidbladnir"
+  skidbladnir_sha256 "$test_home/.local/bin/skidbladnir" \
+    >"$test_home/.local/share/skidbladnir/binary.sha256"
+  doctor_reset
+  skidbladnir_doctor arch >"$fixture/self-resealed-artifact-output" || true
+  assert_contains "$fixture/self-resealed-artifact-output" \
+    'FAIL  skidbladnir.artifact.digest'
+  install -m 0755 "$fixture/release/skidbladnir" \
+    "$test_home/.local/bin/skidbladnir"
+  skidbladnir_sha256 "$test_home/.local/bin/skidbladnir" \
+    >"$test_home/.local/share/skidbladnir/binary.sha256"
 
   export SKIDBLADNIR_TEST_INVENTORY
   SKIDBLADNIR_TEST_INVENTORY='{"machine":{"handle":"mh-11111111111111111111111111111111"},"observedAt":"first","sessions":[{"id":"$2","tmuxName":"second","identityToken":"v1-22222222222222222222222222222222.20.30.2","objective":"private two"},{"id":"$1","tmuxName":"first","identityToken":"v1-11111111111111111111111111111111.20.30.1","objective":"private one"}]}'
@@ -387,19 +511,83 @@ test_converge_and_doctor() {
   skidbladnir_install_macos_service "$test_home"
   assert_contains "$SKIDBLADNIR_TEST_CALLS" 'launchctl kickstart gui/501/dev.niels.skidbladnir'
   ! grep -Fq 'launchctl bootout' "$SKIDBLADNIR_TEST_CALLS" || fail 'unchanged loaded LaunchAgent was restarted'
+
+  local old_binary_sha old_catalogue_sha old_manifest_sha old_bundle_sha
+  old_binary_sha="$(skidbladnir_sha256 "$test_home/.local/bin/skidbladnir")"
+  old_catalogue_sha="$(skidbladnir_sha256 "$test_home/.local/share/skidbladnir/characters.json")"
+  old_manifest_sha="$(skidbladnir_sha256 "$test_home/.local/share/skidbladnir/release.json")"
+  old_bundle_sha="$(skidbladnir_sha256 "$test_home/.local/share/skidbladnir/release-bundle.tar.gz")"
+  sed -e 's/v1[.]2[.]3/v1.2.4/g' \
+    -e 's/1111111111111111111111111111111111111111/2222222222222222222222222222222222222222/g' \
+    "$fixture/release/skidbladnir" >"$fixture/release/skidbladnir.next"
+  mv "$fixture/release/skidbladnir.next" "$fixture/release/skidbladnir"
+  chmod 0755 "$fixture/release/skidbladnir"
+  printf '{"release":2}\n' >"$fixture/release/characters.json"
+  jq '.version = "v1.2.4" | .sourceSha = "2222222222222222222222222222222222222222"' \
+    "$fixture/release/release.json" >"$fixture/release/release.next.json"
+  mv "$fixture/release/release.next.json" "$fixture/release/release.json"
+  tar -czf "$fixture/skidbladnir-linux-amd64.tar.gz" -C "$fixture/release" \
+    skidbladnir characters.json release.json
+  local next_archive_sha
+  next_archive_sha="$(skidbladnir_sha256 "$fixture/skidbladnir-linux-amd64.tar.gz")"
+  jq --arg digest "$next_archive_sha" \
+    '.version = "v1.2.4" | .sourceSha = "2222222222222222222222222222222222222222" |
+      .androidApkSha256 = $digest | .androidSigningCertAssetSha256 = $digest |
+      .linuxAmd64Sha256 = $digest | .darwinArm64Sha256 = $digest |
+      .sha256SumsAssetSha256 = $digest' \
+    "$skidbladnir_release_pin_file" >"$fixture/release-pin.next.json"
+  mv "$fixture/release-pin.next.json" "$skidbladnir_release_pin_file"
+  export SKIDBLADNIR_TEST_FAIL_INSTALL_TARGET='.characters.json.skidbladnir.'
+  export SKIDBLADNIR_TEST_FAIL_INSTALL_ONCE="$fixture/install-failed-once"
+  set +e
+  skidbladnir_converge arch >/dev/null 2>"$fixture/release-transaction-error"
+  local transaction_status=$?
+  set -e
+  unset SKIDBLADNIR_TEST_FAIL_INSTALL_TARGET SKIDBLADNIR_TEST_FAIL_INSTALL_ONCE
+  [[ "$transaction_status" -ne 0 ]] || fail 'injected release promotion failure unexpectedly succeeded'
+  assert_eq "$old_binary_sha" "$(skidbladnir_sha256 "$test_home/.local/bin/skidbladnir")" \
+    'failed release transaction preserved binary'
+  assert_eq "$old_catalogue_sha" "$(skidbladnir_sha256 "$test_home/.local/share/skidbladnir/characters.json")" \
+    'failed release transaction preserved catalogue'
+  assert_eq "$old_manifest_sha" "$(skidbladnir_sha256 "$test_home/.local/share/skidbladnir/release.json")" \
+    'failed release transaction preserved manifest'
+  assert_eq "$old_bundle_sha" "$(skidbladnir_sha256 "$test_home/.local/share/skidbladnir/release-bundle.tar.gz")" \
+    'failed release transaction preserved retained bundle'
+
+  skidbladnir_begin_release_transaction "$test_home" "$test_home/.local/share/skidbladnir"
+  skidbladnir_install_owned "$fixture/release/skidbladnir" "$test_home/.local/bin/skidbladnir" 0755
+  set +e
+  HOME="$test_home" "$test_home/.local/bin/skidbladnir-launch" version \
+    >"$fixture/incomplete-launch-output" 2>"$fixture/incomplete-launch-error"
+  local incomplete_launch_status=$?
+  set -e
+  assert_eq 75 "$incomplete_launch_status" 'incomplete release transaction blocks service launch'
+  [[ ! -s "$fixture/incomplete-launch-output" ]] || fail 'incomplete release transaction launcher wrote stdout'
+  assert_contains "$fixture/incomplete-launch-error" \
+    'Skidbladnir release installation is incomplete; run the platform converge command'
+  skidbladnir_recover_release_transaction "$test_home" "$test_home/.local/share/skidbladnir"
+  assert_eq "$old_binary_sha" "$(skidbladnir_sha256 "$test_home/.local/bin/skidbladnir")" \
+    'crash recovery restored binary'
+  [[ ! -e "$test_home/.local/share/skidbladnir/.release-transaction" ]] ||
+    fail 'crash recovery left its release transaction journal'
   PATH="$old_path"
   export PATH
   pass
 }
 
 write_invite_boundaries() {
+  local invite_expiry
+  case "$(uname -s)" in
+  Darwin) invite_expiry="$(date -u -v+4M '+%Y-%m-%dT%H:%M:%SZ')" ;;
+  *) invite_expiry="$(date -u -d '+4 minutes' '+%Y-%m-%dT%H:%M:%SZ')" ;;
+  esac
   arch_token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
   devbox_token=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBg
   local_token=CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCw
   bearer=DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-  arch_response="$(jq -cn --arg token "$arch_token" '{pairingInviteToken:$token,expiresAt:"2026-08-27T12:00:00Z",machine:{handle:"mh-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",platform:"Linux"}}')"
-  devbox_response="$(jq -cn --arg token "$devbox_token" '{pairingInviteToken:$token,expiresAt:"2026-08-27T12:00:00.123Z",machine:{handle:"mh-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",platform:"Linux"}}')"
-  local_response="$(jq -cn --arg token "$local_token" '{pairingInviteToken:$token,expiresAt:"2026-08-27T12:00:00Z",machine:{handle:"mh-cccccccccccccccccccccccccccccccc",platform:"Darwin"}}')"
+  arch_response="$(jq -cn --arg token "$arch_token" --arg expiry "$invite_expiry" '{pairingInviteToken:$token,expiresAt:$expiry,machine:{handle:"mh-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",platform:"Linux"}}')"
+  devbox_response="$(jq -cn --arg token "$devbox_token" --arg expiry "$invite_expiry" '{pairingInviteToken:$token,expiresAt:$expiry,machine:{handle:"mh-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",platform:"Linux"}}')"
+  local_response="$(jq -cn --arg token "$local_token" --arg expiry "$invite_expiry" '{pairingInviteToken:$token,expiresAt:$expiry,machine:{handle:"mh-cccccccccccccccccccccccccccccccc",platform:"Darwin"}}')"
   export arch_response devbox_response local_response
 
   cat >"$fixture/invite-local" <<'EOF'
@@ -431,6 +619,21 @@ test_invite_success_and_fail_closed() {
   export SKIDBLADNIR_INVITE_STARTS="$fixture/invite-starts"
   install -d -m 0700 "$SKIDBLADNIR_INVITE_STARTS"
 
+  local far_expiry duplicate_response far_response
+  case "$(uname -s)" in
+  Darwin) far_expiry="$(date -u -v+1H '+%Y-%m-%dT%H:%M:%SZ')" ;;
+  *) far_expiry="$(date -u -d '+1 hour' '+%Y-%m-%dT%H:%M:%SZ')" ;;
+  esac
+  duplicate_response="${arch_response/\"expiresAt\"/\"pairingInviteToken\":\"$arch_token\",\"expiresAt\"}"
+  if skidbladnir_invite_response_valid "$duplicate_response" Linux; then
+    fail 'fleet invite accepted a duplicate response member'
+  fi
+  far_response="$(jq -cn --arg token "$arch_token" --arg expiry "$far_expiry" \
+    '{pairingInviteToken:$token,expiresAt:$expiry,machine:{handle:"mh-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",platform:"Linux"}}')"
+  if skidbladnir_invite_response_valid "$far_response" Linux; then
+    fail 'fleet invite accepted an expiry beyond five minutes'
+  fi
+
   ssh() {
     local target
     case " $* " in
@@ -450,6 +653,13 @@ test_invite_success_and_fail_closed() {
     case " $* " in
     *' arch '*)
       [[ "${SKIDBLADNIR_FAIL_ARCH:-0}" == 0 ]] || return 9
+      if [[ "${SKIDBLADNIR_SWAP_ORIGINS:-0}" == 1 ]]; then
+        jq -n \
+          '{Arch:"https://replaced-arch.example-tailnet.ts.net:8443/",DevServer:"https://replaced-devbox.example-tailnet.ts.net:8443/",Local:"https://replaced-macbook.example-tailnet.ts.net:8443/"}' \
+          >"$fixture/origins.replacement.json"
+        chmod 0600 "$fixture/origins.replacement.json"
+        mv "$fixture/origins.replacement.json" "$fixture/origins.json"
+      fi
       printf '%s\n' "$arch_response"
       ;;
     *' dev-server '*) printf '%s\n' "$devbox_response" ;;
@@ -484,6 +694,24 @@ test_invite_success_and_fail_closed() {
     (.machines | map(.origin) | unique | length) == 3
   ' "$SKIDBLADNIR_INVITE_QR" >/dev/null || fail 'QR payload differs from the strict fixed fleet'
   (($(LC_ALL=C wc -c <"$SKIDBLADNIR_INVITE_QR") <= 4096)) || fail 'QR payload exceeds 4096 bytes'
+
+  : >"$SKIDBLADNIR_INVITE_CALLS"
+  rm -f -- "$SKIDBLADNIR_INVITE_STARTS"/* "$SKIDBLADNIR_INVITE_QR"
+  export SKIDBLADNIR_SWAP_ORIGINS=1
+  skidbladnir_invite "$fixture/origins.json" "$fixture/invite-local" \
+    >"$fixture/invite-snapshot-output"
+  unset SKIDBLADNIR_SWAP_ORIGINS
+  jq -e '
+    (.machines | map(.origin)) == [
+      "https://arch.example-tailnet.ts.net:8443/",
+      "https://dev-server.example-tailnet.ts.net:8443/",
+      "https://macbook.example-tailnet.ts.net:8443/"
+    ]
+  ' "$SKIDBLADNIR_INVITE_QR" >/dev/null ||
+    fail 'fleet invite did not retain the validated origins snapshot'
+  jq -n '{Arch:"https://arch.example-tailnet.ts.net:8443/",DevServer:"https://dev-server.example-tailnet.ts.net:8443/",Local:"https://macbook.example-tailnet.ts.net:8443/"}' \
+    >"$fixture/origins.json"
+  chmod 0600 "$fixture/origins.json"
 
   : >"$SKIDBLADNIR_INVITE_CALLS"
   rm -f -- "$SKIDBLADNIR_INVITE_STARTS"/*
@@ -778,10 +1006,116 @@ test_host_acceptance_gate_contract() {
   pass
 }
 
+test_reboot_acceptance_gate_contract() {
+  local evidence="$test_home/.local/state/skidbladnir/reboot-acceptance.json"
+  local status
+  export SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1
+  SKIDBLADNIR_TEST_BOOT_DIGEST="$(printf '%064d' 6)"
+  SKIDBLADNIR_TEST_CREDENTIALS_DIGEST="$(printf '%064d' 7)"
+  SKIDBLADNIR_TEST_LIFETIME_DIGEST="$(printf '%064d' 8)"
+  export SKIDBLADNIR_TEST_BOOT_DIGEST SKIDBLADNIR_TEST_CREDENTIALS_DIGEST SKIDBLADNIR_TEST_LIFETIME_DIGEST
+  skidbladnir_boot_identity_digest_local() { printf '%s\n' "$SKIDBLADNIR_TEST_BOOT_DIGEST"; }
+  skidbladnir_credentials_digest_local() { printf '%s\n' "$SKIDBLADNIR_TEST_CREDENTIALS_DIGEST"; }
+  skidbladnir_reconciled_lifetime_digest_local() { printf '%s\n' "$SKIDBLADNIR_TEST_LIFETIME_DIGEST"; }
+  skidbladnir_acceptance_service_intent() { :; }
+  doctor_reset() {
+    doctor_failures=0
+    doctor_warnings=0
+  }
+  skidbladnir_doctor() { :; }
+  doctor_summary() { ((doctor_failures == 0 && doctor_warnings == 0)); }
+
+  rm -f -- "$evidence"
+  skidbladnir_prepare_reboot_local arch Arch >"$fixture/reboot-prepare-output"
+  assert_contains "$fixture/reboot-prepare-output" 'PASS  skidbladnir.accept-host.reboot.prepare Arch reboot checkpoint is ready'
+  [[ -f "$evidence" && ! -L "$evidence" ]] || fail 'reboot checkpoint is not a regular file'
+  assert_eq 600 "$(skidbladnir_file_mode "$evidence")" 'reboot checkpoint mode'
+  jq -e --arg boot "$SKIDBLADNIR_TEST_BOOT_DIGEST" \
+    --arg credentials "$SKIDBLADNIR_TEST_CREDENTIALS_DIGEST" '
+      type == "object" and
+      keys == ["bootDigest","credentialsDigest","label","platform","releasePinDigest","schemaVersion"] and
+      .schemaVersion == 1 and .platform == "arch" and .label == "Arch" and
+      .bootDigest == $boot and .credentialsDigest == $credentials and
+      (.releasePinDigest | test("^[0-9a-f]{64}$"))
+    ' "$evidence" >/dev/null || fail 'reboot checkpoint schema differs'
+
+  set +e
+  skidbladnir_verify_reboot_local arch Arch >"$fixture/reboot-same-boot-output" \
+    2>"$fixture/reboot-same-boot-error"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail 'reboot verification passed without a reboot'
+  [[ -f "$evidence" ]] || fail 'same-boot verification removed the checkpoint'
+  assert_contains "$fixture/reboot-same-boot-error" 'NOT_RUN  skidbladnir.accept-host.reboot Arch boot identity has not changed'
+
+  SKIDBLADNIR_TEST_BOOT_DIGEST="$(printf '%064d' 9)"
+  SKIDBLADNIR_TEST_LIFETIME_DIGEST="$(printf '%064d' 9)"
+  export SKIDBLADNIR_TEST_BOOT_DIGEST SKIDBLADNIR_TEST_LIFETIME_DIGEST
+  skidbladnir_verify_reboot_local arch Arch >"$fixture/reboot-verify-output"
+  assert_contains "$fixture/reboot-verify-output" 'PASS  skidbladnir.accept-host.reboot Arch reboot/login persistence preserved release and credentials'
+  [[ ! -e "$evidence" && ! -L "$evidence" ]] || fail 'successful reboot verification retained the checkpoint'
+
+  SKIDBLADNIR_TEST_BOOT_DIGEST="$(printf '%064d' 1)"
+  export SKIDBLADNIR_TEST_BOOT_DIGEST
+  skidbladnir_prepare_reboot_local arch Arch >/dev/null
+  SKIDBLADNIR_TEST_BOOT_DIGEST="$(printf '%064d' 2)"
+  SKIDBLADNIR_TEST_CREDENTIALS_DIGEST="$(printf '%064d' 3)"
+  export SKIDBLADNIR_TEST_BOOT_DIGEST SKIDBLADNIR_TEST_CREDENTIALS_DIGEST
+  set +e
+  skidbladnir_verify_reboot_local arch Arch >"$fixture/reboot-credentials-output" \
+    2>"$fixture/reboot-credentials-error"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail 'reboot verification passed changed credentials'
+  [[ -f "$evidence" ]] || fail 'failed reboot verification removed the checkpoint'
+  ! grep -Fq 'PASS  skidbladnir.accept-host.reboot ' "$fixture/reboot-credentials-output" ||
+    fail 'failed reboot verification emitted PASS'
+  assert_contains "$fixture/reboot-credentials-error" 'Skidbladnir credentials changed across reboot on Arch'
+  /bin/unlink "$evidence"
+
+  skidbladnir_prepare_reboot_local() { record_operator_call reboot-local "$@"; }
+  skidbladnir_verify_reboot_local() { record_operator_call reboot-local "$@"; }
+  ssh() {
+    record_operator_call ssh "$@"
+    case "$*" in
+    *'skidbladnir_sha256 "$skidbladnir_release_pin_file"'*)
+      skidbladnir_sha256 "$skidbladnir_release_pin_file"
+      ;;
+    esac
+  }
+  : >"$SKIDBLADNIR_OPERATOR_CALLS"
+  unset SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE
+  set +e
+  skidbladnir_operator_reboot_acceptance prepare Local --allow-reboot-acceptance \
+    >/dev/null 2>"$fixture/reboot-gate-error"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail 'reboot acceptance ran without its environment capability'
+  [[ ! -s "$SKIDBLADNIR_OPERATOR_CALLS" ]] || fail 'missing reboot capability reached a host boundary'
+  assert_contains "$fixture/reboot-gate-error" 'NOT_RUN  skidbladnir.accept-host.reboot'
+
+  export SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1
+  skidbladnir_operator_reboot_acceptance prepare Local --allow-reboot-acceptance
+  assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'reboot-local macos Local'
+  : >"$SKIDBLADNIR_OPERATOR_CALLS"
+  skidbladnir_operator_reboot_acceptance verify DevServer --allow-reboot-acceptance
+  assert_eq 2 "$(wc -l <"$SKIDBLADNIR_OPERATOR_CALLS" | tr -d '[:space:]')" 'DevServer reboot pin and verification boundary count'
+  assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'ConnectionAttempts=1 dev-server'
+  assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'skidbladnir_verify_reboot_local devbox DevServer'
+  : >"$SKIDBLADNIR_OPERATOR_CALLS"
+  skidbladnir_operator_reboot_acceptance prepare Arch --allow-reboot-acceptance
+  assert_eq 2 "$(wc -l <"$SKIDBLADNIR_OPERATOR_CALLS" | tr -d '[:space:]')" 'Arch reboot pin and preparation boundary count'
+  assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'skidbladnir_prepare_reboot_local arch Arch'
+  unset SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE
+  unset SKIDBLADNIR_TEST_BOOT_DIGEST SKIDBLADNIR_TEST_CREDENTIALS_DIGEST SKIDBLADNIR_TEST_LIFETIME_DIGEST
+  pass
+}
+
 test_assets_and_operator_copy
 test_converge_and_doctor
 test_invite_success_and_fail_closed
 test_operator_doctor_and_service_boundary
 test_host_acceptance_gate_contract
+test_reboot_acceptance_gate_contract
 
 printf 'PASS: %d Skidbladnir public-fleet test groups\n' "$tests_run"

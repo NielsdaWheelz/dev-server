@@ -6,7 +6,7 @@
   <string>dev.niels.skidbladnir</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/nnandal/.local/bin/skidbladnir</string>
+    <string>/Users/nnandal/.local/bin/skidbladnir-launch</string>
     <string>gateway</string>
     <string>--listen=127.0.0.1:7341</string>
     <string>--bearer-file=/Users/nnandal/.config/skidbladnir/bearer</string>

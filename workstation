@@ -72,7 +72,9 @@ cmd_doctor() {
 
 cmd_converge() {
   source_platform_packages
+  skidbladnir_preflight_tmux_runtime "$(platform_id)"
   packages_install
+  skidbladnir_require_tmux_runtime "$(platform_id)"
   dotfiles_install
   ai_install
   skidbladnir_converge "$(platform_id)"

@@ -35,8 +35,12 @@ assert_status() {
 }
 
 read_record() {
+  local field
   [[ -s "$record" ]] || fail 'missing routed process record'
-  mapfile -d '' -t fields <"$record"
+  fields=()
+  while IFS= read -r -d '' field; do
+    fields+=("$field")
+  done <"$record"
 }
 
 assert_argv() {

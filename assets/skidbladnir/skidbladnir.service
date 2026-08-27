@@ -5,7 +5,7 @@ Description=Skidbladnir tmux gateway
 Type=simple
 Environment="PATH=%h/bin:%h/.local/bin:%h/.local/share/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 UnsetEnvironment=TMUX TMUX_PANE TMUX_TMPDIR
-ExecStart=%h/.local/bin/skidbladnir gateway --listen=127.0.0.1:7341 --bearer-file=%h/.config/skidbladnir/bearer --catalogue-path=%h/.local/share/skidbladnir/characters.json --machine-handle-file=%h/.config/skidbladnir/machine-handle --host-config=%h/.config/skidbladnir/host-config.json
+ExecStart=%h/.local/bin/skidbladnir-launch gateway --listen=127.0.0.1:7341 --bearer-file=%h/.config/skidbladnir/bearer --catalogue-path=%h/.local/share/skidbladnir/characters.json --machine-handle-file=%h/.config/skidbladnir/machine-handle --host-config=%h/.config/skidbladnir/host-config.json
 Restart=on-failure
 RestartSec=2s
 TimeoutStopSec=10s

@@ -131,6 +131,12 @@
     state: present
     update_cache: true
 
+- name: Verify exact Devbox tmux runtime
+  ansible.builtin.command: /usr/bin/tmux -V
+  register: devbox_tmux_version
+  changed_when: false
+  failed_when: devbox_tmux_version.stdout != 'tmux 3.4'
+
 - name: Read current timezone
   ansible.builtin.command: timedatectl show -p Timezone --value
   register: devbox_current_timezone

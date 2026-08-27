@@ -241,6 +241,68 @@ SKIDBLADNIR_ALLOW_HOST_ACCEPTANCE=host-acceptance-v1 skidbladnir_accept_host_loc
   esac
 }
 
+skidbladnir_operator_reboot_acceptance() {
+  local phase="${1:-}"
+  local target="${2:-}"
+  local gate="${3:-}"
+  local command
+  if [[ "$gate" != --allow-reboot-acceptance ||
+    "${SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE:-}" != reboot-acceptance-v1 ]]; then
+    printf 'NOT_RUN  skidbladnir.accept-host.reboot exact reboot acceptance authorization is required; no checkpoint was changed\n' >&2
+    printf 'Usage: ./skidbladnir <prepare-reboot|verify-reboot> <Local|DevServer|Arch> --allow-reboot-acceptance\n' >&2
+    return 64
+  fi
+  case "$phase" in
+  prepare) ;;
+  verify) ;;
+  *) die "unsupported reboot acceptance phase: $phase" ;;
+  esac
+  case "$target" in
+  Local)
+    "skidbladnir_${phase}_reboot_local" macos Local
+    ;;
+  DevServer)
+    skidbladnir_operator_require_remote_release_pin DevServer || return
+    if [[ "$phase" == prepare ]]; then
+      command='set -euo pipefail
+source "$HOME/.local/share/dev-server/lib/common.sh"
+source "$HOME/.local/share/dev-server/lib/doctor.sh"
+source "$HOME/.local/share/dev-server/lib/skidbladnir.sh"
+SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1 skidbladnir_prepare_reboot_local devbox DevServer'
+    else
+      command='set -euo pipefail
+source "$HOME/.local/share/dev-server/lib/common.sh"
+source "$HOME/.local/share/dev-server/lib/doctor.sh"
+source "$HOME/.local/share/dev-server/lib/skidbladnir.sh"
+SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1 skidbladnir_verify_reboot_local devbox DevServer'
+    fi
+    ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
+      dev-server "$command"
+    ;;
+  Arch)
+    skidbladnir_operator_require_remote_release_pin Arch || return
+    if [[ "$phase" == prepare ]]; then
+      command='set -euo pipefail
+repo="$HOME/src/personal/dev-server"
+source "$repo/lib/common.sh"
+source "$repo/lib/doctor.sh"
+source "$repo/lib/skidbladnir.sh"
+SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1 skidbladnir_prepare_reboot_local arch Arch'
+    else
+      command='set -euo pipefail
+repo="$HOME/src/personal/dev-server"
+source "$repo/lib/common.sh"
+source "$repo/lib/doctor.sh"
+source "$repo/lib/skidbladnir.sh"
+SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1 skidbladnir_verify_reboot_local arch Arch'
+    fi
+    ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
+      arch "$command"
+    ;;
+  *) die "unsupported fleet reboot acceptance target: $target" ;;
+  esac
+}
+
 skidbladnir_operator_service() {
   local action="$1"
   local target="$2"

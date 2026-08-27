@@ -25,7 +25,7 @@ packages_macos_configure_tailscale() {
 
 packages_install() {
   require_cmd brew
-  brew bundle --file "$(packages_macos_file)"
+  HOMEBREW_NO_AUTO_UPDATE=1 brew bundle --file "$(packages_macos_file)"
   packages_macos_configure_tailscale
 }
 
