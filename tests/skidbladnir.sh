@@ -61,6 +61,7 @@ pass() {
 test_assets_and_operator_copy() {
   local pin="$repo_dir/assets/skidbladnir/release-pin.json"
   assert_exact_line_once "$repo_dir/skidbladnir" 'source "$base_dir/lib/doctor.sh"'
+  assert_exact_line_once "$repo_dir/skidbladnir" 'source "$base_dir/lib/packages-macos.sh"'
   jq -e '
     type == "object" and keys == ["androidApkSha256", "androidSigningCertAssetSha256", "darwinArm64Sha256", "linuxAmd64Sha256", "sha256SumsAssetSha256", "sourceSha", "version"] and
     (([.[]] | all(. == "PENDING")) or
@@ -767,8 +768,10 @@ test_operator_doctor_and_service_boundary() {
     printf '%s\n' "$line" >>"$SKIDBLADNIR_OPERATOR_CALLS"
   }
   ssh() {
-    record_operator_call ssh "$@"
-    case "$*" in
+    local remote_script=""
+    if [[ "${*: -4}" == 'bash -o pipefail -s' ]]; then remote_script="$(cat)"; fi
+    record_operator_call ssh "$@" "$remote_script"
+    case "$remote_script" in
     *'skidbladnir_sha256 "$skidbladnir_release_pin_file"'*)
       case " $* ${SKIDBLADNIR_TEST_REMOTE_PIN_MISMATCH:-} " in
       *' dev-server '*' DevServer '*) printf '%064d\n' 0 ;;
@@ -851,8 +854,10 @@ test_operator_doctor_and_service_boundary() {
   ! grep -Eq 'tmux|tailscale' "$SKIDBLADNIR_OPERATOR_CALLS" || fail 'bounded service command touched tmux or Tailscale'
 
   ssh() {
-    record_operator_call ssh "$@"
-    case "$*" in
+    local remote_script=""
+    if [[ "${*: -4}" == 'bash -o pipefail -s' ]]; then remote_script="$(cat)"; fi
+    record_operator_call ssh "$@" "$remote_script"
+    case "$remote_script" in
     *'skidbladnir_sha256 "$skidbladnir_release_pin_file"'*)
       skidbladnir_sha256 "$skidbladnir_release_pin_file"
       return
@@ -888,6 +893,23 @@ test_operator_doctor_and_service_boundary() {
   [[ "$status" -ne 0 ]] || fail 'partial lifetime digest unexpectedly succeeded'
   [[ ! -s "$fixture/operator-lifetime-fail-output" ]] || fail 'partial lifetime digest wrote stdout'
   assert_contains "$fixture/operator-lifetime-fail-error" "Couldn't reconcile and read the whole fleet lifetime. Nothing was displayed. Run ./skidbladnir doctor."
+  pass
+}
+
+test_operator_bash_transport() {
+  # shellcheck source=lib/skidbladnir-operator.sh
+  source "$repo_dir/lib/skidbladnir-operator.sh"
+  local script=$'set -euo pipefail\nprintf "transport ok\\n"'
+  ssh() {
+    printf '%s\n' "$*" >"$fixture/operator-transport-arguments"
+    cat >"$fixture/operator-transport-input"
+  }
+
+  skidbladnir_operator_ssh_bash dev-server "$script"
+  assert_eq \
+    '-T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 dev-server bash -o pipefail -s' \
+    "$(cat "$fixture/operator-transport-arguments")" 'remote Bash transport arguments'
+  assert_eq "$script" "$(cat "$fixture/operator-transport-input")" 'remote Bash transport stdin'
   pass
 }
 
@@ -961,8 +983,10 @@ test_host_acceptance_gate_contract() {
 
   skidbladnir_accept_host_local() { record_operator_call accept-local "$@"; }
   ssh() {
-    record_operator_call ssh "$@"
-    case "$*" in
+    local remote_script=""
+    if [[ "${*: -4}" == 'bash -o pipefail -s' ]]; then remote_script="$(cat)"; fi
+    record_operator_call ssh "$@" "$remote_script"
+    case "$remote_script" in
     *'skidbladnir_sha256 "$skidbladnir_release_pin_file"'*)
       skidbladnir_sha256 "$skidbladnir_release_pin_file"
       ;;
@@ -1077,8 +1101,10 @@ test_reboot_acceptance_gate_contract() {
   skidbladnir_prepare_reboot_local() { record_operator_call reboot-local "$@"; }
   skidbladnir_verify_reboot_local() { record_operator_call reboot-local "$@"; }
   ssh() {
-    record_operator_call ssh "$@"
-    case "$*" in
+    local remote_script=""
+    if [[ "${*: -4}" == 'bash -o pipefail -s' ]]; then remote_script="$(cat)"; fi
+    record_operator_call ssh "$@" "$remote_script"
+    case "$remote_script" in
     *'skidbladnir_sha256 "$skidbladnir_release_pin_file"'*)
       skidbladnir_sha256 "$skidbladnir_release_pin_file"
       ;;
@@ -1115,6 +1141,7 @@ test_reboot_acceptance_gate_contract() {
 test_assets_and_operator_copy
 test_converge_and_doctor
 test_invite_success_and_fail_closed
+test_operator_bash_transport
 test_operator_doctor_and_service_boundary
 test_host_acceptance_gate_contract
 test_reboot_acceptance_gate_contract
