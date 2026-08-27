@@ -656,6 +656,20 @@ test_converge_and_doctor() {
   assert_contains "$SKIDBLADNIR_TEST_CALLS" 'launchctl kickstart gui/501/dev.niels.skidbladnir'
   ! grep -Fq 'launchctl bootout' "$SKIDBLADNIR_TEST_CALLS" || fail 'unchanged loaded LaunchAgent was restarted'
 
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  # shellcheck disable=SC2034
+  skidbladnir_changed=1
+  skidbladnir_activate_macos_service "$test_home"
+  local expected_launchctl="$fixture/changed-launchctl-calls"
+  printf '%s\n' \
+    'launchctl print gui/501/dev.niels.skidbladnir' \
+    'launchctl enable gui/501/dev.niels.skidbladnir' \
+    "launchctl bootout gui/501 $mac_agent_dir/dev.niels.skidbladnir.plist" \
+    "launchctl bootstrap gui/501 $mac_agent_dir/dev.niels.skidbladnir.plist" \
+    >"$expected_launchctl"
+  cmp -s "$expected_launchctl" "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'changed LaunchAgent did not reload once in path-owned order'
+
   local -a journaled_targets=(
     "$test_home/.local/bin/skidbladnir-launch"
     "$test_home/.config/systemd/user/skidbladnir.service"

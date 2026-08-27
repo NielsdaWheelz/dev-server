@@ -111,8 +111,46 @@ test_hard_cut_surface() {
   local source="$repo_dir/assets/routers/ai-router"
   ! grep -Eq 'skidbladnir|router-seam|TMUX|launcher|status-hook' "$source" ||
     fail 'retired Skidbladnir interception remains in the account router'
-  grep -Fxq "  printf '73dc5888888f411c1f0fa7b81d866e721dcc86b527ce8e3b2cf4708661e823ba\\n'" \
-    "$repo_dir/lib/ai-tools.sh" || fail 'missing frozen Codex platform digest'
+  pass
+}
+
+test_codex_platform_pin_mapping() {
+  dev_server_home() { printf '%s\n' "$test_home"; }
+  die() { fail "$*"; }
+  # shellcheck source=lib/ai-tools.sh
+  source "$repo_dir/lib/ai-tools.sh"
+
+  local platform_system
+  local platform_machine
+  uname() {
+    case "${1:-}" in
+      -s) printf '%s\n' "$platform_system" ;;
+      -m) printf '%s\n' "$platform_machine" ;;
+      *) return 64 ;;
+    esac
+  }
+
+  local row expected_path expected_digest
+  for row in \
+    'Linux x86_64 codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex 73dc5888888f411c1f0fa7b81d866e721dcc86b527ce8e3b2cf4708661e823ba' \
+    'Darwin arm64 codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex f0d8762236594359b60cfbe17f4c7e945a3ce8d1c91e74778838c968d250fb6c'; do
+    read -r platform_system platform_machine expected_path expected_digest <<<"$row"
+    expected_path="$test_home/.local/lib/node_modules/@openai/codex/node_modules/@openai/$expected_path"
+    assert_eq "$expected_path" "$(ai_codex_platform_binary)" \
+      "$platform_system $platform_machine Codex payload path"
+    assert_eq "$expected_digest" "$(ai_codex_platform_sha256)" \
+      "$platform_system $platform_machine Codex payload digest"
+  done
+
+  platform_system=Darwin
+  platform_machine=x86_64
+  if (ai_codex_platform_binary >/dev/null 2>&1); then
+    fail 'unsupported Codex host architecture received a platform pin'
+  fi
+  if (ai_codex_platform_sha256 >/dev/null 2>&1); then
+    fail 'unsupported Codex host architecture received a platform digest'
+  fi
+  unset -f uname
   pass
 }
 
@@ -202,6 +240,7 @@ test_pin_doctor_and_convergence() {
 }
 
 test_hard_cut_surface
+test_codex_platform_pin_mapping
 test_explicit_contexts_and_exact_argv
 test_bare_context_inference
 test_pin_doctor_and_convergence

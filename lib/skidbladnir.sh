@@ -600,7 +600,7 @@ skidbladnir_activate_macos_service() {
   launchctl print "$domain/$label" >/dev/null 2>&1 && was_loaded=1
   launchctl enable "$domain/$label"
   if ((was_loaded && skidbladnir_changed)); then
-    launchctl bootout "$domain/$label"
+    launchctl bootout "$domain" "$target"
     launchctl bootstrap "$domain" "$target"
   elif ((was_loaded)); then
     launchctl kickstart "$domain/$label"
