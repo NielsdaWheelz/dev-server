@@ -60,6 +60,7 @@ pass() {
 
 test_assets_and_operator_copy() {
   local pin="$repo_dir/assets/skidbladnir/release-pin.json"
+  assert_exact_line_once "$repo_dir/skidbladnir" 'source "$base_dir/lib/doctor.sh"'
   jq -e '
     type == "object" and keys == ["androidApkSha256", "androidSigningCertAssetSha256", "darwinArm64Sha256", "linuxAmd64Sha256", "sha256SumsAssetSha256", "sourceSha", "version"] and
     (([.[]] | all(. == "PENDING")) or

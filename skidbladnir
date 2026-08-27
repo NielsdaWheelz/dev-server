@@ -5,6 +5,8 @@ base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 # shellcheck source=lib/common.sh
 source "$base_dir/lib/common.sh"
+# shellcheck source=lib/doctor.sh
+source "$base_dir/lib/doctor.sh"
 # shellcheck source=lib/skidbladnir.sh
 source "$base_dir/lib/skidbladnir.sh"
 # shellcheck source=lib/skidbladnir-invite.sh
