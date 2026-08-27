@@ -4,6 +4,13 @@ skidbladnir_operator_require_macbook() {
   [[ "$(uname -s)" == Darwin ]] || die "./skidbladnir is the MacBook-only fixed-fleet operator"
 }
 
+skidbladnir_operator_ssh_bash() {
+  local host="$1"
+  local script="$2"
+  ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
+    "$host" bash -o pipefail -s <<<"$script"
+}
+
 skidbladnir_operator_require_remote_release_pin() {
   local target="$1"
   local host command local_digest remote_digest
@@ -35,8 +42,7 @@ skidbladnir_sha256 "$skidbladnir_release_pin_file"'
     ;;
   *) die "unsupported release pin target: $target" ;;
   esac
-  if ! remote_digest="$(ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
-    "$host" "$command")"; then
+  if ! remote_digest="$(skidbladnir_operator_ssh_bash "$host" "$command")"; then
     printf 'error: could not read the %s release pin digest\n' "$target" >&2
     return 1
   fi
@@ -81,8 +87,7 @@ doctor_summary "Arch Skidbladnir"'
     ;;
   *) die "unsupported fleet doctor target: $target" ;;
   esac
-  ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
-    "$host" "$command"
+  skidbladnir_operator_ssh_bash "$host" "$command"
 }
 
 skidbladnir_operator_doctor() {
@@ -128,8 +133,7 @@ skidbladnir_operator_reconciled_lifetime_call() {
 source "$HOME/.local/share/dev-server/lib/common.sh"
 source "$HOME/.local/share/dev-server/lib/skidbladnir.sh"
 skidbladnir_reconciled_lifetime_digest_local'
-    ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
-      dev-server "$command"
+    skidbladnir_operator_ssh_bash dev-server "$command"
     ;;
   Arch)
     skidbladnir_operator_require_remote_release_pin Arch || return
@@ -138,8 +142,7 @@ repo="$HOME/src/personal/dev-server"
 source "$repo/lib/common.sh"
 source "$repo/lib/skidbladnir.sh"
 skidbladnir_reconciled_lifetime_digest_local'
-    ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
-      arch "$command"
+    skidbladnir_operator_ssh_bash arch "$command"
     ;;
   *) die "unsupported lifetime digest target: $target" ;;
   esac
@@ -223,8 +226,7 @@ source "$HOME/.local/share/dev-server/lib/common.sh"
 source "$HOME/.local/share/dev-server/lib/doctor.sh"
 source "$HOME/.local/share/dev-server/lib/skidbladnir.sh"
 SKIDBLADNIR_ALLOW_HOST_ACCEPTANCE=host-acceptance-v1 skidbladnir_accept_host_local devbox DevServer'
-    ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
-      dev-server "$command"
+    skidbladnir_operator_ssh_bash dev-server "$command"
     ;;
   Arch)
     skidbladnir_operator_require_remote_release_pin Arch || return
@@ -234,8 +236,7 @@ source "$repo/lib/common.sh"
 source "$repo/lib/doctor.sh"
 source "$repo/lib/skidbladnir.sh"
 SKIDBLADNIR_ALLOW_HOST_ACCEPTANCE=host-acceptance-v1 skidbladnir_accept_host_local arch Arch'
-    ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
-      arch "$command"
+    skidbladnir_operator_ssh_bash arch "$command"
     ;;
   *) die "unsupported fleet acceptance target: $target" ;;
   esac
@@ -276,8 +277,7 @@ source "$HOME/.local/share/dev-server/lib/doctor.sh"
 source "$HOME/.local/share/dev-server/lib/skidbladnir.sh"
 SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1 skidbladnir_verify_reboot_local devbox DevServer'
     fi
-    ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
-      dev-server "$command"
+    skidbladnir_operator_ssh_bash dev-server "$command"
     ;;
   Arch)
     skidbladnir_operator_require_remote_release_pin Arch || return
@@ -296,8 +296,7 @@ source "$repo/lib/doctor.sh"
 source "$repo/lib/skidbladnir.sh"
 SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1 skidbladnir_verify_reboot_local arch Arch'
     fi
-    ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
-      arch "$command"
+    skidbladnir_operator_ssh_bash arch "$command"
     ;;
   *) die "unsupported fleet reboot acceptance target: $target" ;;
   esac
