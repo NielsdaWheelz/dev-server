@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
+shellcheck --severity=warning \
+  "$repo_dir/skidbladnir" "$repo_dir/test" \
+  "$repo_dir/lib/skidbladnir.sh" "$repo_dir/lib/skidbladnir-invite.sh" \
+  "$repo_dir/lib/skidbladnir-operator.sh" \
+  "$repo_dir/tests/ai-router.sh" "$repo_dir/tests/skidbladnir.sh"
+shfmt -d -i 2 \
+  "$repo_dir/skidbladnir" "$repo_dir/test" \
+  "$repo_dir/lib/skidbladnir.sh" "$repo_dir/lib/skidbladnir-invite.sh" \
+  "$repo_dir/lib/skidbladnir-operator.sh" \
+  "$repo_dir/tests/skidbladnir.sh"
+
+while IFS= read -r file; do
+  bash -n "$file"
+done < <(find "$repo_dir" -type f \( -name '*.sh' -o -path "$repo_dir/devbox" -o -path "$repo_dir/workstation" -o -path "$repo_dir/skidbladnir" -o -path "$repo_dir/test" \) | LC_ALL=C sort)
+
+while IFS= read -r file; do
+  jq -e . "$file" >/dev/null
+done < <(find "$repo_dir/assets" -type f -name '*.json' | LC_ALL=C sort)
+
+ruby -ryaml -e 'ARGV.each { |file| YAML.load_file(file) }' \
+  "$repo_dir/ansible/playbooks/converge.yml" \
+  "$repo_dir/ansible/roles/skidbladnir/tasks/main.yml"
+plutil -lint "$repo_dir/assets/skidbladnir/dev.niels.skidbladnir.plist" >/dev/null
+
+bash "$repo_dir/tests/ai-router.sh"
+bash "$repo_dir/tests/skidbladnir.sh"

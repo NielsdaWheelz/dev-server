@@ -11,6 +11,7 @@
     - role: security
     - role: shell
     - role: ai_tools
+    - role: skidbladnir
     - role: rootless_docker
   post_tasks:
     - name: Ensure devbox state directory exists

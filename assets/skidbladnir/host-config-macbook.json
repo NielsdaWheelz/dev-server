@@ -1,0 +1,47 @@
+{
+  "platform": "Darwin",
+  "tmux": {"path": "/opt/homebrew/bin/tmux", "version": "tmux 3.7b"},
+  "codexNodeEntrypoint": "/Users/nnandal/.local/bin/codex",
+  "profiles": [
+    {
+      "key": "personal",
+      "label": "Codex · Personal",
+      "command": "/Users/nnandal/bin/codex-personal",
+      "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-personal"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
+      "arguments": ["--dangerously-bypass-approvals-and-sandbox"]
+    },
+    {
+      "key": "work",
+      "label": "Codex · Work",
+      "command": "/Users/nnandal/bin/codex-work",
+      "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-work"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
+      "arguments": ["--dangerously-bypass-approvals-and-sandbox"]
+    },
+    {
+      "key": "work2",
+      "label": "Codex · Work 2",
+      "command": "/Users/nnandal/bin/codex-work2",
+      "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-work2"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
+      "arguments": ["--dangerously-bypass-approvals-and-sandbox"]
+    },
+    {
+      "key": "claude-personal",
+      "label": "Claude · Personal",
+      "command": "/Users/nnandal/bin/claude-personal",
+      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/Users/nnandal/.claude-personal"}],
+      "foregroundSignatures": [{"argument0": "/Users/nnandal/.local/bin/claude"}],
+      "arguments": ["--permission-mode", "auto"]
+    },
+    {
+      "key": "claude-work",
+      "label": "Claude · Work",
+      "command": "/Users/nnandal/bin/claude-work",
+      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/Users/nnandal/.claude-work"}],
+      "foregroundSignatures": [{"argument0": "/Users/nnandal/.local/bin/claude"}],
+      "arguments": ["--permission-mode", "auto"]
+    }
+  ]
+}
