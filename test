@@ -5,14 +5,17 @@ repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 shellcheck --severity=warning \
   "$repo_dir/skidbladnir" "$repo_dir/test" \
+  "$repo_dir/lib/dotfiles.sh" "$repo_dir/lib/packages-arch.sh" \
   "$repo_dir/lib/skidbladnir.sh" "$repo_dir/lib/skidbladnir-invite.sh" \
   "$repo_dir/lib/skidbladnir-operator.sh" "$repo_dir/lib/packages-macos.sh" \
-  "$repo_dir/tests/ai-router.sh" "$repo_dir/tests/skidbladnir.sh"
+  "$repo_dir/tests/ai-router.sh" "$repo_dir/tests/platform-skips.sh" \
+  "$repo_dir/tests/skidbladnir.sh"
 shfmt -d -i 2 \
   "$repo_dir/skidbladnir" "$repo_dir/test" \
+  "$repo_dir/lib/dotfiles.sh" "$repo_dir/lib/packages-arch.sh" \
   "$repo_dir/lib/skidbladnir.sh" "$repo_dir/lib/skidbladnir-invite.sh" \
   "$repo_dir/lib/skidbladnir-operator.sh" "$repo_dir/lib/packages-macos.sh" \
-  "$repo_dir/tests/skidbladnir.sh"
+  "$repo_dir/tests/platform-skips.sh" "$repo_dir/tests/skidbladnir.sh"
 
 while IFS= read -r file; do
   bash -n "$file"
@@ -47,4 +50,5 @@ else
 fi
 
 bash "$repo_dir/tests/ai-router.sh"
+bash "$repo_dir/tests/platform-skips.sh"
 bash "$repo_dir/tests/skidbladnir.sh"

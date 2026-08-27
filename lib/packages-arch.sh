@@ -90,6 +90,10 @@ packages_arch_systemd_boot_config_dest() {
   printf '/efi/loader/loader.conf\n'
 }
 
+packages_arch_systemd_boot_present() {
+  [[ -d /efi/loader ]]
+}
+
 packages_arch_reflector_config_source() {
   printf '%s/assets/reflector/reflector.conf\n' "$dev_server_root"
 }
@@ -102,10 +106,10 @@ packages_arch_apply_touchpad_x11() {
   local device motion_points_string motion_step source
   local -a motion_points
 
-  [[ "${XDG_SESSION_TYPE:-}" == "x11" ]] || return
-  command -v xinput >/dev/null 2>&1 || return
+  [[ "${XDG_SESSION_TYPE:-}" == "x11" ]] || return 0
+  command -v xinput >/dev/null 2>&1 || return 0
   device="$(xinput list --id-only 'SYNA1D31:00 06CB:CD48 Touchpad' 2>/dev/null || true)"
-  [[ -n "$device" ]] || return
+  [[ -n "$device" ]] || return 0
 
   source="$(packages_arch_touchpad_config_source)"
   motion_points_string="$(awk -F '"' '$2 == "AccelPointsMotion" { print $4; exit }' "$source")"
@@ -139,7 +143,7 @@ packages_arch_apply_touchpad_x11() {
 packages_arch_configure_touchpad() {
   local source
 
-  packages_arch_is_huawei_mach_wx9 || return
+  packages_arch_is_huawei_mach_wx9 || return 0
   source="$(packages_arch_touchpad_config_source)"
   [[ -f "$source" ]] || die "missing touchpad config: $source"
   sudo install -D -m 0644 "$source" "$(packages_arch_touchpad_config_dest)"
@@ -149,7 +153,7 @@ packages_arch_configure_touchpad() {
 packages_arch_configure_docker() {
   local user
 
-  pacman -Q docker >/dev/null 2>&1 || return
+  pacman -Q docker >/dev/null 2>&1 || return 0
   user="$(id -un)"
   sudo systemctl enable docker.service
   if ! sudo systemctl start docker.service; then
@@ -183,7 +187,7 @@ packages_arch_remove_packages() {
 packages_arch_configure_zram() {
   local source
 
-  pacman -Q zram-generator >/dev/null 2>&1 || return
+  pacman -Q zram-generator >/dev/null 2>&1 || return 0
   source="$(packages_arch_zram_config_source)"
   [[ -f "$source" ]] || die "missing zram config: $source"
   sudo install -D -m 0644 "$source" "$(packages_arch_zram_config_dest)"
@@ -198,7 +202,7 @@ packages_arch_configure_zram() {
 }
 
 packages_arch_configure_firewall() {
-  pacman -Q firewalld >/dev/null 2>&1 || return
+  pacman -Q firewalld >/dev/null 2>&1 || return 0
   sudo systemctl enable --now firewalld.service
   if sudo firewall-cmd --quiet --permanent --zone=public --query-service=ssh; then
     sudo firewall-cmd --quiet --permanent --zone=public --remove-service=ssh
@@ -207,12 +211,12 @@ packages_arch_configure_firewall() {
 }
 
 packages_arch_configure_ssh() {
-  pacman -Q openssh >/dev/null 2>&1 || return
+  pacman -Q openssh >/dev/null 2>&1 || return 0
   sudo systemctl enable --now sshd.service
 }
 
 packages_arch_configure_tailscale() {
-  pacman -Q tailscale >/dev/null 2>&1 || return
+  pacman -Q tailscale >/dev/null 2>&1 || return 0
   sudo systemctl enable tailscaled.service
   if ! sudo systemctl start tailscaled.service; then
     if packages_arch_reboot_pending; then
@@ -229,7 +233,7 @@ packages_arch_configure_cursor() {
   local settings_file
   local settings_tmp
 
-  command -v cursor >/dev/null 2>&1 || return
+  command -v cursor >/dev/null 2>&1 || return 0
   cursor --install-extension anysphere.remote-ssh --force
 
   home="$(dev_server_home)"
@@ -257,7 +261,7 @@ packages_arch_configure_cursor() {
 packages_arch_configure_reflector() {
   local source
 
-  pacman -Q reflector >/dev/null 2>&1 || return
+  pacman -Q reflector >/dev/null 2>&1 || return 0
   source="$(packages_arch_reflector_config_source)"
   [[ -f "$source" ]] || die "missing reflector config: $source"
   sudo install -D -m 0644 "$source" "$(packages_arch_reflector_config_dest)"
@@ -268,7 +272,7 @@ packages_arch_configure_reflector() {
 packages_arch_configure_eos_update() {
   local source
 
-  command -v eos-update >/dev/null 2>&1 || return
+  command -v eos-update >/dev/null 2>&1 || return 0
   source="$(packages_arch_eos_update_config_source)"
   [[ -f "$source" ]] || die "missing eos-update config: $source"
   sudo install -D -m 0644 "$source" "$(packages_arch_eos_update_config_dest)"
@@ -277,7 +281,7 @@ packages_arch_configure_eos_update() {
 packages_arch_configure_dracut() {
   local source
 
-  command -v dracut >/dev/null 2>&1 || return
+  command -v dracut >/dev/null 2>&1 || return 0
   source="$(packages_arch_dracut_config_source)"
   [[ -f "$source" ]] || die "missing dracut config: $source"
   sudo install -D -m 0644 "$source" "$(packages_arch_dracut_config_dest)"
@@ -286,7 +290,7 @@ packages_arch_configure_dracut() {
 packages_arch_configure_systemd_boot() {
   local source
 
-  [[ -d /efi/loader ]] || return
+  packages_arch_systemd_boot_present || return 0
   source="$(packages_arch_systemd_boot_config_source)"
   [[ -f "$source" ]] || die "missing systemd-boot config: $source"
   sudo install -D -m 0644 "$source" "$(packages_arch_systemd_boot_config_dest)"

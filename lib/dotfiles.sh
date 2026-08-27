@@ -62,12 +62,12 @@ dotfiles_install_tmux_plugins() {
 
 dotfiles_current_login_shell() {
   case "$(uname -s)" in
-    Darwin)
-      dscl . -read "/Users/$(id -un)" UserShell | awk '{print $2}'
-      ;;
-    Linux)
-      getent passwd "$(id -un)" | cut -d: -f7
-      ;;
+  Darwin)
+    dscl . -read "/Users/$(id -un)" UserShell | awk '{print $2}'
+    ;;
+  Linux)
+    getent passwd "$(id -un)" | cut -d: -f7
+    ;;
   esac
 }
 
@@ -88,9 +88,9 @@ dotfiles_configure_xfce_terminal() {
   local current_font
   local font_size
 
-  [[ "$(uname -s)" == "Linux" ]] || return
-  [[ "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]] || return
-  command -v xfconf-query >/dev/null 2>&1 || return
+  [[ "$(uname -s)" == "Linux" ]] || return 0
+  [[ "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]] || return 0
+  command -v xfconf-query >/dev/null 2>&1 || return 0
 
   current_font="$(xfconf-query -c xfce4-terminal -p /font-name 2>/dev/null || printf 'Monospace 10')"
   font_size="${current_font##* }"
@@ -111,8 +111,8 @@ dotfiles_configure_ghostty() {
   local home
   local helpers_file
 
-  [[ "$(uname -s)" == "Linux" ]] || return
-  command -v ghostty >/dev/null 2>&1 || return
+  [[ "$(uname -s)" == "Linux" ]] || return 0
+  command -v ghostty >/dev/null 2>&1 || return 0
 
   home="$(dev_server_home)"
   install -d -m 0755 "$home/.config/ghostty"
@@ -131,9 +131,9 @@ dotfiles_configure_ghostty() {
 }
 
 dotfiles_configure_xfce_theme() {
-  [[ "$(uname -s)" == "Linux" ]] || return
-  [[ "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]] || return
-  command -v xfconf-query >/dev/null 2>&1 || return
+  [[ "$(uname -s)" == "Linux" ]] || return 0
+  [[ "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]] || return 0
+  command -v xfconf-query >/dev/null 2>&1 || return 0
 
   xfconf-query -c xsettings -p /Net/ThemeName -s Arc-Dark
   xfconf-query -c xsettings -p /Net/IconThemeName -s Qogir-Dark
@@ -212,9 +212,9 @@ dotfiles_configure_xfce_qol() {
   local home
   local shortcut
 
-  [[ "$(uname -s)" == "Linux" ]] || return
-  [[ "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]] || return
-  command -v xfconf-query >/dev/null 2>&1 || return
+  [[ "$(uname -s)" == "Linux" ]] || return 0
+  [[ "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]] || return 0
+  command -v xfconf-query >/dev/null 2>&1 || return 0
 
   home="$(dev_server_home)"
   if brightness_floor="$(dotfiles_xfce_brightness_floor_value)"; then
