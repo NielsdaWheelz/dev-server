@@ -11,6 +11,8 @@ source "$base_dir/lib/doctor.sh"
 source "$base_dir/lib/dotfiles.sh"
 # shellcheck source=lib/ai-tools.sh
 source "$base_dir/lib/ai-tools.sh"
+# shellcheck source=lib/skidbladnir.sh
+source "$base_dir/lib/skidbladnir.sh"
 
 usage() {
   cat <<EOF
@@ -64,14 +66,18 @@ cmd_doctor() {
   packages_doctor
   dotfiles_doctor
   ai_doctor
+  skidbladnir_doctor "$(platform_id)"
   doctor_summary
 }
 
 cmd_converge() {
   source_platform_packages
+  skidbladnir_preflight_tmux_runtime "$(platform_id)"
   packages_install
+  skidbladnir_require_tmux_runtime "$(platform_id)"
   dotfiles_install
   ai_install
+  skidbladnir_converge "$(platform_id)"
   cmd_doctor
 }
 

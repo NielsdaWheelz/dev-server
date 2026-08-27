@@ -1,0 +1,52 @@
+---
+- name: Read devbox user id for the user service
+  ansible.builtin.command: "id -u {{ devbox_user }}"
+  register: devbox_skidbladnir_uid
+  changed_when: false
+
+- name: Read devbox lingering state
+  ansible.builtin.command: "loginctl show-user {{ devbox_user }} -p Linger --value"
+  register: devbox_skidbladnir_linger
+  changed_when: false
+  failed_when: false
+
+- name: Enable devbox user services at boot
+  ansible.builtin.command: "loginctl enable-linger {{ devbox_user }}"
+  when: devbox_skidbladnir_linger.stdout != "yes"
+
+- name: Converge pinned Skidbladnir gateway
+  ansible.builtin.shell: |
+    set -euo pipefail
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/skidbladnir.sh"
+    skidbladnir_converge devbox
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: "{{ devbox_user }}"
+  environment:
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ devbox_skidbladnir_uid.stdout }}/bus"
+    HOME: "/home/{{ devbox_user }}"
+    PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+    XDG_RUNTIME_DIR: "/run/user/{{ devbox_skidbladnir_uid.stdout }}"
+  changed_when: false
+
+- name: Diagnose pinned Skidbladnir gateway
+  ansible.builtin.shell: |
+    set -euo pipefail
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/doctor.sh"
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/skidbladnir.sh"
+    doctor_reset
+    skidbladnir_doctor devbox
+    doctor_summary skidbladnir
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: "{{ devbox_user }}"
+  environment:
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ devbox_skidbladnir_uid.stdout }}/bus"
+    HOME: "/home/{{ devbox_user }}"
+    PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+    XDG_RUNTIME_DIR: "/run/user/{{ devbox_skidbladnir_uid.stdout }}"
+  changed_when: false

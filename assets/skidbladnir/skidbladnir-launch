@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+share="$HOME/.local/share/skidbladnir"
+transaction="$share/.release-transaction"
+binary="$HOME/.local/bin/skidbladnir"
+
+if [[ -e "$transaction" || -L "$transaction" ]]; then
+  printf 'Skidbladnir release installation is incomplete; run the platform converge command\n' >&2
+  exit 75
+fi
+[[ -f "$binary" && ! -L "$binary" && -x "$binary" ]] || {
+  printf 'Skidbladnir release binary is unavailable; run the platform converge command\n' >&2
+  exit 75
+}
+exec "$binary" "$@"

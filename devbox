@@ -653,7 +653,7 @@ doctor_remote() {
   fi
   doctor_pass remote.ssh "ssh $server_name works"
 
-  local journal_cmd docker_disk_cmd docker_container_logs_cmd docker_user_env ai_tools_cmd
+  local journal_cmd docker_disk_cmd docker_container_logs_cmd docker_user_env ai_tools_cmd skidbladnir_cmd
 
   doctor_remote_sudo_cmd remote.cloud-init "cloud-init done" "cloud-init status --long | sed -n '1,3p'; cloud-init status --wait >/dev/null"
   journal_cmd="warn_mb=$journal_warn_mb; fail_mb=$journal_fail_mb; [[ \"\$warn_mb\" =~ ^[0-9]+\$ && \"\$fail_mb\" =~ ^[0-9]+\$ ]] || { printf 'invalid journal thresholds: warn=%s fail=%s\n' \"\$warn_mb\" \"\$fail_mb\"; exit 1; }; test -d /var/log/journal || { printf 'persistent journal directory missing\n'; exit 1; }; journal_mb=\$(du -sm /var/log/journal | awk '{print \$1}'); summary=\$(journalctl --disk-usage 2>&1 || true); printf '%s; /var/log/journal %s MiB (warn %s, fail %s)\n' \"\$summary\" \"\$journal_mb\" \"\$warn_mb\" \"\$fail_mb\"; if (( journal_mb >= fail_mb )); then exit 1; fi; if (( journal_mb >= warn_mb )); then exit 2; fi"
@@ -672,6 +672,17 @@ doctor_summary "ai-tools"
 REMOTE
 )"
   doctor_remote_cmd remote.ai-tools "managed AI tools available" "$ai_tools_cmd"
+  skidbladnir_cmd="$(cat <<'REMOTE'
+set -euo pipefail
+source "$HOME/.local/share/dev-server/lib/common.sh"
+source "$HOME/.local/share/dev-server/lib/doctor.sh"
+source "$HOME/.local/share/dev-server/lib/skidbladnir.sh"
+doctor_reset
+skidbladnir_doctor devbox
+doctor_summary "skidbladnir"
+REMOTE
+)"
+  doctor_remote_cmd remote.skidbladnir "pinned Skidbladnir gateway healthy" "$skidbladnir_cmd"
   doctor_remote_cmd remote.tools "GitHub CLI available" "gh --version | head -n 1"
 
   docker_disk_cmd="warn_gb=$docker_disk_warn_gb; fail_gb=$docker_disk_fail_gb; [[ \"\$warn_gb\" =~ ^[0-9]+\$ && \"\$fail_gb\" =~ ^[0-9]+\$ ]] || { printf 'invalid Docker disk thresholds: warn=%s fail=%s\n' \"\$warn_gb\" \"\$fail_gb\"; exit 1; }; warn_mb=\$((warn_gb * 1024)); fail_mb=\$((fail_gb * 1024)); path=\"\$HOME/.local/share/docker\"; total_mb=0; if [[ -e \"\$path\" ]]; then total_mb=\$(du -sm \"\$path\" 2>/dev/null | awk '{print \$1}'); fi; docker system df 2>/dev/null || true; printf 'Rootless Docker data %s MiB (warn %s GiB, fail %s GiB)\n' \"\$total_mb\" \"\$warn_gb\" \"\$fail_gb\"; if (( total_mb >= fail_mb )); then exit 1; fi; if (( total_mb >= warn_mb )); then exit 2; fi"

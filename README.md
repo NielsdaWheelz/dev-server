@@ -11,6 +11,8 @@ and shared repo-owned dotfiles.
 
 - `devbox`: converge and doctor the Hetzner dev box.
 - `workstation`: converge and doctor a local macOS or Arch machine.
+- `skidbladnir`: fixed-fleet doctor, invitation, and bounded outage proof.
+- `test`: routine static and fixture verification; it invokes no live boundary.
 - `lib/`: shared shell libraries for logging, doctors, dotfiles, AI tools, and
   platform package commands.
 - `assets/`: managed routers and dotfiles.
@@ -55,6 +57,88 @@ Local workstation commands:
 ./workstation doctor
 ```
 
+## Skíðblaðnir public fleet
+
+The public [Skíðblaðnir releases](https://github.com/NielsdaWheelz/skidbladnir/releases)
+carry one signed Android APK and pinned host bundles. This repo owns the exact
+Devbox, MacBook, and Arch deployment. `./devbox converge` installs the Devbox
+gateway; `./workstation converge` installs the MacBook or Arch gateway. Each
+gateway starts automatically and publishes only its dedicated HTTPS `:8443`
+Tailscale Serve mapping to loopback `:7341`. Convergence never resets another
+Serve mapping and never replaces an existing machine handle or bearer.
+
+After all three machines are signed in to Tailscale and converged, create the
+local origins manifest on the MacBook:
+
+```sh
+install -d -m 0700 secrets
+install -m 0600 /dev/null secrets/skidbladnir-origins.json
+```
+
+Its strict shape is:
+
+```json
+{
+  "Arch": "https://arch.example-tailnet.ts.net:8443/",
+  "DevServer": "https://dev-server.example-tailnet.ts.net:8443/",
+  "Local": "https://macbook.example-tailnet.ts.net:8443/"
+}
+```
+
+Run `./skidbladnir invite`. It calls only the fixed local, `dev-server`, and
+`arch` commands, then displays one five-minute, single-use QR if every host
+succeeds. It stores no token, bearer, response, or QR payload. On each Android
+phone, install `skidbladnir-android.apk`, sign in to Tailscale, tap `Connect`,
+and scan a newly generated QR. Never commit the origins manifest or copy a host
+bearer off that host.
+
+The release pin is `assets/skidbladnir/release-pin.json`. Its version, source
+SHA, APK, both host bundles, checksum manifest, and signing-certificate asset
+digests must be replaced together from one published immutable release;
+`PENDING` fails closed.
+
+The operator surface is deliberately closed:
+
+```sh
+./skidbladnir doctor
+./skidbladnir reconcile-lifetime-digests
+SKIDBLADNIR_ALLOW_HOST_ACCEPTANCE=host-acceptance-v1 \
+  ./skidbladnir accept-host Arch \
+  --allow-host-convergence --allow-inventory-reconciliation
+SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1 \
+  ./skidbladnir prepare-reboot Arch --allow-reboot-acceptance
+# Reboot only the named, separately approved host.
+SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1 \
+  ./skidbladnir verify-reboot Arch --allow-reboot-acceptance
+./skidbladnir outage Arch
+./skidbladnir recover Arch
+```
+
+`doctor` checks Local, DevServer, and Arch even if one fails. `outage` and
+`recover` accept only those three labels and stop or start only that gateway;
+they never touch tmux or Tailscale Serve. `reconcile-lifetime-digests` makes
+each host authenticate to its own loopback gateway, performs the gateway's
+bounded character normalization and stale phone-shadow reconciliation, and emits only
+`Local|DevServer|Arch <sha256>`. Capture it before and after an approved outage
+journey and require exact equality; no bearer or inventory content leaves its
+host. This command can reconcile host-local tmux character/shadow state;
+`doctor` instead uses the tmux-free pressure endpoint and changes nothing.
+
+`accept-host` is a separate mutation gate for exactly one fixed host. Both
+literal flags and the exact environment capability are required before any
+local or SSH boundary. It validates existing credentials and reconciled
+lifetime, converges twice, requires a completely healthy doctor, requires the
+credentials and lifetime to remain unchanged, and checks the owned service
+definition plus boot/login intent. It proves an identity-preserving reinstall,
+not first installation. `prepare-reboot` then stores a user-owned mode-0600,
+digest-only checkpoint for that exact host. After the separately approved
+reboot, `verify-reboot` requires a changed boot identity, an unchanged release
+pin and credentials, plus a completely healthy doctor and service boot/login
+intent. It removes the checkpoint only after a pass. tmux intentionally starts
+a new lifetime after a machine reboot; the preceding `accept-host` gate proves
+that convergence itself preserved the old lifetime. Neither reboot command
+performs the reboot. Run `./test` for the routine hermetic proof.
+
 Arch convergence installs Mosh and Tailscale, enables `tailscaled`, and leaves
 the one-time tailnet login to
 `sudo tailscale up --operator="$(id -un)"`. macOS convergence installs Mosh,
@@ -74,8 +158,9 @@ On EndeavourOS, workstation convergence also installs an LTS fallback kernel,
 an 8 GiB zram policy, Intel thermal management, firmware and NVMe tooling,
 shell linters, and package maintenance tools. It removes the installer
 onboarding applications and stale Electron runtimes, disables public-zone SSH
-access, enables weekly mirror refreshes using health-ranked US and Canadian
-mirrors, configures `eos-update` to include AUR updates through `yay`, and keeps
+access while enabling the SSH daemon for the fixed tailnet operator boundary,
+enables weekly mirror refreshes using health-ranked US and Canadian mirrors,
+configures `eos-update` to include AUR updates through `yay`, and keeps
 local-NVMe dracut images free of unneeded network storage modules. The normal
 Arch kernel remains the systemd-boot default while LTS stays available as a
 fallback.

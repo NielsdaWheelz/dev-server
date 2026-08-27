@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
+shellcheck --severity=warning \
+  "$repo_dir/skidbladnir" "$repo_dir/test" \
+  "$repo_dir/lib/skidbladnir.sh" "$repo_dir/lib/skidbladnir-invite.sh" \
+  "$repo_dir/lib/skidbladnir-operator.sh" \
+  "$repo_dir/tests/ai-router.sh" "$repo_dir/tests/skidbladnir.sh"
+shfmt -d -i 2 \
+  "$repo_dir/skidbladnir" "$repo_dir/test" \
+  "$repo_dir/lib/skidbladnir.sh" "$repo_dir/lib/skidbladnir-invite.sh" \
+  "$repo_dir/lib/skidbladnir-operator.sh" \
+  "$repo_dir/tests/skidbladnir.sh"
+
+while IFS= read -r file; do
+  bash -n "$file"
+done < <(find "$repo_dir" -type f \( -name '*.sh' -o -path "$repo_dir/devbox" -o -path "$repo_dir/workstation" -o -path "$repo_dir/skidbladnir" -o -path "$repo_dir/test" \) | LC_ALL=C sort)
+
+while IFS= read -r file; do
+  jq -e . "$file" >/dev/null
+done < <(find "$repo_dir/assets" -type f -name '*.json' | LC_ALL=C sort)
+
+yaml_files=(
+  "$repo_dir/ansible/playbooks/converge.yml"
+  "$repo_dir/ansible/roles/skidbladnir/tasks/main.yml"
+)
+if python3 -c 'import yaml' >/dev/null 2>&1; then
+  python3 -c 'import sys, yaml; [yaml.safe_load(open(path, encoding="utf-8")) for path in sys.argv[1:]]' \
+    "${yaml_files[@]}"
+elif command -v ruby >/dev/null 2>&1; then
+  ruby -ryaml -e 'ARGV.each { |file| YAML.safe_load(File.read(file), permitted_classes: [], permitted_symbols: [], aliases: true) }' \
+    "${yaml_files[@]}"
+else
+  printf 'A safe YAML parser (Python PyYAML or Ruby) is required\n' >&2
+  exit 1
+fi
+plist="$repo_dir/assets/skidbladnir/dev.niels.skidbladnir.plist"
+if [[ "$(uname -s)" == Darwin ]]; then
+  /usr/bin/plutil -lint "$plist" >/dev/null
+elif command -v python3 >/dev/null 2>&1; then
+  python3 -c 'import plistlib, sys; plistlib.load(open(sys.argv[1], "rb"))' "$plist"
+else
+  printf 'A plist parser (macOS plutil or Python 3) is required\n' >&2
+  exit 1
+fi
+
+bash "$repo_dir/tests/ai-router.sh"
+bash "$repo_dir/tests/skidbladnir.sh"

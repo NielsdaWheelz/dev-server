@@ -206,6 +206,11 @@ packages_arch_configure_firewall() {
   fi
 }
 
+packages_arch_configure_ssh() {
+  pacman -Q openssh >/dev/null 2>&1 || return
+  sudo systemctl enable --now sshd.service
+}
+
 packages_arch_configure_tailscale() {
   pacman -Q tailscale >/dev/null 2>&1 || return
   sudo systemctl enable tailscaled.service
@@ -317,6 +322,7 @@ packages_arch_configure_maintenance() {
 
 packages_install() {
   local pacman_packages=()
+  local pacman_arguments=(-Syu --needed)
   local aur_packages=()
   local aur_helper
 
@@ -329,7 +335,10 @@ packages_install() {
   packages_arch_remove_packages
 
   if ((${#pacman_packages[@]} > 0)); then
-    sudo pacman -Syu --needed "${pacman_packages[@]}"
+    if [[ -x /usr/bin/tmux && "$(/usr/bin/tmux -V)" == 'tmux 3.7c' ]]; then
+      pacman_arguments+=(--ignore tmux)
+    fi
+    sudo pacman "${pacman_arguments[@]}" "${pacman_packages[@]}"
   fi
 
   if ((${#aur_packages[@]} > 0)); then
@@ -342,6 +351,7 @@ packages_install() {
   packages_arch_configure_zram
   packages_arch_configure_firewall
   packages_arch_configure_tailscale
+  packages_arch_configure_ssh
   packages_arch_configure_cursor
   packages_arch_configure_reflector
   packages_arch_configure_eos_update
@@ -442,6 +452,15 @@ packages_doctor() {
       doctor_pass package.firewall "firewalld active without public SSH permission"
     else
       doctor_fail package.firewall "firewalld inactive or public SSH permission present"
+    fi
+  fi
+
+  if pacman -Q openssh >/dev/null 2>&1; then
+    if systemctl is-enabled --quiet sshd.service &&
+      systemctl is-active --quiet sshd.service; then
+      doctor_pass package.ssh "OpenSSH enabled for fixed tailnet operator access"
+    else
+      doctor_fail package.ssh "OpenSSH is not enabled and active"
     fi
   fi
 
