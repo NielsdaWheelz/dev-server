@@ -35,6 +35,17 @@ assert_exact_line_once() {
     fail "$file must contain exactly once: $line"
 }
 
+deployment_owned_snapshot() {
+  local target
+  for target in "$@"; do
+    [[ -f "$target" && ! -L "$target" ]] ||
+      fail "deployment-owned snapshot target is not a regular file: $target"
+    printf '%s %s\n' \
+      "$(skidbladnir_file_mode "$target")" \
+      "$(skidbladnir_sha256 "$target")"
+  done
+}
+
 plist_json() {
   local file="$1"
   if [[ "$(uname -s)" == Darwin ]]; then
@@ -99,14 +110,27 @@ test_assets_and_operator_copy() {
   done
 
   local unit="$repo_dir/assets/skidbladnir/skidbladnir.service"
-  assert_exact_line_once "$unit" 'Type=simple'
-  assert_exact_line_once "$unit" 'UnsetEnvironment=TMUX TMUX_PANE TMUX_TMPDIR'
-  assert_exact_line_once "$unit" 'ExecStart=%h/.local/bin/skidbladnir-launch gateway --listen=127.0.0.1:7341 --bearer-file=%h/.config/skidbladnir/bearer --catalogue-path=%h/.local/share/skidbladnir/characters.json --machine-handle-file=%h/.config/skidbladnir/machine-handle --host-config=%h/.config/skidbladnir/host-config.json'
-  assert_exact_line_once "$unit" 'Restart=on-failure'
-  assert_exact_line_once "$unit" 'RestartSec=2s'
-  assert_exact_line_once "$unit" 'TimeoutStopSec=10s'
-  assert_exact_line_once "$unit" 'KillMode=process'
-  assert_exact_line_once "$unit" 'WantedBy=default.target'
+  local expected_unit="$fixture/skidbladnir.service.expected"
+  printf '%s\n' \
+    '[Unit]' \
+    'Description=Skidbladnir tmux gateway' \
+    '' \
+    '[Service]' \
+    'Type=simple' \
+    'Environment="PATH=%h/bin:%h/.local/bin:%h/.local/share/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"' \
+    'UnsetEnvironment=TMUX TMUX_PANE TMUX_TMPDIR' \
+    'ExecStart=%h/.local/bin/skidbladnir-launch gateway --listen=127.0.0.1:7341 --bearer-file=%h/.config/skidbladnir/bearer --catalogue-path=%h/.local/share/skidbladnir/characters.json --machine-handle-file=%h/.config/skidbladnir/machine-handle --host-config=%h/.config/skidbladnir/host-config.json' \
+    'Restart=on-failure' \
+    'RestartSec=2s' \
+    'TimeoutStopSec=10s' \
+    'KillMode=process' \
+    'UMask=0022' \
+    '' \
+    '[Install]' \
+    'WantedBy=default.target' \
+    >"$expected_unit"
+  cmp -s "$expected_unit" "$unit" ||
+    fail 'systemd user service differs from the closed host boundary'
 
   plist_json "$repo_dir/assets/skidbladnir/dev.niels.skidbladnir.plist" |
     jq -e '
@@ -510,10 +534,25 @@ test_converge_and_doctor() {
   : >"$SKIDBLADNIR_TEST_CALLS"
   # shellcheck disable=SC2034
   skidbladnir_changed=0
-  skidbladnir_install_macos_service "$test_home"
+  skidbladnir_activate_macos_service "$test_home"
   assert_contains "$SKIDBLADNIR_TEST_CALLS" 'launchctl kickstart gui/501/dev.niels.skidbladnir'
   ! grep -Fq 'launchctl bootout' "$SKIDBLADNIR_TEST_CALLS" || fail 'unchanged loaded LaunchAgent was restarted'
 
+  local -a journaled_targets=(
+    "$test_home/.local/bin/skidbladnir-launch"
+    "$test_home/.config/systemd/user/skidbladnir.service"
+    "$test_home/.local/bin/skidbladnir"
+    "$test_home/.local/share/skidbladnir/characters.json"
+    "$test_home/.local/share/skidbladnir/release.json"
+    "$test_home/.local/share/skidbladnir/release-bundle.tar.gz"
+    "$test_home/.config/skidbladnir/host-config.json"
+    "$test_home/.local/bin/skid-notify"
+    "$test_home/.codex-personal/hooks.json"
+    "$test_home/.codex-work/hooks.json"
+    "$test_home/.codex-work2/hooks.json"
+  )
+  local journaled_before
+  journaled_before="$(deployment_owned_snapshot "${journaled_targets[@]}")"
   local old_binary_sha old_catalogue_sha old_manifest_sha old_bundle_sha
   old_binary_sha="$(skidbladnir_sha256 "$test_home/.local/bin/skidbladnir")"
   old_catalogue_sha="$(skidbladnir_sha256 "$test_home/.local/share/skidbladnir/characters.json")"
@@ -539,7 +578,15 @@ test_converge_and_doctor() {
       .sha256SumsAssetSha256 = $digest' \
     "$skidbladnir_release_pin_file" >"$fixture/release-pin.next.json"
   mv "$fixture/release-pin.next.json" "$skidbladnir_release_pin_file"
-  export SKIDBLADNIR_TEST_FAIL_INSTALL_TARGET='.characters.json.skidbladnir.'
+  jq '.profiles[0].label = "Codex · Personal Next"' \
+    "$fixture/host-config.json" >"$fixture/host-config.next.json"
+  mv "$fixture/host-config.next.json" "$fixture/host-config.json"
+  [[ "$(skidbladnir_sha256 "$fixture/release/skidbladnir")" != "$old_binary_sha" ]] ||
+    fail 'next release binary fixture is not byte-distinct'
+  ! cmp -s "$fixture/host-config.json" "$test_home/.config/skidbladnir/host-config.json" ||
+    fail 'next host config fixture is not byte-distinct'
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  export SKIDBLADNIR_TEST_FAIL_INSTALL_TARGET='.host-config.json.skidbladnir.'
   export SKIDBLADNIR_TEST_FAIL_INSTALL_ONCE="$fixture/install-failed-once"
   set +e
   skidbladnir_converge arch >/dev/null 2>"$fixture/release-transaction-error"
@@ -547,6 +594,10 @@ test_converge_and_doctor() {
   set -e
   unset SKIDBLADNIR_TEST_FAIL_INSTALL_TARGET SKIDBLADNIR_TEST_FAIL_INSTALL_ONCE
   [[ "$transaction_status" -ne 0 ]] || fail 'injected release promotion failure unexpectedly succeeded'
+  [[ -f "$fixture/install-failed-once" ]] ||
+    fail 'host-config install failure injection did not reach its target'
+  assert_contains "$fixture/release-transaction-error" \
+    'Could not stage Skidbladnir owned target:'
   assert_eq "$old_binary_sha" "$(skidbladnir_sha256 "$test_home/.local/bin/skidbladnir")" \
     'failed release transaction preserved binary'
   assert_eq "$old_catalogue_sha" "$(skidbladnir_sha256 "$test_home/.local/share/skidbladnir/characters.json")" \
@@ -555,8 +606,16 @@ test_converge_and_doctor() {
     'failed release transaction preserved manifest'
   assert_eq "$old_bundle_sha" "$(skidbladnir_sha256 "$test_home/.local/share/skidbladnir/release-bundle.tar.gz")" \
     'failed release transaction preserved retained bundle'
+  assert_eq "$journaled_before" "$(deployment_owned_snapshot "${journaled_targets[@]}")" \
+    'failed release transaction restored every deployment-owned file byte and mode'
+  assert_eq "$handle_before" "$(cat "$test_home/.config/skidbladnir/machine-handle")" \
+    'failed release transaction preserved machine handle'
+  assert_eq "$bearer_before" "$(cat "$test_home/.config/skidbladnir/bearer")" \
+    'failed release transaction preserved bearer'
+  ! grep -Eq '^(systemctl|tailscale)' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'failed local file transaction reached service or Serve convergence'
 
-  skidbladnir_begin_release_transaction "$test_home" "$test_home/.local/share/skidbladnir"
+  skidbladnir_begin_release_transaction arch "$test_home"
   skidbladnir_install_owned "$fixture/release/skidbladnir" "$test_home/.local/bin/skidbladnir" 0755
   set +e
   HOME="$test_home" "$test_home/.local/bin/skidbladnir-launch" version \
@@ -567,11 +626,29 @@ test_converge_and_doctor() {
   [[ ! -s "$fixture/incomplete-launch-output" ]] || fail 'incomplete release transaction launcher wrote stdout'
   assert_contains "$fixture/incomplete-launch-error" \
     'Skidbladnir release installation is incomplete; run the platform converge command'
-  skidbladnir_recover_release_transaction "$test_home" "$test_home/.local/share/skidbladnir"
+  skidbladnir_recover_release_transaction arch "$test_home"
   assert_eq "$old_binary_sha" "$(skidbladnir_sha256 "$test_home/.local/bin/skidbladnir")" \
     'crash recovery restored binary'
   [[ ! -e "$test_home/.local/share/skidbladnir/.release-transaction" ]] ||
     fail 'crash recovery left its release transaction journal'
+
+  skidbladnir_begin_release_transaction arch "$test_home"
+  skidbladnir_install_owned "$fixture/release/skidbladnir" "$test_home/.local/bin/skidbladnir" 0755
+  cp "$skidbladnir_release_pin_file" "$fixture/release-pin.before-pending.json"
+  jq 'map_values("PENDING")' "$skidbladnir_release_pin_file" >"$fixture/release-pin.pending.json"
+  mv "$fixture/release-pin.pending.json" "$skidbladnir_release_pin_file"
+  set +e
+  skidbladnir_converge arch >/dev/null 2>"$fixture/pending-pin-recovery-error"
+  local pending_pin_recovery_status=$?
+  set -e
+  mv "$fixture/release-pin.before-pending.json" "$skidbladnir_release_pin_file"
+  [[ "$pending_pin_recovery_status" -ne 0 ]] ||
+    fail 'pending release pin unexpectedly permitted convergence'
+  assert_contains "$fixture/pending-pin-recovery-error" 'Skidbladnir release pin is pending'
+  [[ ! -e "$test_home/.local/share/skidbladnir/.release-transaction" ]] ||
+    fail 'pending release pin stranded the prior release transaction journal'
+  assert_eq "$old_binary_sha" "$(skidbladnir_sha256 "$test_home/.local/bin/skidbladnir")" \
+    'pending release pin recovered the prior binary before failing closed'
   PATH="$old_path"
   export PATH
   pass

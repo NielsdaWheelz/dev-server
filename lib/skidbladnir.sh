@@ -198,8 +198,114 @@ skidbladnir_install_owned() {
   skidbladnir_changed=1
 }
 
+skidbladnir_owned_file_specs() {
+  printf '%s\n' \
+    'launcher 0755' \
+    'service 0644' \
+    'binary 0755' \
+    'catalogue 0644' \
+    'manifest 0644' \
+    'bundle 0644' \
+    'host-config 0600' \
+    'notifier 0755' \
+    'personal-hooks 0600' \
+    'work-hooks 0600' \
+    'work2-hooks 0600'
+}
+
+skidbladnir_owned_file_target() {
+  local platform="$1"
+  local home="$2"
+  local name="$3"
+  case "$platform" in
+  devbox | arch | macos) ;;
+  *) die "unsupported Skidbladnir platform: $platform" ;;
+  esac
+  case "$name" in
+  launcher) printf '%s/.local/bin/skidbladnir-launch\n' "$home" ;;
+  service)
+    if [[ "$platform" == macos ]]; then
+      printf '%s/Library/LaunchAgents/dev.niels.skidbladnir.plist\n' "$home"
+    else
+      printf '%s/.config/systemd/user/skidbladnir.service\n' "$home"
+    fi
+    ;;
+  binary) printf '%s/.local/bin/skidbladnir\n' "$home" ;;
+  catalogue) printf '%s/.local/share/skidbladnir/characters.json\n' "$home" ;;
+  manifest) printf '%s/.local/share/skidbladnir/release.json\n' "$home" ;;
+  bundle) printf '%s/.local/share/skidbladnir/release-bundle.tar.gz\n' "$home" ;;
+  host-config) printf '%s/.config/skidbladnir/host-config.json\n' "$home" ;;
+  notifier) printf '%s/.local/bin/skid-notify\n' "$home" ;;
+  personal-hooks) printf '%s/.codex-personal/hooks.json\n' "$home" ;;
+  work-hooks) printf '%s/.codex-work/hooks.json\n' "$home" ;;
+  work2-hooks) printf '%s/.codex-work2/hooks.json\n' "$home" ;;
+  *) die "unsupported Skidbladnir owned file: $name" ;;
+  esac
+}
+
+skidbladnir_owned_file_source() {
+  local platform="$1"
+  local staging="$2"
+  local archive="$3"
+  local name="$4"
+  case "$platform" in
+  devbox | arch | macos) ;;
+  *) die "unsupported Skidbladnir platform: $platform" ;;
+  esac
+  case "$name" in
+  launcher) printf '%s/assets/skidbladnir/skidbladnir-launch\n' "$dev_server_root" ;;
+  service)
+    if [[ "$platform" == macos ]]; then
+      printf '%s/assets/skidbladnir/dev.niels.skidbladnir.plist\n' "$dev_server_root"
+    else
+      printf '%s/assets/skidbladnir/skidbladnir.service\n' "$dev_server_root"
+    fi
+    ;;
+  binary) printf '%s/skidbladnir\n' "$staging" ;;
+  catalogue) printf '%s/characters.json\n' "$staging" ;;
+  manifest) printf '%s/release.json\n' "$staging" ;;
+  bundle) printf '%s\n' "$archive" ;;
+  host-config) skidbladnir_host_config_source "$platform" ;;
+  notifier)
+    if [[ "$platform" == macos ]]; then
+      printf '%s/assets/skidbladnir/skid-notify-macbook\n' "$dev_server_root"
+    else
+      printf '%s/assets/skidbladnir/skid-notify-linux\n' "$dev_server_root"
+    fi
+    ;;
+  personal-hooks | work-hooks | work2-hooks)
+    if [[ "$platform" == macos ]]; then
+      printf '%s/assets/skidbladnir/status-hooks-macbook.json\n' "$dev_server_root"
+    else
+      printf '%s/assets/skidbladnir/status-hooks-linux.json\n' "$dev_server_root"
+    fi
+    ;;
+  *) die "unsupported Skidbladnir owned file: $name" ;;
+  esac
+}
+
+skidbladnir_preflight_owned_files() {
+  local platform="$1"
+  local home="$2"
+  local staging="$3"
+  local archive="$4"
+  local name mode source target
+  while read -r name mode; do
+    source="$(skidbladnir_owned_file_source "$platform" "$staging" "$archive" "$name")"
+    [[ -f "$source" && ! -L "$source" ]] ||
+      die "Skidbladnir owned source is not a regular file: $source"
+    target="$(skidbladnir_owned_file_target "$platform" "$home" "$name")"
+    if [[ -e "$target" || -L "$target" ]]; then
+      [[ -f "$target" && ! -L "$target" ]] ||
+        die "Skidbladnir owned target is not a regular file: $target"
+    fi
+    [[ -n "$mode" ]] || die "Skidbladnir owned file mode is missing: $name"
+  done < <(skidbladnir_owned_file_specs)
+}
+
 skidbladnir_release_transaction_remove() {
-  local share_dir="$1"
+  local home="$1"
+  local share_dir="$home/.local/share/skidbladnir"
   local transaction="$share_dir/.release-transaction"
   [[ -d "$transaction" && ! -L "$transaction" ]] ||
     die "Skidbladnir release transaction is not a private directory"
@@ -245,10 +351,11 @@ skidbladnir_release_transaction_restore() {
 }
 
 skidbladnir_recover_release_transaction() {
-  local home="$1"
-  local share_dir="$2"
+  local platform="$1"
+  local home="$2"
+  local share_dir="$home/.local/share/skidbladnir"
   local transaction="$share_dir/.release-transaction"
-  local state temporary_state
+  local state temporary_state name mode target
   if [[ ! -e "$transaction" && ! -L "$transaction" ]]; then
     return
   fi
@@ -257,60 +364,65 @@ skidbladnir_recover_release_transaction() {
     die "Skidbladnir release transaction boundary is invalid"
   state="$(cat "$transaction/state" 2>/dev/null || true)"
   if [[ "$state" == preparing ]]; then
-    skidbladnir_release_transaction_remove "$share_dir"
+    skidbladnir_release_transaction_remove "$home"
     return
   fi
   [[ "$state" == prepared || "$state" == recovering ]] ||
     die "Skidbladnir release transaction state is invalid"
+  [[ -f "$transaction/platform" && ! -L "$transaction/platform" &&
+    "$(cat "$transaction/platform")" == "$platform" ]] ||
+    die "Skidbladnir release transaction platform is invalid"
   temporary_state="$transaction/.state.recovering"
   printf 'recovering\n' >"$temporary_state"
   mv -f -- "$temporary_state" "$transaction/state"
-  skidbladnir_release_transaction_restore \
-    "$home/.local/bin/skidbladnir" "$transaction/binary" 0755
-  skidbladnir_release_transaction_restore \
-    "$share_dir/characters.json" "$transaction/characters" 0644
-  skidbladnir_release_transaction_restore \
-    "$share_dir/release.json" "$transaction/manifest" 0644
-  skidbladnir_release_transaction_restore \
-    "$share_dir/release-bundle.tar.gz" "$transaction/bundle" 0644
-  skidbladnir_release_transaction_remove "$share_dir"
+  while read -r name mode; do
+    target="$(skidbladnir_owned_file_target "$platform" "$home" "$name")"
+    skidbladnir_release_transaction_restore "$target" "$transaction/$name" "$mode"
+  done < <(skidbladnir_owned_file_specs)
+  skidbladnir_release_transaction_remove "$home"
 }
 
 skidbladnir_begin_release_transaction() {
-  local home="$1"
-  local share_dir="$2"
+  local platform="$1"
+  local home="$2"
+  local share_dir="$home/.local/share/skidbladnir"
   local transaction="$share_dir/.release-transaction"
-  local prepared_state
+  local prepared_state name mode target
   [[ ! -e "$transaction" && ! -L "$transaction" ]] ||
     die "Skidbladnir release transaction already exists"
   install -d -m 0700 "$transaction"
   printf 'preparing\n' >"$transaction/state"
-  skidbladnir_release_transaction_snapshot \
-    "$home/.local/bin/skidbladnir" "$transaction/binary" 0755
-  skidbladnir_release_transaction_snapshot \
-    "$share_dir/characters.json" "$transaction/characters" 0644
-  skidbladnir_release_transaction_snapshot \
-    "$share_dir/release.json" "$transaction/manifest" 0644
-  skidbladnir_release_transaction_snapshot \
-    "$share_dir/release-bundle.tar.gz" "$transaction/bundle" 0644
+  printf '%s\n' "$platform" >"$transaction/platform"
+  while read -r name mode; do
+    target="$(skidbladnir_owned_file_target "$platform" "$home" "$name")"
+    skidbladnir_release_transaction_snapshot "$target" "$transaction/$name" "$mode"
+  done < <(skidbladnir_owned_file_specs)
   prepared_state="$transaction/.state.prepared"
   printf 'prepared\n' >"$prepared_state"
   mv -f -- "$prepared_state" "$transaction/state"
 }
 
 skidbladnir_commit_release_transaction() {
-  local home="$1"
-  local share_dir="$2"
-  local binary_source="$3"
-  local catalogue_source="$4"
-  local manifest_source="$5"
-  local bundle_source="$6"
-  cmp -s "$binary_source" "$home/.local/bin/skidbladnir" &&
-    cmp -s "$catalogue_source" "$share_dir/characters.json" &&
-    cmp -s "$manifest_source" "$share_dir/release.json" &&
-    cmp -s "$bundle_source" "$share_dir/release-bundle.tar.gz" ||
-    die "Skidbladnir promoted release tuple failed verification"
-  skidbladnir_release_transaction_remove "$share_dir"
+  local platform="$1"
+  local home="$2"
+  local staging="$3"
+  local archive="$4"
+  local share_dir="$home/.local/share/skidbladnir"
+  local transaction="$share_dir/.release-transaction"
+  local name mode source target
+  [[ "$(cat "$transaction/state" 2>/dev/null || true)" == prepared &&
+  -f "$transaction/platform" && ! -L "$transaction/platform" &&
+  "$(cat "$transaction/platform")" == "$platform" ]] ||
+    die "Skidbladnir release transaction is not prepared"
+  while read -r name mode; do
+    source="$(skidbladnir_owned_file_source "$platform" "$staging" "$archive" "$name")"
+    target="$(skidbladnir_owned_file_target "$platform" "$home" "$name")"
+    [[ -f "$target" && ! -L "$target" ]] &&
+      cmp -s "$source" "$target" &&
+      [[ "$(skidbladnir_file_mode "$target" 2>/dev/null)" == "${mode#0}" ]] ||
+      die "Skidbladnir promoted owned file failed verification: $target"
+  done < <(skidbladnir_owned_file_specs)
+  skidbladnir_release_transaction_remove "$home"
 }
 
 # shellcheck disable=SC2329 # Invoked indirectly by the converge EXIT trap.
@@ -318,13 +430,32 @@ skidbladnir_converge_cleanup() {
   local converge_exit=$?
   trap - EXIT
   if [[ "${release_transaction_active:-0}" == 1 ]]; then
-    if ! skidbladnir_recover_release_transaction "$home" "$share_dir"; then
-      printf 'Could not restore the prior Skidbladnir release tuple\n' >&2
+    if ! skidbladnir_recover_release_transaction "$platform" "$home"; then
+      printf 'Could not restore the prior Skidbladnir owned file set\n' >&2
       converge_exit=1
     fi
   fi
   rm -R -- "$staging" || converge_exit=1
   exit "$converge_exit"
+}
+
+skidbladnir_preflight_codex_notify() {
+  local home="$1"
+  local notify="$home/.local/bin/skid-notify"
+  local desired="notify = [\"$notify\"]"
+  local context config
+  for context in personal work work2; do
+    config="$home/.codex-$context/config.toml"
+    if [[ -e "$config" || -L "$config" ]]; then
+      [[ -f "$config" && ! -L "$config" ]] ||
+        die "Codex config is not a regular file: $config"
+      if grep -Eq '^[[:space:]]*notify[[:space:]]*=' "$config"; then
+        [[ "$(grep -Fxc "$desired" "$config" || true)" == 1 &&
+        "$(grep -Ec '^[[:space:]]*notify[[:space:]]*=' "$config" || true)" == 1 ]] ||
+          die "Codex notify configuration conflicts: $config"
+      fi
+    fi
+  done
 }
 
 skidbladnir_configure_codex_notify() {
@@ -445,14 +576,9 @@ skidbladnir_configure_serve() {
   TAILSCALE_BE_CLI=1 "$tailscale_cli" serve --bg --yes --https=8443 --set-path=/v1 http://127.0.0.1:7341/v1 >/dev/null
 }
 
-skidbladnir_install_linux_service() {
-  local home="$1"
-  local unit_source="$dev_server_root/assets/skidbladnir/skidbladnir.service"
-  local unit_target="$home/.config/systemd/user/skidbladnir.service"
+skidbladnir_activate_linux_service() {
   local was_active=0
-  install -d -m 0755 "$(dirname "$unit_target")"
   systemctl --user is-active --quiet skidbladnir.service && was_active=1
-  skidbladnir_install_owned "$unit_source" "$unit_target" 0644
   if [[ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null || true)" != yes ]]; then
     sudo loginctl enable-linger "$(id -un)"
   fi
@@ -463,17 +589,15 @@ skidbladnir_install_linux_service() {
   fi
 }
 
-skidbladnir_install_macos_service() {
+skidbladnir_activate_macos_service() {
   local home="$1"
   local label=dev.niels.skidbladnir
   local domain
-  local source="$dev_server_root/assets/skidbladnir/$label.plist"
-  local target="$home/Library/LaunchAgents/$label.plist"
+  local target
   local was_loaded=0
+  target="$(skidbladnir_owned_file_target macos "$home" service)"
   domain="gui/$(id -u)"
   launchctl print "$domain/$label" >/dev/null 2>&1 && was_loaded=1
-  install -d -m 0755 "$(dirname "$target")"
-  skidbladnir_install_owned "$source" "$target" 0644
   launchctl enable "$domain/$label"
   if ((was_loaded && skidbladnir_changed)); then
     launchctl bootout "$domain/$label"
@@ -505,15 +629,17 @@ skidbladnir_converge() (
   local platform="$1"
   local home asset manifest_platform pin_line version source_sha archive_sha
   local staging archive extracted_members
-  local config_source hooks_source notify_source
   local config_dir share_dir state_dir tailscale_cli context
-  local launcher_source service_source service_target
+  local owned_name owned_mode owned_source owned_target service_target
   local release_transaction_active=0
 
   require_cmd curl
   require_cmd jq
   require_cmd tar
   home="$(dev_server_home)"
+  share_dir="$home/.local/share/skidbladnir"
+  skidbladnir_changed=0
+  skidbladnir_recover_release_transaction "$platform" "$home"
   asset="$(skidbladnir_asset_name "$platform")"
   manifest_platform="$(skidbladnir_manifest_platform "$platform")"
   pin_line="$(skidbladnir_release_values "$platform")" || die "Skidbladnir release pin is pending; root must publish and pin the exact release"
@@ -541,24 +667,17 @@ skidbladnir_converge() (
   skidbladnir_require_tmux_runtime "$platform"
 
   config_dir="$home/.config/skidbladnir"
-  share_dir="$home/.local/share/skidbladnir"
   state_dir="$home/.local/state/skidbladnir"
+  skidbladnir_preflight_owned_files "$platform" "$home" "$staging" "$archive"
+  skidbladnir_preflight_codex_notify "$home"
+  service_target="$(skidbladnir_owned_file_target "$platform" "$home" service)"
   install -d -m 0700 "$config_dir" "$state_dir"
   install -d -m 0755 "$home/.local/bin" "$share_dir"
-  skidbladnir_changed=0
-  skidbladnir_recover_release_transaction "$home" "$share_dir"
-
-  launcher_source="$dev_server_root/assets/skidbladnir/skidbladnir-launch"
-  skidbladnir_install_owned "$launcher_source" "$home/.local/bin/skidbladnir-launch" 0755
-  if [[ "$platform" == macos ]]; then
-    service_source="$dev_server_root/assets/skidbladnir/dev.niels.skidbladnir.plist"
-    service_target="$home/Library/LaunchAgents/dev.niels.skidbladnir.plist"
-  else
-    service_source="$dev_server_root/assets/skidbladnir/skidbladnir.service"
-    service_target="$home/.config/systemd/user/skidbladnir.service"
-  fi
   install -d -m 0755 "$(dirname "$service_target")"
-  skidbladnir_install_owned "$service_source" "$service_target" 0644
+  for context in personal work work2; do
+    install -d -m 0700 "$home/.codex-$context"
+  done
+  skidbladnir_changed=0
 
   if [[ ! -e "$config_dir/machine-handle" && ! -L "$config_dir/machine-handle" ]]; then
     "$staging/skidbladnir" machine init --file="$config_dir/machine-handle" >/dev/null
@@ -569,36 +688,23 @@ skidbladnir_converge() (
   fi
   skidbladnir_secret_valid "$config_dir/bearer" '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$' || die "Skidbladnir bearer is invalid"
 
-  skidbladnir_begin_release_transaction "$home" "$share_dir"
+  skidbladnir_begin_release_transaction "$platform" "$home"
   release_transaction_active=1
-  skidbladnir_install_owned "$staging/skidbladnir" "$home/.local/bin/skidbladnir" 0755
-  skidbladnir_install_owned "$staging/characters.json" "$share_dir/characters.json" 0644
-  skidbladnir_install_owned "$staging/release.json" "$share_dir/release.json" 0644
-  skidbladnir_install_owned "$archive" "$share_dir/release-bundle.tar.gz" 0644
-  skidbladnir_commit_release_transaction "$home" "$share_dir" \
-    "$staging/skidbladnir" "$staging/characters.json" "$staging/release.json" "$archive"
+  while read -r owned_name owned_mode; do
+    owned_source="$(skidbladnir_owned_file_source \
+      "$platform" "$staging" "$archive" "$owned_name")"
+    owned_target="$(skidbladnir_owned_file_target "$platform" "$home" "$owned_name")"
+    skidbladnir_install_owned "$owned_source" "$owned_target" "$owned_mode"
+  done < <(skidbladnir_owned_file_specs)
+  skidbladnir_commit_release_transaction "$platform" "$home" "$staging" "$archive"
   release_transaction_active=0
 
-  config_source="$(skidbladnir_host_config_source "$platform")"
-  skidbladnir_install_owned "$config_source" "$config_dir/host-config.json" 0600
-  if [[ "$platform" == macos ]]; then
-    hooks_source="$dev_server_root/assets/skidbladnir/status-hooks-macbook.json"
-    notify_source="$dev_server_root/assets/skidbladnir/skid-notify-macbook"
-  else
-    hooks_source="$dev_server_root/assets/skidbladnir/status-hooks-linux.json"
-    notify_source="$dev_server_root/assets/skidbladnir/skid-notify-linux"
-  fi
-  skidbladnir_install_owned "$notify_source" "$home/.local/bin/skid-notify" 0755
-  for context in personal work work2; do
-    install -d -m 0700 "$home/.codex-$context"
-    skidbladnir_install_owned "$hooks_source" "$home/.codex-$context/hooks.json" 0600
-  done
   skidbladnir_configure_codex_notify "$home"
 
   if [[ "$platform" == macos ]]; then
-    skidbladnir_install_macos_service "$home"
+    skidbladnir_activate_macos_service "$home"
   else
-    skidbladnir_install_linux_service "$home"
+    skidbladnir_activate_linux_service
   fi
   tailscale_cli="$(skidbladnir_tailscale_cli)" || {
     warn "Skidbladnir Serve pending; Tailscale CLI is unavailable"
