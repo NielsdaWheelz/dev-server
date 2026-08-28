@@ -16,6 +16,15 @@ assert_noop_success() {
   tests_run=$((tests_run + 1))
 }
 
+assert_failure() {
+  local label="$1"
+  shift
+  if ("$@") >/dev/null 2>&1; then
+    fail "$label unexpectedly succeeded"
+  fi
+  tests_run=$((tests_run + 1))
+}
+
 # shellcheck source=lib/common.sh
 source "$repo_dir/lib/common.sh"
 # shellcheck source=lib/dotfiles.sh
@@ -38,16 +47,17 @@ assert_noop_success 'XFCE theme on Darwin' dotfiles_configure_xfce_theme
 assert_noop_success 'XFCE quality-of-life layer on Darwin' dotfiles_configure_xfce_qol
 
 uname() { printf 'Linux\n'; }
-XDG_CURRENT_DESKTOP=GNOME
-assert_noop_success 'XFCE terminal outside XFCE' dotfiles_configure_xfce_terminal
-assert_noop_success 'XFCE theme outside XFCE' dotfiles_configure_xfce_theme
-assert_noop_success 'XFCE quality-of-life layer outside XFCE' dotfiles_configure_xfce_qol
+assert_noop_success 'XFCE terminal without declared workstation role' dotfiles_configure_xfce_terminal
+assert_noop_success 'XFCE theme without declared workstation role' dotfiles_configure_xfce_theme
+assert_noop_success 'XFCE quality-of-life layer without declared workstation role' dotfiles_configure_xfce_qol
 
-XDG_CURRENT_DESKTOP=XFCE
 missing_commands=xfconf-query
-assert_noop_success 'XFCE terminal without xfconf' dotfiles_configure_xfce_terminal
-assert_noop_success 'XFCE theme without xfconf' dotfiles_configure_xfce_theme
-assert_noop_success 'XFCE quality-of-life layer without xfconf' dotfiles_configure_xfce_qol
+assert_noop_success 'unbound XFCE terminal without xfconf' dotfiles_configure_xfce_terminal
+assert_noop_success 'unbound XFCE theme without xfconf' dotfiles_configure_xfce_theme
+assert_noop_success 'unbound XFCE quality-of-life layer without xfconf' dotfiles_configure_xfce_qol
+platform_id() { printf 'arch\n'; }
+assert_failure 'declared XFCE workstation without xfconf' dotfiles_configure_xfce_qol
+unset -f platform_id
 missing_commands=ghostty
 assert_noop_success 'Ghostty integration without Ghostty' dotfiles_configure_ghostty
 

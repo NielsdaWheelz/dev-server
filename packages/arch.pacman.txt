@@ -42,6 +42,9 @@ thermald
 tmux
 ttf-meslo-nerd
 xfce4-clipman-plugin
+xfce4-power-manager
+xfce4-screensaver
+xfconf
 yazi
 zram-generator
 zoxide
