@@ -1,9 +1,9 @@
 {
-  "androidApkSha256": "29222dac27f66f1773140e1c5dc20d121dd6d0e52f815aecc9b8c8cff0fc8b1a",
+  "androidApkSha256": "ceb9d60196cedcbef123af10d744d5bd6ae561e739205a1540316fa42ab6048c",
   "androidSigningCertAssetSha256": "e25f20e491da5d659333a524bd8f33f3572d9851b2b4fab0cd251bcbd27fe0b5",
-  "darwinArm64Sha256": "fe06bf7f61094488aaac4f31ea59e81a905f3ac413ca9bc08e20c5398cf9d75b",
-  "linuxAmd64Sha256": "08854cbae02e46b36ed5ac9288775f8d1a09bff3e2fb054b2600c13bfaa779d9",
-  "sha256SumsAssetSha256": "0fd4731821918b4fd8f62e75065978d20872d415dbacf1e18f2912fdcd6b44e0",
-  "sourceSha": "23b90cef71e941a22764eb23c8c6a0002ffafcb5",
-  "version": "v0.2.2"
+  "darwinArm64Sha256": "15ccd00bc6b4c838b1008c0292cdbf3517f02d93b6711a2734a3b01b71ff1eed",
+  "linuxAmd64Sha256": "3adde105971fe69ef8e21c849dff96765cf9200afb8b644c9750c43ba4255e66",
+  "sha256SumsAssetSha256": "940396c06864f6f2cec34277ac705f70971d1bc7d50692ae3511413fc5092aa6",
+  "sourceSha": "3c24e910952f433101b286019bdc507e4beaf967",
+  "version": "v0.2.4"
 }
