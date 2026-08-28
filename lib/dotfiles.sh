@@ -110,9 +110,43 @@ dotfiles_configure_xfce_terminal() {
   fi
 }
 
-dotfiles_configure_ghostty() {
+dotfiles_configure_xfce_ghostty_default() {
   local home
   local helpers_file
+  local temporary
+
+  home="$(dev_server_home)"
+  helpers_file="$home/.config/xfce4/helpers.rc"
+  temporary="$(mktemp "$helpers_file.XXXXXX")"
+
+  if ! printf 'TerminalEmulator=ghostty\n' >"$temporary"; then
+    rm -f "$temporary"
+    return 1
+  fi
+
+  if [[ -f "$helpers_file" ]] &&
+    ! awk '
+      /^[[:space:]]*\[.*\]/ { next }
+      /^[[:space:]]*TerminalEmulator[[:space:]]*=/ { next }
+      { print }
+    ' "$helpers_file" >>"$temporary"; then
+    rm -f "$temporary"
+    return 1
+  fi
+
+  if [[ -f "$helpers_file" ]] && cmp -s "$temporary" "$helpers_file"; then
+    rm -f "$temporary"
+    return 0
+  fi
+
+  if ! chmod 0644 "$temporary" || ! mv -f "$temporary" "$helpers_file"; then
+    rm -f "$temporary"
+    return 1
+  fi
+}
+
+dotfiles_configure_ghostty() {
+  local home
 
   [[ "$(uname -s)" == "Linux" ]] || return 0
   command -v ghostty >/dev/null 2>&1 || return 0
@@ -126,11 +160,34 @@ dotfiles_configure_ghostty() {
     dotfiles_install_file \
       "$(dotfiles_asset ghostty-xfce-helper.desktop)" \
       "$home/.local/share/xfce4/helpers/ghostty.desktop"
-    helpers_file="$home/.config/xfce4/helpers.rc"
-    git config --file "$helpers_file" Helpers.TerminalEmulator ghostty
+    dotfiles_configure_xfce_ghostty_default
   fi
 
   systemctl --user enable --now app-com.mitchellh.ghostty.service
+}
+
+dotfiles_xfce_ghostty_default_configured() {
+  local home
+  local helper_file
+  local helpers_file
+
+  home="$(dev_server_home)"
+  helper_file="$home/.local/share/xfce4/helpers/ghostty.desktop"
+  helpers_file="$home/.config/xfce4/helpers.rc"
+
+  [[ -f "$helpers_file" && -f "$helper_file" ]] &&
+    awk '
+      /^[[:space:]]*\[.*\]/ { invalid_section = 1; next }
+      /^[[:space:]]*TerminalEmulator[[:space:]]*=/ {
+        value = $0
+        sub(/^[[:space:]]*TerminalEmulator[[:space:]]*=[[:space:]]*/, "", value)
+        sub(/[[:space:]]*$/, "", value)
+        count++
+        if (value == "ghostty") matches++
+      }
+      END { exit(!invalid_section && count == 1 && matches == 1 ? 0 : 1) }
+    ' "$helpers_file" &&
+    cmp -s "$(dotfiles_asset ghostty-xfce-helper.desktop)" "$helper_file"
 }
 
 dotfiles_configure_xfce_theme() {
@@ -537,8 +594,7 @@ dotfiles_doctor() {
       doctor_fail dotfiles.ghostty-config "Ghostty configuration is missing or invalid"
     fi
 
-    if ! dotfiles_xfce_workstation ||
-      [[ "$(xfce4-mime-helper -q TerminalEmulator 2>/dev/null)" == "ghostty" ]]; then
+    if ! dotfiles_xfce_workstation || dotfiles_xfce_ghostty_default_configured; then
       doctor_pass dotfiles.ghostty-default "Ghostty is the preferred terminal"
     else
       doctor_fail dotfiles.ghostty-default "Ghostty is not the preferred XFCE terminal"

@@ -257,12 +257,136 @@ test_declared_packages() {
   pass
 }
 
+test_headless_ghostty_default() {
+  local ghostty_home="$fixture/ghostty-home"
+  local helpers_file="$ghostty_home/.config/xfce4/helpers.rc"
+  local stable_helpers="$fixture/stable-helpers.rc"
+
+  install -d -m 0755 \
+    "$ghostty_home/.config/xfce4" \
+    "$ghostty_home/.local/share/xfce4/helpers"
+  printf '%s\n' \
+    'WebBrowser=firefox' \
+    '[Helpers]' \
+    'MailReader=thunderbird' \
+    'TerminalEmulator=xfce4-terminal' \
+    '[Other] # still a section to XFCE' \
+    'FileManager=thunar' \
+    '[]' \
+    'TerminalEmulator=preserve-me' >"$helpers_file"
+
+  (
+    command() {
+      if [[ "$1" == -v && "$2" == ghostty ]]; then
+        return 0
+      fi
+      builtin command "$@"
+    }
+    uname() { printf 'Linux\n'; }
+    systemctl() { :; }
+    dev_server_home() { printf '%s\n' "$ghostty_home"; }
+    dotfiles_configure_ghostty
+  ) || fail 'Ghostty convergence did not repair the XFCE preferred-terminal file'
+
+  grep -Fqx 'TerminalEmulator=ghostty' "$helpers_file" ||
+    fail 'Ghostty convergence did not write XFCE native root-level syntax'
+  grep -Fqx 'WebBrowser=firefox' "$helpers_file" ||
+    fail 'Ghostty convergence discarded an unrelated XFCE helper preference'
+  grep -Fqx 'MailReader=thunderbird' "$helpers_file" ||
+    fail 'Ghostty convergence discarded a helper preference from the legacy section'
+  grep -Fqx 'FileManager=thunar' "$helpers_file" ||
+    fail 'Ghostty convergence discarded a helper preference from another invalid section'
+  [[ "$(grep -Ec '^[[:space:]]*TerminalEmulator[[:space:]]*=' "$helpers_file")" == 1 ]] ||
+    fail 'Ghostty convergence did not normalize exactly one preferred terminal'
+  ! grep -Eq '^[[:space:]]*\[.*\]' "$helpers_file" ||
+    fail 'Ghostty convergence retained a section that changes XFCE lookup scope'
+
+  cp "$helpers_file" "$stable_helpers"
+  (
+    command() {
+      if [[ "$1" == -v && "$2" == ghostty ]]; then
+        return 0
+      fi
+      builtin command "$@"
+    }
+    uname() { printf 'Linux\n'; }
+    systemctl() { :; }
+    dev_server_home() { printf '%s\n' "$ghostty_home"; }
+    dotfiles_configure_ghostty
+  ) || fail 'repeat Ghostty convergence failed'
+  cmp -s "$stable_helpers" "$helpers_file" ||
+    fail 'repeat Ghostty convergence rewrote stable XFCE helper state'
+
+  if (
+    printf() {
+      [[ "$1" == 'TerminalEmulator=ghostty\n' ]] && return 1
+      builtin printf "$@"
+    }
+    dev_server_home() { printf '%s\n' "$ghostty_home"; }
+    dotfiles_configure_xfce_ghostty_default
+  ); then
+    fail 'Ghostty convergence masked a failed canonical preference write'
+  fi
+  cmp -s "$stable_helpers" "$helpers_file" ||
+    fail 'failed Ghostty convergence replaced the last-known-good helper state'
+
+  (
+    dev_server_home() { printf '%s\n' "$ghostty_home"; }
+    xfce4-mime-helper() { fail 'headless Ghostty default check invoked the display-dependent helper'; }
+    dotfiles_xfce_ghostty_default_configured
+  ) || fail 'persisted Ghostty default did not validate without a display'
+
+  printf '%s\n' 'TerminalEmulator=ghostty' '[Other]' 'FileManager=thunar' >"$helpers_file"
+  if (
+    dev_server_home() { printf '%s\n' "$ghostty_home"; }
+    dotfiles_xfce_ghostty_default_configured
+  ); then
+    fail 'sectioned XFCE helper state passed the flat-file doctor boundary'
+  fi
+
+  printf '%s\n' 'TerminalEmulator=ghostty' '[]' >"$helpers_file"
+  if (
+    dev_server_home() { printf '%s\n' "$ghostty_home"; }
+    dotfiles_xfce_ghostty_default_configured
+  ); then
+    fail 'empty XFCE helper section passed the flat-file doctor boundary'
+  fi
+
+  printf 'TerminalEmulator=xfce4-terminal\n' >"$helpers_file"
+  if (
+    dev_server_home() { printf '%s\n' "$ghostty_home"; }
+    dotfiles_xfce_ghostty_default_configured
+  ); then
+    fail 'drifted Ghostty default passed the doctor boundary'
+  fi
+
+  printf '%s\n' '[Helpers]' 'TerminalEmulator=ghostty' >"$helpers_file"
+  if (
+    dev_server_home() { printf '%s\n' "$ghostty_home"; }
+    dotfiles_xfce_ghostty_default_configured
+  ); then
+    fail 'legacy Git-style Ghostty section passed the XFCE-native doctor boundary'
+  fi
+
+  printf 'TerminalEmulator=ghostty\n' >"$helpers_file"
+  printf '# drift\n' >>"$ghostty_home/.local/share/xfce4/helpers/ghostty.desktop"
+  if (
+    dev_server_home() { printf '%s\n' "$ghostty_home"; }
+    dotfiles_xfce_ghostty_default_configured
+  ); then
+    fail 'drifted Ghostty helper definition passed the doctor boundary'
+  fi
+  pass
+}
+
 test_production_wiring() {
   local configure_calls="$fixture/configure-wiring-calls"
   local doctor_calls="$fixture/doctor-wiring-calls"
+  local ghostty_doctor_calls="$fixture/ghostty-doctor-wiring-calls"
 
   : >"$configure_calls"
   : >"$doctor_calls"
+  : >"$ghostty_doctor_calls"
   (
     unset XDG_CURRENT_DESKTOP
     command() {
@@ -288,17 +412,24 @@ test_production_wiring() {
   (
     unset XDG_CURRENT_DESKTOP
     command() {
-      [[ "$1" == -v && "$2" == xfconf-query ]]
+      [[ "$1" == -v && ("$2" == xfconf-query || "$2" == ghostty) ]]
     }
+    uname() { printf 'Linux\n'; }
+    systemctl() { return 1; }
     dev_server_home() { printf '%s\n' "$fixture"; }
     dotfiles_xfce_brightness_floor_value() { return 1; }
     dotfiles_doctor_xfce_idle_policy() { printf 'called\n' >>"$doctor_calls"; }
+    dotfiles_xfce_ghostty_default_configured() {
+      printf 'called\n' >>"$ghostty_doctor_calls"
+    }
     git() { printf 'main\n'; }
 
     dotfiles_doctor >/dev/null
   )
   assert_eq 1 "$(wc -l <"$doctor_calls" | tr -d ' ')" \
     'dotfiles doctor did not call the focused idle-policy boundary exactly once'
+  assert_eq 1 "$(wc -l <"$ghostty_doctor_calls" | tr -d ' ')" \
+    'dotfiles doctor did not call the headless Ghostty-default boundary exactly once'
   pass
 }
 
@@ -308,6 +439,7 @@ test_idle_policy_drift
 test_idle_policy_runtime_doctor
 test_declared_platform_boundary
 test_declared_packages
+test_headless_ghostty_default
 test_production_wiring
 
-printf 'PASS: %d XFCE idle-policy test groups\n' "$tests_run"
+printf 'PASS: %d XFCE dotfiles test groups\n' "$tests_run"
