@@ -1230,10 +1230,10 @@ test_converge_and_doctor() {
     >"$test_home/.local/share/skidbladnir/binary.sha256"
 
   export SKIDBLADNIR_TEST_INVENTORY
-  SKIDBLADNIR_TEST_INVENTORY='{"machine":{"handle":"mh-11111111111111111111111111111111"},"observedAt":"first","sessions":[{"id":"$2","tmuxName":"second","identityToken":"v1-22222222222222222222222222222222.20.30.2","objective":"private two"},{"id":"$1","tmuxName":"first","identityToken":"v1-11111111111111111111111111111111.20.30.1","objective":"private one"}]}'
+  SKIDBLADNIR_TEST_INVENTORY='{"machine":{"handle":"mh-11111111111111111111111111111111"},"observedAt":"first","sessions":[{"id":"$2","tmuxName":"second","identityToken":"v1-22222222222222222222222222222222.20.30.2","objective":"private two"},{"id":"$0","tmuxName":"first","identityToken":"v1-11111111111111111111111111111111.20.30.1","objective":"private one"}]}'
   local lifetime_before lifetime_after
   lifetime_before="$(skidbladnir_reconciled_lifetime_digest_local)"
-  SKIDBLADNIR_TEST_INVENTORY='{"machine":{"handle":"mh-11111111111111111111111111111111"},"observedAt":"later","sessions":[{"id":"$1","tmuxName":"first","identityToken":"v1-11111111111111111111111111111111.20.30.1","objective":"changed"},{"id":"$2","tmuxName":"second","identityToken":"v1-22222222222222222222222222222222.20.30.2","attention":true}]}'
+  SKIDBLADNIR_TEST_INVENTORY='{"machine":{"handle":"mh-11111111111111111111111111111111"},"observedAt":"later","sessions":[{"id":"$0","tmuxName":"first","identityToken":"v1-11111111111111111111111111111111.20.30.1","objective":"changed"},{"id":"$2","tmuxName":"second","identityToken":"v1-22222222222222222222222222222222.20.30.2","attention":true}]}'
   lifetime_after="$(skidbladnir_reconciled_lifetime_digest_local)"
   assert_eq "$lifetime_before" "$lifetime_after" 'lifetime digest ignores inventory order and mutable card facts'
   [[ "$lifetime_before" =~ ^[0-9a-f]{64}$ ]] || fail 'lifetime digest is not one lowercase SHA-256'

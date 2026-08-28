@@ -1276,7 +1276,7 @@ skidbladnir_reconciled_lifetime_digest_local() (
         (.sessions | type == "array") and
         all(.sessions[];
           type == "object" and
-          (.id | type == "string" and test("^\\$[1-9][0-9]*$")) and
+          (.id | type == "string" and test("^\\$[0-9]+$")) and
           (.tmuxName | type == "string" and length > 0) and
           (.identityToken | type == "string" and test("^v1-[0-9a-f]{32}\\.[1-9][0-9]*\\.[1-9][0-9]*\\.[0-9]+$"))) and
         ([.sessions[].identityToken] | unique | length) == (.sessions | length)
