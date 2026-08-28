@@ -118,19 +118,11 @@ skidbladnir_require_tmux_runtime() {
 }
 
 skidbladnir_sha256() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | awk '{print $1}'
-  else
-    shasum -a 256 "$1" | awk '{print $1}'
-  fi
+  dev_server_sha256 "$1"
 }
 
 skidbladnir_sha256_stream() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum | awk '{print $1}'
-  else
-    shasum -a 256 | awk '{print $1}'
-  fi
+  dev_server_sha256_stream
 }
 
 skidbladnir_archive_member_sha256() (
