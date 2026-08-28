@@ -76,6 +76,23 @@ skidbladnir_host_config_source() {
   esac
 }
 
+skidbladnir_status_hooks_source() {
+  case "$1" in
+  devbox) printf '%s/assets/skidbladnir/status-hooks-devbox.json\n' "$dev_server_root" ;;
+  arch) printf '%s/assets/skidbladnir/status-hooks-arch.json\n' "$dev_server_root" ;;
+  macos) printf '%s/assets/skidbladnir/status-hooks-macbook.json\n' "$dev_server_root" ;;
+  *) die "unsupported Skidbladnir platform: $1" ;;
+  esac
+}
+
+skidbladnir_remote_target() {
+  case "$1" in
+  DevServer) printf 'dev-server\n' ;;
+  Arch) printf 'nnandal@arch\n' ;;
+  *) die "unsupported Skidbladnir remote target: $1" ;;
+  esac
+}
+
 skidbladnir_preflight_tmux_runtime() {
   local platform="$1"
   local config tmux_path tmux_version
@@ -273,13 +290,7 @@ skidbladnir_owned_file_source() {
       printf '%s/assets/skidbladnir/skid-notify-linux\n' "$dev_server_root"
     fi
     ;;
-  personal-hooks | work-hooks | work2-hooks)
-    if [[ "$platform" == macos ]]; then
-      printf '%s/assets/skidbladnir/status-hooks-macbook.json\n' "$dev_server_root"
-    else
-      printf '%s/assets/skidbladnir/status-hooks-linux.json\n' "$dev_server_root"
-    fi
-    ;;
+  personal-hooks | work-hooks | work2-hooks) skidbladnir_status_hooks_source "$platform" ;;
   *) die "unsupported Skidbladnir owned file: $name" ;;
   esac
 }
@@ -500,11 +511,10 @@ skidbladnir_owned_config_matches() {
     ! -L "$home/.config/skidbladnir/host-config.json" ]] &&
     cmp -s "$config_source" "$home/.config/skidbladnir/host-config.json" &&
     [[ "$(skidbladnir_file_mode "$home/.config/skidbladnir/host-config.json" 2>/dev/null)" == 600 ]] || return 1
+  hooks_source="$(skidbladnir_status_hooks_source "$platform")"
   if [[ "$platform" == macos ]]; then
-    hooks_source="$dev_server_root/assets/skidbladnir/status-hooks-macbook.json"
     notify_source="$dev_server_root/assets/skidbladnir/skid-notify-macbook"
   else
-    hooks_source="$dev_server_root/assets/skidbladnir/status-hooks-linux.json"
     notify_source="$dev_server_root/assets/skidbladnir/skid-notify-linux"
   fi
   [[ -f "$home/.local/bin/skidbladnir-launch" && ! -L "$home/.local/bin/skidbladnir-launch" ]] &&

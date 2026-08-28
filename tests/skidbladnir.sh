@@ -204,12 +204,12 @@ test_assets_and_operator_copy() {
   ' "$pin" >/dev/null || fail 'release pin must be wholly pending or wholly canonical'
   cmp -s "$pin" <(jq -S . "$pin") || fail 'release pin keys are not stored in sorted order'
 
-  local row config platform tmux_path tmux_version home
+  local row config platform tmux_path tmux_version home hooks
   for row in \
-    'devbox Linux /usr/bin/tmux tmux_3.4 /home/niels' \
-    'arch Linux /usr/bin/tmux tmux_3.7c /home/niels' \
-    'macbook Darwin /opt/homebrew/bin/tmux tmux_3.7c /Users/nnandal'; do
-    read -r config platform tmux_path tmux_version home <<<"$row"
+    'devbox Linux /usr/bin/tmux tmux_3.4 /home/niels status-hooks-devbox.json' \
+    'arch Linux /usr/bin/tmux tmux_3.7c /home/nnandal status-hooks-arch.json' \
+    'macbook Darwin /opt/homebrew/bin/tmux tmux_3.7c /Users/nnandal status-hooks-macbook.json'; do
+    read -r config platform tmux_path tmux_version home hooks <<<"$row"
     config="$repo_dir/assets/skidbladnir/host-config-$config.json"
     tmux_version="${tmux_version/_/ }"
     jq -e --arg platform "$platform" --arg tmux_path "$tmux_path" \
@@ -225,6 +225,22 @@ test_assets_and_operator_copy() {
         {key:"claude-work",label:"Claude · Work",command:($home + "/bin/claude-work"),environment:[{name:"CLAUDE_CONFIG_DIR",value:($home + "/.claude-work")}],foregroundSignatures:[{argument0:($home + "/.local/bin/claude")}],arguments:["--permission-mode","auto"]}
       ]
     ' "$config" >/dev/null || fail "strict host config differs: $config"
+    hooks="$repo_dir/assets/skidbladnir/$hooks"
+    jq -e --arg home "$home" '
+      type == "object" and keys == ["description", "hooks"] and
+      .description == "Skíðblaðnir pane lifecycle projection" and
+      (.hooks | keys == ["SessionStart", "Stop", "UserPromptSubmit"]) and
+      .hooks.SessionStart == [{
+        matcher:"^(startup|resume|clear)$",
+        hooks:[{type:"command",command:($home + "/.local/bin/skidbladnir status-hook --host-config=" + $home + "/.config/skidbladnir/host-config.json SessionStart"),timeout:5,async:false}]
+      }] and
+      .hooks.UserPromptSubmit == [{
+        hooks:[{type:"command",command:($home + "/.local/bin/skidbladnir status-hook --host-config=" + $home + "/.config/skidbladnir/host-config.json UserPromptSubmit"),timeout:5,async:false}]
+      }] and
+      .hooks.Stop == [{
+        hooks:[{type:"command",command:($home + "/.local/bin/skidbladnir status-hook --host-config=" + $home + "/.config/skidbladnir/host-config.json Stop"),timeout:5,async:false}]
+      }]
+    ' "$hooks" >/dev/null || fail "strict lifecycle hooks differ: $hooks"
   done
 
   local unit="$repo_dir/assets/skidbladnir/skidbladnir.service"
@@ -462,6 +478,10 @@ test_converge_and_doctor() {
   source "$repo_dir/lib/doctor.sh"
   # shellcheck source=lib/skidbladnir.sh
   source "$repo_dir/lib/skidbladnir.sh"
+  assert_eq dev-server "$(skidbladnir_remote_target DevServer)" \
+    'fixed DevServer SSH target'
+  assert_eq nnandal@arch "$(skidbladnir_remote_target Arch)" \
+    'fixed Arch SSH account and alias'
   # dev_server_home reads this shared library seam.
   # shellcheck disable=SC2034
   dev_server_home_dir="$test_home"
@@ -620,7 +640,7 @@ test_converge_and_doctor() {
   doctor_reset
   skidbladnir_doctor arch >"$fixture/hooks-drift-output" || true
   assert_contains "$fixture/hooks-drift-output" 'FAIL  skidbladnir.config'
-  cp "$repo_dir/assets/skidbladnir/status-hooks-linux.json" "$test_home/.codex-work/hooks.json"
+  cp "$(skidbladnir_status_hooks_source arch)" "$test_home/.codex-work/hooks.json"
   chmod 0600 "$test_home/.codex-work/hooks.json"
 
   chmod 0644 "$test_home/.config/skidbladnir/bearer"
@@ -848,7 +868,7 @@ test_invite_success_and_fail_closed() {
   ssh() {
     local target
     case " $* " in
-    *' arch '*) target=Arch ;;
+    *' nnandal@arch '*) target=Arch ;;
     *' dev-server '*) target=DevServer ;;
     *) return 64 ;;
     esac
@@ -862,7 +882,7 @@ test_invite_success_and_fail_closed() {
     for field in "$@"; do printf -v line '%s %q' "$line" "$field"; done
     printf '%s\n' "$line" >>"$SKIDBLADNIR_INVITE_CALLS"
     case " $* " in
-    *' arch '*)
+    *' nnandal@arch '*)
       [[ "${SKIDBLADNIR_FAIL_ARCH:-0}" == 0 ]] || return 9
       if [[ "${SKIDBLADNIR_SWAP_ORIGINS:-0}" == 1 ]]; then
         jq -n \
@@ -889,7 +909,7 @@ test_invite_success_and_fail_closed() {
   rm -f -- "$SKIDBLADNIR_INVITE_STARTS"/*
   skidbladnir_invite "$fixture/origins.json" "$fixture/invite-local" >"$fixture/invite-output"
   assert_eq 4 "$(wc -l <"$SKIDBLADNIR_INVITE_CALLS" | tr -d '[:space:]')" 'three host calls and one QR call'
-  assert_contains "$SKIDBLADNIR_INVITE_CALLS" 'ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 arch'
+  assert_contains "$SKIDBLADNIR_INVITE_CALLS" 'ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 nnandal@arch'
   assert_contains "$SKIDBLADNIR_INVITE_CALLS" 'ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 dev-server'
   assert_contains "$SKIDBLADNIR_INVITE_CALLS" 'local pairing-invite create'
   assert_contains "$SKIDBLADNIR_INVITE_CALLS" 'qrencode -t ANSIUTF8'
@@ -984,7 +1004,7 @@ test_operator_doctor_and_service_boundary() {
     *'skidbladnir_sha256 "$skidbladnir_release_pin_file"'*)
       case " $* ${SKIDBLADNIR_TEST_REMOTE_PIN_MISMATCH:-} " in
       *' dev-server '*' DevServer '*) printf '%064d\n' 0 ;;
-      *' arch '*' Arch '*) printf '%064d\n' 0 ;;
+      *' nnandal@arch '*' Arch '*) printf '%064d\n' 0 ;;
       *) skidbladnir_sha256 "$skidbladnir_release_pin_file" ;;
       esac
       return
@@ -1022,7 +1042,7 @@ test_operator_doctor_and_service_boundary() {
   assert_eq 4 "$(wc -l <"$SKIDBLADNIR_OPERATOR_CALLS" | tr -d '[:space:]')" 'fleet doctor pin and remote call count'
   assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 dev-server'
   assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'skidbladnir_doctor devbox'
-  assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 arch'
+  assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 nnandal@arch'
   assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'skidbladnir_doctor arch'
   assert_contains "$fixture/operator-doctor-output" 'Fleet gateway doctor: pass.'
 
@@ -1057,7 +1077,7 @@ test_operator_doctor_and_service_boundary() {
   assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'launchctl bootout gui/501/dev.niels.skidbladnir'
   assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'launchctl bootstrap gui/501 /Users/nnandal/Library/LaunchAgents/dev.niels.skidbladnir.plist'
   assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'ConnectionAttempts=1 dev-server systemctl\ --user\ stop\ skidbladnir.service'
-  assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'ConnectionAttempts=1 arch systemctl\ --user\ start\ skidbladnir.service'
+  assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'ConnectionAttempts=1 nnandal@arch systemctl\ --user\ start\ skidbladnir.service'
   assert_contains "$fixture/operator-service-output" 'Gateway outage active on Local. tmux and Tailscale Serve were not touched.'
   assert_contains "$fixture/operator-service-output" 'Gateway recovered on Arch. tmux and Tailscale Serve were not touched.'
   ! grep -Eq 'tmux|tailscale' "$SKIDBLADNIR_OPERATOR_CALLS" || fail 'bounded service command touched tmux or Tailscale'
@@ -1074,7 +1094,7 @@ test_operator_doctor_and_service_boundary() {
     esac
     case " $* " in
     *' dev-server '*) printf '%064d\n' 2 ;;
-    *' arch '*)
+    *' nnandal@arch '*)
       [[ "${SKIDBLADNIR_FAIL_ARCH_DIGEST:-0}" == 0 ]] || return 9
       printf '%064d\n' 3
       ;;
@@ -1234,7 +1254,7 @@ test_host_acceptance_gate_contract() {
   : >"$SKIDBLADNIR_OPERATOR_CALLS"
   skidbladnir_operator_accept_host Arch --allow-host-convergence --allow-inventory-reconciliation
   assert_eq 2 "$(wc -l <"$SKIDBLADNIR_OPERATOR_CALLS" | tr -d '[:space:]')" 'Arch pin and acceptance boundary count'
-  assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'ConnectionAttempts=1 arch'
+  assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'ConnectionAttempts=1 nnandal@arch'
   assert_contains "$SKIDBLADNIR_OPERATOR_CALLS" 'skidbladnir_accept_host_local arch Arch'
   unset SKIDBLADNIR_ALLOW_HOST_ACCEPTANCE
   pass

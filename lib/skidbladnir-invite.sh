@@ -65,11 +65,13 @@ skidbladnir_invite_call() {
     "$local_binary" pairing-invite create
     ;;
   DevServer)
-    ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 dev-server \
+    ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
+      "$(skidbladnir_remote_target DevServer)" \
       '$HOME/.local/bin/skidbladnir pairing-invite create'
     ;;
   Arch)
-    ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 arch \
+    ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
+      "$(skidbladnir_remote_target Arch)" \
       '$HOME/.local/bin/skidbladnir pairing-invite create'
     ;;
   *)

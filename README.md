@@ -146,6 +146,10 @@ reuses an existing Tailscale app or installs the recommended standalone app
 when missing, and leaves its one-time system-extension approval and login to
 the app.
 
+The fixed Arch login is `nnandal`. MacBook fleet commands select
+`nnandal@arch` explicitly, so a stale user in the local SSH alias cannot
+silently retarget convergence, doctor, invitation, outage, or reboot gates.
+
 On the Huawei MACH-WX9, workstation convergence installs a device-matched
 libinput preset for the `SYNA1D31` touchpad. It uses a custom curve with
 libinput's precise low-speed response and a proportional 64-point ramp from

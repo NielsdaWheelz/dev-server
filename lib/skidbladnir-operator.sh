@@ -26,14 +26,14 @@ skidbladnir_operator_require_remote_release_pin() {
   local_digest="$(skidbladnir_sha256 "$skidbladnir_release_pin_file")"
   case "$target" in
   DevServer)
-    host=dev-server
+    host="$(skidbladnir_remote_target DevServer)"
     command='set -euo pipefail
 source "$HOME/.local/share/dev-server/lib/common.sh"
 source "$HOME/.local/share/dev-server/lib/skidbladnir.sh"
 skidbladnir_sha256 "$skidbladnir_release_pin_file"'
     ;;
   Arch)
-    host=arch
+    host="$(skidbladnir_remote_target Arch)"
     command='set -euo pipefail
 repo="$HOME/src/personal/dev-server"
 source "$repo/lib/common.sh"
@@ -65,7 +65,7 @@ skidbladnir_operator_doctor_remote() {
   skidbladnir_operator_require_remote_release_pin "$target" || return
   case "$target" in
   DevServer)
-    host=dev-server
+    host="$(skidbladnir_remote_target DevServer)"
     command='set -euo pipefail
 source "$HOME/.local/share/dev-server/lib/common.sh"
 source "$HOME/.local/share/dev-server/lib/doctor.sh"
@@ -75,7 +75,7 @@ skidbladnir_doctor devbox
 doctor_summary "Devbox Skidbladnir"'
     ;;
   Arch)
-    host=arch
+    host="$(skidbladnir_remote_target Arch)"
     command='set -euo pipefail
 repo="$HOME/src/personal/dev-server"
 source "$repo/lib/common.sh"
@@ -133,7 +133,7 @@ skidbladnir_operator_reconciled_lifetime_call() {
 source "$HOME/.local/share/dev-server/lib/common.sh"
 source "$HOME/.local/share/dev-server/lib/skidbladnir.sh"
 skidbladnir_reconciled_lifetime_digest_local'
-    skidbladnir_operator_ssh_bash dev-server "$command"
+    skidbladnir_operator_ssh_bash "$(skidbladnir_remote_target DevServer)" "$command"
     ;;
   Arch)
     skidbladnir_operator_require_remote_release_pin Arch || return
@@ -142,7 +142,7 @@ repo="$HOME/src/personal/dev-server"
 source "$repo/lib/common.sh"
 source "$repo/lib/skidbladnir.sh"
 skidbladnir_reconciled_lifetime_digest_local'
-    skidbladnir_operator_ssh_bash arch "$command"
+    skidbladnir_operator_ssh_bash "$(skidbladnir_remote_target Arch)" "$command"
     ;;
   *) die "unsupported lifetime digest target: $target" ;;
   esac
@@ -226,7 +226,7 @@ source "$HOME/.local/share/dev-server/lib/common.sh"
 source "$HOME/.local/share/dev-server/lib/doctor.sh"
 source "$HOME/.local/share/dev-server/lib/skidbladnir.sh"
 SKIDBLADNIR_ALLOW_HOST_ACCEPTANCE=host-acceptance-v1 skidbladnir_accept_host_local devbox DevServer'
-    skidbladnir_operator_ssh_bash dev-server "$command"
+    skidbladnir_operator_ssh_bash "$(skidbladnir_remote_target DevServer)" "$command"
     ;;
   Arch)
     skidbladnir_operator_require_remote_release_pin Arch || return
@@ -236,7 +236,7 @@ source "$repo/lib/common.sh"
 source "$repo/lib/doctor.sh"
 source "$repo/lib/skidbladnir.sh"
 SKIDBLADNIR_ALLOW_HOST_ACCEPTANCE=host-acceptance-v1 skidbladnir_accept_host_local arch Arch'
-    skidbladnir_operator_ssh_bash arch "$command"
+    skidbladnir_operator_ssh_bash "$(skidbladnir_remote_target Arch)" "$command"
     ;;
   *) die "unsupported fleet acceptance target: $target" ;;
   esac
@@ -277,7 +277,7 @@ source "$HOME/.local/share/dev-server/lib/doctor.sh"
 source "$HOME/.local/share/dev-server/lib/skidbladnir.sh"
 SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1 skidbladnir_verify_reboot_local devbox DevServer'
     fi
-    skidbladnir_operator_ssh_bash dev-server "$command"
+    skidbladnir_operator_ssh_bash "$(skidbladnir_remote_target DevServer)" "$command"
     ;;
   Arch)
     skidbladnir_operator_require_remote_release_pin Arch || return
@@ -296,7 +296,7 @@ source "$repo/lib/doctor.sh"
 source "$repo/lib/skidbladnir.sh"
 SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1 skidbladnir_verify_reboot_local arch Arch'
     fi
-    skidbladnir_operator_ssh_bash arch "$command"
+    skidbladnir_operator_ssh_bash "$(skidbladnir_remote_target Arch)" "$command"
     ;;
   *) die "unsupported fleet reboot acceptance target: $target" ;;
   esac
@@ -323,11 +323,11 @@ skidbladnir_operator_service() {
     ;;
   DevServer)
     ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
-      dev-server "systemctl --user $verb skidbladnir.service"
+      "$(skidbladnir_remote_target DevServer)" "systemctl --user $verb skidbladnir.service"
     ;;
   Arch)
     ssh -T -o BatchMode=yes -o RequestTTY=no -o ConnectTimeout=10 -o ConnectionAttempts=1 \
-      arch "systemctl --user $verb skidbladnir.service"
+      "$(skidbladnir_remote_target Arch)" "systemctl --user $verb skidbladnir.service"
     ;;
   *) die "unsupported fleet command target: $target" ;;
   esac
