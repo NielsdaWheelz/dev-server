@@ -261,10 +261,12 @@ test_headless_ghostty_default() {
   local ghostty_home="$fixture/ghostty-home"
   local helpers_file="$ghostty_home/.config/xfce4/helpers.rc"
   local stable_helpers="$fixture/stable-helpers.rc"
+  local systemctl_calls="$fixture/ghostty-systemctl-calls"
 
   install -d -m 0755 \
     "$ghostty_home/.config/xfce4" \
     "$ghostty_home/.local/share/xfce4/helpers"
+  : >"$systemctl_calls"
   printf '%s\n' \
     'WebBrowser=firefox' \
     '[Helpers]' \
@@ -283,10 +285,21 @@ test_headless_ghostty_default() {
       builtin command "$@"
     }
     uname() { printf 'Linux\n'; }
-    systemctl() { :; }
+    systemctl() {
+      [[ "$#" == 3 && "$1" == --user && "$2" == disable &&
+        "$3" == app-com.mitchellh.ghostty.service ]] ||
+        fail 'Ghostty convergence used the wrong systemctl argument vector'
+      printf 'called\n' >>"$systemctl_calls"
+    }
     dev_server_home() { printf '%s\n' "$ghostty_home"; }
     dotfiles_configure_ghostty
   ) || fail 'Ghostty convergence did not repair the XFCE preferred-terminal file'
+
+  assert_eq 1 "$(wc -l <"$systemctl_calls" | tr -d ' ')" \
+    'Ghostty convergence did not remove exactly one stale service enablement'
+  cmp -s "$repo_dir/assets/dotfiles/ghostty-autostart.desktop" \
+    "$ghostty_home/.config/autostart/ghostty.desktop" ||
+    fail 'Ghostty convergence did not install the exact XFCE service autostart'
 
   grep -Fqx 'TerminalEmulator=ghostty' "$helpers_file" ||
     fail 'Ghostty convergence did not write XFCE native root-level syntax'
@@ -302,6 +315,7 @@ test_headless_ghostty_default() {
     fail 'Ghostty convergence retained a section that changes XFCE lookup scope'
 
   cp "$helpers_file" "$stable_helpers"
+  : >"$systemctl_calls"
   (
     command() {
       if [[ "$1" == -v && "$2" == ghostty ]]; then
@@ -310,10 +324,17 @@ test_headless_ghostty_default() {
       builtin command "$@"
     }
     uname() { printf 'Linux\n'; }
-    systemctl() { :; }
+    systemctl() {
+      [[ "$#" == 3 && "$1" == --user && "$2" == disable &&
+        "$3" == app-com.mitchellh.ghostty.service ]] ||
+        fail 'repeat Ghostty convergence used the wrong systemctl argument vector'
+      printf 'called\n' >>"$systemctl_calls"
+    }
     dev_server_home() { printf '%s\n' "$ghostty_home"; }
     dotfiles_configure_ghostty
   ) || fail 'repeat Ghostty convergence failed'
+  assert_eq 1 "$(wc -l <"$systemctl_calls" | tr -d ' ')" \
+    'repeat Ghostty convergence did not keep legacy enablement disabled'
   cmp -s "$stable_helpers" "$helpers_file" ||
     fail 'repeat Ghostty convergence rewrote stable XFCE helper state'
 
@@ -379,14 +400,83 @@ test_headless_ghostty_default() {
   pass
 }
 
+test_ghostty_xfce_autostart() {
+  local ghostty_home="$fixture/ghostty-home"
+  local autostart="$ghostty_home/.config/autostart/ghostty.desktop"
+
+  (
+    systemctl() {
+      [[ "$#" == 3 && "$1" == --user && "$2" == is-enabled &&
+        "$3" == app-com.mitchellh.ghostty.service ]] ||
+        fail 'Ghostty service doctor used the wrong systemctl argument vector'
+      printf 'disabled\n'
+    }
+    dev_server_home() { printf '%s\n' "$ghostty_home"; }
+    dotfiles_ghostty_service_configured
+  ) || fail 'Ghostty service doctor rejected exact XFCE autostart state'
+
+  if (
+    systemctl() { printf 'enabled\n'; }
+    dev_server_home() { printf '%s\n' "$ghostty_home"; }
+    dotfiles_ghostty_service_configured
+  ); then
+    fail 'Ghostty service doctor accepted stale systemd enablement'
+  fi
+
+  printf '# drift\n' >>"$autostart"
+  if (
+    systemctl() { printf 'disabled\n'; }
+    dev_server_home() { printf '%s\n' "$ghostty_home"; }
+    dotfiles_ghostty_service_configured
+  ); then
+    fail 'Ghostty service doctor accepted a drifted XFCE autostart'
+  fi
+  install -m 0644 "$repo_dir/assets/dotfiles/ghostty-autostart.desktop" "$autostart"
+  pass
+}
+
+test_ghostty_non_xfce_convergence() {
+  local ghostty_home="$fixture/non-xfce-ghostty-home"
+  local systemctl_calls="$fixture/non-xfce-ghostty-systemctl-calls"
+
+  : >"$systemctl_calls"
+  (
+    platform_id() { printf 'devbox\n'; }
+    command() {
+      if [[ "$1" == -v && "$2" == ghostty ]]; then
+        return 0
+      fi
+      builtin command "$@"
+    }
+    uname() { printf 'Linux\n'; }
+    systemctl() {
+      [[ "$#" == 4 && "$1" == --user && "$2" == enable && "$3" == --now &&
+        "$4" == app-com.mitchellh.ghostty.service ]] ||
+        fail 'non-XFCE Ghostty convergence used the wrong systemctl argument vector'
+      printf 'called\n' >>"$systemctl_calls"
+    }
+    dev_server_home() { printf '%s\n' "$ghostty_home"; }
+    dotfiles_configure_ghostty
+  ) || fail 'non-XFCE Ghostty convergence failed'
+
+  assert_eq 1 "$(wc -l <"$systemctl_calls" | tr -d ' ')" \
+    'non-XFCE Ghostty convergence did not start the user service exactly once'
+  [[ ! -e "$ghostty_home/.config/autostart/ghostty.desktop" ]] ||
+    fail 'non-XFCE Ghostty convergence installed an XFCE-only autostart'
+  pass
+}
+
 test_production_wiring() {
   local configure_calls="$fixture/configure-wiring-calls"
   local doctor_calls="$fixture/doctor-wiring-calls"
   local ghostty_doctor_calls="$fixture/ghostty-doctor-wiring-calls"
+  local ghostty_service_doctor_calls="$fixture/ghostty-service-doctor-wiring-calls"
+  local non_xfce_doctor_output="$fixture/non-xfce-doctor-output"
 
   : >"$configure_calls"
   : >"$doctor_calls"
   : >"$ghostty_doctor_calls"
+  : >"$ghostty_service_doctor_calls"
   (
     unset XDG_CURRENT_DESKTOP
     command() {
@@ -422,6 +512,9 @@ test_production_wiring() {
     dotfiles_xfce_ghostty_default_configured() {
       printf 'called\n' >>"$ghostty_doctor_calls"
     }
+    dotfiles_ghostty_service_configured() {
+      printf 'called\n' >>"$ghostty_service_doctor_calls"
+    }
     git() { printf 'main\n'; }
 
     dotfiles_doctor >/dev/null
@@ -430,6 +523,20 @@ test_production_wiring() {
     'dotfiles doctor did not call the focused idle-policy boundary exactly once'
   assert_eq 1 "$(wc -l <"$ghostty_doctor_calls" | tr -d ' ')" \
     'dotfiles doctor did not call the headless Ghostty-default boundary exactly once'
+  assert_eq 1 "$(wc -l <"$ghostty_service_doctor_calls" | tr -d ' ')" \
+    'dotfiles doctor did not check the XFCE Ghostty autostart exactly once'
+
+  (
+    platform_id() { printf 'devbox\n'; }
+    command() { [[ "$1" == -v && "$2" == ghostty ]]; }
+    uname() { printf 'Linux\n'; }
+    dev_server_home() { printf '%s\n' "$fixture"; }
+    dotfiles_ghostty_service_configured() { return 0; }
+    git() { printf 'main\n'; }
+
+    dotfiles_doctor
+  ) >"$non_xfce_doctor_output"
+  assert_contains "$non_xfce_doctor_output" 'Ghostty user service enabled'
   pass
 }
 
@@ -440,6 +547,8 @@ test_idle_policy_runtime_doctor
 test_declared_platform_boundary
 test_declared_packages
 test_headless_ghostty_default
+test_ghostty_xfce_autostart
+test_ghostty_non_xfce_convergence
 test_production_wiring
 
 printf 'PASS: %d XFCE dotfiles test groups\n' "$tests_run"

@@ -156,14 +156,39 @@ dotfiles_configure_ghostty() {
   dotfiles_install_file "$(dotfiles_asset ghostty.config)" "$home/.config/ghostty/config.ghostty"
 
   if dotfiles_xfce_workstation; then
-    install -d -m 0755 "$home/.local/share/xfce4/helpers" "$home/.config/xfce4"
+    install -d -m 0755 \
+      "$home/.config/autostart" \
+      "$home/.config/xfce4" \
+      "$home/.local/share/xfce4/helpers"
+    dotfiles_install_file \
+      "$(dotfiles_asset ghostty-autostart.desktop)" \
+      "$home/.config/autostart/ghostty.desktop"
     dotfiles_install_file \
       "$(dotfiles_asset ghostty-xfce-helper.desktop)" \
       "$home/.local/share/xfce4/helpers/ghostty.desktop"
     dotfiles_configure_xfce_ghostty_default
+    systemctl --user disable app-com.mitchellh.ghostty.service
+  else
+    systemctl --user enable --now app-com.mitchellh.ghostty.service
+  fi
+}
+
+dotfiles_ghostty_service_configured() {
+  local enabled
+  local home
+
+  home="$(dev_server_home)"
+  if ! dotfiles_xfce_workstation; then
+    systemctl --user is-enabled --quiet app-com.mitchellh.ghostty.service
+    return
   fi
 
-  systemctl --user enable --now app-com.mitchellh.ghostty.service
+  [[ -f "$home/.config/autostart/ghostty.desktop" ]] &&
+    cmp -s "$(dotfiles_asset ghostty-autostart.desktop)" \
+      "$home/.config/autostart/ghostty.desktop" || return 1
+
+  enabled="$(systemctl --user is-enabled app-com.mitchellh.ghostty.service 2>/dev/null || true)"
+  [[ "$enabled" == disabled ]]
 }
 
 dotfiles_xfce_ghostty_default_configured() {
@@ -600,10 +625,18 @@ dotfiles_doctor() {
       doctor_fail dotfiles.ghostty-default "Ghostty is not the preferred XFCE terminal"
     fi
 
-    if systemctl --user is-enabled --quiet app-com.mitchellh.ghostty.service; then
-      doctor_pass dotfiles.ghostty-service "Ghostty user service enabled"
+    if dotfiles_ghostty_service_configured; then
+      if dotfiles_xfce_workstation; then
+        doctor_pass dotfiles.ghostty-service "XFCE starts the Ghostty user service after login"
+      else
+        doctor_pass dotfiles.ghostty-service "Ghostty user service enabled"
+      fi
     else
-      doctor_fail dotfiles.ghostty-service "Ghostty user service is not enabled"
+      if dotfiles_xfce_workstation; then
+        doctor_fail dotfiles.ghostty-service "Ghostty XFCE autostart is missing or stale systemd enablement remains"
+      else
+        doctor_fail dotfiles.ghostty-service "Ghostty user service is not enabled"
+      fi
     fi
   fi
 
