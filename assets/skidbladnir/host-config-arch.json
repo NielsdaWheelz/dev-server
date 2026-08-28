@@ -1,46 +1,46 @@
 {
   "platform": "Linux",
   "tmux": {"path": "/usr/bin/tmux", "version": "tmux 3.7c"},
-  "codexNodeEntrypoint": "/home/niels/.local/bin/codex",
+  "codexNodeEntrypoint": "/home/nnandal/.local/bin/codex",
   "profiles": [
     {
       "key": "personal",
       "label": "Codex · Personal",
-      "command": "/home/niels/bin/codex-personal",
-      "environment": [{"name": "CODEX_HOME", "value": "/home/niels/.codex-personal"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/home/niels/.local/bin/codex"}],
+      "command": "/home/nnandal/bin/codex-personal",
+      "environment": [{"name": "CODEX_HOME", "value": "/home/nnandal/.codex-personal"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/home/nnandal/.local/bin/codex"}],
       "arguments": ["--dangerously-bypass-approvals-and-sandbox"]
     },
     {
       "key": "work",
       "label": "Codex · Work",
-      "command": "/home/niels/bin/codex-work",
-      "environment": [{"name": "CODEX_HOME", "value": "/home/niels/.codex-work"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/home/niels/.local/bin/codex"}],
+      "command": "/home/nnandal/bin/codex-work",
+      "environment": [{"name": "CODEX_HOME", "value": "/home/nnandal/.codex-work"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/home/nnandal/.local/bin/codex"}],
       "arguments": ["--dangerously-bypass-approvals-and-sandbox"]
     },
     {
       "key": "work2",
       "label": "Codex · Work 2",
-      "command": "/home/niels/bin/codex-work2",
-      "environment": [{"name": "CODEX_HOME", "value": "/home/niels/.codex-work2"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/home/niels/.local/bin/codex"}],
+      "command": "/home/nnandal/bin/codex-work2",
+      "environment": [{"name": "CODEX_HOME", "value": "/home/nnandal/.codex-work2"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/home/nnandal/.local/bin/codex"}],
       "arguments": ["--dangerously-bypass-approvals-and-sandbox"]
     },
     {
       "key": "claude-personal",
       "label": "Claude · Personal",
-      "command": "/home/niels/bin/claude-personal",
-      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/home/niels/.claude-personal"}],
-      "foregroundSignatures": [{"argument0": "/home/niels/.local/bin/claude"}],
+      "command": "/home/nnandal/bin/claude-personal",
+      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/home/nnandal/.claude-personal"}],
+      "foregroundSignatures": [{"argument0": "/home/nnandal/.local/bin/claude"}],
       "arguments": ["--permission-mode", "auto"]
     },
     {
       "key": "claude-work",
       "label": "Claude · Work",
-      "command": "/home/niels/bin/claude-work",
-      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/home/niels/.claude-work"}],
-      "foregroundSignatures": [{"argument0": "/home/niels/.local/bin/claude"}],
+      "command": "/home/nnandal/bin/claude-work",
+      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/home/nnandal/.claude-work"}],
+      "foregroundSignatures": [{"argument0": "/home/nnandal/.local/bin/claude"}],
       "arguments": ["--permission-mode", "auto"]
     }
   ]
