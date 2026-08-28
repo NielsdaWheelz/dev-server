@@ -1,6 +1,6 @@
 {
   "platform": "Linux",
-  "tmux": {"path": "/usr/bin/tmux", "version": "tmux 3.7c"},
+  "tmux": {"path": "/usr/bin/tmux", "testedVersion": "tmux 3.7c"},
   "codexNodeEntrypoint": "/home/nnandal/.local/bin/codex",
   "profiles": [
     {
