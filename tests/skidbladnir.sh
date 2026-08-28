@@ -412,9 +412,25 @@ printf 'systemctl' >> "$SKIDBLADNIR_TEST_CALLS"
 printf ' %q' "$@" >> "$SKIDBLADNIR_TEST_CALLS"
 printf '\n' >> "$SKIDBLADNIR_TEST_CALLS"
 case " $* " in
-  *' is-active '*) [[ -f "$SKIDBLADNIR_TEST_SERVICE_STATE" ]] ;;
+  *' is-active '*)
+    [[ "${SKIDBLADNIR_TEST_IS_ACTIVE_UNAVAILABLE:-0}" == 0 &&
+      -f "$SKIDBLADNIR_TEST_SERVICE_STATE" ]]
+    ;;
   *' is-enabled '*) [[ -f "$SKIDBLADNIR_TEST_SERVICE_STATE" ]] ;;
-  *' enable --now '*) touch "$SKIDBLADNIR_TEST_SERVICE_STATE" ;;
+  *' enable --now '*)
+    if [[ ! -f "$SKIDBLADNIR_TEST_SERVICE_STATE" ]]; then
+      touch "$SKIDBLADNIR_TEST_SERVICE_STATE"
+      "$SKIDBLADNIR_TEST_INSTALLED_BINARY" version >"$SKIDBLADNIR_TEST_SERVICE_VERSION"
+    fi
+    ;;
+  *' restart '*)
+    if [[ -n "${SKIDBLADNIR_TEST_FAIL_RESTART_ONCE:-}" &&
+      ! -e "$SKIDBLADNIR_TEST_FAIL_RESTART_ONCE" ]]; then
+      : >"$SKIDBLADNIR_TEST_FAIL_RESTART_ONCE"
+      exit 73
+    fi
+    "$SKIDBLADNIR_TEST_INSTALLED_BINARY" version >"$SKIDBLADNIR_TEST_SERVICE_VERSION"
+    ;;
 esac
 EOF
   cat >"$test_bin/loginctl" <<'EOF'
@@ -472,6 +488,8 @@ test_converge_and_doctor() {
   export SKIDBLADNIR_TEST_CALLS="$fixture/runtime-calls"
   export SKIDBLADNIR_TEST_CURL_LEAK="$fixture/ambient-curl-leak"
   export SKIDBLADNIR_TEST_SERVICE_STATE="$fixture/service-active"
+  export SKIDBLADNIR_TEST_SERVICE_VERSION="$fixture/service-version"
+  export SKIDBLADNIR_TEST_INSTALLED_BINARY="$test_home/.local/bin/skidbladnir"
   : >"$SKIDBLADNIR_TEST_CALLS"
 
   # shellcheck source=lib/common.sh
@@ -528,6 +546,7 @@ test_converge_and_doctor() {
   bearer_before="$(cat "$test_home/.config/skidbladnir/bearer")"
   assert_eq mh-11111111111111111111111111111111 "$handle_before" 'created machine handle'
   assert_eq AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA "$bearer_before" 'created bearer'
+  : >"$SKIDBLADNIR_TEST_CALLS"
   skidbladnir_converge arch
   assert_eq "$handle_before" "$(cat "$test_home/.config/skidbladnir/machine-handle")" 'preserved machine handle'
   assert_eq "$bearer_before" "$(cat "$test_home/.config/skidbladnir/bearer")" 'preserved bearer'
@@ -680,8 +699,14 @@ test_converge_and_doctor() {
 
   : >"$SKIDBLADNIR_TEST_CALLS"
   # shellcheck disable=SC2034
-  skidbladnir_changed=1
+  skidbladnir_changed=0
+  skidbladnir_mark_release_activation_required macos "$test_home" \
+    v1.2.3 1111111111111111111111111111111111111111
+  skidbladnir_resume_release_activation macos "$test_home"
+  assert_eq 1 "$skidbladnir_changed" \
+    'persisted release activation state did not restore changed intent on macOS'
   skidbladnir_activate_macos_service "$test_home"
+  skidbladnir_clear_release_activation macos "$test_home"
   local expected_launchctl="$fixture/changed-launchctl-calls"
   printf '%s\n' \
     'launchctl print gui/501/dev.niels.skidbladnir' \
@@ -804,6 +829,117 @@ test_converge_and_doctor() {
     fail 'pending release pin stranded the prior release transaction journal'
   assert_eq "$old_binary_sha" "$(skidbladnir_sha256 "$test_home/.local/bin/skidbladnir")" \
     'pending release pin recovered the prior binary before failing closed'
+
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  export SKIDBLADNIR_TEST_FAIL_RESTART_ONCE="$fixture/service-restart-failed-once"
+  set +e
+  skidbladnir_converge arch >/dev/null 2>"$fixture/service-activation-error"
+  local activation_status=$?
+  set -e
+  unset SKIDBLADNIR_TEST_FAIL_RESTART_ONCE
+  [[ "$activation_status" -ne 0 ]] || fail 'injected service activation failure unexpectedly succeeded'
+  [[ -f "$fixture/service-restart-failed-once" ]] ||
+    fail 'service restart failure injection did not reach its target'
+  assert_eq 'v1.2.4 2222222222222222222222222222222222222222' \
+    "$("$test_home/.local/bin/skidbladnir" version)" \
+    'failed service activation did not retain the committed release'
+  assert_eq 'v1.2.3 1111111111111111111111111111111111111111' \
+    "$(cat "$SKIDBLADNIR_TEST_SERVICE_VERSION")" \
+    'failed service activation changed the running release'
+  local activation_marker
+  activation_marker="$(skidbladnir_release_activation_marker arch "$test_home")"
+  [[ -f "$activation_marker" && ! -L "$activation_marker" ]] ||
+    fail 'failed service activation did not leave a regular retry marker'
+  assert_eq 600 "$(skidbladnir_file_mode "$activation_marker")" \
+    'release activation retry marker mode'
+  assert_eq $'arch\tv1.2.4\t2222222222222222222222222222222222222222' \
+    "$(cat "$activation_marker")" \
+    'release activation retry marker target'
+  [[ ! -e "$test_home/.local/share/skidbladnir/.release-transaction" ]] ||
+    fail 'failed service activation left an artifact transaction journal'
+  ! grep -Fq 'tailscale ' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'failed service activation reached Serve convergence'
+  doctor_reset
+  skidbladnir_doctor arch >"$fixture/pending-activation-doctor" || true
+  assert_contains "$fixture/pending-activation-doctor" 'FAIL  skidbladnir.service'
+
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  export SKIDBLADNIR_TEST_IS_ACTIVE_UNAVAILABLE=1
+  skidbladnir_converge arch
+  unset SKIDBLADNIR_TEST_IS_ACTIVE_UNAVAILABLE
+  assert_eq 'v1.2.4 2222222222222222222222222222222222222222' \
+    "$(cat "$SKIDBLADNIR_TEST_SERVICE_VERSION")" \
+    'retry after service activation failure left the prior release running'
+  assert_contains "$SKIDBLADNIR_TEST_CALLS" 'systemctl --user restart skidbladnir.service'
+  [[ ! -e "$activation_marker" && ! -L "$activation_marker" ]] ||
+    fail 'successful service activation retained its retry marker'
+  doctor_reset
+  skidbladnir_doctor arch >"$fixture/retried-activation-doctor"
+  assert_contains "$fixture/retried-activation-doctor" 'PASS  skidbladnir.service'
+
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  skidbladnir_converge arch
+  ! grep -Fq 'systemctl --user restart skidbladnir.service' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'healthy unchanged Linux service was restarted after activation recovery'
+
+  /bin/unlink "$test_home/.codex-personal/config.toml"
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  skidbladnir_converge arch
+  assert_contains "$test_home/.codex-personal/config.toml" \
+    "notify = [\"$test_home/.local/bin/skid-notify\"]"
+  ! grep -Fq 'systemctl --user restart skidbladnir.service' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'Codex notify-only convergence restarted the unchanged gateway service'
+
+  assert_invalid_activation_marker() {
+    local label="$1"
+    local status
+    doctor_reset
+    skidbladnir_doctor arch >"$fixture/invalid-marker-$label-doctor" || true
+    ! grep -Fq 'PASS  skidbladnir.service' "$fixture/invalid-marker-$label-doctor" ||
+      fail "$label activation marker let doctor report a healthy service"
+    : >"$SKIDBLADNIR_TEST_CALLS"
+    set +e
+    skidbladnir_converge arch >/dev/null 2>"$fixture/invalid-marker-$label-error"
+    status=$?
+    set -e
+    [[ "$status" -ne 0 ]] || fail "$label activation marker permitted convergence"
+    ! grep -Eq '^(systemctl|tailscale)' "$SKIDBLADNIR_TEST_CALLS" ||
+      fail "$label activation marker reached a service boundary"
+    [[ ! -e "$test_home/.local/share/skidbladnir/.release-transaction" ]] ||
+      fail "$label activation marker stranded a release transaction"
+  }
+
+  local marker_referent="$fixture/activation-marker-referent"
+  printf 'preserve me\n' >"$marker_referent"
+  ln -s "$marker_referent" "$activation_marker"
+  assert_invalid_activation_marker symlink
+  assert_eq 'preserve me' "$(cat "$marker_referent")" \
+    'invalid activation-marker symlink changed its referent'
+  /bin/unlink "$activation_marker"
+
+  ln -s "$fixture/missing-activation-marker-referent" "$activation_marker"
+  assert_invalid_activation_marker broken-symlink
+  [[ ! -e "$fixture/missing-activation-marker-referent" ]] ||
+    fail 'broken activation-marker symlink created its missing referent'
+  /bin/unlink "$activation_marker"
+
+  printf '%s\n' $'arch\tv1.2.4\t2222222222222222222222222222222222222222' \
+    >"$activation_marker"
+  chmod 0644 "$activation_marker"
+  assert_invalid_activation_marker mode
+  /bin/unlink "$activation_marker"
+
+  printf 'malformed\n' >"$activation_marker"
+  chmod 0600 "$activation_marker"
+  assert_invalid_activation_marker malformed
+  /bin/unlink "$activation_marker"
+
+  printf '%s\ntrailing\n' $'arch\tv1.2.4\t2222222222222222222222222222222222222222' \
+    >"$activation_marker"
+  chmod 0600 "$activation_marker"
+  assert_invalid_activation_marker trailing-data
+  /bin/unlink "$activation_marker"
+  unset -f assert_invalid_activation_marker
   PATH="$old_path"
   export PATH
   pass

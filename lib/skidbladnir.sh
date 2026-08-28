@@ -315,6 +315,83 @@ skidbladnir_release_transaction_remove() {
   rm -R -- "$transaction"
 }
 
+skidbladnir_release_activation_marker() {
+  local platform="$1"
+  local home="$2"
+  case "$platform" in
+  devbox | arch | macos) ;;
+  *) die "unsupported Skidbladnir platform: $platform" ;;
+  esac
+  printf '%s/.local/share/skidbladnir/.release-activation-required\n' "$home"
+}
+
+skidbladnir_release_activation_required() {
+  local platform="$1"
+  local home="$2"
+  local marker marker_platform marker_version marker_source marker_extra value framed
+  marker="$(skidbladnir_release_activation_marker "$platform" "$home")"
+  if [[ ! -e "$marker" && ! -L "$marker" ]]; then
+    return 1
+  fi
+  [[ -f "$marker" && ! -L "$marker" &&
+    "$(skidbladnir_file_mode "$marker" 2>/dev/null)" == 600 ]] ||
+    die "Skidbladnir release activation marker is invalid"
+  IFS=$'\t' read -r marker_platform marker_version marker_source marker_extra <"$marker" || true
+  value="$(cat "$marker")" || die "Skidbladnir release activation marker is unreadable"
+  framed="$(
+    cat "$marker"
+    printf .
+  )" || die "Skidbladnir release activation marker is unreadable"
+  [[ -z "$marker_extra" && "$marker_platform" == "$platform" &&
+    "$marker_version" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ &&
+    "$marker_source" =~ ^[0-9a-f]{40}$ &&
+    "$value" == "$marker_platform"$'\t'"$marker_version"$'\t'"$marker_source" &&
+    "$framed" == "$value"$'\n.' ]] ||
+    die "Skidbladnir release activation marker is invalid"
+}
+
+skidbladnir_mark_release_activation_required() {
+  local platform="$1"
+  local home="$2"
+  local version="$3"
+  local source_sha="$4"
+  local marker temporary
+  marker="$(skidbladnir_release_activation_marker "$platform" "$home")"
+  if [[ -e "$marker" || -L "$marker" ]]; then
+    skidbladnir_release_activation_required "$platform" "$home"
+  fi
+  temporary="$(mktemp "$(dirname "$marker")/.release-activation-required.XXXXXX")"
+  if ! printf '%s\t%s\t%s\n' "$platform" "$version" "$source_sha" >"$temporary" ||
+    ! chmod 0600 "$temporary" ||
+    ! mv -f -- "$temporary" "$marker"; then
+    [[ ! -e "$temporary" && ! -L "$temporary" ]] || /bin/unlink "$temporary" 2>/dev/null || true
+    die "Could not persist Skidbladnir release activation state"
+  fi
+  skidbladnir_release_activation_required "$platform" "$home"
+}
+
+skidbladnir_resume_release_activation() {
+  local platform="$1"
+  local home="$2"
+  if skidbladnir_release_activation_required "$platform" "$home"; then
+    skidbladnir_changed=1
+  fi
+}
+
+skidbladnir_clear_release_activation() {
+  local platform="$1"
+  local home="$2"
+  local marker
+  marker="$(skidbladnir_release_activation_marker "$platform" "$home")"
+  if [[ ! -e "$marker" && ! -L "$marker" ]]; then
+    return
+  fi
+  skidbladnir_release_activation_required "$platform" "$home"
+  /bin/unlink "$marker" || die "Could not clear Skidbladnir release activation state"
+  [[ ! -e "$marker" && ! -L "$marker" ]] ||
+    die "Skidbladnir release activation state remains after service activation"
+}
+
 skidbladnir_release_transaction_snapshot() {
   local target="$1"
   local backup="$2"
@@ -438,7 +515,9 @@ skidbladnir_converge_cleanup() {
       converge_exit=1
     fi
   fi
-  rm -R -- "$staging" || converge_exit=1
+  if [[ -n "${staging:-}" ]]; then
+    rm -R -- "$staging" || converge_exit=1
+  fi
   exit "$converge_exit"
 }
 
@@ -579,14 +658,12 @@ skidbladnir_configure_serve() {
 }
 
 skidbladnir_activate_linux_service() {
-  local was_active=0
-  systemctl --user is-active --quiet skidbladnir.service && was_active=1
   if [[ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null || true)" != yes ]]; then
     sudo loginctl enable-linger "$(id -un)"
   fi
   systemctl --user daemon-reload
   systemctl --user enable --now skidbladnir.service
-  if ((was_active && skidbladnir_changed)); then
+  if ((skidbladnir_changed)); then
     systemctl --user restart skidbladnir.service
   fi
 }
@@ -630,10 +707,11 @@ skidbladnir_converge() (
   umask 077
   local platform="$1"
   local home asset manifest_platform pin_line version source_sha archive_sha
-  local staging archive extracted_members
+  local staging="" archive extracted_members
   local config_dir share_dir state_dir tailscale_cli context
   local owned_name owned_mode owned_source owned_target service_target
   local release_transaction_active=0
+  local service_restart_required=0
 
   require_cmd curl
   require_cmd jq
@@ -698,16 +776,23 @@ skidbladnir_converge() (
     owned_target="$(skidbladnir_owned_file_target "$platform" "$home" "$owned_name")"
     skidbladnir_install_owned "$owned_source" "$owned_target" "$owned_mode"
   done < <(skidbladnir_owned_file_specs)
+  skidbladnir_resume_release_activation "$platform" "$home"
+  service_restart_required="$skidbladnir_changed"
+  if ((service_restart_required)); then
+    skidbladnir_mark_release_activation_required "$platform" "$home" "$version" "$source_sha"
+  fi
   skidbladnir_commit_release_transaction "$platform" "$home" "$staging" "$archive"
   release_transaction_active=0
 
   skidbladnir_configure_codex_notify "$home"
+  skidbladnir_changed="$service_restart_required"
 
   if [[ "$platform" == macos ]]; then
     skidbladnir_activate_macos_service "$home"
   else
     skidbladnir_activate_linux_service
   fi
+  skidbladnir_clear_release_activation "$platform" "$home"
   tailscale_cli="$(skidbladnir_tailscale_cli)" || {
     warn "Skidbladnir Serve pending; Tailscale CLI is unavailable"
     exit 0
@@ -721,13 +806,14 @@ skidbladnir_doctor() {
   local current_version current_binary_sha current_characters_sha current_release_sha
   local expected_binary_sha expected_characters_sha expected_release_sha bundle bundle_members
   local tailscale_cli tmux_path tmux_version serve_status
-  local service_source service_target
+  local service_source service_target activation_marker
   home="$(dev_server_home)"
   config_dir="$home/.config/skidbladnir"
   share_dir="$home/.local/share/skidbladnir"
   binary="$home/.local/bin/skidbladnir"
   config="$config_dir/host-config.json"
   desired_config="$(skidbladnir_host_config_source "$platform")"
+  activation_marker="$(skidbladnir_release_activation_marker "$platform" "$home")"
 
   pin_line="$(skidbladnir_release_values "$platform" 2>/dev/null || true)"
   if [[ -z "$pin_line" ]]; then
@@ -807,7 +893,8 @@ skidbladnir_doctor() {
   if [[ "$platform" == macos ]]; then
     service_source="$dev_server_root/assets/skidbladnir/dev.niels.skidbladnir.plist"
     service_target="$home/Library/LaunchAgents/dev.niels.skidbladnir.plist"
-    if [[ -f "$service_target" && ! -L "$service_target" ]] &&
+    if [[ ! -e "$activation_marker" && ! -L "$activation_marker" &&
+      -f "$service_target" && ! -L "$service_target" ]] &&
       cmp -s "$service_source" "$service_target" &&
       [[ "$(skidbladnir_file_mode "$service_target" 2>/dev/null)" == 644 ]] &&
       launchctl print "gui/$(id -u)/dev.niels.skidbladnir" 2>/dev/null |
@@ -819,7 +906,8 @@ skidbladnir_doctor() {
   else
     service_source="$dev_server_root/assets/skidbladnir/skidbladnir.service"
     service_target="$home/.config/systemd/user/skidbladnir.service"
-    if [[ -f "$service_target" && ! -L "$service_target" ]] &&
+    if [[ ! -e "$activation_marker" && ! -L "$activation_marker" &&
+      -f "$service_target" && ! -L "$service_target" ]] &&
       cmp -s "$service_source" "$service_target" &&
       [[ "$(skidbladnir_file_mode "$service_target" 2>/dev/null)" == 644 ]] &&
       systemctl --user is-enabled --quiet skidbladnir.service &&
