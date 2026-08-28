@@ -23,9 +23,10 @@ skidbladnir_invite_manifest_snapshot() (
     ;;
   *)
     descriptor=/proc/self/fd/9
-    owner="$(stat -c '%u' "$descriptor" 2>/dev/null)"
-    size="$(stat -c '%s' "$descriptor" 2>/dev/null)"
-    opened_identity="$(stat -c '%i' "$descriptor" 2>/dev/null)"
+    # GNU stat must follow the procfs descriptor symlink to inspect the opened file.
+    owner="$(stat -Lc '%u' "$descriptor" 2>/dev/null)"
+    size="$(stat -Lc '%s' "$descriptor" 2>/dev/null)"
+    opened_identity="$(stat -Lc '%i' "$descriptor" 2>/dev/null)"
     path_identity="$(stat -c '%i' "$manifest" 2>/dev/null)"
     ;;
   esac
