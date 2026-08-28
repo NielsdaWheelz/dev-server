@@ -691,6 +691,7 @@ test_converge_and_doctor() {
     >"$expected_launchctl"
   cmp -s "$expected_launchctl" "$SKIDBLADNIR_TEST_CALLS" ||
     fail 'changed LaunchAgent did not reload once in path-owned order'
+  unset -f launchctl id
 
   local -a journaled_targets=(
     "$test_home/.local/bin/skidbladnir-launch"
