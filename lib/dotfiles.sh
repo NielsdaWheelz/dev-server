@@ -226,7 +226,7 @@ dotfiles_xfce_idle_policy_configured() {
     [[ "$(xfconf-query -c xfce4-screensaver -p /saver/idle-activation/delay 2>/dev/null)" == "30" ]] &&
     [[ "$(xfconf-query -c xfce4-screensaver -p /lock/enabled 2>/dev/null)" == "true" ]] &&
     [[ "$(xfconf-query -c xfce4-screensaver -p /lock/saver-activation/enabled 2>/dev/null)" == "true" ]] &&
-    [[ "$(xfconf-query -c xfce4-screensaver -p /lock/saver-activation/delay 2>/dev/null)" == "0" ]] &&
+    [[ "$(xfconf-query -c xfce4-screensaver -p /lock/saver-activation/delay 2>/dev/null)" == "25" ]] &&
     [[ "$(xfconf-query -c xfce4-screensaver -p /lock/sleep-activation 2>/dev/null)" == "true" ]]
 }
 
@@ -280,7 +280,7 @@ dotfiles_configure_xfce_qol() {
   dotfiles_xfconf_set xfce4-screensaver \
     /lock/saver-activation/enabled bool true
   dotfiles_xfconf_set xfce4-screensaver \
-    /lock/saver-activation/delay int 0
+    /lock/saver-activation/delay int 25
   dotfiles_xfconf_set xfce4-screensaver /lock/sleep-activation bool true
 
   dotfiles_xfconf_set xfce4-keyboard-shortcuts \
