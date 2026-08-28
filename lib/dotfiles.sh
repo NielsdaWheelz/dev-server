@@ -207,6 +207,29 @@ dotfiles_xfce_shortcuts_configured() {
     [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/xfwm4/custom/<Shift><Super>4' 2>/dev/null)" == "move_window_workspace_4_key" ]]
 }
 
+dotfiles_xfce_idle_policy_configured() {
+  local power=/xfce4-power-manager
+
+  [[ "$(xfconf-query -c xfce4-power-manager -p "$power/dpms-enabled" 2>/dev/null)" == "true" ]] &&
+    [[ "$(xfconf-query -c xfce4-power-manager -p "$power/dpms-on-ac-sleep" 2>/dev/null)" == "5" ]] &&
+    [[ "$(xfconf-query -c xfce4-power-manager -p "$power/dpms-on-ac-off" 2>/dev/null)" == "5" ]] &&
+    [[ "$(xfconf-query -c xfce4-power-manager -p "$power/dpms-on-battery-sleep" 2>/dev/null)" == "2" ]] &&
+    [[ "$(xfconf-query -c xfce4-power-manager -p "$power/dpms-on-battery-off" 2>/dev/null)" == "2" ]] &&
+    [[ "$(xfconf-query -c xfce4-power-manager -p "$power/inactivity-on-ac" 2>/dev/null)" == "0" ]] &&
+    [[ "$(xfconf-query -c xfce4-power-manager -p "$power/inactivity-on-battery" 2>/dev/null)" == "5" ]] &&
+    [[ "$(xfconf-query -c xfce4-power-manager -p "$power/inactivity-sleep-mode-on-ac" 2>/dev/null)" == "1" ]] &&
+    [[ "$(xfconf-query -c xfce4-power-manager -p "$power/inactivity-sleep-mode-on-battery" 2>/dev/null)" == "1" ]] &&
+    [[ "$(xfconf-query -c xfce4-power-manager -p "$power/lock-screen-suspend-hibernate" 2>/dev/null)" == "true" ]] &&
+    [[ "$(xfconf-query -c xfce4-screensaver -p /saver/enabled 2>/dev/null)" == "true" ]] &&
+    [[ "$(xfconf-query -c xfce4-screensaver -p /saver/mode 2>/dev/null)" == "0" ]] &&
+    [[ "$(xfconf-query -c xfce4-screensaver -p /saver/idle-activation/enabled 2>/dev/null)" == "true" ]] &&
+    [[ "$(xfconf-query -c xfce4-screensaver -p /saver/idle-activation/delay 2>/dev/null)" == "30" ]] &&
+    [[ "$(xfconf-query -c xfce4-screensaver -p /lock/enabled 2>/dev/null)" == "true" ]] &&
+    [[ "$(xfconf-query -c xfce4-screensaver -p /lock/saver-activation/enabled 2>/dev/null)" == "true" ]] &&
+    [[ "$(xfconf-query -c xfce4-screensaver -p /lock/saver-activation/delay 2>/dev/null)" == "0" ]] &&
+    [[ "$(xfconf-query -c xfce4-screensaver -p /lock/sleep-activation 2>/dev/null)" == "true" ]]
+}
+
 dotfiles_configure_xfce_qol() {
   local brightness_floor
   local home
@@ -226,6 +249,39 @@ dotfiles_configure_xfce_qol() {
     /xfce4-power-manager/profile-on-ac string balanced
   dotfiles_xfconf_set xfce4-power-manager \
     /xfce4-power-manager/profile-on-battery string power-saver
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/dpms-enabled bool true
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/dpms-on-ac-sleep uint 5
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/dpms-on-ac-off uint 5
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/dpms-on-battery-sleep uint 2
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/dpms-on-battery-off uint 2
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/inactivity-on-ac uint 0
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/inactivity-on-battery uint 5
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/inactivity-sleep-mode-on-ac uint 1
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/inactivity-sleep-mode-on-battery uint 1
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/lock-screen-suspend-hibernate bool true
+
+  dotfiles_xfconf_set xfce4-screensaver /saver/enabled bool true
+  dotfiles_xfconf_set xfce4-screensaver /saver/mode int 0
+  dotfiles_xfconf_set xfce4-screensaver \
+    /saver/idle-activation/enabled bool true
+  dotfiles_xfconf_set xfce4-screensaver \
+    /saver/idle-activation/delay int 30
+  dotfiles_xfconf_set xfce4-screensaver /lock/enabled bool true
+  dotfiles_xfconf_set xfce4-screensaver \
+    /lock/saver-activation/enabled bool true
+  dotfiles_xfconf_set xfce4-screensaver \
+    /lock/saver-activation/delay int 0
+  dotfiles_xfconf_set xfce4-screensaver /lock/sleep-activation bool true
 
   dotfiles_xfconf_set xfce4-keyboard-shortcuts \
     '/commands/custom/<Super>Return' string 'exo-open --launch TerminalEmulator'
@@ -387,6 +443,12 @@ dotfiles_doctor() {
       doctor_pass dotfiles.power-profiles "balanced on AC and power-saver on battery"
     else
       doctor_fail dotfiles.power-profiles "XFCE power profiles are not fully configured"
+    fi
+
+    if dotfiles_xfce_idle_policy_configured; then
+      doctor_pass dotfiles.idle-policy "display 5m AC/2m battery, lock 30m, suspend never AC/5m battery"
+    else
+      doctor_fail dotfiles.idle-policy "XFCE display, lock, or suspend idle policy is incomplete"
     fi
 
     if dotfiles_xfce_shortcuts_configured; then
