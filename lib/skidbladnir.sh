@@ -618,16 +618,262 @@ skidbladnir_tailscale_cli() {
   fi
 }
 
-skidbladnir_configure_serve() {
+skidbladnir_serve_config_is_wholly_owned() {
+  jq -e '
+    type == "object" and
+    ((keys - ["AllowFunnel", "Foreground", "Services", "TCP", "Web"]) | length == 0) and
+    .TCP == {"8443":{"HTTPS":true}} and
+    (.Web | type == "object" and length > 0 and
+      all(to_entries[];
+        (.key | endswith(":8443")) and
+        (.value | type == "object" and keys == ["Handlers"]) and
+        (.value.Handlers | type == "object" and length > 0 and
+          all(to_entries[];
+            ((.key == "/") and (.value == {"Proxy":"http://127.0.0.1:7341"})) or
+            ((.key == "/v1") and (.value == {"Proxy":"http://127.0.0.1:7341/v1"})))))) and
+    (((has("AllowFunnel") | not) or .AllowFunnel == {})) and
+    (((has("Foreground") | not) or .Foreground == {})) and
+    (((has("Services") | not) or .Services == {}))
+  ' >/dev/null
+}
+
+skidbladnir_serve_config_is_desired_for_host() {
+  local hostname="$1"
+  jq -e --arg key "$hostname:8443" '
+    type == "object" and
+    ((keys - ["AllowFunnel", "Foreground", "Services", "TCP", "Web"]) | length == 0) and
+    .TCP == {"8443":{"HTTPS":true}} and
+    .Web == {($key):{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}} and
+    (((has("AllowFunnel") | not) or .AllowFunnel == {})) and
+    (((has("Foreground") | not) or .Foreground == {})) and
+    (((has("Services") | not) or .Services == {}))
+  ' >/dev/null
+}
+
+skidbladnir_canonical_single_json() {
+  jq -cSse '
+    if length == 1 then .[0]
+    else error("expected exactly one JSON document")
+    end
+  '
+}
+
+skidbladnir_tailscale_current_dns_name() {
+  local dns_name
+  dns_name="$(jq -er '
+    if type == "object" and
+      .BackendState == "Running" and
+      (.Self.DNSName | type == "string")
+    then .Self.DNSName
+    else error("running Tailscale DNS name unavailable")
+    end
+  ')" || return 1
+  [[ "${#dns_name}" -ge 4 && "${#dns_name}" -le 254 &&
+    "$dns_name" =~ ^[a-z0-9][a-z0-9.-]*[a-z0-9][.]$ &&
+    "$dns_name" != *..* && "$dns_name" != *.-* && "$dns_name" != *-.* ]] || return 1
+  printf '%s\n' "${dns_name%.}"
+}
+
+skidbladnir_runtime_os() {
+  uname -s
+}
+
+skidbladnir_localapi_get_etag() {
+  LC_ALL=C awk '
+    { sub(/\r$/, "") }
+    $1 ~ /^HTTP\/[0-9]+([.][0-9]+)?$/ {
+      status = $2
+      status_count++
+      next
+    }
+    tolower($0) ~ /^etag:[[:space:]]*/ {
+      etag = $0
+      sub(/^[^:]*:[[:space:]]*/, "", etag)
+      etag_count++
+      next
+    }
+    tolower($0) ~ /^content-type:[[:space:]]*/ {
+      content_type = $0
+      sub(/^[^:]*:[[:space:]]*/, "", content_type)
+      content_type_count++
+    }
+    END {
+      if (status_count != 1 || status != "200" ||
+          etag_count != 1 ||
+          content_type_count != 1 || tolower(content_type) != "application/json") exit 1
+      print etag
+    }
+  ' "$1"
+}
+
+skidbladnir_localapi_response_is_200() {
+  LC_ALL=C awk '
+    { sub(/\r$/, "") }
+    $1 ~ /^HTTP\/[0-9]+([.][0-9]+)?$/ {
+      status = $2
+      status_count++
+    }
+    END { exit !(status_count == 1 && status == "200") }
+  ' "$1"
+}
+
+skidbladnir_reconcile_owned_serve_hostnames() (
+  set -euo pipefail
+  set +x
   local tailscale_cli="$1"
-  local serve_status
-  if ! TAILSCALE_BE_CLI=1 "$tailscale_cli" status --json 2>/dev/null |
-    jq -e '.BackendState == "Running"' >/dev/null; then
+  local platform="$2"
+  local hostname="$3"
+  local expected_status="$4"
+  local runtime_os credentials transport socket token port rest
+  local workspace headers post_headers observed desired header_bytes post_header_bytes body_bytes etag
+  local expected_canonical observed_canonical pre_status pre_hostname
+  local localapi_url
+  umask 077
+  runtime_os="$(skidbladnir_runtime_os)" ||
+    die "Could not identify the runtime for stale Serve hostname repair"
+  credentials="$(TAILSCALE_BE_CLI=1 "$tailscale_cli" debug local-creds 2>/dev/null)" ||
+    die "Tailscale LocalAPI credentials are unavailable for stale Serve hostname repair"
+  [[ "$credentials" != *$'\n'* ]] ||
+    die "Tailscale LocalAPI credentials have an unsupported shape"
+  case "$platform:$runtime_os" in
+  arch:Linux | devbox:Linux)
+    local prefix='curl --unix-socket '
+    local suffix=' http://local-tailscaled.sock/localapi/v0/status'
+    [[ "$credentials" == "$prefix"*"$suffix" ]] ||
+      die "Linux stale Serve hostname repair requires Tailscale's Unix-socket LocalAPI"
+    socket="${credentials#"$prefix"}"
+    socket="${socket%"$suffix"}"
+    [[ "${#socket}" -le 4096 && "$socket" =~ ^/[A-Za-z0-9._/-]+$ &&
+      "$socket" != *//* && "$socket" != */../* && "$socket" != */./* &&
+      -S "$socket" && ! -L "$socket" ]] ||
+      die "Tailscale's Unix-socket LocalAPI path is invalid"
+    transport=unix
+    token=''
+    localapi_url='http://local-tailscaled.sock/localapi/v0/serve-config'
+    ;;
+  macos:Darwin)
+    local prefix='curl -u:'
+    local marker=' http://localhost:'
+    local suffix='/localapi/v0/status'
+    [[ "$credentials" == "$prefix"*"$marker"*"$suffix" ]] ||
+      die "macOS stale Serve hostname repair requires Tailscale's loopback token LocalAPI"
+    rest="${credentials#"$prefix"}"
+    token="${rest%%"$marker"*}"
+    rest="${rest#*"$marker"}"
+    port="${rest%"$suffix"}"
+    [[ "${#token}" -ge 16 && "${#token}" -le 128 && "$token" =~ ^[A-Za-z0-9_-]+$ &&
+      "$port" =~ ^[1-9][0-9]{0,4}$ && "$port" -le 65535 ]] ||
+      die "Tailscale's loopback token LocalAPI credentials are invalid"
+    transport=tcp-token
+    socket=''
+    localapi_url="http://127.0.0.1:$port/localapi/v0/serve-config"
+    ;;
+  *)
+    die "Automatic stale Serve hostname repair is unsupported on this platform and runtime"
+    ;;
+  esac
+
+  localapi_curl() {
+    local curl_status
+    if [[ "$transport" == unix ]]; then
+      curl -q --noproxy '*' --unix-socket "$socket" "$@"
+      curl_status=$?
+    else
+      printf 'user = ":%s"\n' "$token" |
+        curl -q --noproxy '*' --config - "$@"
+      curl_status=$?
+    fi
+    return "$curl_status"
+  }
+
+  workspace="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-skidbladnir-serve.XXXXXX")" ||
+    die "Could not create the stale Serve hostname repair workspace"
+  trap 'rm -rf -- "$workspace"' EXIT
+  headers="$workspace/headers"
+  post_headers="$workspace/post-headers"
+  observed="$workspace/observed.json"
+  desired="$workspace/desired.json"
+
+  localapi_curl --silent --show-error --fail \
+    --connect-timeout 2 --max-time 5 --max-filesize 65536 \
+    --dump-header "$headers" --output "$observed" "$localapi_url" ||
+    die "Could not read Tailscale LocalAPI Serve state for atomic stale-hostname repair"
+  [[ -f "$headers" && ! -L "$headers" && -f "$observed" && ! -L "$observed" ]] ||
+    die "Tailscale LocalAPI Serve response files are invalid"
+  header_bytes="$(LC_ALL=C wc -c <"$headers" | tr -d '[:space:]')"
+  body_bytes="$(LC_ALL=C wc -c <"$observed" | tr -d '[:space:]')"
+  [[ "$header_bytes" =~ ^[1-9][0-9]{0,4}$ && "$header_bytes" -le 16384 ]] ||
+    die "Tailscale LocalAPI Serve response headers are invalid"
+  [[ "$body_bytes" =~ ^[1-9][0-9]{0,5}$ && "$body_bytes" -le 65536 ]] ||
+    die "Tailscale LocalAPI Serve response body is invalid"
+  etag="$(skidbladnir_localapi_get_etag "$headers")" ||
+    die "Tailscale LocalAPI Serve response status, content type, or ETag is invalid"
+  [[ "$etag" =~ ^[0-9a-f]{64}$ ]] ||
+    die "Tailscale LocalAPI Serve ETag is invalid"
+
+  expected_canonical="$(printf '%s' "$expected_status" | skidbladnir_canonical_single_json)" ||
+    die "The approved CLI Serve snapshot is invalid"
+  observed_canonical="$(skidbladnir_canonical_single_json <"$observed")" ||
+    die "Tailscale LocalAPI returned other than one Serve JSON document"
+  [[ "$observed_canonical" == "$expected_canonical" ]] ||
+    die "Tailscale Serve state changed before atomic stale-hostname repair"
+  printf '%s' "$observed_canonical" | skidbladnir_serve_config_is_wholly_owned ||
+    die "Tailscale Serve state includes unowned data before stale-hostname repair"
+  jq -cnS --arg key "$hostname:8443" '
+    {
+      TCP:{"8443":{HTTPS:true}},
+      Web:{($key):{Handlers:{"/v1":{Proxy:"http://127.0.0.1:7341/v1"}}}}
+    }
+  ' >"$desired" || die "Could not construct the canonical Skidbladnir Serve configuration"
+
+  pre_status="$(TAILSCALE_BE_CLI=1 "$tailscale_cli" status --json 2>/dev/null)" ||
+    die "Tailscale status is unavailable before atomic stale-hostname repair"
+  pre_status="$(printf '%s' "$pre_status" | skidbladnir_canonical_single_json)" ||
+    die "Tailscale status is invalid before atomic stale-hostname repair"
+  pre_hostname="$(printf '%s' "$pre_status" | skidbladnir_tailscale_current_dns_name)" ||
+    die "Tailscale's current DNS hostname is invalid before atomic stale-hostname repair"
+  [[ "$pre_hostname" == "$hostname" ]] ||
+    die "Tailscale's DNS hostname changed before atomic stale-hostname repair"
+
+  localapi_curl --silent --show-error --fail \
+    --connect-timeout 2 --max-time 5 \
+    --header "If-Match: $etag" --header 'Content-Type: application/json' \
+    --data-binary "@$desired" --dump-header "$post_headers" --output /dev/null "$localapi_url" ||
+    die "Atomic stale Serve hostname repair did not complete or could not be confirmed; rerun convergence"
+  [[ -f "$post_headers" && ! -L "$post_headers" ]] ||
+    die "Tailscale LocalAPI Serve mutation response headers are invalid"
+  post_header_bytes="$(LC_ALL=C wc -c <"$post_headers" | tr -d '[:space:]')"
+  [[ "$post_header_bytes" =~ ^[1-9][0-9]{0,4}$ && "$post_header_bytes" -le 16384 ]] &&
+    skidbladnir_localapi_response_is_200 "$post_headers" ||
+    die "Tailscale LocalAPI did not confirm stale Serve hostname repair with HTTP 200"
+)
+
+skidbladnir_configure_serve() (
+  set +x
+  local tailscale_cli="$1"
+  local platform="$2"
+  local tailscale_status serve_status post_tailscale_status current_dns_name post_dns_name
+  local owned_web_count current_web_count
+  case "$platform" in arch | devbox | macos) ;; *) die "unsupported Skidbladnir platform: $platform" ;; esac
+  if ! tailscale_status="$(TAILSCALE_BE_CLI=1 "$tailscale_cli" status --json 2>/dev/null)"; then
     warn "Skidbladnir Serve pending; sign in to Tailscale, then converge again"
     return
   fi
+  tailscale_status="$(printf '%s' "$tailscale_status" | skidbladnir_canonical_single_json)" ||
+    die "Tailscale status is invalid"
+  printf '%s' "$tailscale_status" | jq -e '
+    type == "object" and (.BackendState | type == "string")
+  ' >/dev/null || die "Tailscale status is invalid"
+  if ! printf '%s' "$tailscale_status" | jq -e '.BackendState == "Running"' >/dev/null; then
+    warn "Skidbladnir Serve pending; sign in to Tailscale, then converge again"
+    return
+  fi
+  current_dns_name="$(printf '%s' "$tailscale_status" | skidbladnir_tailscale_current_dns_name)" ||
+    die "Tailscale's current DNS hostname is invalid"
   serve_status="$(TAILSCALE_BE_CLI=1 "$tailscale_cli" serve status --json 2>/dev/null)" ||
     die "Skidbladnir Serve status is unavailable"
+  serve_status="$(printf '%s' "$serve_status" | skidbladnir_canonical_single_json)" ||
+    die "Skidbladnir Serve status is invalid"
   printf '%s' "$serve_status" | jq -e '
     type == "object" and
     ((.Web // {}) | type == "object") and
@@ -636,6 +882,34 @@ skidbladnir_configure_serve() {
       ((.value.Handlers // {}) | keys[]) |
       select(. != "/" and . != "/v1")] | length == 0)
   ' >/dev/null || die "Skidbladnir Serve 8443 has an unowned path; remove it explicitly"
+
+  owned_web_count="$(printf '%s' "$serve_status" | jq -er '
+    [((.Web // {}) | to_entries[]) | select(.key | endswith(":8443"))] | length
+  ')" || die "Skidbladnir Serve status is invalid"
+  current_web_count="$(printf '%s' "$serve_status" | jq -er --arg key "$current_dns_name:8443" '
+    [((.Web // {}) | to_entries[]) | select(.key == $key)] | length
+  ')" || die "Skidbladnir Serve status is invalid"
+  if ((owned_web_count > 1 || (owned_web_count == 1 && current_web_count == 0))); then
+    printf '%s' "$serve_status" | skidbladnir_serve_config_is_wholly_owned ||
+      die "Skidbladnir stale Serve hostnames coexist with unowned state; remove the stale owned mapping explicitly"
+    skidbladnir_reconcile_owned_serve_hostnames \
+      "$tailscale_cli" "$platform" "$current_dns_name" "$serve_status" || return 1
+    post_tailscale_status="$(TAILSCALE_BE_CLI=1 "$tailscale_cli" status --json 2>/dev/null)" ||
+      die "Tailscale status is unavailable after stale Serve hostname repair"
+    post_tailscale_status="$(printf '%s' "$post_tailscale_status" | skidbladnir_canonical_single_json)" ||
+      die "Tailscale status is invalid after stale Serve hostname repair"
+    post_dns_name="$(printf '%s' "$post_tailscale_status" | skidbladnir_tailscale_current_dns_name)" ||
+      die "Tailscale's current DNS hostname is invalid after stale Serve hostname repair"
+    [[ "$post_dns_name" == "$current_dns_name" ]] ||
+      die "Tailscale's DNS hostname changed during stale Serve hostname repair; converge again"
+    serve_status="$(TAILSCALE_BE_CLI=1 "$tailscale_cli" serve status --json 2>/dev/null)" ||
+      die "Skidbladnir Serve status is unavailable after stale-hostname repair"
+    serve_status="$(printf '%s' "$serve_status" | skidbladnir_canonical_single_json)" ||
+      die "Skidbladnir Serve status is invalid after stale-hostname repair"
+    printf '%s' "$serve_status" | skidbladnir_serve_config_is_desired_for_host "$current_dns_name" ||
+      die "Atomic stale Serve hostname repair did not produce the canonical current-host mapping"
+    return
+  fi
 
   if printf '%s' "$serve_status" | jq -e '
     [((.Web // {}) | to_entries[]) |
@@ -650,12 +924,14 @@ skidbladnir_configure_serve() {
         select(. != null)] == [{"Proxy":"http://127.0.0.1:7341"}]
     ' >/dev/null || die "Skidbladnir Serve root path is not the retired owned mapping"
     # Retired owned command: tailscale serve --yes --https=8443 --set-path=/ off
-    TAILSCALE_BE_CLI=1 "$tailscale_cli" serve --yes --https=8443 --set-path=/ off >/dev/null
+    TAILSCALE_BE_CLI=1 "$tailscale_cli" serve --yes --https=8443 --set-path=/ off >/dev/null ||
+      die "Could not remove the retired Skidbladnir Serve root mapping"
   fi
 
   # Desired command: tailscale serve --bg --yes --https=8443 --set-path=/v1 http://127.0.0.1:7341/v1
-  TAILSCALE_BE_CLI=1 "$tailscale_cli" serve --bg --yes --https=8443 --set-path=/v1 http://127.0.0.1:7341/v1 >/dev/null
-}
+  TAILSCALE_BE_CLI=1 "$tailscale_cli" serve --bg --yes --https=8443 --set-path=/v1 http://127.0.0.1:7341/v1 >/dev/null ||
+    die "Could not configure the dedicated Skidbladnir Serve mapping"
+)
 
 skidbladnir_activate_linux_service() {
   if [[ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null || true)" != yes ]]; then
@@ -797,7 +1073,7 @@ skidbladnir_converge() (
     warn "Skidbladnir Serve pending; Tailscale CLI is unavailable"
     exit 0
   }
-  skidbladnir_configure_serve "$tailscale_cli"
+  skidbladnir_configure_serve "$tailscale_cli" "$platform"
 )
 
 skidbladnir_doctor() {
@@ -805,7 +1081,8 @@ skidbladnir_doctor() {
   local home config_dir share_dir binary config desired_config pin_line version source_sha archive_sha
   local current_version current_binary_sha current_characters_sha current_release_sha
   local expected_binary_sha expected_characters_sha expected_release_sha bundle bundle_members
-  local tailscale_cli tmux_path tmux_version serve_status
+  local tailscale_cli tailscale_status tailscale_running current_dns_name
+  local tmux_path tmux_version serve_status doctor_xtrace
   local service_source service_target activation_marker
   home="$(dev_server_home)"
   config_dir="$home/.config/skidbladnir"
@@ -924,9 +1201,25 @@ skidbladnir_doctor() {
     skidbladnir_doctor_fail skidbladnir.loopback "tmux-free loopback pressure endpoint is unhealthy; inspect the gateway service"
   fi
 
+  doctor_xtrace=0
+  case $- in
+  *x*)
+    doctor_xtrace=1
+    set +x
+    ;;
+  esac
   tailscale_cli="$(skidbladnir_tailscale_cli 2>/dev/null || true)"
   serve_status=""
-  [[ -z "$tailscale_cli" ]] || serve_status="$(TAILSCALE_BE_CLI=1 "$tailscale_cli" serve status --json 2>/dev/null || true)"
+  tailscale_status=""
+  if [[ -n "$tailscale_cli" ]]; then
+    serve_status="$(TAILSCALE_BE_CLI=1 "$tailscale_cli" serve status --json 2>/dev/null || true)"
+    tailscale_status="$(TAILSCALE_BE_CLI=1 "$tailscale_cli" status --json 2>/dev/null || true)"
+  fi
+  tailscale_running=0
+  if printf '%s' "$tailscale_status" | jq -e '.BackendState == "Running"' >/dev/null 2>&1; then
+    tailscale_running=1
+  fi
+  current_dns_name="$(printf '%s' "$tailscale_status" | skidbladnir_tailscale_current_dns_name 2>/dev/null || true)"
   if printf '%s' "$serve_status" | jq -e '
     type == "object" and
     (. as $status |
@@ -937,17 +1230,22 @@ skidbladnir_doctor() {
   ' >/dev/null 2>&1; then
     skidbladnir_doctor_fail skidbladnir.serve \
       "public Funnel is enabled on HTTPS 8443; run tailscale funnel --https=8443 off, then converge again"
-  elif printf '%s' "$serve_status" | jq -e '
+  elif printf '%s' "$serve_status" | jq -e --arg key "$current_dns_name:8443" '
     type == "object" and .TCP["8443"].HTTPS == true and
     ([((.Web // {}) | to_entries[]) |
       select(.key | endswith(":8443"))] as $owned |
       ($owned | length == 1) and
+      ($owned[0].key == $key) and
       ($owned[0].value.Handlers == {"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}) and
       (((.AllowFunnel // {})[$owned[0].key] // false) == false))
   ' >/dev/null 2>&1; then
     skidbladnir_doctor_pass skidbladnir.serve "private HTTPS 8443 exposes only loopback /v1"
   else
     skidbladnir_doctor_fail skidbladnir.serve "dedicated Serve mapping missing; sign in to Tailscale and converge again"
+  fi
+  unset tailscale_status current_dns_name serve_status
+  if ((doctor_xtrace)); then
+    set -x
   fi
 
   tmux_path="$(jq -er '.tmux.path' "$desired_config" 2>/dev/null || true)"
@@ -958,8 +1256,7 @@ skidbladnir_doctor() {
     skidbladnir_doctor_fail skidbladnir.tmux "configured tmux path or version differs; run the platform converge command"
   fi
 
-  if [[ -n "$tailscale_cli" ]] && TAILSCALE_BE_CLI=1 "$tailscale_cli" status --json 2>/dev/null |
-    jq -e '.BackendState == "Running"' >/dev/null; then
+  if ((tailscale_running)); then
     skidbladnir_doctor_pass skidbladnir.tailscale "Tailscale is signed in"
   else
     skidbladnir_doctor_fail skidbladnir.tailscale "Tailscale is not signed in; complete the one-time login"

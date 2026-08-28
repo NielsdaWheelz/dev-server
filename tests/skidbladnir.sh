@@ -8,9 +8,11 @@ fixture="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-skidbladnir-test.XXXXXX")"
 test_home="$fixture/home"
 test_bin="$fixture/bin"
 tests_run=0
+test_socket_dir=""
 
 cleanup() {
   rm -rf -- "$fixture"
+  [[ -z "$test_socket_dir" ]] || rm -rf -- "$test_socket_dir"
 }
 trap cleanup EXIT
 
@@ -293,7 +295,10 @@ test_assets_and_operator_copy() {
     'if [[ -e "$transaction" || -L "$transaction" ]]; then'
   assert_contains "$repo_dir/lib/skidbladnir.sh" 'tailscale serve --bg --yes --https=8443 --set-path=/v1 http://127.0.0.1:7341/v1'
   assert_contains "$repo_dir/lib/skidbladnir.sh" 'tailscale serve --yes --https=8443 --set-path=/ off'
-  ! grep -Fq 'tailscale serve reset' "$repo_dir/lib/skidbladnir.sh" || fail 'convergence resets unrelated Tailscale Serve state'
+  ! grep -Fq 'serve reset' "$repo_dir/lib/skidbladnir.sh" ||
+    fail 'convergence contains a destructive Tailscale Serve reset path'
+  assert_contains "$repo_dir/lib/skidbladnir.sh" '--header "If-Match: $etag"'
+  assert_contains "$repo_dir/lib/skidbladnir.sh" '/localapi/v0/serve-config'
   assert_contains "$repo_dir/lib/skidbladnir-invite.sh" \
     'Fleet invite ready. It expires in 5 minutes and works once. On the phone, open Skíðblaðnir and tap Connect.'
   assert_contains "$repo_dir/lib/skidbladnir-invite.sh" \
@@ -377,22 +382,99 @@ write_runtime_boundaries() {
   cat >"$test_bin/curl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+original_args=" $* "
+request_config=""
 if [[ " $* " == *' --config - '* ]]; then
   request_config="$(cat)"
-  if [[ "${1:-}" != -q || " $* " != *' --noproxy * '* ]]; then
+  if [[ "$original_args" == *'/localapi/v0/serve-config '* ]]; then
+    if [[ "${1:-}" != -q || "$original_args" != *' --noproxy * '* ]]; then
+      printf '%s\n' "$request_config" >"$SKIDBLADNIR_TEST_CURL_LEAK"
+    fi
+  else
+    if [[ "${1:-}" != -q || "$original_args" != *' --noproxy * '* ]]; then
+      printf '%s\n' "$request_config" >"$SKIDBLADNIR_TEST_CURL_LEAK"
+    fi
+    printf 'curl-args' >>"$SKIDBLADNIR_TEST_CALLS"
+    printf ' %q' "$@" >>"$SKIDBLADNIR_TEST_CALLS"
+    printf '\n' >>"$SKIDBLADNIR_TEST_CALLS"
+    url_line=""
+    while IFS= read -r line; do
+      case "$line" in url\ =*) url_line="$line" ;; esac
+    done <<<"$request_config"
+    printf 'curl-config %q\n' "$url_line" >>"$SKIDBLADNIR_TEST_CALLS"
+    if [[ "$original_args" != *' --output /dev/null '* && -n "${SKIDBLADNIR_TEST_INVENTORY:-}" ]]; then
+      printf '%s\n' "$SKIDBLADNIR_TEST_INVENTORY"
+    fi
+    exit 0
+  fi
+fi
+if [[ "$original_args" == *'/localapi/v0/serve-config '* ]]; then
+  if [[ "${1:-}" != -q || "$original_args" != *' --noproxy * '* ]]; then
     printf '%s\n' "$request_config" >"$SKIDBLADNIR_TEST_CURL_LEAK"
   fi
-  printf 'curl-args' >>"$SKIDBLADNIR_TEST_CALLS"
-  printf ' %q' "$@" >>"$SKIDBLADNIR_TEST_CALLS"
-  printf '\n' >>"$SKIDBLADNIR_TEST_CALLS"
-  url_line=""
-  while IFS= read -r line; do
-    case "$line" in url\ =*) url_line="$line" ;; esac
-  done <<<"$request_config"
-  printf 'curl-config %q\n' "$url_line" >>"$SKIDBLADNIR_TEST_CALLS"
-  if [[ " $* " != *' --output /dev/null '* && -n "${SKIDBLADNIR_TEST_INVENTORY:-}" ]]; then
-    printf '%s\n' "$SKIDBLADNIR_TEST_INVENTORY"
+  dump_header=""
+  output=""
+  data_binary=""
+  if_match=""
+  socket=""
+  url=""
+  while (( $# > 0 )); do
+    case "$1" in
+      --dump-header|-D) dump_header="$2"; shift 2 ;;
+      --output|-o) output="$2"; shift 2 ;;
+      --data-binary) data_binary="$2"; shift 2 ;;
+      --header|-H)
+        case "$2" in If-Match:\ *) if_match="${2#If-Match: }" ;; esac
+        shift 2
+        ;;
+      --unix-socket) socket="$2"; shift 2 ;;
+      http://*/localapi/v0/serve-config) url="$1"; shift ;;
+      *) shift ;;
+    esac
+  done
+  if [[ -n "$socket" ]]; then
+    [[ "$socket" == "$SKIDBLADNIR_TEST_TAILSCALE_SOCKET" ]]
+    [[ "$url" == http://local-tailscaled.sock/localapi/v0/serve-config ]]
+    [[ -z "$request_config" ]]
+  else
+    [[ "$url" == "http://127.0.0.1:$SKIDBLADNIR_TEST_LOCALAPI_PORT/localapi/v0/serve-config" ]]
+    [[ "$request_config" == "user = \":$SKIDBLADNIR_TEST_LOCALAPI_TOKEN\"" ]]
   fi
+  if [[ -z "$data_binary" ]]; then
+    printf 'curl-localapi GET\n' >>"$SKIDBLADNIR_TEST_CALLS"
+    [[ -n "$dump_header" && -n "$output" ]]
+    printf 'HTTP/1.1 %s Test\r\n' "${SKIDBLADNIR_TEST_LOCALAPI_GET_STATUS:-200}" >"$dump_header"
+    printf 'Content-Type: %s\r\n' "${SKIDBLADNIR_TEST_LOCALAPI_CONTENT_TYPE:-application/json}" >>"$dump_header"
+    if [[ "${SKIDBLADNIR_TEST_LOCALAPI_MISSING_ETAG:-0}" == 0 ]]; then
+      printf 'Etag: %s\r\n' "$(cat "$SKIDBLADNIR_TEST_SERVE_ETAG")" >>"$dump_header"
+    fi
+    if [[ "${SKIDBLADNIR_TEST_LOCALAPI_DUPLICATE_ETAG:-0}" != 0 ]]; then
+      printf 'ETag: %064d\r\n' 9 >>"$dump_header"
+    fi
+    printf '\r\n' >>"$dump_header"
+    if [[ -n "${SKIDBLADNIR_TEST_LOCALAPI_BODY:-}" ]]; then
+      cp "$SKIDBLADNIR_TEST_LOCALAPI_BODY" "$output"
+    else
+      cp "$SKIDBLADNIR_TEST_SERVE_STATE" "$output"
+    fi
+    exit 0
+  fi
+  printf 'curl-localapi POST\n' >>"$SKIDBLADNIR_TEST_CALLS"
+  if [[ -n "${SKIDBLADNIR_TEST_LOCALAPI_RACE_STATE:-}" &&
+    ! -e "$SKIDBLADNIR_TEST_LOCALAPI_RACE_ONCE" ]]; then
+    cp "$SKIDBLADNIR_TEST_LOCALAPI_RACE_STATE" "$SKIDBLADNIR_TEST_SERVE_STATE"
+    printf '%064d\n' 2 >"$SKIDBLADNIR_TEST_SERVE_ETAG"
+    : >"$SKIDBLADNIR_TEST_LOCALAPI_RACE_ONCE"
+  fi
+  [[ "${SKIDBLADNIR_TEST_FAIL_LOCALAPI_POST:-0}" == 0 ]]
+  [[ "$if_match" == "$(cat "$SKIDBLADNIR_TEST_SERVE_ETAG")" ]]
+  [[ "$data_binary" == @* ]]
+  cp "${data_binary#@}" "$SKIDBLADNIR_TEST_SERVE_STATE.next"
+  mv "$SKIDBLADNIR_TEST_SERVE_STATE.next" "$SKIDBLADNIR_TEST_SERVE_STATE"
+  printf '%064d\n' 3 >"$SKIDBLADNIR_TEST_SERVE_ETAG"
+  [[ "${SKIDBLADNIR_TEST_FAIL_LOCALAPI_RESPONSE_AFTER_APPLY:-0}" == 0 ]] || exit 75
+  [[ -n "$dump_header" ]]
+  printf 'HTTP/1.1 %s Test\r\n\r\n' "${SKIDBLADNIR_TEST_LOCALAPI_POST_STATUS:-200}" >"$dump_header"
   exit 0
 fi
 output=""
@@ -450,12 +532,58 @@ printf 'tailscale' >> "$SKIDBLADNIR_TEST_CALLS"
 printf ' %q' "$@" >> "$SKIDBLADNIR_TEST_CALLS"
 printf '\n' >> "$SKIDBLADNIR_TEST_CALLS"
 case "${1:-} ${2:-}" in
-  'status --json') printf '{"BackendState":"Running"}\n' ;;
+  'status --json')
+    if [[ -n "${SKIDBLADNIR_TEST_TAILSCALE_STATUS_SEQUENCE:-}" ]]; then
+      count=0
+      if [[ -e "$SKIDBLADNIR_TEST_TAILSCALE_STATUS_COUNT" ]]; then
+        count="$(cat "$SKIDBLADNIR_TEST_TAILSCALE_STATUS_COUNT")"
+      fi
+      count=$((count + 1))
+      printf '%s\n' "$count" >"$SKIDBLADNIR_TEST_TAILSCALE_STATUS_COUNT"
+      awk -v wanted="$count" 'NR == wanted { print; found = 1 } END { exit !found }' \
+        "$SKIDBLADNIR_TEST_TAILSCALE_STATUS_SEQUENCE"
+    elif [[ -n "${SKIDBLADNIR_TEST_TAILSCALE_STATUS:-}" ]]; then
+      printf '%s\n' "$SKIDBLADNIR_TEST_TAILSCALE_STATUS"
+    else
+      printf '%s\n' '{"BackendState":"Running","Self":{"DNSName":"current.example.ts.net."}}'
+    fi
+    ;;
+  'debug local-creds')
+    if [[ -n "${SKIDBLADNIR_TEST_LOCAL_CREDS:-}" ]]; then
+      printf '%s\n' "$SKIDBLADNIR_TEST_LOCAL_CREDS"
+    else
+      printf 'curl --unix-socket %s http://local-tailscaled.sock/localapi/v0/status\n' \
+        "$SKIDBLADNIR_TEST_TAILSCALE_SOCKET"
+    fi
+    ;;
   'serve status')
-    if [[ -n "${SKIDBLADNIR_TEST_SERVE_STATUS:-}" ]]; then
+    if [[ -n "${SKIDBLADNIR_TEST_SERVE_SECOND_STATUS:-}" &&
+      -n "${SKIDBLADNIR_TEST_SERVE_STATUS_READ_ONCE:-}" &&
+      -e "$SKIDBLADNIR_TEST_SERVE_STATUS_READ_ONCE" ]]; then
+      if [[ -n "${SKIDBLADNIR_TEST_SERVE_SECOND_STATE:-}" ]]; then
+        cp "$SKIDBLADNIR_TEST_SERVE_SECOND_STATE" "$SKIDBLADNIR_TEST_SERVE_STATE"
+      fi
+      printf '%s\n' "$SKIDBLADNIR_TEST_SERVE_SECOND_STATUS"
+    elif [[ -n "${SKIDBLADNIR_TEST_SERVE_STATUS_READ_ONCE:-}" ]]; then
+      : >"$SKIDBLADNIR_TEST_SERVE_STATUS_READ_ONCE"
+      printf '%s\n' "$SKIDBLADNIR_TEST_SERVE_STATUS"
+    elif [[ -n "${SKIDBLADNIR_TEST_SERVE_STATE:-}" ]]; then
+      cat "$SKIDBLADNIR_TEST_SERVE_STATE"
+    elif [[ -n "${SKIDBLADNIR_TEST_SERVE_STATUS:-}" ]]; then
       printf '%s\n' "$SKIDBLADNIR_TEST_SERVE_STATUS"
     else
-      printf '%s\n' '{"TCP":{"8443":{"HTTPS":true}},"Web":{"host.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}}}'
+      printf '%s\n' '{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}}}'
+    fi
+    ;;
+  'serve --bg')
+    [[ "${SKIDBLADNIR_TEST_FAIL_SERVE_APPLY:-0}" == 0 ]] || exit 74
+    if [[ -n "${SKIDBLADNIR_TEST_SERVE_STATE:-}" ]]; then
+      jq -c --arg host "$SKIDBLADNIR_TEST_SERVE_HOST" \
+        '.TCP["8443"] = {HTTPS:true} |
+          .Web[$host + ":8443"] = {Handlers:{"/v1":{Proxy:"http://127.0.0.1:7341/v1"}}}' \
+        "$SKIDBLADNIR_TEST_SERVE_STATE" \
+        >"$SKIDBLADNIR_TEST_SERVE_STATE.next"
+      mv "$SKIDBLADNIR_TEST_SERVE_STATE.next" "$SKIDBLADNIR_TEST_SERVE_STATE"
     fi
     ;;
 esac
@@ -509,6 +637,7 @@ test_converge_and_doctor() {
   skidbladnir_release_pin_file="$fixture/release-pin.json"
   skidbladnir_host_config_source() { printf '%s\n' "$fixture/host-config.json"; }
   skidbladnir_tailscale_cli() { printf '%s\n' "$test_bin/tailscale"; }
+  skidbladnir_runtime_os() { printf 'Linux\n'; }
 
   printf 'owned source\n' >"$fixture/owned-source"
   printf 'unrelated target\n' >"$fixture/unrelated-target"
@@ -557,10 +686,492 @@ test_converge_and_doctor() {
   assert_contains "$SKIDBLADNIR_TEST_CALLS" 'systemctl --user enable --now skidbladnir.service'
   ! grep -Fq 'systemctl --user restart skidbladnir.service' "$SKIDBLADNIR_TEST_CALLS" ||
     fail 'unchanged active Linux service was restarted'
-  export SKIDBLADNIR_TEST_SERVE_STATUS='{"TCP":{"8443":{"HTTPS":true}},"Web":{"host.example.ts.net:8443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:7341"}}}}}'
-  skidbladnir_configure_serve "$test_bin/tailscale"
+  export SKIDBLADNIR_TEST_SERVE_STATUS='{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:7341"}}}}}'
+  skidbladnir_configure_serve "$test_bin/tailscale" arch
   assert_contains "$SKIDBLADNIR_TEST_CALLS" 'tailscale serve --yes --https=8443 --set-path=/ off'
   unset SKIDBLADNIR_TEST_SERVE_STATUS
+
+  local duplicate_serve_status='{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}},"AllowFunnel":{}}'
+  local desired_serve_status='{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}}}'
+  local raced_serve_status='{"TCP":{"8443":{"HTTPS":true},"9443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"other.example.ts.net:9443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:9000"}}}}}'
+  local serve_state="$fixture/serve-state.json"
+  local serve_etag="$fixture/serve-etag"
+  test_socket_dir="$(mktemp -d /tmp/dev-server-skid-socket.XXXXXX)"
+  local tailscale_socket="$test_socket_dir/tailscaled.sock"
+  local localapi_body="$fixture/localapi-body.json"
+  local serve_tmp="$fixture/serve-tmp"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import socket, sys; sock = socket.socket(socket.AF_UNIX); sock.bind(sys.argv[1]); sock.close()' \
+      "$tailscale_socket"
+  else
+    ruby -rsocket -e 'server = UNIXServer.new(ARGV.fetch(0)); server.close' "$tailscale_socket"
+  fi
+  export SKIDBLADNIR_TEST_TAILSCALE_SOCKET="$tailscale_socket"
+  export SKIDBLADNIR_TEST_SERVE_ETAG="$serve_etag"
+  export SKIDBLADNIR_TEST_SERVE_HOST=current.example.ts.net
+  export SKIDBLADNIR_TEST_LOCALAPI_PORT=41112
+  export SKIDBLADNIR_TEST_LOCALAPI_TOKEN=macToken_0123456789abcdef
+  install -d -m 0700 "$serve_tmp"
+  export TMPDIR="$serve_tmp"
+  printf '%064d\n' 1 >"$serve_etag"
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf '%s\n' '{"AllowFunnel":{},"Web":{"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}},"TCP":{"8443":{"HTTPS":true}}}' >"$localapi_body"
+  export SKIDBLADNIR_TEST_SERVE_STATE="$serve_state"
+  export SKIDBLADNIR_TEST_LOCALAPI_BODY="$localapi_body"
+
+  local stale_v1_serve_status='{"TCP":{"8443":{"HTTPS":true}},"Web":{"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}},"AllowFunnel":{}}'
+  local stale_root_serve_status='{"TCP":{"8443":{"HTTPS":true}},"Web":{"retired.example.ts.net:8443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:7341"}}}},"AllowFunnel":{}}'
+  assert_stale_serve_reconciled() {
+    local label="$1"
+    local platform="$2"
+    local runtime="$3"
+    local stale_status="$4"
+    skidbladnir_runtime_os() { printf '%s\n' "$runtime"; }
+    if [[ "$platform" == macos ]]; then
+      export SKIDBLADNIR_TEST_LOCAL_CREDS="curl -u:$SKIDBLADNIR_TEST_LOCALAPI_TOKEN http://localhost:$SKIDBLADNIR_TEST_LOCALAPI_PORT/localapi/v0/status"
+    else
+      unset SKIDBLADNIR_TEST_LOCAL_CREDS
+    fi
+    printf '%s\n' "$stale_status" >"$serve_state"
+    printf '%064d\n' 1 >"$serve_etag"
+    unset SKIDBLADNIR_TEST_LOCALAPI_BODY
+    : >"$SKIDBLADNIR_TEST_CALLS"
+    skidbladnir_configure_serve "$test_bin/tailscale" "$platform"
+    jq -e --argjson desired "$desired_serve_status" '. == $desired' "$serve_state" >/dev/null ||
+      fail "$label stale Serve hostname was not replaced atomically"
+    assert_contains "$SKIDBLADNIR_TEST_CALLS" 'curl-localapi GET'
+    assert_contains "$SKIDBLADNIR_TEST_CALLS" 'curl-localapi POST'
+    ! grep -Fq 'tailscale serve --bg' "$SKIDBLADNIR_TEST_CALLS" ||
+      fail "$label stale Serve hostname fell through to additive CLI mutation"
+    ! grep -Fq 'tailscale serve --yes' "$SKIDBLADNIR_TEST_CALLS" ||
+      fail "$label stale Serve root mapping fell through to current-host CLI removal"
+  }
+  printf '%s\n' "$stale_v1_serve_status" >"$serve_state"
+  unset SKIDBLADNIR_TEST_LOCALAPI_BODY
+  doctor_reset
+  skidbladnir_doctor arch >"$fixture/single-stale-serve-doctor" || true
+  assert_contains "$fixture/single-stale-serve-doctor" 'FAIL  skidbladnir.serve'
+  assert_stale_serve_reconciled linux-v1 arch Linux "$stale_v1_serve_status"
+  doctor_reset
+  skidbladnir_doctor arch >"$fixture/single-stale-repaired-doctor"
+  assert_contains "$fixture/single-stale-repaired-doctor" 'PASS  skidbladnir.serve'
+  assert_stale_serve_reconciled linux-root arch Linux "$stale_root_serve_status"
+  assert_stale_serve_reconciled macos-v1 macos Darwin "$stale_v1_serve_status"
+  assert_stale_serve_reconciled macos-root macos Darwin "$stale_root_serve_status"
+  unset -f assert_stale_serve_reconciled
+  unset SKIDBLADNIR_TEST_LOCAL_CREDS
+  skidbladnir_runtime_os() { printf 'Linux\n'; }
+
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf '%064d\n' 1 >"$serve_etag"
+  export SKIDBLADNIR_TEST_LOCALAPI_BODY="$localapi_body"
+  doctor_reset
+  skidbladnir_doctor arch >"$fixture/duplicate-serve-doctor" || true
+  assert_contains "$fixture/duplicate-serve-doctor" 'FAIL  skidbladnir.serve'
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  skidbladnir_configure_serve "$test_bin/tailscale" arch
+  unset SKIDBLADNIR_TEST_LOCALAPI_BODY
+  printf '%s\n' \
+    'tailscale status --json' \
+    'tailscale serve status --json' \
+    'tailscale debug local-creds' \
+    'curl-localapi GET' \
+    'tailscale status --json' \
+    'curl-localapi POST' \
+    'tailscale status --json' \
+    'tailscale serve status --json' \
+    >"$fixture/expected-duplicate-serve-calls"
+  cmp -s "$fixture/expected-duplicate-serve-calls" "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'owned duplicate Serve hostname repair did not use atomic LocalAPI compare-and-swap'
+  jq -e --argjson desired "$desired_serve_status" '. == $desired' "$serve_state" >/dev/null ||
+    fail 'owned duplicate Serve hostname repair did not leave one canonical mapping'
+  doctor_reset
+  skidbladnir_doctor arch >"$fixture/repaired-serve-doctor"
+  assert_contains "$fixture/repaired-serve-doctor" 'PASS  skidbladnir.serve'
+  skidbladnir_configure_serve "$test_bin/tailscale" arch
+  assert_eq 1 "$(grep -Fc 'curl-localapi POST' "$SKIDBLADNIR_TEST_CALLS")" \
+    'canonical Serve state was reconciled again'
+  ! grep -Fq 'serve reset' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'duplicate repair invoked a destructive Serve reset'
+  unset SKIDBLADNIR_TEST_SERVE_STATE
+
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf '%064s\n' e | tr ' ' e >"$serve_etag"
+  export SKIDBLADNIR_TEST_SERVE_STATE="$serve_state"
+  export SKIDBLADNIR_TEST_LOCAL_CREDS="curl -u:$SKIDBLADNIR_TEST_LOCALAPI_TOKEN http://localhost:$SKIDBLADNIR_TEST_LOCALAPI_PORT/localapi/v0/status"
+  export SKIDBLADNIR_TEST_TAILSCALE_STATUS='{"BackendState":"Running","Self":{"DNSName":"current.example.ts.net."},"Peer":{"peer-secret":{"UserID":12345}}}'
+  skidbladnir_runtime_os() { printf 'Darwin\n'; }
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  local mac_cas_xtrace="$fixture/mac-cas-xtrace"
+  {
+    set -x
+    skidbladnir_configure_serve "$test_bin/tailscale" macos
+    set +x
+  } 2>"$mac_cas_xtrace"
+  jq -e --argjson desired "$desired_serve_status" '. == $desired' "$serve_state" >/dev/null ||
+    fail 'macOS token LocalAPI repair did not leave one canonical mapping'
+  assert_contains "$SKIDBLADNIR_TEST_CALLS" 'curl-localapi GET'
+  assert_contains "$SKIDBLADNIR_TEST_CALLS" 'curl-localapi POST'
+  for private_value in \
+    "$SKIDBLADNIR_TEST_LOCALAPI_TOKEN" "$tailscale_socket" \
+    "$(printf '%064s' e | tr ' ' e)" 'retired.example.ts.net' 'peer-secret'; do
+    ! grep -Fq "$private_value" "$mac_cas_xtrace" ||
+      fail 'duplicate Serve repair exposed private state under xtrace'
+  done
+  [[ ! -e "$SKIDBLADNIR_TEST_CURL_LEAK" ]] ||
+    fail 'macOS token LocalAPI repair honored ambient curl state'
+  [[ -z "$(find "$serve_tmp" -mindepth 1 -print -quit)" ]] ||
+    fail 'duplicate Serve repair left temporary files behind'
+  skidbladnir_runtime_os() { printf 'Linux\n'; }
+  unset SKIDBLADNIR_TEST_LOCAL_CREDS SKIDBLADNIR_TEST_SERVE_STATE \
+    SKIDBLADNIR_TEST_TAILSCALE_STATUS
+
+  assert_serve_reconcile_refused() {
+    local label="$1"
+    local status_json="$2"
+    local status
+    export SKIDBLADNIR_TEST_SERVE_STATUS="$status_json"
+    : >"$SKIDBLADNIR_TEST_CALLS"
+    set +e
+    (skidbladnir_configure_serve "$test_bin/tailscale" arch) \
+      >"$fixture/refused-serve-$label-output" 2>"$fixture/refused-serve-$label-error"
+    status=$?
+    set -e
+    unset SKIDBLADNIR_TEST_SERVE_STATUS
+    [[ "$status" -ne 0 ]] || fail "$label Serve state permitted duplicate reconciliation"
+    ! grep -Fq 'curl-localapi POST' "$SKIDBLADNIR_TEST_CALLS" ||
+      fail "$label Serve state reached atomic replacement"
+    ! grep -Fq 'tailscale serve --bg' "$SKIDBLADNIR_TEST_CALLS" ||
+      fail "$label Serve state was mutated after reconciliation refusal"
+  }
+  assert_serve_reconcile_refused unrelated-port \
+    '{"TCP":{"8443":{"HTTPS":true},"9443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"other.example.ts.net:9443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:9000"}}}},"AllowFunnel":{}}'
+  assert_serve_reconcile_refused wrong-proxy \
+    '{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:9000/v1"}}}},"AllowFunnel":{}}'
+  assert_serve_reconcile_refused funnel-true \
+    '{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}},"AllowFunnel":{"current.example.ts.net:8443":true}}'
+  assert_serve_reconcile_refused funnel-false \
+    '{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}},"AllowFunnel":{"unrelated.example.ts.net:443":false}}'
+  assert_serve_reconcile_refused funnel-null \
+    '{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}},"AllowFunnel":null}'
+  assert_serve_reconcile_refused funnel-false-marker \
+    '{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}},"AllowFunnel":false}'
+  assert_serve_reconcile_refused services \
+    '{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}},"Services":{"svc:other":{"TCP":{"443":{"HTTPS":true}}}}}'
+  assert_serve_reconcile_refused services-null \
+    '{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}},"Services":null}'
+  assert_serve_reconcile_refused services-false \
+    '{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}},"Services":false}'
+  assert_serve_reconcile_refused foreground \
+    '{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}},"Foreground":{"session":{"TCP":{"443":{"HTTPS":true}}}}}'
+  assert_serve_reconcile_refused foreground-null \
+    '{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}},"Foreground":null}'
+  assert_serve_reconcile_refused foreground-false \
+    '{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}},"Foreground":false}'
+  assert_serve_reconcile_refused unknown-field \
+    '{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}},"Unknown":{}}'
+  assert_serve_reconcile_refused malformed '[]'
+  unset -f assert_serve_reconcile_refused
+
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf '%064d\n' 1 >"$serve_etag"
+  export SKIDBLADNIR_TEST_SERVE_STATE="$serve_state"
+  export SKIDBLADNIR_TEST_FAIL_LOCALAPI_POST=1
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  set +e
+  (skidbladnir_configure_serve "$test_bin/tailscale" arch) \
+    >"$fixture/failed-serve-cas-output" 2>"$fixture/failed-serve-cas-error"
+  local failed_serve_cas_status=$?
+  set -e
+  unset SKIDBLADNIR_TEST_FAIL_LOCALAPI_POST
+  [[ "$failed_serve_cas_status" -ne 0 ]] || fail 'failed Serve compare-and-swap reported success'
+  assert_contains "$SKIDBLADNIR_TEST_CALLS" 'curl-localapi POST'
+  jq -e --argjson duplicate "$duplicate_serve_status" '. == $duplicate' "$serve_state" >/dev/null ||
+    fail 'failed Serve compare-and-swap changed the prior configuration'
+  ! grep -Fq 'tailscale serve --bg' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'failed Serve compare-and-swap proceeded to CLI mutation'
+  skidbladnir_configure_serve "$test_bin/tailscale" arch
+  doctor_reset
+  skidbladnir_doctor arch >"$fixture/retried-serve-cas-doctor"
+  assert_contains "$fixture/retried-serve-cas-doctor" 'PASS  skidbladnir.serve'
+
+  local post_status post_status_result
+  for post_status in 204 302; do
+    printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+    printf '%064d\n' 1 >"$serve_etag"
+    export SKIDBLADNIR_TEST_LOCALAPI_POST_STATUS="$post_status"
+    : >"$SKIDBLADNIR_TEST_CALLS"
+    set +e
+    (skidbladnir_configure_serve "$test_bin/tailscale" arch) \
+      >"$fixture/localapi-post-$post_status-output" \
+      2>"$fixture/localapi-post-$post_status-error"
+    post_status_result=$?
+    set -e
+    unset SKIDBLADNIR_TEST_LOCALAPI_POST_STATUS
+    [[ "$post_status_result" -ne 0 ]] ||
+      fail "LocalAPI POST HTTP $post_status response was accepted"
+    assert_contains "$SKIDBLADNIR_TEST_CALLS" 'curl-localapi POST'
+    jq -e --argjson desired "$desired_serve_status" '. == $desired' "$serve_state" >/dev/null ||
+      fail "LocalAPI POST HTTP $post_status did not preserve the applied canonical state"
+    ! grep -Fq 'tailscale serve --bg' "$SKIDBLADNIR_TEST_CALLS" ||
+      fail "LocalAPI POST HTTP $post_status failure fell back to CLI mutation"
+    skidbladnir_configure_serve "$test_bin/tailscale" arch
+    assert_eq 1 "$(grep -Fc 'curl-localapi POST' "$SKIDBLADNIR_TEST_CALLS")" \
+      "retry after LocalAPI POST HTTP $post_status repeated atomic replacement"
+  done
+
+  local post_cas_drift_serve_status='{"TCP":{"8443":{"HTTPS":true},"9443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"other.example.ts.net:9443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:9000"}}}}}'
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf '%s\n' "$post_cas_drift_serve_status" >"$fixture/post-cas-drift-state.json"
+  printf '%064d\n' 1 >"$serve_etag"
+  export SKIDBLADNIR_TEST_SERVE_STATUS="$duplicate_serve_status"
+  export SKIDBLADNIR_TEST_SERVE_SECOND_STATUS="$post_cas_drift_serve_status"
+  export SKIDBLADNIR_TEST_SERVE_SECOND_STATE="$fixture/post-cas-drift-state.json"
+  export SKIDBLADNIR_TEST_SERVE_STATUS_READ_ONCE="$fixture/post-cas-drift-status-read-once"
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  set +e
+  (skidbladnir_configure_serve "$test_bin/tailscale" arch) \
+    >"$fixture/post-cas-drift-output" 2>"$fixture/post-cas-drift-error"
+  local post_cas_drift_result=$?
+  set -e
+  unset SKIDBLADNIR_TEST_SERVE_STATUS SKIDBLADNIR_TEST_SERVE_SECOND_STATUS \
+    SKIDBLADNIR_TEST_SERVE_SECOND_STATE SKIDBLADNIR_TEST_SERVE_STATUS_READ_ONCE
+  [[ "$post_cas_drift_result" -ne 0 ]] || fail 'post-CAS Serve drift reported success'
+  assert_contains "$SKIDBLADNIR_TEST_CALLS" 'curl-localapi POST'
+  jq -e --argjson drift "$post_cas_drift_serve_status" '. == $drift' "$serve_state" >/dev/null ||
+    fail 'post-CAS Serve drift was not preserved'
+  ! grep -Fq 'tailscale serve --bg' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'post-CAS Serve drift failure fell back to CLI mutation'
+  skidbladnir_configure_serve "$test_bin/tailscale" arch
+  assert_eq 1 "$(grep -Fc 'curl-localapi POST' "$SKIDBLADNIR_TEST_CALLS")" \
+    'retry after post-CAS Serve drift repeated atomic replacement'
+  jq -e --argjson drift "$post_cas_drift_serve_status" '. == $drift' "$serve_state" >/dev/null ||
+    fail 'retry after post-CAS Serve drift changed unrelated Serve state'
+
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf '%064d\n' 1 >"$serve_etag"
+  export SKIDBLADNIR_TEST_LOCAL_CREDS="curl -u:$SKIDBLADNIR_TEST_LOCALAPI_TOKEN http://localhost:$SKIDBLADNIR_TEST_LOCALAPI_PORT/localapi/v0/status"
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  set +e
+  (skidbladnir_configure_serve "$test_bin/tailscale" arch) \
+    >"$fixture/unsupported-local-creds-output" 2>"$fixture/unsupported-local-creds-error"
+  local unsupported_local_creds_status=$?
+  set -e
+  unset SKIDBLADNIR_TEST_LOCAL_CREDS
+  [[ "$unsupported_local_creds_status" -ne 0 ]] || fail 'Linux accepted token LocalAPI credentials'
+  ! grep -Fq 'curl-localapi' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'Linux token LocalAPI credentials reached curl'
+
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf '%064d\n' 1 >"$serve_etag"
+  skidbladnir_runtime_os() { printf 'Darwin\n'; }
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  set +e
+  (skidbladnir_configure_serve "$test_bin/tailscale" macos) \
+    >"$fixture/macos-unix-creds-output" 2>"$fixture/macos-unix-creds-error"
+  local macos_unix_creds_status=$?
+  set -e
+  skidbladnir_runtime_os() { printf 'Linux\n'; }
+  [[ "$macos_unix_creds_status" -ne 0 ]] || fail 'macOS accepted Unix-socket LocalAPI credentials'
+  ! grep -Fq 'curl-localapi' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'macOS Unix-socket LocalAPI credentials reached curl'
+
+  local alternate_duplicate_serve_status='{"AllowFunnel":{},"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"older.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"retired.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}}}'
+  printf '%s\n' "$alternate_duplicate_serve_status" >"$serve_state"
+  printf '%064d\n' 1 >"$serve_etag"
+  export SKIDBLADNIR_TEST_SERVE_STATUS="$duplicate_serve_status"
+  export SKIDBLADNIR_TEST_SERVE_STATUS_READ_ONCE="$fixture/snapshot-status-read-once"
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  set +e
+  (skidbladnir_configure_serve "$test_bin/tailscale" arch) \
+    >"$fixture/mismatched-snapshot-output" 2>"$fixture/mismatched-snapshot-error"
+  local mismatched_snapshot_status=$?
+  set -e
+  unset SKIDBLADNIR_TEST_SERVE_STATUS SKIDBLADNIR_TEST_SERVE_STATUS_READ_ONCE
+  [[ "$mismatched_snapshot_status" -ne 0 ]] ||
+    fail 'LocalAPI state different from the approved CLI snapshot was accepted'
+  assert_contains "$SKIDBLADNIR_TEST_CALLS" 'curl-localapi GET'
+  ! grep -Fq 'curl-localapi POST' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'mismatched CLI and LocalAPI Serve snapshots reached mutation'
+  jq -e --argjson alternate "$alternate_duplicate_serve_status" '. == $alternate' "$serve_state" >/dev/null ||
+    fail 'snapshot mismatch changed the LocalAPI Serve state'
+
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf '%064d\n' 1 >"$serve_etag"
+  printf '%s\n%s\n' "$duplicate_serve_status" "$duplicate_serve_status" \
+    >"$fixture/multiple-localapi-documents"
+  export SKIDBLADNIR_TEST_LOCALAPI_BODY="$fixture/multiple-localapi-documents"
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  set +e
+  (skidbladnir_configure_serve "$test_bin/tailscale" arch) \
+    >"$fixture/multiple-localapi-documents-output" 2>"$fixture/multiple-localapi-documents-error"
+  local multiple_localapi_documents_status=$?
+  set -e
+  unset SKIDBLADNIR_TEST_LOCALAPI_BODY
+  [[ "$multiple_localapi_documents_status" -ne 0 ]] ||
+    fail 'multiple LocalAPI Serve JSON documents were accepted'
+  ! grep -Fq 'curl-localapi POST' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'multiple LocalAPI Serve JSON documents reached mutation'
+
+  local metadata_case metadata_status
+  for metadata_case in non-200 missing-etag duplicate-etag wrong-content-type; do
+    printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+    printf '%064d\n' 1 >"$serve_etag"
+    case "$metadata_case" in
+    non-200) export SKIDBLADNIR_TEST_LOCALAPI_GET_STATUS=302 ;;
+    missing-etag) export SKIDBLADNIR_TEST_LOCALAPI_MISSING_ETAG=1 ;;
+    duplicate-etag) export SKIDBLADNIR_TEST_LOCALAPI_DUPLICATE_ETAG=1 ;;
+    wrong-content-type) export SKIDBLADNIR_TEST_LOCALAPI_CONTENT_TYPE=text/plain ;;
+    esac
+    : >"$SKIDBLADNIR_TEST_CALLS"
+    set +e
+    (skidbladnir_configure_serve "$test_bin/tailscale" arch) \
+      >"$fixture/localapi-$metadata_case-output" 2>"$fixture/localapi-$metadata_case-error"
+    metadata_status=$?
+    set -e
+    unset SKIDBLADNIR_TEST_LOCALAPI_GET_STATUS SKIDBLADNIR_TEST_LOCALAPI_MISSING_ETAG \
+      SKIDBLADNIR_TEST_LOCALAPI_DUPLICATE_ETAG SKIDBLADNIR_TEST_LOCALAPI_CONTENT_TYPE
+    [[ "$metadata_status" -ne 0 ]] || fail "$metadata_case LocalAPI metadata was accepted"
+    ! grep -Fq 'curl-localapi POST' "$SKIDBLADNIR_TEST_CALLS" ||
+      fail "$metadata_case LocalAPI metadata reached mutation"
+  done
+
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf '%064d\n' 1 >"$serve_etag"
+  dd if=/dev/zero of="$fixture/oversized-localapi-body" bs=65537 count=1 2>/dev/null
+  export SKIDBLADNIR_TEST_LOCALAPI_BODY="$fixture/oversized-localapi-body"
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  set +e
+  (skidbladnir_configure_serve "$test_bin/tailscale" arch) \
+    >"$fixture/oversized-localapi-body-output" 2>"$fixture/oversized-localapi-body-error"
+  local oversized_localapi_body_status=$?
+  set -e
+  unset SKIDBLADNIR_TEST_LOCALAPI_BODY
+  [[ "$oversized_localapi_body_status" -ne 0 ]] || fail 'oversized LocalAPI Serve body was accepted'
+  ! grep -Fq 'curl-localapi POST' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'oversized LocalAPI Serve body reached mutation'
+
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf '%064d\n' 1 >"$serve_etag"
+  export SKIDBLADNIR_TEST_TAILSCALE_STATUS='{"BackendState":"Running","Self":{"DNSName":"renamed.example.ts.net."}}'
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  skidbladnir_configure_serve "$test_bin/tailscale" arch
+  unset SKIDBLADNIR_TEST_TAILSCALE_STATUS
+  local renamed_desired_serve_status='{"TCP":{"8443":{"HTTPS":true}},"Web":{"renamed.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}}}}'
+  assert_contains "$SKIDBLADNIR_TEST_CALLS" 'curl-localapi GET'
+  assert_contains "$SKIDBLADNIR_TEST_CALLS" 'curl-localapi POST'
+  jq -e --argjson desired "$renamed_desired_serve_status" '. == $desired' "$serve_state" >/dev/null ||
+    fail 'all-stale owned Serve hostnames were not replaced with the current hostname'
+  ! grep -Fq 'tailscale serve --bg' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'all-stale owned Serve hostnames fell through to additive CLI mutation'
+
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf 'not-an-etag\n' >"$serve_etag"
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  set +e
+  (skidbladnir_configure_serve "$test_bin/tailscale" arch) \
+    >"$fixture/invalid-etag-output" 2>"$fixture/invalid-etag-error"
+  local invalid_etag_status=$?
+  set -e
+  [[ "$invalid_etag_status" -ne 0 ]] || fail 'invalid LocalAPI ETag was accepted'
+  ! grep -Fq 'curl-localapi POST' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'invalid LocalAPI ETag reached mutation'
+
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf '%064d\n' 1 >"$serve_etag"
+  printf '%s\n' \
+    '{"BackendState":"Running","Self":{"DNSName":"current.example.ts.net."}}' \
+    '{"BackendState":"Running","Self":{"DNSName":"renamed.example.ts.net."}}' \
+    >"$fixture/pre-post-hostname-sequence"
+  export SKIDBLADNIR_TEST_TAILSCALE_STATUS_SEQUENCE="$fixture/pre-post-hostname-sequence"
+  export SKIDBLADNIR_TEST_TAILSCALE_STATUS_COUNT="$fixture/pre-post-hostname-count"
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  set +e
+  (skidbladnir_configure_serve "$test_bin/tailscale" arch) \
+    >"$fixture/pre-post-hostname-output" 2>"$fixture/pre-post-hostname-error"
+  local pre_post_hostname_status=$?
+  set -e
+  unset SKIDBLADNIR_TEST_TAILSCALE_STATUS_SEQUENCE SKIDBLADNIR_TEST_TAILSCALE_STATUS_COUNT
+  [[ "$pre_post_hostname_status" -ne 0 ]] ||
+    fail 'hostname change before LocalAPI POST was accepted'
+  ! grep -Fq 'curl-localapi POST' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'hostname change before LocalAPI POST reached mutation'
+
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf '%064d\n' 1 >"$serve_etag"
+  printf '%s\n' \
+    '{"BackendState":"Running","Self":{"DNSName":"current.example.ts.net."}}' \
+    '{"BackendState":"Running","Self":{"DNSName":"current.example.ts.net."}}' \
+    '{"BackendState":"Running","Self":{"DNSName":"renamed.example.ts.net."}}' \
+    >"$fixture/post-hostname-sequence"
+  export SKIDBLADNIR_TEST_TAILSCALE_STATUS_SEQUENCE="$fixture/post-hostname-sequence"
+  export SKIDBLADNIR_TEST_TAILSCALE_STATUS_COUNT="$fixture/post-hostname-count"
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  set +e
+  (skidbladnir_configure_serve "$test_bin/tailscale" arch) \
+    >"$fixture/post-hostname-output" 2>"$fixture/post-hostname-error"
+  local post_hostname_status=$?
+  set -e
+  unset SKIDBLADNIR_TEST_TAILSCALE_STATUS_SEQUENCE SKIDBLADNIR_TEST_TAILSCALE_STATUS_COUNT
+  [[ "$post_hostname_status" -ne 0 ]] ||
+    fail 'hostname change after LocalAPI POST reported success'
+  assert_contains "$SKIDBLADNIR_TEST_CALLS" 'curl-localapi POST'
+  jq -e --argjson desired "$desired_serve_status" '. == $desired' "$serve_state" >/dev/null ||
+    fail 'hostname postcondition failure did not preserve the applied canonical state'
+  ! grep -Fq 'tailscale serve --bg' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'hostname postcondition failure fell back to CLI mutation'
+
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf '%064d\n' 1 >"$serve_etag"
+  export SKIDBLADNIR_TEST_FAIL_LOCALAPI_RESPONSE_AFTER_APPLY=1
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  set +e
+  (skidbladnir_configure_serve "$test_bin/tailscale" arch) \
+    >"$fixture/lost-post-response-output" 2>"$fixture/lost-post-response-error"
+  local lost_post_response_status=$?
+  set -e
+  unset SKIDBLADNIR_TEST_FAIL_LOCALAPI_RESPONSE_AFTER_APPLY
+  [[ "$lost_post_response_status" -ne 0 ]] ||
+    fail 'lost LocalAPI POST response reported success'
+  jq -e --argjson desired "$desired_serve_status" '. == $desired' "$serve_state" >/dev/null ||
+    fail 'lost LocalAPI POST response did not preserve the applied canonical state'
+  skidbladnir_configure_serve "$test_bin/tailscale" arch
+  assert_eq 1 "$(grep -Fc 'curl-localapi POST' "$SKIDBLADNIR_TEST_CALLS")" \
+    'retry after a lost POST response repeated atomic replacement'
+
+  printf '%s\n' "$duplicate_serve_status" >"$serve_state"
+  printf '%064d\n' 1 >"$serve_etag"
+  printf '%s\n' "$raced_serve_status" >"$fixture/raced-serve-state.json"
+  export SKIDBLADNIR_TEST_LOCALAPI_RACE_STATE="$fixture/raced-serve-state.json"
+  export SKIDBLADNIR_TEST_LOCALAPI_RACE_ONCE="$fixture/localapi-race-once"
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  set +e
+  (skidbladnir_configure_serve "$test_bin/tailscale" arch) \
+    >"$fixture/raced-serve-output" 2>"$fixture/raced-serve-error"
+  local raced_serve_result=$?
+  set -e
+  unset SKIDBLADNIR_TEST_LOCALAPI_RACE_STATE SKIDBLADNIR_TEST_LOCALAPI_RACE_ONCE
+  [[ "$raced_serve_result" -ne 0 ]] || fail 'concurrent Serve change did not defeat compare-and-swap'
+  jq -e --argjson raced "$raced_serve_status" '. == $raced' "$serve_state" >/dev/null ||
+    fail 'failed compare-and-swap erased the concurrent Serve change'
+  ! grep -Fq 'tailscale serve --bg' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'concurrent Serve change was followed by CLI mutation'
+
+  local shared_serve_status='{"TCP":{"8443":{"HTTPS":true},"9443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/v1":{"Proxy":"http://127.0.0.1:7341/v1"}}},"other.example.ts.net:9443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:9000"}}}}}'
+  printf '%s\n' "$shared_serve_status" >"$serve_state"
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  skidbladnir_configure_serve "$test_bin/tailscale" arch
+  ! grep -Fq 'curl-localapi' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'single canonical mapping entered duplicate reconciliation'
+  jq -e '
+    .TCP["9443"] == {HTTPS:true} and
+    .Web["other.example.ts.net:9443"] == {Handlers:{"/":{Proxy:"http://127.0.0.1:9000"}}}
+  ' "$serve_state" >/dev/null || fail 'ordinary convergence changed unrelated Serve state'
+  [[ -z "$(find "$serve_tmp" -mindepth 1 -print -quit)" ]] ||
+    fail 'duplicate Serve repair left temporary files after a failure path'
+  unset SKIDBLADNIR_TEST_SERVE_STATE SKIDBLADNIR_TEST_SERVE_ETAG \
+    SKIDBLADNIR_TEST_SERVE_HOST SKIDBLADNIR_TEST_TAILSCALE_SOCKET \
+    SKIDBLADNIR_TEST_LOCALAPI_PORT SKIDBLADNIR_TEST_LOCALAPI_TOKEN TMPDIR
 
   local doctor_output="$fixture/doctor-output"
   doctor_reset
@@ -591,13 +1202,20 @@ test_converge_and_doctor() {
   arch_token="" devbox_token="" local_token=""
   assert_no_secret "$doctor_output"
   local xtrace_output="$fixture/doctor-xtrace"
+  local doctor_status_marker=doctor-status-only-private-marker
+  export SKIDBLADNIR_TEST_TAILSCALE_STATUS="{\"BackendState\":\"Running\",\"Self\":{\"DNSName\":\"current.example.ts.net.\"},\"Peer\":{\"$doctor_status_marker\":{\"UserID\":12345}}}"
   {
     set -x
     doctor_reset
     skidbladnir_doctor arch >/dev/null
     set +x
   } 2>"$xtrace_output"
+  unset SKIDBLADNIR_TEST_TAILSCALE_STATUS
   assert_no_secret "$xtrace_output"
+  for private_value in "$doctor_status_marker" current.example.ts.net; do
+    ! grep -Fq "$private_value" "$xtrace_output" ||
+      fail 'doctor exposed private Tailscale status under xtrace'
+  done
 
   printf '\n# locally replaced after convergence\n' >>"$test_home/.local/bin/skidbladnir"
   skidbladnir_sha256 "$test_home/.local/bin/skidbladnir" \
