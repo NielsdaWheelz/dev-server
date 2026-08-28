@@ -339,9 +339,6 @@ packages_install() {
   packages_arch_remove_packages
 
   if ((${#pacman_packages[@]} > 0)); then
-    if [[ -x /usr/bin/tmux && "$(/usr/bin/tmux -V)" == 'tmux 3.7c' ]]; then
-      pacman_arguments+=(--ignore tmux)
-    fi
     sudo pacman "${pacman_arguments[@]}" "${pacman_packages[@]}"
   fi
 

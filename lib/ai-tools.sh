@@ -14,67 +14,32 @@ ai_direct_tools() {
 
 ai_tool_contexts() {
   case "$1" in
-    codex) printf 'personal work work2\n' ;;
-    claude) printf 'personal work\n' ;;
-    *) die "unknown routed AI tool: $1" ;;
+  codex) printf 'personal work work2\n' ;;
+  claude) printf 'personal work\n' ;;
+  *) die "unknown routed AI tool: $1" ;;
   esac
 }
 
 ai_tool_package() {
   case "$1" in
-    codex) printf '@openai/codex@0.149.1\n' ;;
-    claude) printf '@anthropic-ai/claude-code\n' ;;
-    opencode) printf 'opencode-ai\n' ;;
-    *) die "unknown AI tool: $1" ;;
-  esac
-}
-
-ai_codex_version() {
-  printf 'codex-cli 0.149.1\n'
-}
-
-ai_codex_platform_binary() {
-  local relative
-  case "$(uname -s):$(uname -m)" in
-    Linux:x86_64)
-      relative='codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex'
-      ;;
-    Darwin:arm64)
-      relative='codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex'
-      ;;
-    *)
-      die "unsupported Codex platform: $(uname -s) $(uname -m)"
-      ;;
-  esac
-  printf '%s/.local/lib/node_modules/@openai/codex/node_modules/@openai/%s\n' \
-    "$(dev_server_home)" "$relative"
-}
-
-ai_codex_platform_sha256() {
-  case "$(uname -s):$(uname -m)" in
-    Linux:x86_64)
-      printf '73dc5888888f411c1f0fa7b81d866e721dcc86b527ce8e3b2cf4708661e823ba\n'
-      ;;
-    Darwin:arm64)
-      printf 'f0d8762236594359b60cfbe17f4c7e945a3ce8d1c91e74778838c968d250fb6c\n'
-      ;;
-    *)
-      die "unsupported Codex platform: $(uname -s) $(uname -m)"
-      ;;
+  codex) printf '@openai/codex@latest\n' ;;
+  claude) printf '@anthropic-ai/claude-code\n' ;;
+  opencode) printf 'opencode-ai\n' ;;
+  *) die "unknown AI tool: $1" ;;
   esac
 }
 
 ai_tool_install_method() {
   case "$1" in
-    codex) printf 'npm\n' ;;
-    claude) printf 'native\n' ;;
-    opencode) printf 'npm\n' ;;
-    *) die "unknown AI tool: $1" ;;
+  codex) printf 'npm\n' ;;
+  claude) printf 'native\n' ;;
+  opencode) printf 'npm\n' ;;
+  *) die "unknown AI tool: $1" ;;
   esac
 }
 
 ai_native_channel() {
-  printf '%s\n' "${CLAUDE_NATIVE_CHANNEL:-stable}"
+  printf 'stable\n'
 }
 
 ai_tool_real_binary() {
@@ -86,12 +51,12 @@ ai_tool_home() {
   local context="$2"
 
   case "$tool:$context" in
-    codex:personal) printf '%s/.codex-personal\n' "$(dev_server_home)" ;;
-    codex:work) printf '%s/.codex-work\n' "$(dev_server_home)" ;;
-    codex:work2) printf '%s/.codex-work2\n' "$(dev_server_home)" ;;
-    claude:personal) printf '%s/.claude-personal\n' "$(dev_server_home)" ;;
-    claude:work) printf '%s/.claude-work\n' "$(dev_server_home)" ;;
-    *) die "unknown AI tool/context: $tool/$context" ;;
+  codex:personal) printf '%s/.codex-personal\n' "$(dev_server_home)" ;;
+  codex:work) printf '%s/.codex-work\n' "$(dev_server_home)" ;;
+  codex:work2) printf '%s/.codex-work2\n' "$(dev_server_home)" ;;
+  claude:personal) printf '%s/.claude-personal\n' "$(dev_server_home)" ;;
+  claude:work) printf '%s/.claude-work\n' "$(dev_server_home)" ;;
+  *) die "unknown AI tool/context: $tool/$context" ;;
   esac
 }
 
@@ -185,7 +150,7 @@ ai_install_opencode_config() {
   jq empty "$source" >/dev/null || die "invalid OpenCode config JSON: $source"
   jq empty "$managed_source" >/dev/null || die "invalid managed OpenCode config JSON: $managed_source"
   rendered="$(mktemp "${TMPDIR:-/tmp}/dev-server-opencode.XXXXXX")"
-  if ! ai_render_opencode_config > "$rendered"; then
+  if ! ai_render_opencode_config >"$rendered"; then
     rm -f "$rendered"
     die "failed to render OpenCode config"
   fi
@@ -204,7 +169,7 @@ ai_install_npm_globals() {
     packages+=("$(ai_tool_package "$tool")")
   done
 
-  if (( ${#packages[@]} == 0 )); then
+  if ((${#packages[@]} == 0)); then
     return 0
   fi
 
@@ -225,8 +190,8 @@ ai_install_native_tool() {
   local pkg
 
   case "$tool" in
-    claude) ;;
-    *) die "no native installer defined for AI tool: $tool" ;;
+  claude) ;;
+  *) die "no native installer defined for AI tool: $tool" ;;
   esac
 
   require_cmd curl
@@ -300,14 +265,12 @@ ai_doctor_tool() {
   local shortcut_target
   local shortcuts=()
   local version
-  local platform_binary
-  local platform_sha256
 
   case "$tool" in
-    opencode)
-      ai_doctor_direct_tool "$tool"
-      return
-      ;;
+  opencode)
+    ai_doctor_direct_tool "$tool"
+    return
+    ;;
   esac
 
   expected="$(ai_tool_real_binary "$tool")"
@@ -353,22 +316,6 @@ ai_doctor_tool() {
   done
 
   version="$("$home/bin/$tool" --version)"
-  if [[ "$tool" == codex && "$version" != "$(ai_codex_version)" ]]; then
-    doctor_fail "ai.$tool" "version $version, expected $(ai_codex_version)"
-    return
-  fi
-  if [[ "$tool" == codex ]]; then
-    platform_binary="$(ai_codex_platform_binary)"
-    if [[ ! -f "$platform_binary" || -L "$platform_binary" || ! -x "$platform_binary" ]]; then
-      doctor_fail "ai.$tool" "missing exact Codex platform binary"
-      return
-    fi
-    platform_sha256="$(dev_server_sha256 "$platform_binary")"
-    if [[ "$platform_sha256" != "$(ai_codex_platform_sha256)" ]]; then
-      doctor_fail "ai.$tool" "platform binary digest differs from the pin"
-      return
-    fi
-  fi
   doctor_pass "ai.$tool" "[$(ai_tool_install_method "$tool")] $version via $router -> $expected"
 }
 
@@ -459,7 +406,7 @@ ai_doctor_opencode() {
   fi
 
   if resolved_config="$("$binary" debug config 2>&1)" &&
-     jq -e '
+    jq -e '
        .model == "kimi-for-coding/k3" and
        .default_agent == "build" and
        .share == "disabled" and
@@ -477,15 +424,15 @@ ai_doctor_opencode() {
        .compaction.auto == true and
        .compaction.prune == false and
        .compaction.reserved == 10000
-     ' >/dev/null <<< "$resolved_config"; then
+     ' >/dev/null <<<"$resolved_config"; then
     doctor_pass ai.opencode.runtime "K3/max/256K and managed runtime settings resolve correctly"
   else
     doctor_fail ai.opencode.runtime "effective OpenCode configuration is not the managed K3 baseline"
   fi
 
   if plan_agent="$("$binary" debug agent plan 2>&1)" &&
-     explore_agent="$("$binary" debug agent explore 2>&1)" &&
-     jq -e '
+    explore_agent="$("$binary" debug agent explore 2>&1)" &&
+    jq -e '
        ([.permission[] | select(
          .permission == "edit" and .pattern == "*" and .action == "deny"
        )] | length) > 0 and
@@ -493,26 +440,26 @@ ai_doctor_opencode() {
          .permission == "task" and .pattern == "general" and .action == "deny"
        )] | length) > 0 and
        ([.permission[] | select(.permission == "bash")] | last | .action) == "ask"
-     ' >/dev/null <<< "$plan_agent" &&
-     jq -e '
+     ' >/dev/null <<<"$plan_agent" &&
+    jq -e '
        .tools.edit == false and
        .tools.write == false and
        ([.permission[] | select(.permission == "bash")] | last | .action) == "ask"
-     ' >/dev/null <<< "$explore_agent"; then
+     ' >/dev/null <<<"$explore_agent"; then
     doctor_pass ai.opencode.agents "Plan and Explore retain guarded built-in semantics"
   else
     doctor_fail ai.opencode.agents "effective Plan or Explore permissions are unsafe"
   fi
 
   if models="$("$binary" models kimi-for-coding 2>&1)" &&
-     printf '%s\n' "$models" | grep -Fqx 'kimi-for-coding/k3'; then
+    printf '%s\n' "$models" | grep -Fqx 'kimi-for-coding/k3'; then
     doctor_pass ai.opencode.kimi "Kimi Code catalog exposes kimi-for-coding/k3"
   else
     doctor_fail ai.opencode.kimi "Kimi Code catalog does not expose kimi-for-coding/k3"
   fi
 
   if auth="$("$binary" auth list 2>&1)" &&
-     printf '%s\n' "$auth" | grep -Eiq 'kimi-for-coding|Kimi For Coding'; then
+    printf '%s\n' "$auth" | grep -Eiq 'kimi-for-coding|Kimi For Coding'; then
     doctor_pass ai.opencode.auth "Kimi For Coding credential enrolled"
   else
     doctor_warn ai.opencode.auth "not enrolled; run: opencode auth login --provider kimi-for-coding"

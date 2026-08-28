@@ -124,7 +124,7 @@ set -euo pipefail
   printf '%s\0' "$@"
 } >"$ROUTER_RECORD"
 if [[ "${1:-}" == --version && $# -eq 1 ]]; then
-  printf '%s\n' "${FAKE_TOOL_VERSION:-codex-cli 0.149.1}"
+  printf '%s\n' "${FAKE_TOOL_VERSION:-codex-cli current-test-release}"
 fi
 EOF
   chmod 0755 "$test_home/.local/bin/$tool"
@@ -158,46 +158,8 @@ test_hard_cut_surface() {
   local source="$repo_dir/assets/routers/ai-router"
   ! grep -Eq 'skidbladnir|router-seam|TMUX|launcher|status-hook' "$source" ||
     fail 'retired Skidbladnir interception remains in the account router'
-  pass
-}
-
-test_codex_platform_pin_mapping() {
-  dev_server_home() { printf '%s\n' "$test_home"; }
-  die() { fail "$*"; }
-  # shellcheck source=lib/ai-tools.sh
-  source "$repo_dir/lib/ai-tools.sh"
-
-  local platform_system
-  local platform_machine
-  uname() {
-    case "${1:-}" in
-      -s) printf '%s\n' "$platform_system" ;;
-      -m) printf '%s\n' "$platform_machine" ;;
-      *) return 64 ;;
-    esac
-  }
-
-  local row expected_path expected_digest
-  for row in \
-    'Linux x86_64 codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex 73dc5888888f411c1f0fa7b81d866e721dcc86b527ce8e3b2cf4708661e823ba' \
-    'Darwin arm64 codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex f0d8762236594359b60cfbe17f4c7e945a3ce8d1c91e74778838c968d250fb6c'; do
-    read -r platform_system platform_machine expected_path expected_digest <<<"$row"
-    expected_path="$test_home/.local/lib/node_modules/@openai/codex/node_modules/@openai/$expected_path"
-    assert_eq "$expected_path" "$(ai_codex_platform_binary)" \
-      "$platform_system $platform_machine Codex payload path"
-    assert_eq "$expected_digest" "$(ai_codex_platform_sha256)" \
-      "$platform_system $platform_machine Codex payload digest"
-  done
-
-  platform_system=Darwin
-  platform_machine=x86_64
-  if (ai_codex_platform_binary >/dev/null 2>&1); then
-    fail 'unsupported Codex host architecture received a platform pin'
-  fi
-  if (ai_codex_platform_sha256 >/dev/null 2>&1); then
-    fail 'unsupported Codex host architecture received a platform digest'
-  fi
-  unset -f uname
+  ! grep -Eq 'ai_codex_(version|platform_binary|platform_sha256)' "$repo_dir/lib/ai-tools.sh" ||
+    fail 'retired Codex version or payload pinning remains in the installer'
   pass
 }
 
@@ -246,7 +208,7 @@ test_bare_context_inference() {
   pass
 }
 
-test_pin_doctor_and_convergence() {
+test_latest_release_doctor_and_convergence() {
   dev_server_home() { printf '%s\n' "$test_home"; }
   dev_server_assets_dir() { printf '%s/assets\n' "$repo_dir"; }
   die() { fail "$*"; }
@@ -257,15 +219,8 @@ test_pin_doctor_and_convergence() {
   # shellcheck source=lib/ai-tools.sh
   source "$repo_dir/lib/ai-tools.sh"
 
-  local fixture_platform_binary="$fixture/codex-platform"
-  local fixture_platform_digest
-  printf 'reviewed fake platform binary\n' >"$fixture_platform_binary"
-  chmod 0755 "$fixture_platform_binary"
-  fixture_platform_digest="$(dev_server_sha256 "$fixture_platform_binary")"
-  ai_codex_platform_binary() { printf '%s\n' "$fixture_platform_binary"; }
-  ai_codex_platform_sha256() { printf '%s\n' "$fixture_platform_digest"; }
-
-  assert_eq '@openai/codex@0.149.1' "$(ai_tool_package codex)" 'Codex npm pin'
+  assert_eq '@openai/codex@latest' "$(ai_tool_package codex)" 'Codex stable release selector'
+  assert_eq stable "$(CLAUDE_NATIVE_CHANNEL=beta ai_native_channel)" 'Claude stable release selector'
   ai_install_router
   ai_install_router
   cmp -s "$repo_dir/assets/routers/ai-router" "$test_home/.local/libexec/ai-router" ||
@@ -274,13 +229,13 @@ test_pin_doctor_and_convergence() {
   local original_home="$HOME"
   export HOME="$test_home"
   export ROUTER_RECORD="$record"
-  export FAKE_TOOL_VERSION='codex-cli 0.149.1'
+  export FAKE_TOOL_VERSION='codex-cli 1.2.3'
   ai_doctor_tool codex
-  assert_eq pass "$doctor_result" 'exact Codex doctor'
-  printf 'drift\n' >>"$fixture_platform_binary"
+  assert_eq pass "$doctor_result" 'older installed Codex doctor'
   doctor_result=''
+  export FAKE_TOOL_VERSION='codex-cli 9.8.7'
   ai_doctor_tool codex
-  assert_eq fail "$doctor_result" 'wrong Codex platform digest doctor'
+  assert_eq pass "$doctor_result" 'newer installed Codex doctor'
   unset FAKE_TOOL_VERSION ROUTER_RECORD
   export HOME="$original_home"
   pass
@@ -288,9 +243,8 @@ test_pin_doctor_and_convergence() {
 
 test_portable_sha256
 test_hard_cut_surface
-test_codex_platform_pin_mapping
 test_explicit_contexts_and_exact_argv
 test_bare_context_inference
-test_pin_doctor_and_convergence
+test_latest_release_doctor_and_convergence
 
 printf 'PASS: %d ai-router test groups\n' "$tests_run"

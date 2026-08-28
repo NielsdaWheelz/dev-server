@@ -4,7 +4,7 @@ set -euo pipefail
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 shellcheck --severity=warning \
-  "$repo_dir/skidbladnir" "$repo_dir/test" \
+  "$repo_dir/skidbladnir" "$repo_dir/test" "$repo_dir/workstation" \
   "$repo_dir/lib/common.sh" "$repo_dir/lib/ai-tools.sh" "$repo_dir/lib/dotfiles.sh" \
   "$repo_dir/lib/packages-arch.sh" \
   "$repo_dir/lib/skidbladnir.sh" "$repo_dir/lib/skidbladnir-invite.sh" \
@@ -12,11 +12,12 @@ shellcheck --severity=warning \
   "$repo_dir/tests/ai-router.sh" "$repo_dir/tests/dotfiles.sh" "$repo_dir/tests/platform-skips.sh" \
   "$repo_dir/tests/skidbladnir.sh"
 shfmt -d -i 2 \
-  "$repo_dir/skidbladnir" "$repo_dir/test" \
-  "$repo_dir/lib/common.sh" "$repo_dir/lib/dotfiles.sh" "$repo_dir/lib/packages-arch.sh" \
+  "$repo_dir/skidbladnir" "$repo_dir/test" "$repo_dir/workstation" \
+  "$repo_dir/lib/common.sh" "$repo_dir/lib/ai-tools.sh" "$repo_dir/lib/dotfiles.sh" "$repo_dir/lib/packages-arch.sh" \
   "$repo_dir/lib/skidbladnir.sh" "$repo_dir/lib/skidbladnir-invite.sh" \
   "$repo_dir/lib/skidbladnir-operator.sh" "$repo_dir/lib/packages-macos.sh" \
-  "$repo_dir/tests/dotfiles.sh" "$repo_dir/tests/platform-skips.sh" "$repo_dir/tests/skidbladnir.sh"
+  "$repo_dir/tests/ai-router.sh" "$repo_dir/tests/dotfiles.sh" \
+  "$repo_dir/tests/platform-skips.sh" "$repo_dir/tests/skidbladnir.sh"
 
 while IFS= read -r file; do
   bash -n "$file"
@@ -28,6 +29,7 @@ done < <(find "$repo_dir/assets" -type f -name '*.json' | LC_ALL=C sort)
 
 yaml_files=(
   "$repo_dir/ansible/playbooks/converge.yml"
+  "$repo_dir/ansible/roles/base/tasks/main.yml"
   "$repo_dir/ansible/roles/skidbladnir/tasks/main.yml"
 )
 if python3 -c 'import yaml' >/dev/null 2>&1; then

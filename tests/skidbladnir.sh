@@ -73,7 +73,7 @@ pass() {
   tests_run=$((tests_run + 1))
 }
 
-test_macos_tmux_pin_guard() {
+test_macos_tmux_tracks_homebrew_stable() {
   local package_fixture="$fixture/macos-packages"
   local package_root="$package_fixture/repo"
   local package_bin="$package_fixture/bin"
@@ -82,12 +82,8 @@ test_macos_tmux_pin_guard() {
   local package_tmux_template="$package_fixture/tmux-template"
   local package_tmux_version="$package_fixture/tmux-version"
   local expected_calls="$package_fixture/expected-calls"
-  install -d -m 0755 \
-    "$package_root/assets/skidbladnir" "$package_root/packages" "$package_bin"
+  install -d -m 0755 "$package_root/packages" "$package_bin"
   printf 'brew "tmux"\n' >"$package_root/packages/Brewfile"
-  jq -n --arg path "$package_bin/tmux" \
-    '{tmux:{path:$path,version:"tmux 3.7c"}}' \
-    >"$package_root/assets/skidbladnir/host-config-macbook.json"
   cat >"$package_tmux_template" <<'EOF'
 #!/usr/bin/env bash
 printf 'tmux %s\n' "$(cat "$BREW_TEST_TMUX_VERSION")"
@@ -96,21 +92,24 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 case "${1:-}" in
-  pin)
+  unpin)
     [[ "${2:-}" == --formula && "${3:-}" == tmux ]]
-    printf 'pin --formula tmux\n' >>"$BREW_TEST_CALLS"
-    : >"$BREW_TEST_PINNED"
+    printf 'unpin --formula tmux\n' >>"$BREW_TEST_CALLS"
+    rm -f -- "$BREW_TEST_PINNED"
+    ;;
+  update)
+    printf 'update\n' >>"$BREW_TEST_CALLS"
     ;;
   bundle)
     printf 'bundle\n' >>"$BREW_TEST_CALLS"
-    if [[ ! -f "$BREW_TEST_PINNED" ]]; then
-      cp "$BREW_TEST_TMUX_TEMPLATE" "$BREW_TEST_TMUX_PATH"
-      chmod 0755 "$BREW_TEST_TMUX_PATH"
-      printf '%s\n' "$BREW_TEST_BUNDLE_VERSION" >"$BREW_TEST_TMUX_VERSION"
-    fi
+    [[ ! -f "$BREW_TEST_PINNED" ]]
+    cp "$BREW_TEST_TMUX_TEMPLATE" "$BREW_TEST_TMUX_PATH"
+    chmod 0755 "$BREW_TEST_TMUX_PATH"
+    printf '%s\n' "$BREW_TEST_BUNDLE_VERSION" >"$BREW_TEST_TMUX_VERSION"
     ;;
   list)
     [[ "${2:-}" == --pinned && "${3:-}" == --formula ]]
+    printf 'list --pinned --formula\n' >>"$BREW_TEST_CALLS"
     if [[ -f "$BREW_TEST_PINNED" ]]; then
       printf 'tmux\n'
     fi
@@ -143,51 +142,29 @@ EOF
   cp "$package_tmux_template" "$package_bin/tmux"
   chmod 0755 "$package_bin/tmux"
   printf '3.7c\n' >"$package_tmux_version"
+  : >"$package_pinned"
   run_packages_install 3.7d
-  printf '%s\n' 'pin --formula tmux' bundle >"$expected_calls"
-  cmp -s "$expected_calls" "$package_calls" ||
-    fail 'macOS convergence did not pin exact tmux before Homebrew bundle'
-  assert_eq 'tmux 3.7c' "$(BREW_TEST_TMUX_VERSION="$package_tmux_version" "$package_bin/tmux" -V)" \
-    'Homebrew bundle changed the pinned exact tmux runtime'
-
-  rm -f -- "$package_bin/tmux" "$package_tmux_version" "$package_pinned" "$package_calls"
-  run_packages_install 3.7c
-  printf '%s\n' bundle 'pin --formula tmux' >"$expected_calls"
-  cmp -s "$expected_calls" "$package_calls" ||
-    fail 'fresh macOS convergence did not pin tmux after validating the installed version'
-  assert_eq 'tmux 3.7c' "$(BREW_TEST_TMUX_VERSION="$package_tmux_version" "$package_bin/tmux" -V)" \
-    'fresh macOS convergence installed the wrong tmux runtime'
-  [[ -f "$package_pinned" ]] || fail 'fresh exact tmux runtime was not left pinned'
-
-  rm -f -- "$package_bin/tmux" "$package_tmux_version" "$package_pinned" "$package_calls"
-  run_packages_install 3.7d
-  printf '%s\n' bundle >"$expected_calls"
-  cmp -s "$expected_calls" "$package_calls" ||
-    fail 'macOS convergence pinned an unreviewed tmux version'
-  [[ ! -f "$package_pinned" ]] || fail 'unreviewed tmux version was left pinned'
-
-  (
-    export PATH="$package_bin:/usr/bin:/bin"
-    export BREW_TEST_CALLS="$package_calls"
-    export BREW_TEST_PINNED="$package_pinned"
-    : >"$package_pinned"
-    dev_server_root="$package_root"
-    doctor_pass() { [[ "$1" != package.tmux-pin ]] || printf 'PASS %s %s\n' "$1" "$2"; }
-    doctor_fail() { [[ "$1" != package.tmux-pin ]] || printf 'FAIL %s %s\n' "$1" "$2"; }
-    doctor_local_cmd() { :; }
-    # shellcheck source=lib/packages-macos.sh
-    source "$repo_dir/lib/packages-macos.sh"
-    packages_macos_tailscale_cli() { return 1; }
-    packages_doctor
-    rm -f -- "$package_pinned"
-    packages_doctor
-  ) >"$package_fixture/doctor"
   printf '%s\n' \
-    'PASS package.tmux-pin Homebrew tmux formula protected from unreviewed upgrades' \
-    'FAIL package.tmux-pin Homebrew tmux formula is not pinned; run ./workstation converge' \
-    >"$package_fixture/expected-doctor"
-  cmp -s "$package_fixture/expected-doctor" "$package_fixture/doctor" ||
-    fail 'macOS doctor did not distinguish pinned and unpinned tmux'
+    'list --pinned --formula' \
+    'unpin --formula tmux' \
+    update \
+    bundle \
+    >"$expected_calls"
+  cmp -s "$expected_calls" "$package_calls" ||
+    fail 'macOS convergence did not unpin tmux before refreshing Homebrew'
+  assert_eq 'tmux 3.7d' "$(BREW_TEST_TMUX_VERSION="$package_tmux_version" "$package_bin/tmux" -V)" \
+    'macOS convergence did not install the current stable tmux release'
+  [[ ! -e "$package_pinned" ]] || fail 'macOS convergence left tmux pinned'
+
+  rm -f -- "$package_bin/tmux" "$package_tmux_version" "$package_pinned" "$package_calls"
+  run_packages_install 3.8
+  printf '%s\n' 'list --pinned --formula' update bundle >"$expected_calls"
+  cmp -s "$expected_calls" "$package_calls" ||
+    fail 'fresh macOS convergence did not refresh Homebrew before installation'
+  assert_eq 'tmux 3.8' "$(BREW_TEST_TMUX_VERSION="$package_tmux_version" "$package_bin/tmux" -V)" \
+    'fresh macOS convergence did not install the current stable tmux release'
+  ! grep -Eq 'packages_macos_(pin|doctor_tmux_pin)|package[.]tmux-pin|brew pin' \
+    "$repo_dir/lib/packages-macos.sh" || fail 'retired macOS tmux pinning remains'
   pass
 }
 
@@ -208,18 +185,18 @@ test_assets_and_operator_copy() {
   ' "$pin" >/dev/null || fail 'release pin must be wholly pending or wholly canonical'
   cmp -s "$pin" <(jq -S . "$pin") || fail 'release pin keys are not stored in sorted order'
 
-  local row config platform tmux_path tmux_version home hooks
+  local row config platform tmux_path tmux_tested_version home hooks
   for row in \
     'devbox Linux /usr/bin/tmux tmux_3.4 /home/niels status-hooks-devbox.json' \
     'arch Linux /usr/bin/tmux tmux_3.7c /home/nnandal status-hooks-arch.json' \
     'macbook Darwin /opt/homebrew/bin/tmux tmux_3.7c /Users/nnandal status-hooks-macbook.json'; do
-    read -r config platform tmux_path tmux_version home hooks <<<"$row"
+    read -r config platform tmux_path tmux_tested_version home hooks <<<"$row"
     config="$repo_dir/assets/skidbladnir/host-config-$config.json"
-    tmux_version="${tmux_version/_/ }"
+    tmux_tested_version="${tmux_tested_version/_/ }"
     jq -e --arg platform "$platform" --arg tmux_path "$tmux_path" \
-      --arg tmux_version "$tmux_version" --arg home "$home" '
+      --arg tmux_tested_version "$tmux_tested_version" --arg home "$home" '
       type == "object" and keys == ["codexNodeEntrypoint", "platform", "profiles", "tmux"] and
-      .platform == $platform and .tmux == {path: $tmux_path, version: $tmux_version} and
+      .platform == $platform and .tmux == {path: $tmux_path, testedVersion: $tmux_tested_version} and
       .codexNodeEntrypoint == ($home + "/.local/bin/codex") and
       .profiles == [
         {key:"personal",label:"Codex · Personal",command:($home + "/bin/codex-personal"),environment:[{name:"CODEX_HOME",value:($home + "/.codex-personal")}],foregroundSignatures:[{executableBase:"codex"},{executableBase:"node",argument1:($home + "/.local/bin/codex")}],arguments:["--dangerously-bypass-approvals-and-sandbox"]},
@@ -306,13 +283,20 @@ test_assets_and_operator_copy() {
   ! grep -Eq -- '--arg[^[:cntrl:]]*(token|result|response|bearer)' "$repo_dir/lib/skidbladnir-invite.sh" ||
     fail 'fleet invitation passes credential material in process arguments'
   assert_contains "$repo_dir/workstation" 'skidbladnir_converge "$(platform_id)"'
-  assert_contains "$repo_dir/workstation" 'skidbladnir_preflight_tmux_runtime "$(platform_id)"'
   assert_contains "$repo_dir/workstation" 'skidbladnir_require_tmux_runtime "$(platform_id)"'
-  assert_contains "$repo_dir/lib/packages-arch.sh" 'pacman_arguments+=(--ignore tmux)'
+  ! grep -Fq 'skidbladnir_preflight_tmux_runtime' "$repo_dir/workstation" "$repo_dir/lib/skidbladnir.sh" ||
+    fail 'retired tmux version preflight remains'
+  ! grep -Fq -- '--ignore tmux' "$repo_dir/lib/packages-arch.sh" ||
+    fail 'Arch convergence still excludes tmux from stable upgrades'
   assert_contains "$repo_dir/lib/packages-arch.sh" 'sudo systemctl enable --now sshd.service'
   assert_contains "$repo_dir/lib/packages-arch.sh" 'doctor_pass package.ssh "OpenSSH enabled for fixed tailnet operator access"'
+  assert_contains "$repo_dir/lib/packages-macos.sh" 'packages_macos_unpin_tmux'
+  assert_contains "$repo_dir/lib/packages-macos.sh" 'brew update'
   assert_contains "$repo_dir/lib/packages-macos.sh" 'HOMEBREW_NO_AUTO_UPDATE=1 brew bundle'
-  assert_contains "$repo_dir/ansible/roles/base/tasks/main.yml" "failed_when: devbox_tmux_version.stdout != 'tmux 3.4'"
+  assert_contains "$repo_dir/ansible/roles/base/tasks/main.yml" 'name: Install latest tmux release'
+  assert_contains "$repo_dir/ansible/roles/base/tasks/main.yml" 'state: latest'
+  ! grep -Fq 'Verify exact Devbox tmux runtime' "$repo_dir/ansible/roles/base/tasks/main.yml" ||
+    fail 'Devbox convergence still enforces an exact tmux version'
   assert_contains "$repo_dir/devbox" 'skidbladnir_doctor devbox'
   assert_contains "$repo_dir/ansible/playbooks/converge.yml" 'role: skidbladnir'
   grep -Fxq 'reconcile-lifetime-digests)' "$repo_dir/skidbladnir" || fail 'exact reconciled lifetime command case missing'
@@ -369,7 +353,7 @@ EOF
   cat >"$fixture/host-config.json" <<EOF
 {
   "platform": "Linux",
-  "tmux": {"path": "$test_bin/tmux", "version": "tmux 3.7c"},
+  "tmux": {"path": "$test_bin/tmux", "testedVersion": "tmux 3.7c"},
   "codexNodeEntrypoint": "$test_home/.local/bin/codex",
   "profiles": [
     {"key":"personal","label":"Codex · Personal","command":"$test_home/bin/codex-personal","environment":[{"name":"CODEX_HOME","value":"$test_home/.codex-personal"}],"foregroundSignatures":[{"executableBase":"codex"}],"arguments":[]}
@@ -592,7 +576,7 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "$1" == -V ]]
-printf 'tmux 3.7c\n'
+printf '%s\n' "${SKIDBLADNIR_TEST_TMUX_VERSION:-tmux 3.7c}"
 EOF
   cat >"$test_bin/install" <<'EOF'
 #!/usr/bin/env bash
@@ -638,6 +622,15 @@ test_converge_and_doctor() {
   skidbladnir_host_config_source() { printf '%s\n' "$fixture/host-config.json"; }
   skidbladnir_tailscale_cli() { printf '%s\n' "$test_bin/tailscale"; }
   skidbladnir_runtime_os() { printf 'Linux\n'; }
+
+  if skidbladnir_observed_tmux_version "$fixture/missing-tmux" >/dev/null 2>&1; then
+    fail 'missing tmux executable was accepted'
+  fi
+  export SKIDBLADNIR_TEST_TMUX_VERSION=$'tmux 3.8\nextra'
+  if skidbladnir_observed_tmux_version "$test_bin/tmux" >/dev/null 2>&1; then
+    fail 'multiline tmux version output was accepted'
+  fi
+  unset SKIDBLADNIR_TEST_TMUX_VERSION
 
   printf 'owned source\n' >"$fixture/owned-source"
   printf 'unrelated target\n' >"$fixture/unrelated-target"
@@ -1192,7 +1185,7 @@ test_converge_and_doctor() {
   assert_contains "$doctor_output" 'skidbladnir.serve'
   assert_contains "$doctor_output" 'private HTTPS 8443 exposes only loopback /v1'
   assert_contains "$doctor_output" 'skidbladnir.tmux'
-  assert_contains "$doctor_output" 'tmux 3.7c available at the configured path'
+  assert_contains "$doctor_output" 'tmux 3.7c matches the last tested version'
   assert_contains "$doctor_output" 'skidbladnir.tailscale'
   assert_contains "$doctor_output" 'Tailscale is signed in'
   assert_contains "$SKIDBLADNIR_TEST_CALLS" 'curl-config url\ =\ \"http://127.0.0.1:7341/v1/pressure\"'
@@ -1216,6 +1209,22 @@ test_converge_and_doctor() {
     ! grep -Fq "$private_value" "$xtrace_output" ||
       fail 'doctor exposed private Tailscale status under xtrace'
   done
+
+  local tmux_drift_output="$fixture/doctor-tmux-drift-output"
+  export SKIDBLADNIR_TEST_TMUX_VERSION='tmux 3.8'
+  if ! skidbladnir_require_tmux_runtime arch; then
+    fail 'tmux version drift blocked runtime convergence'
+  fi
+  doctor_reset
+  skidbladnir_doctor arch >"$tmux_drift_output"
+  assert_eq 0 "$doctor_failures" 'tmux drift doctor failure count'
+  assert_eq 1 "$doctor_warnings" 'tmux drift doctor warning count'
+  assert_contains "$tmux_drift_output" 'WARN  skidbladnir.tmux'
+  assert_contains "$tmux_drift_output" 'tmux 3.8 installed; last tested with tmux 3.7c'
+  doctor_summary >"$fixture/doctor-tmux-drift-summary" 2>&1 ||
+    fail 'advisory tmux drift made doctor fail'
+  assert_contains "$fixture/doctor-tmux-drift-summary" 'doctor: warn (1 warning(s))'
+  unset SKIDBLADNIR_TEST_TMUX_VERSION
 
   printf '\n# locally replaced after convergence\n' >>"$test_home/.local/bin/skidbladnir"
   skidbladnir_sha256 "$test_home/.local/bin/skidbladnir" \
@@ -1914,7 +1923,10 @@ test_host_acceptance_gate_contract() {
   }
   skidbladnir_doctor() {
     printf 'doctor %s\n' "$1" >>"$SKIDBLADNIR_ACCEPTANCE_CALLS"
-    if [[ "${SKIDBLADNIR_ACCEPTANCE_DOCTOR_WARN:-0}" == 1 ]]; then
+    if [[ "${SKIDBLADNIR_ACCEPTANCE_DOCTOR_FAIL:-0}" == 1 ]]; then
+      doctor_failures=1
+      printf 'FAIL  skidbladnir.fixture          fixture failure\n'
+    elif [[ "${SKIDBLADNIR_ACCEPTANCE_DOCTOR_WARN:-0}" == 1 ]]; then
       doctor_warnings=1
       printf 'WARN  skidbladnir.fixture          fixture warning\n'
     else
@@ -1936,16 +1948,46 @@ test_host_acceptance_gate_contract() {
 
   export SKIDBLADNIR_ACCEPTANCE_DOCTOR_WARN=1
   set +e
-  skidbladnir_accept_host_local arch Arch >"$fixture/acceptance-doctor-fail-output" \
-    2>"$fixture/acceptance-doctor-fail-error"
+  skidbladnir_accept_host_local arch Arch >"$fixture/acceptance-doctor-warn-output" \
+    2>"$fixture/acceptance-doctor-warn-error"
   local status=$?
   set -e
+  [[ "$status" -eq 0 ]] || fail 'advisory doctor warning blocked host acceptance'
+  assert_contains "$fixture/acceptance-doctor-warn-output" 'WARN  skidbladnir.fixture'
+  assert_contains "$fixture/acceptance-doctor-warn-output" 'PASS  skidbladnir.accept-host'
+
+  set +e
+  skidbladnir_reboot_acceptance_require_health arch Arch \
+    >"$fixture/reboot-acceptance-doctor-warn-output" \
+    2>"$fixture/reboot-acceptance-doctor-warn-error"
+  status=$?
+  set -e
   unset SKIDBLADNIR_ACCEPTANCE_DOCTOR_WARN
-  [[ "$status" -ne 0 ]] || fail 'host acceptance passed an incomplete doctor'
-  [[ ! -s "$fixture/acceptance-doctor-fail-output" ]] ||
-    ! grep -Fq 'PASS  skidbladnir.accept-host' "$fixture/acceptance-doctor-fail-output" ||
-    fail 'host acceptance emitted PASS after an incomplete doctor'
-  assert_contains "$fixture/acceptance-doctor-fail-error" 'Skidbladnir doctor is not completely healthy after convergence on Arch'
+  [[ "$status" -eq 0 ]] || fail 'advisory doctor warning blocked reboot acceptance'
+  assert_contains "$fixture/reboot-acceptance-doctor-warn-output" 'WARN  skidbladnir.fixture'
+
+  export SKIDBLADNIR_ACCEPTANCE_DOCTOR_FAIL=1
+  set +e
+  skidbladnir_accept_host_local arch Arch >"$fixture/acceptance-doctor-fail-output" \
+    2>"$fixture/acceptance-doctor-fail-error"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail 'doctor failure did not block host acceptance'
+  ! grep -Fq 'PASS  skidbladnir.accept-host' "$fixture/acceptance-doctor-fail-output" ||
+    fail 'host acceptance emitted PASS after a doctor failure'
+  assert_contains "$fixture/acceptance-doctor-fail-error" \
+    'Skidbladnir doctor has failures after convergence on Arch'
+
+  set +e
+  (skidbladnir_reboot_acceptance_require_health arch Arch) \
+    >"$fixture/reboot-acceptance-doctor-fail-output" \
+    2>"$fixture/reboot-acceptance-doctor-fail-error"
+  status=$?
+  set -e
+  unset SKIDBLADNIR_ACCEPTANCE_DOCTOR_FAIL
+  [[ "$status" -ne 0 ]] || fail 'doctor failure did not block reboot acceptance'
+  assert_contains "$fixture/reboot-acceptance-doctor-fail-error" \
+    'Skidbladnir doctor has failures for reboot acceptance on Arch'
 
   local lifetime_marker="$fixture/acceptance-lifetime-marker"
   skidbladnir_reconciled_lifetime_digest_local() {
@@ -2124,7 +2166,7 @@ test_reboot_acceptance_gate_contract() {
   pass
 }
 
-test_macos_tmux_pin_guard
+test_macos_tmux_tracks_homebrew_stable
 test_assets_and_operator_copy
 test_converge_and_doctor
 test_invite_success_and_fail_closed

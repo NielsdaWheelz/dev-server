@@ -127,13 +127,14 @@ host. This command can reconcile host-local tmux character/shadow state;
 `accept-host` is a separate mutation gate for exactly one fixed host. Both
 literal flags and the exact environment capability are required before any
 local or SSH boundary. It validates existing credentials and reconciled
-lifetime, converges twice, requires a completely healthy doctor, requires the
+lifetime, converges twice, requires a doctor with no failures, requires the
 credentials and lifetime to remain unchanged, and checks the owned service
-definition plus boot/login intent. It proves an identity-preserving reinstall,
+definition plus boot/login intent. Advisory warnings remain visible but do not
+block acceptance. It proves an identity-preserving reinstall,
 not first installation. `prepare-reboot` then stores a user-owned mode-0600,
 digest-only checkpoint for that exact host. After the separately approved
 reboot, `verify-reboot` requires a changed boot identity, an unchanged release
-pin and credentials, plus a completely healthy doctor and service boot/login
+pin and credentials, plus a failure-free doctor and service boot/login
 intent. It removes the checkpoint only after a pass. tmux intentionally starts
 a new lifetime after a machine reboot; the preceding `accept-host` gate proves
 that convergence itself preserved the old lifetime. Neither reboot command
@@ -210,6 +211,9 @@ notifications for commands that finish after 30 seconds while unfocused.
   managed router under `~/.local/libexec/ai-router` for separate account state.
   OpenCode uses the direct `~/bin/opencode` shortcut and its native state
   locations; it does not pretend to provide isolated contexts.
+- Convergence follows the stable channels for Codex and Claude and the current
+  native-package release for tmux. Tool versions are not pinned; tmux drift
+  from the last tested version is an advisory doctor warning.
 - Generated cloud-init is secret-bearing. Normal commands use temporary files;
   keep `cloud-init-devbox.yaml` out of git.
 - The `secrets/` directory is ignored and should stay local.

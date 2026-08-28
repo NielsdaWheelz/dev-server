@@ -26,32 +26,32 @@ EOF
 
 platform_id() {
   case "$(uname -s)" in
-    Darwin)
-      printf 'macos\n'
-      ;;
-    Linux)
-      if [[ -f /etc/arch-release ]]; then
-        printf 'arch\n'
-      else
-        die "unsupported Linux platform; workstation supports Arch only"
-      fi
-      ;;
-    *)
-      die "unsupported platform: $(uname -s)"
-      ;;
+  Darwin)
+    printf 'macos\n'
+    ;;
+  Linux)
+    if [[ -f /etc/arch-release ]]; then
+      printf 'arch\n'
+    else
+      die "unsupported Linux platform; workstation supports Arch only"
+    fi
+    ;;
+  *)
+    die "unsupported platform: $(uname -s)"
+    ;;
   esac
 }
 
 source_platform_packages() {
   case "$(platform_id)" in
-    macos)
-      # shellcheck source=lib/packages-macos.sh
-      source "$base_dir/lib/packages-macos.sh"
-      ;;
-    arch)
-      # shellcheck source=lib/packages-arch.sh
-      source "$base_dir/lib/packages-arch.sh"
-      ;;
+  macos)
+    # shellcheck source=lib/packages-macos.sh
+    source "$base_dir/lib/packages-macos.sh"
+    ;;
+  arch)
+    # shellcheck source=lib/packages-arch.sh
+    source "$base_dir/lib/packages-arch.sh"
+    ;;
   esac
 }
 
@@ -72,7 +72,6 @@ cmd_doctor() {
 
 cmd_converge() {
   source_platform_packages
-  skidbladnir_preflight_tmux_runtime "$(platform_id)"
   packages_install
   skidbladnir_require_tmux_runtime "$(platform_id)"
   dotfiles_install
@@ -86,15 +85,21 @@ main() {
   shift || true
 
   case "$command" in
-    converge) [[ $# -eq 0 ]] || die "Usage: ./workstation converge"; cmd_converge ;;
-    doctor) [[ $# -eq 0 ]] || die "Usage: ./workstation doctor"; cmd_doctor ;;
-    -h|--help|help|"")
-      usage
-      ;;
-    *)
-      usage >&2
-      return 1
-      ;;
+  converge)
+    [[ $# -eq 0 ]] || die "Usage: ./workstation converge"
+    cmd_converge
+    ;;
+  doctor)
+    [[ $# -eq 0 ]] || die "Usage: ./workstation doctor"
+    cmd_doctor
+    ;;
+  -h | --help | help | "")
+    usage
+    ;;
+  *)
+    usage >&2
+    return 1
+    ;;
   esac
 }
 

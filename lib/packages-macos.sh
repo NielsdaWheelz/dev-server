@@ -23,36 +23,17 @@ packages_macos_configure_tailscale() {
   open -gj -a Tailscale
 }
 
-packages_macos_pin_tmux_if_exact() {
-  local config="$dev_server_root/assets/skidbladnir/host-config-macbook.json"
-  local tmux_path
-  local tmux_version
-  tmux_path="$(jq -er '.tmux.path' "$config")" || die "MacBook tmux path is invalid"
-  tmux_version="$(jq -er '.tmux.version' "$config")" || die "MacBook tmux version is invalid"
-
-  if [[ -x "$tmux_path" && "$($tmux_path -V 2>/dev/null || true)" == "$tmux_version" ]] &&
-    ! packages_macos_tmux_is_pinned; then
-    brew pin --formula tmux
-  fi
-}
-
-packages_macos_tmux_is_pinned() {
-  brew list --pinned --formula 2>/dev/null | grep -Fxq tmux
-}
-
-packages_macos_doctor_tmux_pin() {
-  if packages_macos_tmux_is_pinned; then
-    doctor_pass package.tmux-pin "Homebrew tmux formula protected from unreviewed upgrades"
-  else
-    doctor_fail package.tmux-pin "Homebrew tmux formula is not pinned; run ./workstation converge"
+packages_macos_unpin_tmux() {
+  if brew list --pinned --formula 2>/dev/null | grep -Fxq tmux; then
+    brew unpin --formula tmux
   fi
 }
 
 packages_install() {
   require_cmd brew
-  packages_macos_pin_tmux_if_exact
+  packages_macos_unpin_tmux
+  brew update
   HOMEBREW_NO_AUTO_UPDATE=1 brew bundle --file "$(packages_macos_file)"
-  packages_macos_pin_tmux_if_exact
   packages_macos_configure_tailscale
 }
 
@@ -60,7 +41,6 @@ packages_doctor() {
   if command -v brew >/dev/null 2>&1; then
     doctor_pass package.brew "brew present"
     doctor_local_cmd package.bundle "Brewfile dependencies available" "HOMEBREW_NO_AUTO_UPDATE=1 brew bundle check --file '$(packages_macos_file)'"
-    packages_macos_doctor_tmux_pin
   else
     doctor_fail package.brew "brew missing"
   fi

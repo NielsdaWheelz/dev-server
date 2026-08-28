@@ -93,28 +93,35 @@ skidbladnir_remote_target() {
   esac
 }
 
-skidbladnir_preflight_tmux_runtime() {
+skidbladnir_tmux_path() {
   local platform="$1"
-  local config tmux_path tmux_version
-  config="$(skidbladnir_host_config_source "$platform")"
-  tmux_path="$(jq -er '.tmux.path' "$config")" || die "Skidbladnir tmux path is invalid"
-  tmux_version="$(jq -er '.tmux.version' "$config")" || die "Skidbladnir tmux version is invalid"
-  if [[ -e "$tmux_path" || -L "$tmux_path" ]]; then
-    [[ -x "$tmux_path" &&
-      "$($tmux_path -V 2>/dev/null || true)" == "$tmux_version" ]] ||
-      die "Installed tmux differs from the exact Skidbladnir host-config version; resolve it before convergence"
-  fi
+  jq -er '.tmux.path | select(type == "string" and startswith("/"))' \
+    "$(skidbladnir_host_config_source "$platform")"
+}
+
+skidbladnir_tmux_version_is_canonical() {
+  local version="$1"
+  [[ "$version" != *$'\n'* && "$version" != *$'\r'* && "$version" != *' ' ]] &&
+    printf '%s\n' "$version" | LC_ALL=C grep -Eq '^tmux [!-~][[:print:]]{0,58}$'
+}
+
+skidbladnir_observed_tmux_version() {
+  local tmux_path="$1"
+  local framed observed
+  [[ -x "$tmux_path" ]] || return 1
+  framed="$("$tmux_path" -V 2>/dev/null && printf .)" || return 1
+  [[ "$framed" == *$'\n.' ]] || return 1
+  observed="${framed%$'\n.'}"
+  skidbladnir_tmux_version_is_canonical "$observed" || return 1
+  printf '%s\n' "$observed"
 }
 
 skidbladnir_require_tmux_runtime() {
   local platform="$1"
-  local config tmux_path tmux_version
-  config="$(skidbladnir_host_config_source "$platform")"
-  tmux_path="$(jq -er '.tmux.path' "$config")" || die "Skidbladnir tmux path is invalid"
-  tmux_version="$(jq -er '.tmux.version' "$config")" || die "Skidbladnir tmux version is invalid"
-  [[ -x "$tmux_path" &&
-    "$($tmux_path -V 2>/dev/null || true)" == "$tmux_version" ]] ||
-    die "Package convergence did not produce the exact Skidbladnir tmux version"
+  local tmux_path
+  tmux_path="$(skidbladnir_tmux_path "$platform")" || die "Skidbladnir tmux path is invalid"
+  skidbladnir_observed_tmux_version "$tmux_path" >/dev/null ||
+    die "Package convergence did not produce a canonical tmux runtime at $tmux_path"
 }
 
 skidbladnir_sha256() {
@@ -1082,7 +1089,7 @@ skidbladnir_doctor() {
   local current_version current_binary_sha current_characters_sha current_release_sha
   local expected_binary_sha expected_characters_sha expected_release_sha bundle bundle_members
   local tailscale_cli tailscale_status tailscale_running current_dns_name
-  local tmux_path tmux_version serve_status doctor_xtrace
+  local tmux_path tmux_tested_version tmux_observed_version serve_status doctor_xtrace
   local service_source service_target activation_marker
   home="$(dev_server_home)"
   config_dir="$home/.config/skidbladnir"
@@ -1248,12 +1255,17 @@ skidbladnir_doctor() {
     set -x
   fi
 
-  tmux_path="$(jq -er '.tmux.path' "$desired_config" 2>/dev/null || true)"
-  tmux_version="$(jq -er '.tmux.version' "$desired_config" 2>/dev/null || true)"
-  if [[ -x "$tmux_path" && "$($tmux_path -V 2>/dev/null || true)" == "$tmux_version" ]]; then
-    skidbladnir_doctor_pass skidbladnir.tmux "$tmux_version available at the configured path"
+  tmux_path="$(skidbladnir_tmux_path "$platform" 2>/dev/null || true)"
+  tmux_tested_version="$(jq -er '.tmux.testedVersion' "$desired_config" 2>/dev/null || true)"
+  tmux_observed_version="$(skidbladnir_observed_tmux_version "$tmux_path" 2>/dev/null || true)"
+  if ! skidbladnir_tmux_version_is_canonical "$tmux_tested_version"; then
+    skidbladnir_doctor_fail skidbladnir.tmux "host config has an invalid testedVersion; fix the deployment asset"
+  elif [[ -z "$tmux_observed_version" ]]; then
+    skidbladnir_doctor_fail skidbladnir.tmux "configured tmux executable is missing, broken, or noncanonical; run the platform converge command"
+  elif [[ "$tmux_observed_version" == "$tmux_tested_version" ]]; then
+    skidbladnir_doctor_pass skidbladnir.tmux "$tmux_observed_version matches the last tested version"
   else
-    skidbladnir_doctor_fail skidbladnir.tmux "configured tmux path or version differs; run the platform converge command"
+    skidbladnir_doctor_warn skidbladnir.tmux "$tmux_observed_version installed; last tested with $tmux_tested_version"
   fi
 
   if ((tailscale_running)); then
@@ -1381,9 +1393,9 @@ skidbladnir_reboot_acceptance_require_health() {
   local label="$2"
   doctor_reset
   skidbladnir_doctor "$platform"
-  if ((doctor_failures != 0 || doctor_warnings != 0)); then
+  if ((doctor_failures != 0)); then
     doctor_summary "$label Skidbladnir reboot acceptance" || true
-    die "Skidbladnir doctor is not completely healthy for reboot acceptance on $label"
+    die "Skidbladnir doctor has failures for reboot acceptance on $label"
   fi
   doctor_summary "$label Skidbladnir reboot acceptance"
   skidbladnir_acceptance_service_intent "$platform" ||
@@ -1519,9 +1531,9 @@ skidbladnir_accept_host_local() (
   skidbladnir_converge "$platform" >/dev/null
   doctor_reset
   skidbladnir_doctor "$platform"
-  if ((doctor_failures != 0 || doctor_warnings != 0)); then
+  if ((doctor_failures != 0)); then
     doctor_summary "$label Skidbladnir acceptance" || true
-    die "Skidbladnir doctor is not completely healthy after convergence on $label"
+    die "Skidbladnir doctor has failures after convergence on $label"
   fi
   doctor_summary "$label Skidbladnir acceptance"
   credentials_after="$(skidbladnir_credentials_digest_local)"
