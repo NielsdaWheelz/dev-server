@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Ghostty
+Comment=Start the Ghostty user service after XFCE login
+Exec=/usr/bin/systemctl --user start app-com.mitchellh.ghostty.service
+Icon=com.mitchellh.ghostty
+OnlyShowIn=XFCE;
+Terminal=false
+NoDisplay=true
+Hidden=false
+X-GNOME-Autostart-enabled=true
