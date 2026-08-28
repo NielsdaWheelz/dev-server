@@ -180,6 +180,12 @@ on battery, the idle saver locks after 30 minutes, and the system suspends after
 gets a Qogir-Dark cursor, workspace and window shortcuts, and a San Francisco
 solar schedule for Gammastep night color.
 
+Clipman and Gammastep are owned exclusively by XFCE autostart so they inherit
+the graphical session instead of a headless user-service environment. Over SSH
+with no XFCE login, convergence still validates their exact configuration and
+reports runtime ownership as advisory; configuration drift still fails, and a
+logged-in XFCE session with either runtime missing also fails.
+
 Arch convergence installs Cursor from the explicit AUR manifest and adds
 Anysphere's Remote SSH extension. The `dev-server` and `macbook` aliases are
 preclassified as Linux and macOS remotes. A remote repository can be opened

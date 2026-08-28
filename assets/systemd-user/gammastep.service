@@ -1,7 +1,0 @@
-[Unit]
-Description=Adjust screen color temperature for time of day
-
-[Service]
-ExecStart=/usr/bin/gammastep -c %h/.config/gammastep/config.ini
-Restart=on-failure
-RestartSec=5

@@ -88,6 +88,31 @@ dotfiles_xfce_workstation() {
   declare -F platform_id >/dev/null 2>&1 && [[ "$(platform_id)" == arch ]]
 }
 
+dotfiles_xfce_session_active() {
+  command -v busctl >/dev/null 2>&1 &&
+    busctl --user status org.xfce.SessionManager >/dev/null 2>&1
+}
+
+dotfiles_doctor_xfce_session_capability() {
+  local id="$1"
+  local configured_check="$2"
+  local runtime_check="$3"
+  local ready_message="$4"
+  local configuration_failure="$5"
+  local runtime_failure="$6"
+  local inactive_message="$7"
+
+  if ! "$configured_check"; then
+    doctor_fail "$id" "$configuration_failure"
+  elif "$runtime_check"; then
+    doctor_pass "$id" "$ready_message"
+  elif dotfiles_xfce_session_active; then
+    doctor_fail "$id" "$runtime_failure"
+  else
+    doctor_warn "$id" "$inactive_message"
+  fi
+}
+
 dotfiles_configure_xfce_terminal() {
   local current_font
   local font_size
@@ -364,13 +389,31 @@ dotfiles_configure_xfce_idle_policy() {
 
 dotfiles_doctor_xfce_idle_policy() {
   dotfiles_xfce_workstation || return 0
-  if dotfiles_xfce_idle_policy_configured && dotfiles_xfce_idle_consumers_active; then
-    doctor_pass dotfiles.idle-policy \
-      "display off 5m AC/2m battery, idle lock 30m, suspend never AC/5m battery"
-  else
-    doctor_fail dotfiles.idle-policy \
-      "XFCE display, lock, suspend, presentation mode, or runtime ownership is incomplete"
-  fi
+  dotfiles_doctor_xfce_session_capability \
+    dotfiles.idle-policy \
+    dotfiles_xfce_idle_policy_configured \
+    dotfiles_xfce_idle_consumers_active \
+    "display off 5m AC/2m battery, idle lock 30m, suspend never AC/5m battery" \
+    "XFCE display, lock, suspend, or presentation-mode configuration is incomplete" \
+    "XFCE power-manager or screensaver ownership is missing from the active session" \
+    "policy configured; runtime ownership awaits an XFCE login"
+}
+
+dotfiles_retire_xfce_session_services() {
+  local home
+  local unit
+  local units=(xfce4-clipman.service gammastep.service)
+
+  home="$(dev_server_home)"
+  require_cmd systemctl
+  for unit in "${units[@]}"; do
+    systemctl --user disable --now "$unit" >/dev/null 2>&1 || true
+    rm -f "$home/.config/systemd/user/$unit"
+  done
+  systemctl --user daemon-reload
+  for unit in "${units[@]}"; do
+    systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true
+  done
 }
 
 dotfiles_configure_xfce_qol() {
@@ -380,6 +423,7 @@ dotfiles_configure_xfce_qol() {
 
   dotfiles_xfce_workstation || return 0
   require_cmd xfconf-query
+  dotfiles_retire_xfce_session_services
 
   home="$(dev_server_home)"
   if brightness_floor="$(dotfiles_xfce_brightness_floor_value)"; then
@@ -419,7 +463,6 @@ dotfiles_configure_xfce_qol() {
   if command -v xfce4-clipman >/dev/null 2>&1; then
     install -d -m 0755 "$home/.config/autostart"
     rm -f "$home/.config/autostart/xfce4-clipman.desktop"
-    rm -f "$home/.config/systemd/user/xfce4-clipman.service"
     dotfiles_install_file \
       "$(dotfiles_asset xfce4-clipman-autostart.desktop)" \
       "$home/.config/autostart/xfce4-clipman-plugin-autostart.desktop"
@@ -437,34 +480,85 @@ dotfiles_configure_xfce_qol() {
     shortcut='/commands/custom/<Super>v'
     dotfiles_xfconf_set xfce4-keyboard-shortcuts "$shortcut" string \
       /usr/bin/xfce4-clipman-history
-
-    if ! busctl --user status org.xfce.clipman >/dev/null 2>&1; then
-      systemd-run --user --quiet --collect /usr/bin/xfce4-clipman
-      for _ in {1..20}; do
-        busctl --user status org.xfce.clipman >/dev/null 2>&1 && break
-        sleep 0.1
-      done
-    fi
   fi
 
   if command -v gammastep >/dev/null 2>&1; then
     install -d -m 0755 \
       "$home/.config/autostart" \
-      "$home/.config/gammastep" \
-      "$home/.config/systemd/user"
+      "$home/.config/gammastep"
     dotfiles_install_file \
       "$(dotfiles_asset gammastep-autostart.desktop)" \
       "$home/.config/autostart/gammastep.desktop"
     dotfiles_install_file \
       "$(dotfiles_asset gammastep.config)" \
       "$home/.config/gammastep/config.ini"
-    dotfiles_install_file \
-      "$(dev_server_assets_dir)/systemd-user/gammastep.service" \
-      "$home/.config/systemd/user/gammastep.service"
-    systemctl --user daemon-reload
-    systemctl --user disable gammastep.service >/dev/null 2>&1 || true
-    systemctl --user restart gammastep.service
   fi
+}
+
+dotfiles_xfce_user_service_retired() {
+  local unit="$1"
+  local path
+
+  path="$(dev_server_home)/.config/systemd/user/$unit"
+  [[ ! -e "$path" && ! -L "$path" ]]
+}
+
+dotfiles_clipboard_history_configured() {
+  local home
+
+  home="$(dev_server_home)"
+  [[ -f "$home/.config/autostart/xfce4-clipman-plugin-autostart.desktop" ]] &&
+    [[ ! -L "$home/.config/autostart/xfce4-clipman-plugin-autostart.desktop" ]] &&
+    cmp -s "$(dotfiles_asset xfce4-clipman-autostart.desktop)" \
+      "$home/.config/autostart/xfce4-clipman-plugin-autostart.desktop" &&
+    dotfiles_xfce_user_service_retired xfce4-clipman.service &&
+    [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/commands/custom/<Super>v' 2>/dev/null)" == "/usr/bin/xfce4-clipman-history" ]] &&
+    [[ "$(xfconf-query -c xfce4-panel -p /plugins/clipman/settings/max-texts-in-history 2>/dev/null)" == "50" ]]
+}
+
+dotfiles_clipboard_history_runtime_active() {
+  busctl --user status org.xfce.clipman >/dev/null 2>&1
+}
+
+dotfiles_doctor_xfce_clipboard_history() {
+  dotfiles_doctor_xfce_session_capability \
+    dotfiles.clipboard-history \
+    dotfiles_clipboard_history_configured \
+    dotfiles_clipboard_history_runtime_active \
+    "Clipman active with 50-item history and Super+V search" \
+    "Clipman autostart, history, shortcut, or retired-service state is incomplete" \
+    "Clipman is not active in the current XFCE session" \
+    "configured; runtime awaits an XFCE login"
+}
+
+dotfiles_gammastep_configured() {
+  local home
+
+  home="$(dev_server_home)"
+  [[ -f "$home/.config/gammastep/config.ini" ]] &&
+    [[ ! -L "$home/.config/gammastep/config.ini" ]] &&
+    cmp -s "$(dotfiles_asset gammastep.config)" \
+      "$home/.config/gammastep/config.ini" &&
+    [[ -f "$home/.config/autostart/gammastep.desktop" ]] &&
+    [[ ! -L "$home/.config/autostart/gammastep.desktop" ]] &&
+    cmp -s "$(dotfiles_asset gammastep-autostart.desktop)" \
+      "$home/.config/autostart/gammastep.desktop" &&
+    dotfiles_xfce_user_service_retired gammastep.service
+}
+
+dotfiles_gammastep_runtime_active() {
+  pgrep -u "$(id -u)" -x gammastep >/dev/null 2>&1
+}
+
+dotfiles_doctor_xfce_night_color() {
+  dotfiles_doctor_xfce_session_capability \
+    dotfiles.night-color \
+    dotfiles_gammastep_configured \
+    dotfiles_gammastep_runtime_active \
+    "Gammastep active with San Francisco solar schedule" \
+    "Gammastep configuration, autostart, or retired-service state is incomplete" \
+    "Gammastep is not active in the current XFCE session" \
+    "configured; runtime awaits an XFCE login"
 }
 
 dotfiles_configure_git() {
@@ -582,31 +676,11 @@ dotfiles_doctor() {
     fi
 
     if command -v xfce4-clipman >/dev/null 2>&1; then
-      if [[ -f "$home/.config/autostart/xfce4-clipman-plugin-autostart.desktop" ]] &&
-        grep -Eq '^Exec=(/usr/bin/)?xfce4-clipman$' \
-          "$home/.config/autostart/xfce4-clipman-plugin-autostart.desktop" &&
-        grep -Fqx 'Hidden=false' \
-          "$home/.config/autostart/xfce4-clipman-plugin-autostart.desktop" &&
-        busctl --user status org.xfce.clipman >/dev/null 2>&1 &&
-        [[ "$(xfconf-query -c xfce4-keyboard-shortcuts -p '/commands/custom/<Super>v' 2>/dev/null)" == "/usr/bin/xfce4-clipman-history" ]] &&
-        [[ "$(xfconf-query -c xfce4-panel -p /plugins/clipman/settings/max-texts-in-history 2>/dev/null)" == "50" ]]; then
-        doctor_pass dotfiles.clipboard-history "Clipman active with 50-item history and Super+V search"
-      else
-        doctor_fail dotfiles.clipboard-history "Clipman history or Super+V shortcut is not active"
-      fi
+      dotfiles_doctor_xfce_clipboard_history
     fi
 
     if command -v gammastep >/dev/null 2>&1; then
-      if [[ -f "$home/.config/gammastep/config.ini" ]] &&
-        cmp -s "$(dotfiles_asset gammastep.config)" "$home/.config/gammastep/config.ini" &&
-        [[ -f "$home/.config/autostart/gammastep.desktop" ]] &&
-        cmp -s "$(dotfiles_asset gammastep-autostart.desktop)" \
-          "$home/.config/autostart/gammastep.desktop" &&
-        systemctl --user is-active --quiet gammastep.service; then
-        doctor_pass dotfiles.night-color "Gammastep active with San Francisco solar schedule"
-      else
-        doctor_fail dotfiles.night-color "Gammastep configuration or user service is not active"
-      fi
+      dotfiles_doctor_xfce_night_color
     fi
   fi
 
