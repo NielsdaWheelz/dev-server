@@ -363,7 +363,7 @@ ai_doctor_tool() {
       doctor_fail "ai.$tool" "missing exact Codex platform binary"
       return
     fi
-    platform_sha256="$(sha256sum "$platform_binary" | awk '{print $1}')"
+    platform_sha256="$(dev_server_sha256 "$platform_binary")"
     if [[ "$platform_sha256" != "$(ai_codex_platform_sha256)" ]]; then
       doctor_fail "ai.$tool" "platform binary digest differs from the pin"
       return

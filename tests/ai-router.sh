@@ -2,6 +2,8 @@
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# shellcheck source=lib/common.sh
+source "$repo_dir/lib/common.sh"
 fixture="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-ai-router.XXXXXX")"
 test_home="$fixture/home"
 router="$test_home/.local/libexec/ai-router"
@@ -56,6 +58,51 @@ assert_argv() {
 
 pass() {
   tests_run=$((tests_run + 1))
+}
+
+test_portable_sha256() {
+  local empty="$fixture/empty"
+  local expected_digest=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  : >"$empty"
+  assert_eq "$expected_digest" \
+    "$(PATH=/usr/bin:/bin dev_server_sha256 "$empty")" \
+    'native platform SHA-256 command'
+  (
+    command() {
+      [[ "${1:-}" == -v && "${2:-}" =~ ^(sha256sum|shasum)$ ]] || builtin command "$@"
+    }
+    sha256sum() {
+      assert_eq 2 "$#" 'sha256sum argv count'
+      assert_eq -- "$1" 'sha256sum option terminator'
+      assert_eq "$empty" "$2" 'sha256sum path'
+      printf '%s  fixture\n' "$expected_digest"
+    }
+    shasum() { fail 'shasum ran while sha256sum was available'; }
+    assert_eq "$expected_digest" "$(dev_server_sha256 "$empty")" 'sha256sum preference'
+  )
+  (
+    command() {
+      if [[ "${1:-}" == -v && "${2:-}" == sha256sum ]]; then return 1; fi
+      if [[ "${1:-}" == -v && "${2:-}" == shasum ]]; then return 0; fi
+      builtin command "$@"
+    }
+    shasum() {
+      assert_eq 4 "$#" 'shasum argv count'
+      assert_eq -a "$1" 'shasum algorithm option'
+      assert_eq 256 "$2" 'shasum algorithm'
+      assert_eq -- "$3" 'shasum option terminator'
+      assert_eq "$empty" "$4" 'shasum path'
+      printf '%s  fixture\n' "$expected_digest"
+    }
+    assert_eq "$expected_digest" "$(dev_server_sha256 "$empty")" 'shasum fallback'
+  )
+  if (
+    command() { [[ "${1:-}" != -v ]] && builtin command "$@"; }
+    dev_server_sha256 "$empty"
+  ) >/dev/null 2>&1; then
+    fail 'SHA-256 helper accepted a host with no supported digest command'
+  fi
+  pass
 }
 
 install -d -m 0755 "$test_home/.local/libexec" "$test_home/.local/bin" "$test_home/bin"
@@ -214,7 +261,7 @@ test_pin_doctor_and_convergence() {
   local fixture_platform_digest
   printf 'reviewed fake platform binary\n' >"$fixture_platform_binary"
   chmod 0755 "$fixture_platform_binary"
-  fixture_platform_digest="$(shasum -a 256 "$fixture_platform_binary" | awk '{print $1}')"
+  fixture_platform_digest="$(dev_server_sha256 "$fixture_platform_binary")"
   ai_codex_platform_binary() { printf '%s\n' "$fixture_platform_binary"; }
   ai_codex_platform_sha256() { printf '%s\n' "$fixture_platform_digest"; }
 
@@ -239,6 +286,7 @@ test_pin_doctor_and_convergence() {
   pass
 }
 
+test_portable_sha256
 test_hard_cut_surface
 test_codex_platform_pin_mapping
 test_explicit_contexts_and_exact_argv

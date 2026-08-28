@@ -2,6 +2,8 @@
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# shellcheck source=lib/common.sh
+source "$repo_dir/lib/common.sh"
 fixture="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-skidbladnir-test.XXXXXX")"
 test_home="$fixture/home"
 test_bin="$fixture/bin"
@@ -354,7 +356,7 @@ EOF
   tar -czf "$fixture/skidbladnir-linux-amd64.tar.gz" -C "$release_dir" \
     skidbladnir characters.json release.json
   local archive_sha
-  archive_sha="$(shasum -a 256 "$fixture/skidbladnir-linux-amd64.tar.gz" | awk '{print $1}')"
+  archive_sha="$(dev_server_sha256 "$fixture/skidbladnir-linux-amd64.tar.gz")"
   jq -n --arg digest "$archive_sha" --arg source "$source_sha" \
     '{version:"v1.2.3",sourceSha:$source,androidApkSha256:$digest,androidSigningCertAssetSha256:$digest,linuxAmd64Sha256:$digest,darwinArm64Sha256:$digest,sha256SumsAssetSha256:$digest}' \
     >"$fixture/release-pin.json"
