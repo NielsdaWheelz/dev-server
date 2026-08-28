@@ -219,6 +219,7 @@ test_latest_release_doctor_and_convergence() {
   # shellcheck source=lib/ai-tools.sh
   source "$repo_dir/lib/ai-tools.sh"
 
+  assert_eq 'codex claude' "$(ai_tools)" 'managed AI tool set'
   assert_eq '@openai/codex@latest' "$(ai_tool_package codex)" 'Codex stable release selector'
   assert_eq stable "$(CLAUDE_NATIVE_CHANNEL=beta ai_native_channel)" 'Claude stable release selector'
   ai_install_router

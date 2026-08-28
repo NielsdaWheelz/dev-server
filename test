@@ -29,6 +29,7 @@ done < <(find "$repo_dir/assets" -type f -name '*.json' | LC_ALL=C sort)
 
 yaml_files=(
   "$repo_dir/ansible/playbooks/converge.yml"
+  "$repo_dir/ansible/roles/ai_tools/tasks/main.yml"
   "$repo_dir/ansible/roles/base/tasks/main.yml"
   "$repo_dir/ansible/roles/skidbladnir/tasks/main.yml"
 )
