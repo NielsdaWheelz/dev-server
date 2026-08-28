@@ -2,7 +2,7 @@
 Type=Application
 Name=Gammastep
 Comment=Adjust screen color temperature for time of day
-Exec=/usr/bin/systemctl --user restart gammastep.service
+Exec=/usr/bin/gammastep
 Icon=gammastep
 OnlyShowIn=XFCE;
 Terminal=false

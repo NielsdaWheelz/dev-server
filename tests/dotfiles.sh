@@ -41,6 +41,7 @@ source "$repo_dir/lib/doctor.sh"
 # shellcheck source=lib/dotfiles.sh
 source "$repo_dir/lib/dotfiles.sh"
 doctor_failures=0
+doctor_warnings=0
 
 declare -F dotfiles_configure_xfce_idle_policy >/dev/null ||
   fail 'missing focused XFCE idle-policy convergence boundary'
@@ -211,23 +212,42 @@ test_idle_policy_drift() {
 }
 
 test_idle_policy_runtime_doctor() {
-  printf '%s\n' org.xfce.PowerManager org.xfce.ScreenSaver >"$bus_names_file"
+  printf '%s\n' \
+    org.xfce.SessionManager \
+    org.xfce.PowerManager \
+    org.xfce.ScreenSaver >"$bus_names_file"
   doctor_reset
   dotfiles_doctor_xfce_idle_policy >"$doctor_output"
   assert_eq 0 "$doctor_failures" 'healthy idle-policy doctor failure count'
+  assert_eq 0 "$doctor_warnings" 'healthy idle-policy doctor warning count'
   assert_contains "$doctor_output" 'pass  dotfiles.idle-policy'
 
-  printf '%s\n' org.xfce.PowerManager >"$bus_names_file"
+  printf '%s\n' org.xfce.SessionManager org.xfce.PowerManager >"$bus_names_file"
   doctor_reset
   dotfiles_doctor_xfce_idle_policy >"$doctor_output"
   assert_eq 1 "$doctor_failures" 'missing screensaver owner failure count'
   assert_contains "$doctor_output" 'fail  dotfiles.idle-policy'
 
-  printf '%s\n' org.xfce.ScreenSaver >"$bus_names_file"
+  printf '%s\n' org.xfce.SessionManager org.xfce.ScreenSaver >"$bus_names_file"
   doctor_reset
   dotfiles_doctor_xfce_idle_policy >"$doctor_output"
   assert_eq 1 "$doctor_failures" 'missing power-manager owner failure count'
   assert_contains "$doctor_output" 'fail  dotfiles.idle-policy'
+
+  : >"$bus_names_file"
+  doctor_reset
+  dotfiles_doctor_xfce_idle_policy >"$doctor_output"
+  assert_eq 0 "$doctor_failures" 'headless idle-policy doctor failure count'
+  assert_eq 1 "$doctor_warnings" 'headless idle-policy doctor warning count'
+  assert_contains "$doctor_output" 'warn  dotfiles.idle-policy'
+
+  state_put xfce4-power-manager /xfce4-power-manager/presentation-mode bool true
+  doctor_reset
+  dotfiles_doctor_xfce_idle_policy >"$doctor_output"
+  assert_eq 1 "$doctor_failures" 'headless idle-policy drift failure count'
+  assert_eq 0 "$doctor_warnings" 'headless idle-policy drift warning count'
+  assert_contains "$doctor_output" 'fail  dotfiles.idle-policy'
+  state_put xfce4-power-manager /xfce4-power-manager/presentation-mode bool false
   pass
 }
 
@@ -254,6 +274,138 @@ test_declared_packages() {
     [[ "$(grep -Fxc -- "$package" "$repo_dir/packages/arch.pacman.txt")" == 1 ]] ||
       fail "Arch package manifest must contain exactly one $package entry"
   done
+  pass
+}
+
+test_xfce_session_app_convergence() {
+  local qol_home="$fixture/xfce-qol-home"
+  local systemctl_calls="$fixture/xfce-qol-systemctl-calls"
+  local expected_systemctl="$fixture/xfce-qol-systemctl-expected"
+
+  install -d -m 0755 \
+    "$qol_home/.config/autostart" \
+    "$qol_home/.config/systemd/user"
+  printf 'retired clipman service\n' >"$qol_home/.config/systemd/user/xfce4-clipman.service"
+  printf 'retired gammastep service\n' >"$qol_home/.config/systemd/user/gammastep.service"
+  : >"$systemctl_calls"
+
+  (
+    command() {
+      if [[ "$1" == -v &&
+        ("$2" == xfce4-clipman || "$2" == gammastep || "$2" == systemctl) ]]; then
+        return 0
+      fi
+      builtin command "$@"
+    }
+    dev_server_home() { printf '%s\n' "$qol_home"; }
+    dotfiles_xfce_brightness_floor_value() { return 1; }
+    dotfiles_xfconf_set() { :; }
+    dotfiles_xfwm_shortcut_set() { :; }
+    dotfiles_configure_xfce_idle_policy() { :; }
+    busctl() { fail 'XFCE convergence inspected session runtime ownership'; }
+    systemd-run() { fail 'XFCE convergence launched a GUI process through the headless user manager'; }
+    systemctl() {
+      printf '%s\n' "$*" >>"$systemctl_calls"
+      return 0
+    }
+
+    dotfiles_configure_xfce_qol
+  ) || fail 'XFCE session-app convergence failed'
+
+  printf '%s\n' \
+    '--user disable --now xfce4-clipman.service' \
+    '--user disable --now gammastep.service' \
+    '--user daemon-reload' \
+    '--user reset-failed xfce4-clipman.service' \
+    '--user reset-failed gammastep.service' >"$expected_systemctl"
+  cmp -s "$expected_systemctl" "$systemctl_calls" ||
+    fail 'XFCE convergence did not retire the two headless GUI services exactly'
+  [[ ! -e "$qol_home/.config/systemd/user/xfce4-clipman.service" ]] ||
+    fail 'XFCE convergence retained the retired Clipman user service'
+  [[ ! -e "$qol_home/.config/systemd/user/gammastep.service" ]] ||
+    fail 'XFCE convergence retained the retired Gammastep user service'
+  cmp -s "$repo_dir/assets/dotfiles/xfce4-clipman-autostart.desktop" \
+    "$qol_home/.config/autostart/xfce4-clipman-plugin-autostart.desktop" ||
+    fail 'XFCE convergence did not install the exact Clipman autostart'
+  cmp -s "$repo_dir/assets/dotfiles/gammastep-autostart.desktop" \
+    "$qol_home/.config/autostart/gammastep.desktop" ||
+    fail 'XFCE convergence did not install the exact Gammastep autostart'
+  cmp -s "$repo_dir/assets/dotfiles/gammastep.config" \
+    "$qol_home/.config/gammastep/config.ini" ||
+    fail 'XFCE convergence did not install the exact Gammastep configuration'
+  grep -Fqx 'Exec=/usr/bin/gammastep' \
+    "$repo_dir/assets/dotfiles/gammastep-autostart.desktop" ||
+    fail 'Gammastep is not owned directly by the graphical XFCE session'
+  [[ ! -e "$repo_dir/assets/systemd-user/gammastep.service" ]] ||
+    fail 'the retired headless Gammastep service remains in the asset catalogue'
+  pass
+}
+
+test_xfce_session_app_doctor() {
+  local qol_home="$fixture/xfce-qol-doctor-home"
+  local gammastep_active="$fixture/gammastep-active"
+
+  install -d -m 0755 \
+    "$qol_home/.config/autostart" \
+    "$qol_home/.config/gammastep" \
+    "$qol_home/.config/systemd/user"
+  install -m 0644 "$repo_dir/assets/dotfiles/xfce4-clipman-autostart.desktop" \
+    "$qol_home/.config/autostart/xfce4-clipman-plugin-autostart.desktop"
+  install -m 0644 "$repo_dir/assets/dotfiles/gammastep-autostart.desktop" \
+    "$qol_home/.config/autostart/gammastep.desktop"
+  install -m 0644 "$repo_dir/assets/dotfiles/gammastep.config" \
+    "$qol_home/.config/gammastep/config.ini"
+  state_put xfce4-keyboard-shortcuts '/commands/custom/<Super>v' string \
+    /usr/bin/xfce4-clipman-history
+  state_put xfce4-panel /plugins/clipman/settings/max-texts-in-history uint 50
+
+  (
+    dev_server_home() { printf '%s\n' "$qol_home"; }
+    dotfiles_gammastep_runtime_active() { [[ -s "$gammastep_active" ]]; }
+
+    printf '%s\n' org.xfce.SessionManager org.xfce.clipman >"$bus_names_file"
+    printf 'active\n' >"$gammastep_active"
+    doctor_reset
+    {
+      dotfiles_doctor_xfce_clipboard_history
+      dotfiles_doctor_xfce_night_color
+    } >"$doctor_output"
+    assert_eq 0 "$doctor_failures" 'healthy XFCE session-app doctor failure count'
+    assert_eq 0 "$doctor_warnings" 'healthy XFCE session-app doctor warning count'
+    assert_contains "$doctor_output" 'pass  dotfiles.clipboard-history'
+    assert_contains "$doctor_output" 'pass  dotfiles.night-color'
+
+    : >"$bus_names_file"
+    : >"$gammastep_active"
+    doctor_reset
+    {
+      dotfiles_doctor_xfce_clipboard_history
+      dotfiles_doctor_xfce_night_color
+    } >"$doctor_output"
+    assert_eq 0 "$doctor_failures" 'headless XFCE session-app doctor failure count'
+    assert_eq 2 "$doctor_warnings" 'headless XFCE session-app doctor warning count'
+    assert_contains "$doctor_output" 'warn  dotfiles.clipboard-history'
+    assert_contains "$doctor_output" 'warn  dotfiles.night-color'
+
+    printf '%s\n' org.xfce.SessionManager >"$bus_names_file"
+    doctor_reset
+    {
+      dotfiles_doctor_xfce_clipboard_history
+      dotfiles_doctor_xfce_night_color
+    } >"$doctor_output"
+    assert_eq 2 "$doctor_failures" 'active broken XFCE session-app doctor failure count'
+    assert_eq 0 "$doctor_warnings" 'active broken XFCE session-app doctor warning count'
+    assert_contains "$doctor_output" 'fail  dotfiles.clipboard-history'
+    assert_contains "$doctor_output" 'fail  dotfiles.night-color'
+
+    : >"$bus_names_file"
+    printf '# drift\n' >>"$qol_home/.config/autostart/gammastep.desktop"
+    doctor_reset
+    dotfiles_doctor_xfce_night_color >"$doctor_output"
+    assert_eq 1 "$doctor_failures" 'headless Gammastep configuration drift failure count'
+    assert_eq 0 "$doctor_warnings" 'headless Gammastep configuration drift warning count'
+    assert_contains "$doctor_output" 'fail  dotfiles.night-color'
+  ) || fail 'XFCE session-app doctor policy failed'
   pass
 }
 
@@ -483,6 +635,9 @@ test_production_wiring() {
       if [[ "$1" == -v && "$2" == xfconf-query ]]; then
         return 0
       fi
+      if [[ "$1" == -v && "$2" == systemctl ]]; then
+        return 0
+      fi
       if [[ "$1" == -v && ("$2" == xfce4-clipman || "$2" == gammastep) ]]; then
         return 1
       fi
@@ -493,6 +648,7 @@ test_production_wiring() {
     dotfiles_xfconf_set() { :; }
     dotfiles_xfwm_shortcut_set() { :; }
     dotfiles_configure_xfce_idle_policy() { printf 'called\n' >>"$configure_calls"; }
+    systemctl() { :; }
 
     dotfiles_configure_xfce_qol
   )
@@ -546,6 +702,8 @@ test_idle_policy_drift
 test_idle_policy_runtime_doctor
 test_declared_platform_boundary
 test_declared_packages
+test_xfce_session_app_convergence
+test_xfce_session_app_doctor
 test_headless_ghostty_default
 test_ghostty_xfce_autostart
 test_ghostty_non_xfce_convergence
