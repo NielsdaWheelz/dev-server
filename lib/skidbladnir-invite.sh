@@ -31,7 +31,7 @@ skidbladnir_invite_manifest_snapshot() (
     ;;
   esac
   [[ -f "$descriptor" && -f "$manifest" && ! -L "$manifest" &&
-    "$owner" == "$(id -u)" && "$size" =~ ^[1-9][0-9]{0,3}$ &&
+    "$owner" == "$(command id -u)" && "$size" =~ ^[1-9][0-9]{0,3}$ &&
     "$size" -le 4096 && "$opened_identity" == "$path_identity" ]] || return 1
   canonical="$(jq --stream -nce '
     reduce inputs as $item (
