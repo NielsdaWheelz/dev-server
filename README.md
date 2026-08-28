@@ -172,9 +172,10 @@ fallback.
 Firmware metadata, SMART disk health, package-file indexes, and package-cache
 cleanup run automatically. XFCE also gets persistent searchable clipboard
 history on `Super+V`, a hardware-scaled 1% minimum screen brightness, balanced
-AC and power-saver battery profiles, and an explicit idle policy. The display
-turns off after 5 minutes on AC or 2 minutes on battery, the session locks after
-30 minutes, and the system suspends after 5 minutes only on battery. XFCE also
+AC and power-saver battery profiles, and an explicit idle policy. Under ordinary
+uninhibited idle time, the display turns off after 5 minutes on AC or 2 minutes
+on battery, the idle saver locks after 30 minutes, and the system suspends after
+5 minutes only on battery; every suspend also locks. XFCE also
 gets a Qogir-Dark cursor, workspace and window shortcuts, and a San Francisco
 solar schedule for Gammastep night color.
 

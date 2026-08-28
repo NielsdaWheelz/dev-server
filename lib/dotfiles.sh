@@ -84,13 +84,16 @@ dotfiles_configure_login_shell() {
   fi
 }
 
+dotfiles_xfce_workstation() {
+  declare -F platform_id >/dev/null 2>&1 && [[ "$(platform_id)" == arch ]]
+}
+
 dotfiles_configure_xfce_terminal() {
   local current_font
   local font_size
 
-  [[ "$(uname -s)" == "Linux" ]] || return 0
-  [[ "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]] || return 0
-  command -v xfconf-query >/dev/null 2>&1 || return 0
+  dotfiles_xfce_workstation || return 0
+  require_cmd xfconf-query
 
   current_font="$(xfconf-query -c xfce4-terminal -p /font-name 2>/dev/null || printf 'Monospace 10')"
   font_size="${current_font##* }"
@@ -118,7 +121,7 @@ dotfiles_configure_ghostty() {
   install -d -m 0755 "$home/.config/ghostty"
   dotfiles_install_file "$(dotfiles_asset ghostty.config)" "$home/.config/ghostty/config.ghostty"
 
-  if [[ "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]]; then
+  if dotfiles_xfce_workstation; then
     install -d -m 0755 "$home/.local/share/xfce4/helpers" "$home/.config/xfce4"
     dotfiles_install_file \
       "$(dotfiles_asset ghostty-xfce-helper.desktop)" \
@@ -131,9 +134,8 @@ dotfiles_configure_ghostty() {
 }
 
 dotfiles_configure_xfce_theme() {
-  [[ "$(uname -s)" == "Linux" ]] || return 0
-  [[ "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]] || return 0
-  command -v xfconf-query >/dev/null 2>&1 || return 0
+  dotfiles_xfce_workstation || return 0
+  require_cmd xfconf-query
 
   xfconf-query -c xsettings -p /Net/ThemeName -s Arc-Dark
   xfconf-query -c xsettings -p /Net/IconThemeName -s Qogir-Dark
@@ -156,7 +158,7 @@ dotfiles_xfconf_set() {
   local value="$4"
 
   if xfconf-query -c "$channel" -p "$property" >/dev/null 2>&1; then
-    xfconf-query -c "$channel" -p "$property" -s "$value"
+    xfconf-query -c "$channel" -p "$property" -t "$type" -s "$value"
   else
     xfconf-query -c "$channel" -p "$property" -n -t "$type" -s "$value"
   fi
@@ -211,52 +213,44 @@ dotfiles_xfce_idle_policy_configured() {
   local power=/xfce4-power-manager
 
   [[ "$(xfconf-query -c xfce4-power-manager -p "$power/dpms-enabled" 2>/dev/null)" == "true" ]] &&
-    [[ "$(xfconf-query -c xfce4-power-manager -p "$power/dpms-on-ac-sleep" 2>/dev/null)" == "5" ]] &&
+    [[ "$(xfconf-query -c xfce4-power-manager -p "$power/dpms-on-ac-sleep" 2>/dev/null)" == "0" ]] &&
     [[ "$(xfconf-query -c xfce4-power-manager -p "$power/dpms-on-ac-off" 2>/dev/null)" == "5" ]] &&
-    [[ "$(xfconf-query -c xfce4-power-manager -p "$power/dpms-on-battery-sleep" 2>/dev/null)" == "2" ]] &&
+    [[ "$(xfconf-query -c xfce4-power-manager -p "$power/dpms-on-battery-sleep" 2>/dev/null)" == "0" ]] &&
     [[ "$(xfconf-query -c xfce4-power-manager -p "$power/dpms-on-battery-off" 2>/dev/null)" == "2" ]] &&
     [[ "$(xfconf-query -c xfce4-power-manager -p "$power/inactivity-on-ac" 2>/dev/null)" == "0" ]] &&
     [[ "$(xfconf-query -c xfce4-power-manager -p "$power/inactivity-on-battery" 2>/dev/null)" == "5" ]] &&
     [[ "$(xfconf-query -c xfce4-power-manager -p "$power/inactivity-sleep-mode-on-ac" 2>/dev/null)" == "1" ]] &&
     [[ "$(xfconf-query -c xfce4-power-manager -p "$power/inactivity-sleep-mode-on-battery" 2>/dev/null)" == "1" ]] &&
     [[ "$(xfconf-query -c xfce4-power-manager -p "$power/lock-screen-suspend-hibernate" 2>/dev/null)" == "true" ]] &&
+    [[ "$(xfconf-query -c xfce4-power-manager -p "$power/presentation-mode" 2>/dev/null)" == "false" ]] &&
     [[ "$(xfconf-query -c xfce4-screensaver -p /saver/enabled 2>/dev/null)" == "true" ]] &&
     [[ "$(xfconf-query -c xfce4-screensaver -p /saver/mode 2>/dev/null)" == "0" ]] &&
     [[ "$(xfconf-query -c xfce4-screensaver -p /saver/idle-activation/enabled 2>/dev/null)" == "true" ]] &&
     [[ "$(xfconf-query -c xfce4-screensaver -p /saver/idle-activation/delay 2>/dev/null)" == "30" ]] &&
     [[ "$(xfconf-query -c xfce4-screensaver -p /lock/enabled 2>/dev/null)" == "true" ]] &&
     [[ "$(xfconf-query -c xfce4-screensaver -p /lock/saver-activation/enabled 2>/dev/null)" == "true" ]] &&
-    [[ "$(xfconf-query -c xfce4-screensaver -p /lock/saver-activation/delay 2>/dev/null)" == "25" ]] &&
+    [[ "$(xfconf-query -c xfce4-screensaver -p /lock/saver-activation/delay 2>/dev/null)" == "0" ]] &&
     [[ "$(xfconf-query -c xfce4-screensaver -p /lock/sleep-activation 2>/dev/null)" == "true" ]]
 }
 
-dotfiles_configure_xfce_qol() {
-  local brightness_floor
-  local home
-  local shortcut
+dotfiles_xfce_idle_consumers_active() {
+  command -v busctl >/dev/null 2>&1 &&
+    busctl --user status org.xfce.PowerManager >/dev/null 2>&1 &&
+    busctl --user status org.xfce.ScreenSaver >/dev/null 2>&1
+}
 
-  [[ "$(uname -s)" == "Linux" ]] || return 0
-  [[ "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]] || return 0
-  command -v xfconf-query >/dev/null 2>&1 || return 0
+dotfiles_configure_xfce_idle_policy() {
+  dotfiles_xfce_workstation || return 0
+  require_cmd xfconf-query
 
-  home="$(dev_server_home)"
-  if brightness_floor="$(dotfiles_xfce_brightness_floor_value)"; then
-    dotfiles_xfconf_set xfce4-power-manager \
-      /xfce4-power-manager/brightness-slider-min-level int "$brightness_floor"
-  fi
-
-  dotfiles_xfconf_set xfce4-power-manager \
-    /xfce4-power-manager/profile-on-ac string balanced
-  dotfiles_xfconf_set xfce4-power-manager \
-    /xfce4-power-manager/profile-on-battery string power-saver
   dotfiles_xfconf_set xfce4-power-manager \
     /xfce4-power-manager/dpms-enabled bool true
   dotfiles_xfconf_set xfce4-power-manager \
-    /xfce4-power-manager/dpms-on-ac-sleep uint 5
+    /xfce4-power-manager/dpms-on-ac-sleep uint 0
   dotfiles_xfconf_set xfce4-power-manager \
     /xfce4-power-manager/dpms-on-ac-off uint 5
   dotfiles_xfconf_set xfce4-power-manager \
-    /xfce4-power-manager/dpms-on-battery-sleep uint 2
+    /xfce4-power-manager/dpms-on-battery-sleep uint 0
   dotfiles_xfconf_set xfce4-power-manager \
     /xfce4-power-manager/dpms-on-battery-off uint 2
   dotfiles_xfconf_set xfce4-power-manager \
@@ -269,6 +263,8 @@ dotfiles_configure_xfce_qol() {
     /xfce4-power-manager/inactivity-sleep-mode-on-battery uint 1
   dotfiles_xfconf_set xfce4-power-manager \
     /xfce4-power-manager/lock-screen-suspend-hibernate bool true
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/presentation-mode bool false
 
   dotfiles_xfconf_set xfce4-screensaver /saver/enabled bool true
   dotfiles_xfconf_set xfce4-screensaver /saver/mode int 0
@@ -280,8 +276,40 @@ dotfiles_configure_xfce_qol() {
   dotfiles_xfconf_set xfce4-screensaver \
     /lock/saver-activation/enabled bool true
   dotfiles_xfconf_set xfce4-screensaver \
-    /lock/saver-activation/delay int 25
+    /lock/saver-activation/delay int 0
   dotfiles_xfconf_set xfce4-screensaver /lock/sleep-activation bool true
+}
+
+dotfiles_doctor_xfce_idle_policy() {
+  dotfiles_xfce_workstation || return 0
+  if dotfiles_xfce_idle_policy_configured && dotfiles_xfce_idle_consumers_active; then
+    doctor_pass dotfiles.idle-policy \
+      "display off 5m AC/2m battery, idle lock 30m, suspend never AC/5m battery"
+  else
+    doctor_fail dotfiles.idle-policy \
+      "XFCE display, lock, suspend, presentation mode, or runtime ownership is incomplete"
+  fi
+}
+
+dotfiles_configure_xfce_qol() {
+  local brightness_floor
+  local home
+  local shortcut
+
+  dotfiles_xfce_workstation || return 0
+  require_cmd xfconf-query
+
+  home="$(dev_server_home)"
+  if brightness_floor="$(dotfiles_xfce_brightness_floor_value)"; then
+    dotfiles_xfconf_set xfce4-power-manager \
+      /xfce4-power-manager/brightness-slider-min-level int "$brightness_floor"
+  fi
+
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/profile-on-ac string balanced
+  dotfiles_xfconf_set xfce4-power-manager \
+    /xfce4-power-manager/profile-on-battery string power-saver
+  dotfiles_configure_xfce_idle_policy
 
   dotfiles_xfconf_set xfce4-keyboard-shortcuts \
     '/commands/custom/<Super>Return' string 'exo-open --launch TerminalEmulator'
@@ -424,8 +452,11 @@ dotfiles_doctor() {
     doctor_fail dotfiles.login-shell "zsh missing"
   fi
 
-  if [[ "$(uname -s)" == "Linux" && "${XDG_CURRENT_DESKTOP:-}" == *XFCE* ]] &&
-    command -v xfconf-query >/dev/null 2>&1; then
+  if dotfiles_xfce_workstation && ! command -v xfconf-query >/dev/null 2>&1; then
+    doctor_fail dotfiles.xfce-config "xfconf-query is missing on the declared XFCE workstation"
+  fi
+
+  if dotfiles_xfce_workstation && command -v xfconf-query >/dev/null 2>&1; then
     if [[ "$(xfconf-query -c xsettings -p /Net/ThemeName 2>/dev/null)" == "Arc-Dark" ]] &&
       [[ "$(xfconf-query -c xsettings -p /Net/IconThemeName 2>/dev/null)" == "Qogir-Dark" ]] &&
       [[ "$(xfconf-query -c xsettings -p /Gtk/CursorThemeName 2>/dev/null)" == "Qogir-Dark" ]] &&
@@ -445,11 +476,7 @@ dotfiles_doctor() {
       doctor_fail dotfiles.power-profiles "XFCE power profiles are not fully configured"
     fi
 
-    if dotfiles_xfce_idle_policy_configured; then
-      doctor_pass dotfiles.idle-policy "display 5m AC/2m battery, lock 30m, suspend never AC/5m battery"
-    else
-      doctor_fail dotfiles.idle-policy "XFCE display, lock, or suspend idle policy is incomplete"
-    fi
+    dotfiles_doctor_xfce_idle_policy
 
     if dotfiles_xfce_shortcuts_configured; then
       doctor_pass dotfiles.desktop-shortcuts "terminal, lock, screenshot, tiling, and workspace shortcuts active"
@@ -510,7 +537,7 @@ dotfiles_doctor() {
       doctor_fail dotfiles.ghostty-config "Ghostty configuration is missing or invalid"
     fi
 
-    if [[ "${XDG_CURRENT_DESKTOP:-}" != *XFCE* ]] ||
+    if ! dotfiles_xfce_workstation ||
       [[ "$(xfce4-mime-helper -q TerminalEmulator 2>/dev/null)" == "ghostty" ]]; then
       doctor_pass dotfiles.ghostty-default "Ghostty is the preferred terminal"
     else

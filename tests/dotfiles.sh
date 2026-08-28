@@ -1,0 +1,313 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+fixture="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-dotfiles.XXXXXX")"
+state_file="$fixture/xfconf-state"
+calls_file="$fixture/xfconf-calls"
+bus_names_file="$fixture/bus-names"
+doctor_output="$fixture/doctor-output"
+tests_run=0
+
+cleanup() {
+  rm -rf -- "$fixture"
+}
+trap cleanup EXIT
+
+fail() {
+  printf 'FAIL: %s\n' "$*" >&2
+  exit 1
+}
+
+assert_eq() {
+  local want="$1"
+  local got="$2"
+  local label="$3"
+  [[ "$got" == "$want" ]] || fail "$label: got <$got>, want <$want>"
+}
+
+assert_contains() {
+  grep -Fq -- "$2" "$1" || fail "$1 does not contain: $2"
+}
+
+pass() {
+  tests_run=$((tests_run + 1))
+}
+
+# shellcheck source=lib/common.sh
+source "$repo_dir/lib/common.sh"
+# shellcheck source=lib/doctor.sh
+source "$repo_dir/lib/doctor.sh"
+# shellcheck source=lib/dotfiles.sh
+source "$repo_dir/lib/dotfiles.sh"
+doctor_failures=0
+
+declare -F dotfiles_configure_xfce_idle_policy >/dev/null ||
+  fail 'missing focused XFCE idle-policy convergence boundary'
+declare -F dotfiles_doctor_xfce_idle_policy >/dev/null ||
+  fail 'missing focused XFCE idle-policy doctor boundary'
+
+platform_id() { printf 'arch\n'; }
+unset XDG_CURRENT_DESKTOP
+
+: >"$state_file"
+: >"$calls_file"
+: >"$bus_names_file"
+
+state_get() {
+  local channel="$1"
+  local property="$2"
+  awk -F '|' -v channel="$channel" -v property="$property" '
+    $1 == channel && $2 == property { found = 1; type = $3; value = $4 }
+    END {
+      if (!found) exit 1
+      print type "|" value
+    }
+  ' "$state_file"
+}
+
+state_put() {
+  local channel="$1"
+  local property="$2"
+  local type="$3"
+  local value="$4"
+  local temporary
+  temporary="$(mktemp "$fixture/xfconf-state.XXXXXX")"
+  awk -F '|' -v channel="$channel" -v property="$property" \
+    '!(($1 == channel) && ($2 == property))' "$state_file" >"$temporary"
+  printf '%s|%s|%s|%s\n' "$channel" "$property" "$type" "$value" >>"$temporary"
+  mv "$temporary" "$state_file"
+}
+
+xfconf-query() {
+  local channel=""
+  local property=""
+  local type=""
+  local value=""
+  local create=0
+  local write=0
+  local current
+
+  while (($# > 0)); do
+    case "$1" in
+    -c)
+      channel="$2"
+      shift 2
+      ;;
+    -p)
+      property="$2"
+      shift 2
+      ;;
+    -n)
+      create=1
+      shift
+      ;;
+    -t)
+      type="$2"
+      shift 2
+      ;;
+    -s)
+      value="$2"
+      write=1
+      shift 2
+      ;;
+    *) fail "unexpected xfconf-query argument: $1" ;;
+    esac
+  done
+  [[ -n "$channel" && -n "$property" ]] || fail 'xfconf-query omitted channel or property'
+
+  if ((write == 0)); then
+    current="$(state_get "$channel" "$property")" || return 1
+    printf '%s\n' "${current#*|}"
+    return
+  fi
+
+  if ((create)); then
+    [[ -n "$type" ]] || fail "xfconf create omitted type: $channel $property"
+    ! state_get "$channel" "$property" >/dev/null 2>&1 ||
+      fail "xfconf create replaced existing state: $channel $property"
+    printf 'create|%s|%s|%s|%s\n' "$channel" "$property" "$type" "$value" >>"$calls_file"
+  else
+    current="$(state_get "$channel" "$property")" ||
+      fail "xfconf set targeted missing state: $channel $property"
+    if [[ -z "$type" ]]; then
+      type="${current%%|*}"
+    fi
+    printf 'set|%s|%s|%s|%s\n' "$channel" "$property" "$type" "$value" >>"$calls_file"
+  fi
+  state_put "$channel" "$property" "$type" "$value"
+}
+
+busctl() {
+  [[ "$#" == 3 && "$1" == --user && "$2" == status ]] ||
+    fail "unexpected busctl invocation: $*"
+  grep -Fqx -- "$3" "$bus_names_file"
+}
+
+expected_idle_creates() {
+  printf '%s\n' \
+    'create|xfce4-power-manager|/xfce4-power-manager/dpms-enabled|bool|true' \
+    'create|xfce4-power-manager|/xfce4-power-manager/dpms-on-ac-sleep|uint|0' \
+    'create|xfce4-power-manager|/xfce4-power-manager/dpms-on-ac-off|uint|5' \
+    'create|xfce4-power-manager|/xfce4-power-manager/dpms-on-battery-sleep|uint|0' \
+    'create|xfce4-power-manager|/xfce4-power-manager/dpms-on-battery-off|uint|2' \
+    'create|xfce4-power-manager|/xfce4-power-manager/inactivity-on-ac|uint|0' \
+    'create|xfce4-power-manager|/xfce4-power-manager/inactivity-on-battery|uint|5' \
+    'create|xfce4-power-manager|/xfce4-power-manager/inactivity-sleep-mode-on-ac|uint|1' \
+    'create|xfce4-power-manager|/xfce4-power-manager/inactivity-sleep-mode-on-battery|uint|1' \
+    'create|xfce4-power-manager|/xfce4-power-manager/lock-screen-suspend-hibernate|bool|true' \
+    'create|xfce4-power-manager|/xfce4-power-manager/presentation-mode|bool|false' \
+    'create|xfce4-screensaver|/saver/enabled|bool|true' \
+    'create|xfce4-screensaver|/saver/mode|int|0' \
+    'create|xfce4-screensaver|/saver/idle-activation/enabled|bool|true' \
+    'create|xfce4-screensaver|/saver/idle-activation/delay|int|30' \
+    'create|xfce4-screensaver|/lock/enabled|bool|true' \
+    'create|xfce4-screensaver|/lock/saver-activation/enabled|bool|true' \
+    'create|xfce4-screensaver|/lock/saver-activation/delay|int|0' \
+    'create|xfce4-screensaver|/lock/sleep-activation|bool|true'
+}
+
+test_exact_idle_policy_convergence() {
+  local expected="$fixture/expected-creates"
+  local expected_updates="$fixture/expected-updates"
+  expected_idle_creates >"$expected"
+
+  dotfiles_configure_xfce_idle_policy
+  cmp -s "$expected" "$calls_file" || fail 'first idle-policy convergence used the wrong properties, types, values, or order'
+  dotfiles_xfce_idle_policy_configured || fail 'fresh exact idle policy did not validate'
+
+  : >"$calls_file"
+  dotfiles_configure_xfce_idle_policy
+  awk -F '|' '{ print "set|" $2 "|" $3 "|" $4 "|" $5 }' "$expected" >"$expected_updates"
+  cmp -s "$expected_updates" "$calls_file" || fail 'repeat idle-policy convergence was not a stable update'
+  dotfiles_xfce_idle_policy_configured || fail 'repeated exact idle policy did not validate'
+  pass
+}
+
+test_idle_policy_type_repair() {
+  state_put xfce4-power-manager /xfce4-power-manager/dpms-on-ac-off int 5
+  : >"$calls_file"
+
+  dotfiles_configure_xfce_idle_policy
+
+  assert_eq 'uint|5' \
+    "$(state_get xfce4-power-manager /xfce4-power-manager/dpms-on-ac-off)" \
+    'wrong XFConf type was not repaired'
+  pass
+}
+
+test_idle_policy_drift() {
+  state_put xfce4-power-manager /xfce4-power-manager/presentation-mode bool true
+  if dotfiles_xfce_idle_policy_configured; then
+    fail 'presentation mode bypassed the idle-policy doctor'
+  fi
+  state_put xfce4-power-manager /xfce4-power-manager/presentation-mode bool false
+  state_put xfce4-screensaver /saver/idle-activation/delay int 29
+  if dotfiles_xfce_idle_policy_configured; then
+    fail 'idle delay drift bypassed the idle-policy doctor'
+  fi
+  state_put xfce4-screensaver /saver/idle-activation/delay int 30
+  pass
+}
+
+test_idle_policy_runtime_doctor() {
+  printf '%s\n' org.xfce.PowerManager org.xfce.ScreenSaver >"$bus_names_file"
+  doctor_reset
+  dotfiles_doctor_xfce_idle_policy >"$doctor_output"
+  assert_eq 0 "$doctor_failures" 'healthy idle-policy doctor failure count'
+  assert_contains "$doctor_output" 'pass  dotfiles.idle-policy'
+
+  printf '%s\n' org.xfce.PowerManager >"$bus_names_file"
+  doctor_reset
+  dotfiles_doctor_xfce_idle_policy >"$doctor_output"
+  assert_eq 1 "$doctor_failures" 'missing screensaver owner failure count'
+  assert_contains "$doctor_output" 'fail  dotfiles.idle-policy'
+
+  printf '%s\n' org.xfce.ScreenSaver >"$bus_names_file"
+  doctor_reset
+  dotfiles_doctor_xfce_idle_policy >"$doctor_output"
+  assert_eq 1 "$doctor_failures" 'missing power-manager owner failure count'
+  assert_contains "$doctor_output" 'fail  dotfiles.idle-policy'
+  pass
+}
+
+test_declared_platform_boundary() {
+  export XDG_CURRENT_DESKTOP=GNOME
+  dotfiles_xfce_workstation || fail 'declared Arch workstation depended on transient desktop environment'
+
+  platform_id() { printf 'macos\n'; }
+  : >"$calls_file"
+  dotfiles_configure_xfce_idle_policy
+  [[ ! -s "$calls_file" ]] || fail 'unsupported platform reached XFCE mutation'
+  doctor_reset
+  dotfiles_doctor_xfce_idle_policy >"$doctor_output"
+  assert_eq 0 "$doctor_failures" 'unsupported platform idle doctor failure count'
+  [[ ! -s "$doctor_output" ]] || fail 'unsupported platform emitted an idle-policy doctor fact'
+  platform_id() { printf 'arch\n'; }
+  unset XDG_CURRENT_DESKTOP
+  pass
+}
+
+test_declared_packages() {
+  local package
+  for package in xfconf xfce4-power-manager xfce4-screensaver; do
+    [[ "$(grep -Fxc -- "$package" "$repo_dir/packages/arch.pacman.txt")" == 1 ]] ||
+      fail "Arch package manifest must contain exactly one $package entry"
+  done
+  pass
+}
+
+test_production_wiring() {
+  local configure_calls="$fixture/configure-wiring-calls"
+  local doctor_calls="$fixture/doctor-wiring-calls"
+
+  : >"$configure_calls"
+  : >"$doctor_calls"
+  (
+    unset XDG_CURRENT_DESKTOP
+    command() {
+      if [[ "$1" == -v && "$2" == xfconf-query ]]; then
+        return 0
+      fi
+      if [[ "$1" == -v && ("$2" == xfce4-clipman || "$2" == gammastep) ]]; then
+        return 1
+      fi
+      builtin command "$@"
+    }
+    dev_server_home() { printf '%s\n' "$fixture"; }
+    dotfiles_xfce_brightness_floor_value() { return 1; }
+    dotfiles_xfconf_set() { :; }
+    dotfiles_xfwm_shortcut_set() { :; }
+    dotfiles_configure_xfce_idle_policy() { printf 'called\n' >>"$configure_calls"; }
+
+    dotfiles_configure_xfce_qol
+  )
+  assert_eq 1 "$(wc -l <"$configure_calls" | tr -d ' ')" \
+    'quality-of-life convergence did not call the focused idle-policy boundary exactly once'
+
+  (
+    unset XDG_CURRENT_DESKTOP
+    command() {
+      [[ "$1" == -v && "$2" == xfconf-query ]]
+    }
+    dev_server_home() { printf '%s\n' "$fixture"; }
+    dotfiles_xfce_brightness_floor_value() { return 1; }
+    dotfiles_doctor_xfce_idle_policy() { printf 'called\n' >>"$doctor_calls"; }
+    git() { printf 'main\n'; }
+
+    dotfiles_doctor >/dev/null
+  )
+  assert_eq 1 "$(wc -l <"$doctor_calls" | tr -d ' ')" \
+    'dotfiles doctor did not call the focused idle-policy boundary exactly once'
+  pass
+}
+
+test_exact_idle_policy_convergence
+test_idle_policy_type_repair
+test_idle_policy_drift
+test_idle_policy_runtime_doctor
+test_declared_platform_boundary
+test_declared_packages
+test_production_wiring
+
+printf 'PASS: %d XFCE idle-policy test groups\n' "$tests_run"
