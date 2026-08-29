@@ -76,11 +76,11 @@ skidbladnir_host_config_source() {
   esac
 }
 
-skidbladnir_status_hooks_source() {
+skidbladnir_agent_hooks_source() {
   case "$1" in
-  devbox) printf '%s/assets/skidbladnir/status-hooks-devbox.json\n' "$dev_server_root" ;;
-  arch) printf '%s/assets/skidbladnir/status-hooks-arch.json\n' "$dev_server_root" ;;
-  macos) printf '%s/assets/skidbladnir/status-hooks-macbook.json\n' "$dev_server_root" ;;
+  devbox) printf '%s/assets/skidbladnir/agent-hooks-devbox.json\n' "$dev_server_root" ;;
+  arch) printf '%s/assets/skidbladnir/agent-hooks-arch.json\n' "$dev_server_root" ;;
+  macos) printf '%s/assets/skidbladnir/agent-hooks-macbook.json\n' "$dev_server_root" ;;
   *) die "unsupported Skidbladnir platform: $1" ;;
   esac
 }
@@ -224,9 +224,87 @@ skidbladnir_owned_file_specs() {
     'bundle 0644' \
     'host-config 0600' \
     'notifier 0755' \
-    'personal-hooks 0600' \
-    'work-hooks 0600' \
-    'work2-hooks 0600'
+    'personal-agent-hooks 0600' \
+    'work-agent-hooks 0600' \
+    'work2-agent-hooks 0600' \
+    'claude-plugin-manifest 0644' \
+    'claude-plugin-hooks 0644' \
+    'claude-plugin-forwarder 0755'
+}
+
+skidbladnir_owned_directory_specs() {
+  printf '%s\n' \
+    'claude-plugin 0755' \
+    'claude-plugin-manifest-directory 0755' \
+    'claude-plugin-hooks-directory 0755' \
+    'claude-plugin-bin-directory 0755'
+}
+
+skidbladnir_owned_directory_target() {
+  local home="$1"
+  case "$2" in
+  claude-plugin) printf '%s/.local/share/skidbladnir/claude-agent-identity\n' "$home" ;;
+  claude-plugin-manifest-directory) printf '%s/.local/share/skidbladnir/claude-agent-identity/.claude-plugin\n' "$home" ;;
+  claude-plugin-hooks-directory) printf '%s/.local/share/skidbladnir/claude-agent-identity/hooks\n' "$home" ;;
+  claude-plugin-bin-directory) printf '%s/.local/share/skidbladnir/claude-agent-identity/bin\n' "$home" ;;
+  *) die "unsupported Skidbladnir owned directory: $2" ;;
+  esac
+}
+
+skidbladnir_claude_plugin_has_only_owned_nodes() (
+  local root="$1"
+  local directory entry expected_file
+  local -a entries=()
+  if [[ ! -e "$root" && ! -L "$root" ]]; then
+    return 0
+  fi
+  [[ -d "$root" && ! -L "$root" ]] || return 1
+  shopt -s dotglob nullglob
+  entries=("$root"/*)
+  for entry in "${entries[@]}"; do
+    case "$entry" in
+    "$root/.claude-plugin" | "$root/hooks" | "$root/bin") ;;
+    *) return 1 ;;
+    esac
+  done
+  for directory in .claude-plugin hooks bin; do
+    case "$directory" in
+    .claude-plugin) expected_file=plugin.json ;;
+    hooks) expected_file=hooks.json ;;
+    bin) expected_file=agent-hook ;;
+    esac
+    if [[ ! -e "$root/$directory" && ! -L "$root/$directory" ]]; then
+      continue
+    fi
+    [[ -d "$root/$directory" && ! -L "$root/$directory" ]] || return 1
+    entries=("$root/$directory"/*)
+    for entry in "${entries[@]}"; do
+      [[ "$entry" == "$root/$directory/$expected_file" ]] || return 1
+    done
+    if [[ -e "$root/$directory/$expected_file" || -L "$root/$directory/$expected_file" ]]; then
+      [[ -f "$root/$directory/$expected_file" &&
+        ! -L "$root/$directory/$expected_file" ]] || return 1
+    fi
+  done
+)
+
+skidbladnir_claude_plugin_topology_is_exact() {
+  local root="$1"
+  skidbladnir_claude_plugin_has_only_owned_nodes "$root" || return 1
+  [[ -d "$root" && ! -L "$root" &&
+    "$(skidbladnir_file_mode "$root" 2>/dev/null)" == 755 ]] || return 1
+  [[ -d "$root/.claude-plugin" && ! -L "$root/.claude-plugin" &&
+    "$(skidbladnir_file_mode "$root/.claude-plugin" 2>/dev/null)" == 755 ]] || return 1
+  [[ -d "$root/hooks" && ! -L "$root/hooks" &&
+    "$(skidbladnir_file_mode "$root/hooks" 2>/dev/null)" == 755 ]] || return 1
+  [[ -d "$root/bin" && ! -L "$root/bin" &&
+    "$(skidbladnir_file_mode "$root/bin" 2>/dev/null)" == 755 ]] || return 1
+  [[ -f "$root/.claude-plugin/plugin.json" && ! -L "$root/.claude-plugin/plugin.json" &&
+    "$(skidbladnir_file_mode "$root/.claude-plugin/plugin.json" 2>/dev/null)" == 644 ]] || return 1
+  [[ -f "$root/hooks/hooks.json" && ! -L "$root/hooks/hooks.json" &&
+    "$(skidbladnir_file_mode "$root/hooks/hooks.json" 2>/dev/null)" == 644 ]] || return 1
+  [[ -f "$root/bin/agent-hook" && ! -L "$root/bin/agent-hook" &&
+    "$(skidbladnir_file_mode "$root/bin/agent-hook" 2>/dev/null)" == 755 ]]
 }
 
 skidbladnir_owned_file_target() {
@@ -252,9 +330,12 @@ skidbladnir_owned_file_target() {
   bundle) printf '%s/.local/share/skidbladnir/release-bundle.tar.gz\n' "$home" ;;
   host-config) printf '%s/.config/skidbladnir/host-config.json\n' "$home" ;;
   notifier) printf '%s/.local/bin/skid-notify\n' "$home" ;;
-  personal-hooks) printf '%s/.codex-personal/hooks.json\n' "$home" ;;
-  work-hooks) printf '%s/.codex-work/hooks.json\n' "$home" ;;
-  work2-hooks) printf '%s/.codex-work2/hooks.json\n' "$home" ;;
+  personal-agent-hooks) printf '%s/.codex-personal/hooks.json\n' "$home" ;;
+  work-agent-hooks) printf '%s/.codex-work/hooks.json\n' "$home" ;;
+  work2-agent-hooks) printf '%s/.codex-work2/hooks.json\n' "$home" ;;
+  claude-plugin-manifest) printf '%s/.local/share/skidbladnir/claude-agent-identity/.claude-plugin/plugin.json\n' "$home" ;;
+  claude-plugin-hooks) printf '%s/.local/share/skidbladnir/claude-agent-identity/hooks/hooks.json\n' "$home" ;;
+  claude-plugin-forwarder) printf '%s/.local/share/skidbladnir/claude-agent-identity/bin/agent-hook\n' "$home" ;;
   *) die "unsupported Skidbladnir owned file: $name" ;;
   esac
 }
@@ -289,9 +370,52 @@ skidbladnir_owned_file_source() {
       printf '%s/assets/skidbladnir/skid-notify-linux\n' "$dev_server_root"
     fi
     ;;
-  personal-hooks | work-hooks | work2-hooks) skidbladnir_status_hooks_source "$platform" ;;
+  personal-agent-hooks | work-agent-hooks | work2-agent-hooks) skidbladnir_agent_hooks_source "$platform" ;;
+  claude-plugin-manifest) printf '%s/assets/skidbladnir/claude-agent-identity/.claude-plugin/plugin.json\n' "$dev_server_root" ;;
+  claude-plugin-hooks) printf '%s/assets/skidbladnir/claude-agent-identity/hooks/hooks.json\n' "$dev_server_root" ;;
+  claude-plugin-forwarder) printf '%s/assets/skidbladnir/claude-agent-identity/bin/agent-hook\n' "$dev_server_root" ;;
   *) die "unsupported Skidbladnir owned file: $name" ;;
   esac
+}
+
+skidbladnir_preflight_owned_directories() {
+  local home="$1"
+  local name mode target source_plugin installed_plugin
+  source_plugin="$dev_server_root/assets/skidbladnir/claude-agent-identity"
+  skidbladnir_claude_plugin_topology_is_exact "$source_plugin" ||
+    die "Skidbladnir Claude plugin source topology is invalid: $source_plugin"
+  installed_plugin="$home/.local/share/skidbladnir/claude-agent-identity"
+  skidbladnir_claude_plugin_has_only_owned_nodes "$installed_plugin" ||
+    die "Skidbladnir Claude plugin contains an unmanaged entry: $installed_plugin"
+  while read -r name mode; do
+    target="$(skidbladnir_owned_directory_target "$home" "$name")"
+    if [[ -e "$target" || -L "$target" ]]; then
+      [[ -d "$target" && ! -L "$target" ]] ||
+        die "Skidbladnir owned directory is invalid: $target"
+    fi
+    [[ -n "$mode" ]] || die "Skidbladnir owned directory mode is missing: $name"
+  done < <(skidbladnir_owned_directory_specs)
+}
+
+skidbladnir_install_owned_directories() {
+  local home="$1"
+  local name mode expected_mode target
+  while read -r name mode; do
+    expected_mode="${mode#0}"
+    target="$(skidbladnir_owned_directory_target "$home" "$name")"
+    if [[ ! -e "$target" && ! -L "$target" ]]; then
+      install -d -m "$mode" "$target"
+      skidbladnir_changed=1
+    fi
+    [[ -d "$target" && ! -L "$target" ]] ||
+      die "Skidbladnir owned directory is invalid: $target"
+    if [[ "$(skidbladnir_file_mode "$target" 2>/dev/null)" != "$expected_mode" ]]; then
+      chmod "$mode" "$target"
+      skidbladnir_changed=1
+    fi
+    [[ "$(skidbladnir_file_mode "$target" 2>/dev/null)" == "$expected_mode" ]] ||
+      die "Skidbladnir owned directory mode differs: $target"
+  done < <(skidbladnir_owned_directory_specs)
 }
 
 skidbladnir_preflight_owned_files() {
@@ -509,6 +633,12 @@ skidbladnir_commit_release_transaction() {
       [[ "$(skidbladnir_file_mode "$target" 2>/dev/null)" == "${mode#0}" ]] ||
       die "Skidbladnir promoted owned file failed verification: $target"
   done < <(skidbladnir_owned_file_specs)
+  skidbladnir_claude_plugin_topology_is_exact \
+    "$dev_server_root/assets/skidbladnir/claude-agent-identity" ||
+    die "Skidbladnir Claude plugin source topology changed during release transaction"
+  skidbladnir_claude_plugin_topology_is_exact \
+    "$home/.local/share/skidbladnir/claude-agent-identity" ||
+    die "Skidbladnir Claude plugin topology changed during release transaction"
   skidbladnir_release_transaction_remove "$home"
 }
 
@@ -580,39 +710,59 @@ skidbladnir_configure_codex_notify() {
   done
 }
 
+skidbladnir_regular_file_matches() {
+  local source="$1"
+  local target="$2"
+  local expected_mode="$3"
+  [[ -f "$target" && ! -L "$target" ]] &&
+    cmp -s "$source" "$target" &&
+    [[ "$(skidbladnir_file_mode "$target" 2>/dev/null)" == "$expected_mode" ]]
+}
+
+skidbladnir_claude_plugin_installation_matches() {
+  local home="$1"
+  local source="$dev_server_root/assets/skidbladnir/claude-agent-identity"
+  local installed="$home/.local/share/skidbladnir/claude-agent-identity"
+
+  skidbladnir_claude_plugin_topology_is_exact "$source" || return 1
+  skidbladnir_claude_plugin_topology_is_exact "$installed" || return 1
+  skidbladnir_regular_file_matches "$source/.claude-plugin/plugin.json" \
+    "$installed/.claude-plugin/plugin.json" 644 || return 1
+  skidbladnir_regular_file_matches "$source/hooks/hooks.json" \
+    "$installed/hooks/hooks.json" 644 || return 1
+  skidbladnir_regular_file_matches "$source/bin/agent-hook" \
+    "$installed/bin/agent-hook" 755
+}
+
 skidbladnir_owned_config_matches() {
   local platform="$1"
   local home="$2"
-  local config_source hooks_source notify_source context codex_config desired
+  local config_source agent_hooks_source notify_source context codex_config desired
   config_source="$(skidbladnir_host_config_source "$platform")"
-  [[ -f "$home/.config/skidbladnir/host-config.json" &&
-    ! -L "$home/.config/skidbladnir/host-config.json" ]] &&
-    cmp -s "$config_source" "$home/.config/skidbladnir/host-config.json" &&
-    [[ "$(skidbladnir_file_mode "$home/.config/skidbladnir/host-config.json" 2>/dev/null)" == 600 ]] || return 1
-  hooks_source="$(skidbladnir_status_hooks_source "$platform")"
+  skidbladnir_regular_file_matches "$config_source" \
+    "$home/.config/skidbladnir/host-config.json" 600 || return 1
+  agent_hooks_source="$(skidbladnir_agent_hooks_source "$platform")"
   if [[ "$platform" == macos ]]; then
     notify_source="$dev_server_root/assets/skidbladnir/skid-notify-macbook"
   else
     notify_source="$dev_server_root/assets/skidbladnir/skid-notify-linux"
   fi
-  [[ -f "$home/.local/bin/skidbladnir-launch" && ! -L "$home/.local/bin/skidbladnir-launch" ]] &&
-    cmp -s "$dev_server_root/assets/skidbladnir/skidbladnir-launch" \
-      "$home/.local/bin/skidbladnir-launch" &&
-    [[ "$(skidbladnir_file_mode "$home/.local/bin/skidbladnir-launch" 2>/dev/null)" == 755 ]] || return 1
-  [[ -f "$home/.local/bin/skid-notify" && ! -L "$home/.local/bin/skid-notify" ]] &&
-    cmp -s "$notify_source" "$home/.local/bin/skid-notify" &&
-    [[ "$(skidbladnir_file_mode "$home/.local/bin/skid-notify" 2>/dev/null)" == 755 ]] || return 1
+  skidbladnir_regular_file_matches \
+    "$dev_server_root/assets/skidbladnir/skidbladnir-launch" \
+    "$home/.local/bin/skidbladnir-launch" 755 || return 1
+  skidbladnir_regular_file_matches "$notify_source" \
+    "$home/.local/bin/skid-notify" 755 || return 1
   desired="notify = [\"$home/.local/bin/skid-notify\"]"
   for context in personal work work2; do
-    [[ -f "$home/.codex-$context/hooks.json" && ! -L "$home/.codex-$context/hooks.json" ]] &&
-      cmp -s "$hooks_source" "$home/.codex-$context/hooks.json" &&
-      [[ "$(skidbladnir_file_mode "$home/.codex-$context/hooks.json" 2>/dev/null)" == 600 ]] || return 1
+    skidbladnir_regular_file_matches "$agent_hooks_source" \
+      "$home/.codex-$context/hooks.json" 600 || return 1
     codex_config="$home/.codex-$context/config.toml"
     [[ -f "$codex_config" && ! -L "$codex_config" ]] &&
       [[ "$(skidbladnir_file_mode "$codex_config" 2>/dev/null)" == 600 ]] &&
       [[ "$(grep -Fxc "$desired" "$codex_config" || true)" == 1 ]] &&
       [[ "$(grep -Ec '^[[:space:]]*notify[[:space:]]*=' "$codex_config" || true)" == 1 ]] || return 1
   done
+  skidbladnir_claude_plugin_installation_matches "$home"
 }
 
 skidbladnir_tailscale_cli() {
@@ -1031,11 +1181,13 @@ skidbladnir_converge() (
 
   config_dir="$home/.config/skidbladnir"
   state_dir="$home/.local/state/skidbladnir"
+  skidbladnir_preflight_owned_directories "$home"
   skidbladnir_preflight_owned_files "$platform" "$home" "$staging" "$archive"
   skidbladnir_preflight_codex_notify "$home"
   service_target="$(skidbladnir_owned_file_target "$platform" "$home" service)"
   install -d -m 0700 "$config_dir" "$state_dir"
   install -d -m 0755 "$home/.local/bin" "$share_dir"
+  skidbladnir_install_owned_directories "$home"
   install -d -m 0755 "$(dirname "$service_target")"
   for context in personal work work2; do
     install -d -m 0700 "$home/.codex-$context"
@@ -1162,9 +1314,9 @@ skidbladnir_doctor() {
   fi
 
   if skidbladnir_owned_config_matches "$platform" "$home"; then
-    skidbladnir_doctor_pass skidbladnir.config "strict $platform host config, hooks, and notifier installed"
+    skidbladnir_doctor_pass skidbladnir.config "strict $platform host config, hooks, Claude plugin, and notifier installed"
   else
-    skidbladnir_doctor_fail skidbladnir.config "owned host config, hooks, or notifier differs; run the platform converge command"
+    skidbladnir_doctor_fail skidbladnir.config "owned host config, hooks, Claude plugin, or notifier differs; run the platform converge command"
   fi
 
   if skidbladnir_secret_valid "$config_dir/machine-handle" '^mh-[0-9a-f]{32}$' &&
@@ -1288,14 +1440,14 @@ skidbladnir_reconciled_lifetime_digest_local() (
         (.sessions | type == "array") and
         all(.sessions[];
           type == "object" and
-          (.id | type == "string" and test("^\\$[0-9]+$")) and
+          (.tmuxId | type == "string" and test("^\\$[0-9]+$")) and
           (.tmuxName | type == "string" and length > 0) and
           (.identityToken | type == "string" and test("^v1-[0-9a-f]{32}\\.[1-9][0-9]*\\.[1-9][0-9]*\\.[0-9]+$"))) and
         ([.sessions[].identityToken] | unique | length) == (.sessions | length)
       ) then
         {
           machineHandle: .machine.handle,
-          sessions: (.sessions | map({id, tmuxName, identityToken}) | sort_by(.id, .tmuxName, .identityToken))
+          sessions: (.sessions | map({tmuxId, tmuxName, identityToken}) | sort_by(.tmuxId, .tmuxName, .identityToken))
         }
       else error("invalid lifetime inventory") end
     ' 2>/dev/null | skidbladnir_sha256_stream

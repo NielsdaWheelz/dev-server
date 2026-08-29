@@ -1,11 +1,11 @@
 {
   "platform": "Darwin",
   "tmux": {"path": "/opt/homebrew/bin/tmux", "testedVersion": "tmux 3.7c"},
-  "codexNodeEntrypoint": "/Users/nnandal/.local/bin/codex",
   "profiles": [
     {
       "key": "personal",
       "label": "Codex · Personal",
+      "provider": "Codex",
       "command": "/Users/nnandal/bin/codex-personal",
       "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-personal"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
@@ -14,6 +14,7 @@
     {
       "key": "work",
       "label": "Codex · Work",
+      "provider": "Codex",
       "command": "/Users/nnandal/bin/codex-work",
       "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-work"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
@@ -22,6 +23,7 @@
     {
       "key": "work2",
       "label": "Codex · Work 2",
+      "provider": "Codex",
       "command": "/Users/nnandal/bin/codex-work2",
       "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-work2"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
@@ -30,6 +32,7 @@
     {
       "key": "claude-personal",
       "label": "Claude · Personal",
+      "provider": "Claude",
       "command": "/Users/nnandal/bin/claude-personal",
       "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/Users/nnandal/.claude-personal"}],
       "foregroundSignatures": [{"argument0": "/Users/nnandal/.local/bin/claude"}],
@@ -38,6 +41,7 @@
     {
       "key": "claude-work",
       "label": "Claude · Work",
+      "provider": "Claude",
       "command": "/Users/nnandal/bin/claude-work",
       "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/Users/nnandal/.claude-work"}],
       "foregroundSignatures": [{"argument0": "/Users/nnandal/.local/bin/claude"}],

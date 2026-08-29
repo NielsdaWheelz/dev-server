@@ -19,7 +19,7 @@ usage() {
 Usage: ./workstation <command>
 
 Commands:
-  converge   Install packages, dotfiles, AI tools, then doctor.
+  converge   Install packages, dotfiles, Skidbladnir, AI tools, then doctor.
   doctor     Run local positive health checks.
 EOF
 }
@@ -65,8 +65,8 @@ cmd_doctor() {
   source_platform_packages
   packages_doctor
   dotfiles_doctor
-  ai_doctor
   skidbladnir_doctor "$(platform_id)"
+  ai_doctor
   doctor_summary
 }
 
@@ -75,8 +75,8 @@ cmd_converge() {
   packages_install
   skidbladnir_require_tmux_runtime "$(platform_id)"
   dotfiles_install
-  ai_install
   skidbladnir_converge "$(platform_id)"
+  ai_install
   cmd_doctor
 }
 

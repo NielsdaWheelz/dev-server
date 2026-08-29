@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec "$HOME/.local/bin/skidbladnir" agent-hook \
+  "--host-config=$HOME/.config/skidbladnir/host-config.json" Claude SessionStart

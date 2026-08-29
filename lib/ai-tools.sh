@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+ai_tools_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=lib/skidbladnir.sh
+source "$ai_tools_lib_dir/skidbladnir.sh"
+
 ai_tools() {
   printf 'codex claude\n'
 }
@@ -58,6 +62,10 @@ ai_router_dest() {
   printf '%s/.local/libexec/ai-router\n' "$(dev_server_home)"
 }
 
+ai_claude_plugin_ready() {
+  skidbladnir_claude_plugin_installation_matches "$(dev_server_home)"
+}
+
 ai_install_dirs() {
   local home
   local tool
@@ -83,6 +91,8 @@ ai_install_router() {
   home="$(dev_server_home)"
   router_source="$(ai_router_source)"
   router_dest="$(ai_router_dest)"
+  ai_claude_plugin_ready ||
+    die "Claude identity plugin is unavailable; converge Skidbladnir before activating the AI router"
   [[ -f "$router_source" ]] || die "missing AI router asset: $router_source"
 
   install -m 0755 "$router_source" "$router_dest"
@@ -151,9 +161,9 @@ ai_install_native() {
 
 ai_install() {
   ai_install_dirs
-  ai_install_router
   ai_install_npm_globals
   ai_install_native
+  ai_install_router
 }
 
 ai_doctor_tool() {
@@ -209,7 +219,14 @@ ai_doctor_tool() {
     fi
   done
 
-  version="$("$home/bin/$tool" --version)"
+  if [[ "$tool" == claude ]] && ! ai_claude_plugin_ready; then
+    doctor_fail "ai.$tool" "Claude identity plugin is unavailable; converge Skidbladnir"
+    return
+  fi
+  if ! version="$("$home/bin/$tool" --version 2>/dev/null)"; then
+    doctor_fail "ai.$tool" "managed binary version check failed"
+    return
+  fi
   doctor_pass "ai.$tool" "[$(ai_tool_install_method "$tool")] $version via $router -> $expected"
 }
 
