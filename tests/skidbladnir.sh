@@ -170,6 +170,7 @@ EOF
 
 test_assets_and_operator_copy() {
   local pin="$repo_dir/assets/skidbladnir/release-pin.json"
+  local workstation_skid_line workstation_ai_line devbox_skid_line devbox_ai_line
   assert_exact_line_once "$repo_dir/skidbladnir" 'source "$base_dir/lib/doctor.sh"'
   assert_exact_line_once "$repo_dir/skidbladnir" 'source "$base_dir/lib/packages-macos.sh"'
   jq -e '
@@ -184,45 +185,103 @@ test_assets_and_operator_copy() {
        (.sha256SumsAssetSha256 | test("^[0-9a-f]{64}$"))))
   ' "$pin" >/dev/null || fail 'release pin must be wholly pending or wholly canonical'
   cmp -s "$pin" <(jq -S . "$pin") || fail 'release pin keys are not stored in sorted order'
+  jq -e '
+    if ([.[]] | all(. == "PENDING")) then true
+    else
+      (.version | capture("^v(?<major>0|[1-9][0-9]*)\\.(?<minor>0|[1-9][0-9]*)\\.(?<patch>0|[1-9][0-9]*)$") |
+        ((.major | tonumber) * 1000000) +
+        ((.minor | tonumber) * 1000) +
+        (.patch | tonumber)) >= 2010
+    end
+  ' "$pin" >/dev/null || fail 'pre-agent-identity Skidbladnir release remains active'
+
+  workstation_skid_line="$(grep -nF '  skidbladnir_converge "$(platform_id)"' \
+    "$repo_dir/workstation" | cut -d: -f1)"
+  workstation_ai_line="$(grep -nF '  ai_install' "$repo_dir/workstation" | cut -d: -f1)"
+  [[ -n "$workstation_skid_line" && -n "$workstation_ai_line" &&
+    "$workstation_skid_line" -lt "$workstation_ai_line" ]] ||
+    fail 'workstation activates the AI router before the Claude plugin owner converges'
+  devbox_skid_line="$(grep -nF '    - role: skidbladnir' \
+    "$repo_dir/ansible/playbooks/converge.yml" | cut -d: -f1)"
+  devbox_ai_line="$(grep -nF '    - role: ai_tools' \
+    "$repo_dir/ansible/playbooks/converge.yml" | cut -d: -f1)"
+  [[ -n "$devbox_skid_line" && -n "$devbox_ai_line" &&
+    "$devbox_skid_line" -lt "$devbox_ai_line" ]] ||
+    fail 'devbox activates the AI router before the Claude plugin owner converges'
 
   local row config platform tmux_path tmux_tested_version home hooks
   for row in \
-    'devbox Linux /usr/bin/tmux tmux_3.4 /home/niels status-hooks-devbox.json' \
-    'arch Linux /usr/bin/tmux tmux_3.7c /home/nnandal status-hooks-arch.json' \
-    'macbook Darwin /opt/homebrew/bin/tmux tmux_3.7c /Users/nnandal status-hooks-macbook.json'; do
+    'devbox Linux /usr/bin/tmux tmux_3.4 /home/niels agent-hooks-devbox.json' \
+    'arch Linux /usr/bin/tmux tmux_3.7c /home/nnandal agent-hooks-arch.json' \
+    'macbook Darwin /opt/homebrew/bin/tmux tmux_3.7c /Users/nnandal agent-hooks-macbook.json'; do
     read -r config platform tmux_path tmux_tested_version home hooks <<<"$row"
     config="$repo_dir/assets/skidbladnir/host-config-$config.json"
     tmux_tested_version="${tmux_tested_version/_/ }"
     jq -e --arg platform "$platform" --arg tmux_path "$tmux_path" \
       --arg tmux_tested_version "$tmux_tested_version" --arg home "$home" '
-      type == "object" and keys == ["codexNodeEntrypoint", "platform", "profiles", "tmux"] and
+      type == "object" and keys == ["platform", "profiles", "tmux"] and
       .platform == $platform and .tmux == {path: $tmux_path, testedVersion: $tmux_tested_version} and
-      .codexNodeEntrypoint == ($home + "/.local/bin/codex") and
       .profiles == [
-        {key:"personal",label:"Codex · Personal",command:($home + "/bin/codex-personal"),environment:[{name:"CODEX_HOME",value:($home + "/.codex-personal")}],foregroundSignatures:[{executableBase:"codex"},{executableBase:"node",argument1:($home + "/.local/bin/codex")}],arguments:["--dangerously-bypass-approvals-and-sandbox"]},
-        {key:"work",label:"Codex · Work",command:($home + "/bin/codex-work"),environment:[{name:"CODEX_HOME",value:($home + "/.codex-work")}],foregroundSignatures:[{executableBase:"codex"},{executableBase:"node",argument1:($home + "/.local/bin/codex")}],arguments:["--dangerously-bypass-approvals-and-sandbox"]},
-        {key:"work2",label:"Codex · Work 2",command:($home + "/bin/codex-work2"),environment:[{name:"CODEX_HOME",value:($home + "/.codex-work2")}],foregroundSignatures:[{executableBase:"codex"},{executableBase:"node",argument1:($home + "/.local/bin/codex")}],arguments:["--dangerously-bypass-approvals-and-sandbox"]},
-        {key:"claude-personal",label:"Claude · Personal",command:($home + "/bin/claude-personal"),environment:[{name:"CLAUDE_CONFIG_DIR",value:($home + "/.claude-personal")}],foregroundSignatures:[{argument0:($home + "/.local/bin/claude")}],arguments:["--permission-mode","auto"]},
-        {key:"claude-work",label:"Claude · Work",command:($home + "/bin/claude-work"),environment:[{name:"CLAUDE_CONFIG_DIR",value:($home + "/.claude-work")}],foregroundSignatures:[{argument0:($home + "/.local/bin/claude")}],arguments:["--permission-mode","auto"]}
+        {key:"personal",label:"Codex · Personal",provider:"Codex",command:($home + "/bin/codex-personal"),environment:[{name:"CODEX_HOME",value:($home + "/.codex-personal")}],foregroundSignatures:[{executableBase:"codex"},{executableBase:"node",argument1:($home + "/.local/bin/codex")}],arguments:["--dangerously-bypass-approvals-and-sandbox"]},
+        {key:"work",label:"Codex · Work",provider:"Codex",command:($home + "/bin/codex-work"),environment:[{name:"CODEX_HOME",value:($home + "/.codex-work")}],foregroundSignatures:[{executableBase:"codex"},{executableBase:"node",argument1:($home + "/.local/bin/codex")}],arguments:["--dangerously-bypass-approvals-and-sandbox"]},
+        {key:"work2",label:"Codex · Work 2",provider:"Codex",command:($home + "/bin/codex-work2"),environment:[{name:"CODEX_HOME",value:($home + "/.codex-work2")}],foregroundSignatures:[{executableBase:"codex"},{executableBase:"node",argument1:($home + "/.local/bin/codex")}],arguments:["--dangerously-bypass-approvals-and-sandbox"]},
+        {key:"claude-personal",label:"Claude · Personal",provider:"Claude",command:($home + "/bin/claude-personal"),environment:[{name:"CLAUDE_CONFIG_DIR",value:($home + "/.claude-personal")}],foregroundSignatures:[{argument0:($home + "/.local/bin/claude")}],arguments:["--permission-mode","auto"]},
+        {key:"claude-work",label:"Claude · Work",provider:"Claude",command:($home + "/bin/claude-work"),environment:[{name:"CLAUDE_CONFIG_DIR",value:($home + "/.claude-work")}],foregroundSignatures:[{argument0:($home + "/.local/bin/claude")}],arguments:["--permission-mode","auto"]}
       ]
     ' "$config" >/dev/null || fail "strict host config differs: $config"
     hooks="$repo_dir/assets/skidbladnir/$hooks"
     jq -e --arg home "$home" '
       type == "object" and keys == ["description", "hooks"] and
-      .description == "Skíðblaðnir pane lifecycle projection" and
+      .description == "Skíðblaðnir agent identity projection" and
       (.hooks | keys == ["SessionStart", "Stop", "UserPromptSubmit"]) and
       .hooks.SessionStart == [{
         matcher:"^(startup|resume|clear)$",
-        hooks:[{type:"command",command:($home + "/.local/bin/skidbladnir status-hook --host-config=" + $home + "/.config/skidbladnir/host-config.json SessionStart"),timeout:5,async:false}]
+        hooks:[{type:"command",command:($home + "/.local/bin/skidbladnir agent-hook --host-config=" + $home + "/.config/skidbladnir/host-config.json Codex SessionStart"),timeout:5,async:false}]
       }] and
       .hooks.UserPromptSubmit == [{
-        hooks:[{type:"command",command:($home + "/.local/bin/skidbladnir status-hook --host-config=" + $home + "/.config/skidbladnir/host-config.json UserPromptSubmit"),timeout:5,async:false}]
+        hooks:[{type:"command",command:($home + "/.local/bin/skidbladnir agent-hook --host-config=" + $home + "/.config/skidbladnir/host-config.json Codex UserPromptSubmit"),timeout:5,async:false}]
       }] and
       .hooks.Stop == [{
-        hooks:[{type:"command",command:($home + "/.local/bin/skidbladnir status-hook --host-config=" + $home + "/.config/skidbladnir/host-config.json Stop"),timeout:5,async:false}]
+        hooks:[{type:"command",command:($home + "/.local/bin/skidbladnir agent-hook --host-config=" + $home + "/.config/skidbladnir/host-config.json Codex Stop"),timeout:5,async:false}]
       }]
     ' "$hooks" >/dev/null || fail "strict lifecycle hooks differ: $hooks"
   done
+
+  local plugin="$repo_dir/assets/skidbladnir/claude-agent-identity"
+  jq -e '
+    type == "object" and keys == ["description", "name"] and
+    .name == "skidbladnir-agent-identity" and
+    .description == "Skíðblaðnir Claude agent identity projection"
+  ' "$plugin/.claude-plugin/plugin.json" >/dev/null ||
+    fail 'strict Claude plugin manifest differs'
+  jq -e '
+    type == "object" and keys == ["description", "hooks"] and
+    .description == "Skíðblaðnir agent identity projection" and
+    .hooks == {
+      SessionStart: [{
+        hooks: [{
+          type: "command",
+          command: "${CLAUDE_PLUGIN_ROOT}/bin/agent-hook",
+          args: [],
+          timeout: 5,
+          async: false
+        }]
+      }]
+    }
+  ' "$plugin/hooks/hooks.json" >/dev/null || fail 'strict Claude plugin hooks differ'
+  [[ -f "$plugin/bin/agent-hook" && ! -L "$plugin/bin/agent-hook" &&
+    -x "$plugin/bin/agent-hook" ]] || fail 'Claude plugin forwarder must be executable'
+  cmp -s "$plugin/bin/agent-hook" <(printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'set -euo pipefail' \
+    '' \
+    'exec "$HOME/.local/bin/skidbladnir" agent-hook \' \
+    '  "--host-config=$HOME/.config/skidbladnir/host-config.json" Claude SessionStart') ||
+    fail 'Claude plugin forwarder is not the closed content-free command'
+  [[ -z "$(find "$repo_dir/assets/skidbladnir" -maxdepth 1 -name 'status-hooks-*' -print -quit)" ]] ||
+    fail 'retired status-hook assets remain'
+  ! grep -Fq 'skidbladnir_status_hooks_source' "$repo_dir/lib/skidbladnir.sh" ||
+    fail 'retired status-hook deployment function remains'
 
   local unit="$repo_dir/assets/skidbladnir/skidbladnir.service"
   local expected_unit="$fixture/skidbladnir.service.expected"
@@ -354,9 +413,8 @@ EOF
 {
   "platform": "Linux",
   "tmux": {"path": "$test_bin/tmux", "testedVersion": "tmux 3.7c"},
-  "codexNodeEntrypoint": "$test_home/.local/bin/codex",
   "profiles": [
-    {"key":"personal","label":"Codex · Personal","command":"$test_home/bin/codex-personal","environment":[{"name":"CODEX_HOME","value":"$test_home/.codex-personal"}],"foregroundSignatures":[{"executableBase":"codex"}],"arguments":[]}
+    {"key":"personal","label":"Codex · Personal","provider":"Codex","command":"$test_home/bin/codex-personal","environment":[{"name":"CODEX_HOME","value":"$test_home/.codex-personal"}],"foregroundSignatures":[{"executableBase":"codex"}],"arguments":[]}
   ]
 }
 EOF
@@ -622,6 +680,9 @@ test_converge_and_doctor() {
   skidbladnir_host_config_source() { printf '%s\n' "$fixture/host-config.json"; }
   skidbladnir_tailscale_cli() { printf '%s\n' "$test_bin/tailscale"; }
   skidbladnir_runtime_os() { printf 'Linux\n'; }
+  skidbladnir_claude_plugin_topology_is_exact \
+    "$repo_dir/assets/skidbladnir/claude-agent-identity" ||
+    fail 'deployment source Claude plugin topology is not the exact seven-node tree'
 
   if skidbladnir_observed_tmux_version "$fixture/missing-tmux" >/dev/null 2>&1; then
     fail 'missing tmux executable was accepted'
@@ -652,6 +713,25 @@ test_converge_and_doctor() {
   fi
   mv "$fixture/release-pin.valid.json" "$skidbladnir_release_pin_file"
   cp "$skidbladnir_release_pin_file" "$fixture/release-pin.valid.json"
+  local release_case_version release_case_source release_case_expected release_case_observed
+  while read -r release_case_version release_case_source release_case_expected; do
+    jq --arg version "$release_case_version" --arg source "$release_case_source" \
+      '.version = $version | .sourceSha = $source' \
+      "$fixture/release-pin.valid.json" >"$skidbladnir_release_pin_file"
+    if skidbladnir_release_values arch >/dev/null 2>&1; then
+      release_case_observed=accept
+    else
+      release_case_observed=reject
+    fi
+    assert_eq "$release_case_expected" "$release_case_observed" \
+      "Skidbladnir release compatibility boundary for $release_case_version"
+  done <<'RELEASE_CASES'
+v0.2.9 40b29223c0e474ec1c5e910cf8b9ad8a746a2602 reject
+v0.2.10 96da47a1239c8b3e96fbcc8998ad3eba23fa69fa accept
+v0.3.0 3333333333333333333333333333333333333333 accept
+RELEASE_CASES
+  mv "$fixture/release-pin.valid.json" "$skidbladnir_release_pin_file"
+  cp "$skidbladnir_release_pin_file" "$fixture/release-pin.valid.json"
   sed 's/"version": "v1.2.3"/"version": "v1.2.3", "version": "v1.2.3"/' \
     "$fixture/release-pin.valid.json" >"$skidbladnir_release_pin_file"
   if skidbladnir_release_values arch >/dev/null 2>&1; then
@@ -660,6 +740,8 @@ test_converge_and_doctor() {
   mv "$fixture/release-pin.valid.json" "$skidbladnir_release_pin_file"
 
   local old_path="$PATH"
+  local installed_plugin="$test_home/.local/share/skidbladnir/claude-agent-identity"
+  install -d -m 0755 "$installed_plugin/.claude-plugin"
   PATH="$test_bin:$PATH"
   export PATH
   skidbladnir_converge arch
@@ -668,6 +750,8 @@ test_converge_and_doctor() {
   bearer_before="$(cat "$test_home/.config/skidbladnir/bearer")"
   assert_eq mh-11111111111111111111111111111111 "$handle_before" 'created machine handle'
   assert_eq AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA "$bearer_before" 'created bearer'
+  skidbladnir_claude_plugin_topology_is_exact "$installed_plugin" ||
+    fail 'partial Claude plugin tree did not converge to the exact seven-node tree'
   : >"$SKIDBLADNIR_TEST_CALLS"
   skidbladnir_converge arch
   assert_eq "$handle_before" "$(cat "$test_home/.config/skidbladnir/machine-handle")" 'preserved machine handle'
@@ -679,6 +763,59 @@ test_converge_and_doctor() {
   assert_contains "$SKIDBLADNIR_TEST_CALLS" 'systemctl --user enable --now skidbladnir.service'
   ! grep -Fq 'systemctl --user restart skidbladnir.service' "$SKIDBLADNIR_TEST_CALLS" ||
     fail 'unchanged active Linux service was restarted'
+
+  local -a plugin_owned_targets=(
+    "$installed_plugin/.claude-plugin/plugin.json"
+    "$installed_plugin/hooks/hooks.json"
+    "$installed_plugin/bin/agent-hook"
+  )
+  local plugin_owned_before unexpected_plugin_entry topology_status
+  plugin_owned_before="$(deployment_owned_snapshot "${plugin_owned_targets[@]}")"
+  unexpected_plugin_entry="$installed_plugin/.mcp.json"
+  printf '{}\n' >"$unexpected_plugin_entry"
+  doctor_reset
+  skidbladnir_doctor arch >"$fixture/plugin-extra-doctor" || true
+  assert_contains "$fixture/plugin-extra-doctor" 'FAIL  skidbladnir.config'
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  set +e
+  skidbladnir_converge arch >/dev/null 2>"$fixture/plugin-extra-converge-error"
+  topology_status=$?
+  set -e
+  [[ "$topology_status" -ne 0 ]] ||
+    fail 'convergence accepted an unmanaged Claude plugin capability'
+  assert_contains "$fixture/plugin-extra-converge-error" \
+    'Skidbladnir Claude plugin contains an unmanaged entry:'
+  assert_eq '{}' "$(cat "$unexpected_plugin_entry")" \
+    'failed convergence preserved the unmanaged Claude plugin entry'
+  assert_eq "$plugin_owned_before" \
+    "$(deployment_owned_snapshot "${plugin_owned_targets[@]}")" \
+    'failed plugin topology preflight preserved every owned plugin file'
+  ! grep -Eq '^(systemctl|tailscale)' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'failed plugin topology preflight reached a host mutation boundary'
+  /bin/unlink "$unexpected_plugin_entry"
+
+  skidbladnir_begin_release_transaction arch "$test_home"
+  printf '{}\n' >"$unexpected_plugin_entry"
+  set +e
+  (skidbladnir_commit_release_transaction arch "$test_home" \
+    "$fixture/release" "$fixture/skidbladnir-linux-amd64.tar.gz") \
+    >/dev/null 2>"$fixture/plugin-extra-commit-error"
+  topology_status=$?
+  set -e
+  [[ "$topology_status" -ne 0 ]] ||
+    fail 'release transaction committed a concurrently widened Claude plugin'
+  assert_contains "$fixture/plugin-extra-commit-error" \
+    'Skidbladnir Claude plugin topology changed during release transaction'
+  skidbladnir_recover_release_transaction arch "$test_home"
+  assert_eq '{}' "$(cat "$unexpected_plugin_entry")" \
+    'release rollback preserved the unknown Claude plugin entry'
+  assert_eq "$plugin_owned_before" \
+    "$(deployment_owned_snapshot "${plugin_owned_targets[@]}")" \
+    'release rollback did not restore every owned plugin file'
+  [[ ! -e "$test_home/.local/share/skidbladnir/.release-transaction" ]] ||
+    fail 'plugin topology rollback left its release transaction journal'
+  /bin/unlink "$unexpected_plugin_entry"
+
   export SKIDBLADNIR_TEST_SERVE_STATUS='{"TCP":{"8443":{"HTTPS":true}},"Web":{"current.example.ts.net:8443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:7341"}}}}}'
   skidbladnir_configure_serve "$test_bin/tailscale" arch
   assert_contains "$SKIDBLADNIR_TEST_CALLS" 'tailscale serve --yes --https=8443 --set-path=/ off'
@@ -1175,7 +1312,7 @@ test_converge_and_doctor() {
   assert_contains "$doctor_output" 'skidbladnir.artifact.digest'
   assert_contains "$doctor_output" 'pinned archive and all installed release members match'
   assert_contains "$doctor_output" 'skidbladnir.config'
-  assert_contains "$doctor_output" 'strict arch host config, hooks, and notifier installed'
+  assert_contains "$doctor_output" 'strict arch host config, hooks, Claude plugin, and notifier installed'
   assert_contains "$doctor_output" 'skidbladnir.secrets'
   assert_contains "$doctor_output" 'machine handle and bearer are canonical mode-0600 files'
   assert_contains "$doctor_output" 'skidbladnir.service'
@@ -1239,13 +1376,17 @@ test_converge_and_doctor() {
     >"$test_home/.local/share/skidbladnir/binary.sha256"
 
   export SKIDBLADNIR_TEST_INVENTORY
-  SKIDBLADNIR_TEST_INVENTORY='{"machine":{"handle":"mh-11111111111111111111111111111111"},"observedAt":"first","sessions":[{"id":"$2","tmuxName":"second","identityToken":"v1-22222222222222222222222222222222.20.30.2","objective":"private two"},{"id":"$0","tmuxName":"first","identityToken":"v1-11111111111111111111111111111111.20.30.1","objective":"private one"}]}'
+  SKIDBLADNIR_TEST_INVENTORY='{"machine":{"handle":"mh-11111111111111111111111111111111"},"observedAt":"first","sessions":[{"tmuxId":"$2","tmuxName":"second","identityToken":"v1-22222222222222222222222222222222.20.30.2","objective":"private two"},{"tmuxId":"$0","tmuxName":"first","identityToken":"v1-11111111111111111111111111111111.20.30.1","objective":"private one"}]}'
   local lifetime_before lifetime_after
   lifetime_before="$(skidbladnir_reconciled_lifetime_digest_local)"
-  SKIDBLADNIR_TEST_INVENTORY='{"machine":{"handle":"mh-11111111111111111111111111111111"},"observedAt":"later","sessions":[{"id":"$0","tmuxName":"first","identityToken":"v1-11111111111111111111111111111111.20.30.1","objective":"changed"},{"id":"$2","tmuxName":"second","identityToken":"v1-22222222222222222222222222222222.20.30.2","attention":true}]}'
+  SKIDBLADNIR_TEST_INVENTORY='{"machine":{"handle":"mh-11111111111111111111111111111111"},"observedAt":"later","sessions":[{"tmuxId":"$0","tmuxName":"first","identityToken":"v1-11111111111111111111111111111111.20.30.1","objective":"changed"},{"tmuxId":"$2","tmuxName":"second","identityToken":"v1-22222222222222222222222222222222.20.30.2","attention":true}]}'
   lifetime_after="$(skidbladnir_reconciled_lifetime_digest_local)"
   assert_eq "$lifetime_before" "$lifetime_after" 'lifetime digest ignores inventory order and mutable card facts'
   [[ "$lifetime_before" =~ ^[0-9a-f]{64}$ ]] || fail 'lifetime digest is not one lowercase SHA-256'
+  SKIDBLADNIR_TEST_INVENTORY='{"machine":{"handle":"mh-11111111111111111111111111111111"},"sessions":[{"id":"$0","tmuxName":"first","identityToken":"v1-11111111111111111111111111111111.20.30.1"}]}'
+  if skidbladnir_reconciled_lifetime_digest_local >/dev/null 2>&1; then
+    fail 'lifetime digest accepted the retired session id field'
+  fi
   unset SKIDBLADNIR_TEST_INVENTORY
 
   printf 'catalogue drift\n' >>"$test_home/.local/share/skidbladnir/characters.json"
@@ -1280,7 +1421,7 @@ test_converge_and_doctor() {
   doctor_reset
   skidbladnir_doctor arch >"$fixture/drift-output" || true
   assert_contains "$fixture/drift-output" 'FAIL  skidbladnir.config'
-  assert_contains "$fixture/drift-output" 'owned host config, hooks, or notifier differs; run the platform converge command'
+  assert_contains "$fixture/drift-output" 'owned host config, hooks, Claude plugin, or notifier differs; run the platform converge command'
   cp "$fixture/host-config.json" "$test_home/.config/skidbladnir/host-config.json"
   chmod 0600 "$test_home/.config/skidbladnir/host-config.json"
 
@@ -1288,8 +1429,33 @@ test_converge_and_doctor() {
   doctor_reset
   skidbladnir_doctor arch >"$fixture/hooks-drift-output" || true
   assert_contains "$fixture/hooks-drift-output" 'FAIL  skidbladnir.config'
-  cp "$(skidbladnir_status_hooks_source arch)" "$test_home/.codex-work/hooks.json"
+  cp "$(skidbladnir_agent_hooks_source arch)" "$test_home/.codex-work/hooks.json"
   chmod 0600 "$test_home/.codex-work/hooks.json"
+
+  printf '\n' >>"$installed_plugin/hooks/hooks.json"
+  doctor_reset
+  skidbladnir_doctor arch >"$fixture/plugin-drift-output" || true
+  assert_contains "$fixture/plugin-drift-output" 'FAIL  skidbladnir.config'
+  install -m 0644 \
+    "$repo_dir/assets/skidbladnir/claude-agent-identity/hooks/hooks.json" \
+    "$installed_plugin/hooks/hooks.json"
+
+  chmod 0644 "$installed_plugin/bin/agent-hook"
+  doctor_reset
+  skidbladnir_doctor arch >"$fixture/plugin-mode-output" || true
+  assert_contains "$fixture/plugin-mode-output" 'FAIL  skidbladnir.config'
+  chmod 0755 "$installed_plugin/bin/agent-hook"
+
+  mv "$installed_plugin/bin" "$installed_plugin/bin.real"
+  ln -s bin.real "$installed_plugin/bin"
+  if (skidbladnir_preflight_owned_directories "$test_home") >/dev/null 2>&1; then
+    fail 'Claude plugin directory symlink passed deployment preflight'
+  fi
+  doctor_reset
+  skidbladnir_doctor arch >"$fixture/plugin-symlink-output" || true
+  assert_contains "$fixture/plugin-symlink-output" 'FAIL  skidbladnir.config'
+  /bin/unlink "$installed_plugin/bin"
+  mv "$installed_plugin/bin.real" "$installed_plugin/bin"
 
   chmod 0644 "$test_home/.config/skidbladnir/bearer"
   doctor_reset
@@ -1357,6 +1523,9 @@ test_converge_and_doctor() {
     "$test_home/.codex-personal/hooks.json"
     "$test_home/.codex-work/hooks.json"
     "$test_home/.codex-work2/hooks.json"
+    "$test_home/.local/share/skidbladnir/claude-agent-identity/.claude-plugin/plugin.json"
+    "$test_home/.local/share/skidbladnir/claude-agent-identity/hooks/hooks.json"
+    "$test_home/.local/share/skidbladnir/claude-agent-identity/bin/agent-hook"
   )
   local journaled_before
   journaled_before="$(deployment_owned_snapshot "${journaled_targets[@]}")"

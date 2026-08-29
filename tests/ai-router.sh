@@ -156,8 +156,10 @@ invoke() {
 
 test_hard_cut_surface() {
   local source="$repo_dir/assets/routers/ai-router"
-  ! grep -Eq 'skidbladnir|router-seam|TMUX|launcher|status-hook' "$source" ||
+  ! grep -Eq 'router-seam|TMUX|launcher|status-hook|settings[.]json' "$source" ||
     fail 'retired Skidbladnir interception remains in the account router'
+  assert_eq 1 "$(grep -Fxc '    exec "$real_binary" --plugin-dir "$HOME/.local/share/skidbladnir/claude-agent-identity" "$@"' "$source" || true)" \
+    'Claude local plugin injection count'
   ! grep -Eq 'ai_codex_(version|platform_binary|platform_sha256)' "$repo_dir/lib/ai-tools.sh" ||
     fail 'retired Codex version or payload pinning remains in the installer'
   pass
@@ -184,7 +186,13 @@ test_explicit_contexts_and_exact_argv() {
       assert_eq '' "${fields[1]}" "$command CODEX_HOME"
       assert_eq "$want" "${fields[2]}" "$command CLAUDE_CONFIG_DIR"
     fi
-    assert_argv "$command" --flag 'spaced value' '' -- resume
+    if [[ "$variable" == CODEX ]]; then
+      assert_argv "$command" --flag 'spaced value' '' -- resume
+    else
+      assert_argv "$command" --plugin-dir \
+        "$test_home/.local/share/skidbladnir/claude-agent-identity" \
+        --flag 'spaced value' '' -- resume
+    fi
   done
   pass
 }
@@ -205,10 +213,14 @@ test_bare_context_inference() {
   assert_status 0 'bare Claude work path inside tmux'
   read_record
   assert_eq "$test_home/.claude-work" "${fields[2]}" 'bare Claude work CLAUDE_CONFIG_DIR'
+  assert_argv 'bare Claude work' --plugin-dir \
+    "$test_home/.local/share/skidbladnir/claude-agent-identity" \
+    -C "$test_home/src/work/project" --exact
   pass
 }
 
 test_latest_release_doctor_and_convergence() {
+  local plugin="$test_home/.local/share/skidbladnir/claude-agent-identity"
   dev_server_home() { printf '%s\n' "$test_home"; }
   dev_server_assets_dir() { printf '%s/assets\n' "$repo_dir"; }
   die() { fail "$*"; }
@@ -222,6 +234,20 @@ test_latest_release_doctor_and_convergence() {
   assert_eq 'codex claude' "$(ai_tools)" 'managed AI tool set'
   assert_eq '@openai/codex@latest' "$(ai_tool_package codex)" 'Codex stable release selector'
   assert_eq stable "$(CLAUDE_NATIVE_CHANNEL=beta ai_native_channel)" 'Claude stable release selector'
+  printf 'prior router\n' >"$router"
+  chmod 0755 "$router"
+  if (ai_install_router) >/dev/null 2>&1; then
+    fail 'router activation accepted an absent Claude identity plugin'
+  fi
+  assert_eq 'prior router' "$(cat "$router")" \
+    'failed router activation preserved the prior router'
+  install -d -m 0755 "$plugin/.claude-plugin" "$plugin/hooks" "$plugin/bin"
+  install -m 0644 "$repo_dir/assets/skidbladnir/claude-agent-identity/.claude-plugin/plugin.json" \
+    "$plugin/.claude-plugin/plugin.json"
+  install -m 0644 "$repo_dir/assets/skidbladnir/claude-agent-identity/hooks/hooks.json" \
+    "$plugin/hooks/hooks.json"
+  install -m 0755 "$repo_dir/assets/skidbladnir/claude-agent-identity/bin/agent-hook" \
+    "$plugin/bin/agent-hook"
   ai_install_router
   ai_install_router
   cmp -s "$repo_dir/assets/routers/ai-router" "$test_home/.local/libexec/ai-router" ||
@@ -237,7 +263,68 @@ test_latest_release_doctor_and_convergence() {
   export FAKE_TOOL_VERSION='codex-cli 9.8.7'
   ai_doctor_tool codex
   assert_eq pass "$doctor_result" 'newer installed Codex doctor'
+  rm -rf -- "$plugin"
+  doctor_result=''
+  ai_doctor_tool claude
+  assert_eq fail "$doctor_result" 'missing Claude plugin doctor result'
   unset FAKE_TOOL_VERSION ROUTER_RECORD
+  export HOME="$original_home"
+  pass
+}
+
+install_valid_claude_plugin_fixture() {
+  local plugin="$test_home/.local/share/skidbladnir/claude-agent-identity"
+  rm -rf -- "$plugin"
+  install -d -m 0755 "$plugin/.claude-plugin" "$plugin/hooks" "$plugin/bin"
+  install -m 0644 "$repo_dir/assets/skidbladnir/claude-agent-identity/.claude-plugin/plugin.json" \
+    "$plugin/.claude-plugin/plugin.json"
+  install -m 0644 "$repo_dir/assets/skidbladnir/claude-agent-identity/hooks/hooks.json" \
+    "$plugin/hooks/hooks.json"
+  install -m 0755 "$repo_dir/assets/skidbladnir/claude-agent-identity/bin/agent-hook" \
+    "$plugin/bin/agent-hook"
+}
+
+assert_claude_plugin_rejected() {
+  local label="$1"
+  printf 'prior router\n' >"$router"
+  chmod 0755 "$router"
+  if (ai_install_router) >/dev/null 2>&1; then
+    fail "$label: router activation accepted an invalid Claude identity plugin"
+  fi
+  assert_eq 'prior router' "$(cat "$router")" \
+    "$label: failed activation preserved the prior router"
+
+  doctor_result=''
+  ai_doctor_tool claude
+  assert_eq fail "$doctor_result" "$label: Claude doctor result"
+}
+
+test_strict_claude_plugin_activation_and_doctor() {
+  local plugin="$test_home/.local/share/skidbladnir/claude-agent-identity"
+  local linked_hooks="$fixture/linked-hooks"
+  local original_home="$HOME"
+  export HOME="$test_home"
+  export ROUTER_RECORD="$record"
+
+  install_valid_claude_plugin_fixture
+  printf '{"name":"not-the-owned-plugin"}\n' >"$plugin/.claude-plugin/plugin.json"
+  assert_claude_plugin_rejected 'malformed plugin bytes'
+
+  install_valid_claude_plugin_fixture
+  rm -rf -- "$linked_hooks"
+  mv "$plugin/hooks" "$linked_hooks"
+  ln -s "$linked_hooks" "$plugin/hooks"
+  assert_claude_plugin_rejected 'nested directory symlink'
+
+  install_valid_claude_plugin_fixture
+  chmod 0600 "$plugin/hooks/hooks.json"
+  assert_claude_plugin_rejected 'wrong plugin mode'
+
+  install_valid_claude_plugin_fixture
+  : >"$plugin/unmanaged"
+  assert_claude_plugin_rejected 'unmanaged plugin node'
+
+  unset ROUTER_RECORD
   export HOME="$original_home"
   pass
 }
@@ -247,5 +334,6 @@ test_hard_cut_surface
 test_explicit_contexts_and_exact_argv
 test_bare_context_inference
 test_latest_release_doctor_and_convergence
+test_strict_claude_plugin_activation_and_doctor
 
 printf 'PASS: %d ai-router test groups\n' "$tests_run"

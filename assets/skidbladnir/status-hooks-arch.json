@@ -1,8 +1,0 @@
-{
-  "description": "Skíðblaðnir pane lifecycle projection",
-  "hooks": {
-    "SessionStart": [{"matcher": "^(startup|resume|clear)$", "hooks": [{"type": "command", "command": "/home/nnandal/.local/bin/skidbladnir status-hook --host-config=/home/nnandal/.config/skidbladnir/host-config.json SessionStart", "timeout": 5, "async": false}]}],
-    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "/home/nnandal/.local/bin/skidbladnir status-hook --host-config=/home/nnandal/.config/skidbladnir/host-config.json UserPromptSubmit", "timeout": 5, "async": false}]}],
-    "Stop": [{"hooks": [{"type": "command", "command": "/home/nnandal/.local/bin/skidbladnir status-hook --host-config=/home/nnandal/.config/skidbladnir/host-config.json Stop", "timeout": 5, "async": false}]}]
-  }
-}

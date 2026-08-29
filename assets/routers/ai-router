@@ -181,10 +181,10 @@ fi
 case "$tool" in
   codex)
     export CODEX_HOME="$state_dir"
+    exec "$real_binary" "$@"
     ;;
   claude)
     export CLAUDE_CONFIG_DIR="$state_dir"
+    exec "$real_binary" --plugin-dir "$HOME/.local/share/skidbladnir/claude-agent-identity" "$@"
     ;;
 esac
-
-exec "$real_binary" "$@"
