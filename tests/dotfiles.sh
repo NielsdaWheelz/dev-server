@@ -618,6 +618,69 @@ test_ghostty_non_xfce_convergence() {
   pass
 }
 
+test_tmux_session_title_convergence() {
+  local tmux_asset="$repo_dir/assets/dotfiles/tmux.conf"
+  local tmux_calls="$fixture/tmux-calls"
+  local tmux_doctor_failures="$fixture/tmux-doctor-failures"
+  local tmux_doctor_output="$fixture/tmux-doctor-output"
+  local tmux_home="$fixture/tmux-home"
+
+  assert_eq 1 "$(grep -Fxc -- 'set -g set-titles on' "$tmux_asset")" \
+    'managed tmux config must enable terminal titles exactly once'
+  assert_eq 1 "$(grep -Fxc -- "set -g set-titles-string '#{session_name}'" "$tmux_asset")" \
+    'managed tmux config must use only the session name as the terminal title'
+
+  install -d -m 0755 "$tmux_home"
+  install -m 0644 "$tmux_asset" "$tmux_home/.tmux.conf"
+
+  : >"$tmux_calls"
+  (
+    dev_server_home() { printf '%s\n' "$tmux_home"; }
+    tmux() {
+      printf '%s\n' "$*" >>"$tmux_calls"
+      return 0
+    }
+
+    dotfiles_reload_tmux_if_running
+  ) || fail 'active tmux server reload failed'
+  assert_eq $'list-sessions\nsource-file '"$tmux_home/.tmux.conf" \
+    "$(cat "$tmux_calls")" \
+    'active tmux server did not reload the managed config exactly once'
+
+  : >"$tmux_calls"
+  (
+    dev_server_home() { printf '%s\n' "$tmux_home"; }
+    tmux() {
+      printf '%s\n' "$*" >>"$tmux_calls"
+      return 1
+    }
+
+    dotfiles_reload_tmux_if_running
+  ) || fail 'inactive tmux server reload path failed'
+  assert_eq 'list-sessions' "$(cat "$tmux_calls")" \
+    'inactive tmux server path attempted to source the managed config'
+
+  (
+    doctor_reset
+    dev_server_home() { printf '%s\n' "$tmux_home"; }
+    dotfiles_doctor_tmux
+    printf '%s\n' "$doctor_failures" >"$tmux_doctor_failures"
+  ) >"$tmux_doctor_output"
+  assert_eq 0 "$(cat "$tmux_doctor_failures")" 'exact managed tmux config failed its doctor'
+  assert_contains "$tmux_doctor_output" 'pass  dotfiles.tmux.conf'
+
+  printf '# drift\n' >>"$tmux_home/.tmux.conf"
+  (
+    doctor_reset
+    dev_server_home() { printf '%s\n' "$tmux_home"; }
+    dotfiles_doctor_tmux
+    printf '%s\n' "$doctor_failures" >"$tmux_doctor_failures"
+  ) >"$tmux_doctor_output"
+  assert_eq 1 "$(cat "$tmux_doctor_failures")" 'drifted tmux config passed its doctor'
+  assert_contains "$tmux_doctor_output" 'fail  dotfiles.tmux.conf'
+  pass
+}
+
 test_production_wiring() {
   local configure_calls="$fixture/configure-wiring-calls"
   local doctor_calls="$fixture/doctor-wiring-calls"
@@ -707,6 +770,7 @@ test_xfce_session_app_doctor
 test_headless_ghostty_default
 test_ghostty_xfce_autostart
 test_ghostty_non_xfce_convergence
+test_tmux_session_title_convergence
 test_production_wiring
 
 printf 'PASS: %d XFCE dotfiles test groups\n' "$tests_run"
