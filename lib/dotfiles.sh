@@ -60,6 +60,32 @@ dotfiles_install_tmux_plugins() {
   fi
 }
 
+dotfiles_reload_tmux_if_running() {
+  local home
+
+  command -v tmux >/dev/null 2>&1 || return 0
+  tmux list-sessions >/dev/null 2>&1 || return 0
+
+  home="$(dev_server_home)"
+  tmux source-file "$home/.tmux.conf"
+}
+
+dotfiles_tmux_configured() {
+  local home
+
+  home="$(dev_server_home)"
+  [[ -f "$home/.tmux.conf" ]] &&
+    cmp -s "$(dotfiles_asset tmux.conf)" "$home/.tmux.conf"
+}
+
+dotfiles_doctor_tmux() {
+  if dotfiles_tmux_configured; then
+    doctor_pass dotfiles.tmux.conf "managed tmux configuration installed"
+  else
+    doctor_fail dotfiles.tmux.conf "tmux configuration is missing or differs from the managed asset"
+  fi
+}
+
 dotfiles_current_login_shell() {
   case "$(uname -s)" in
   Darwin)
@@ -591,6 +617,7 @@ dotfiles_install() {
   dotfiles_install_file "$(dotfiles_asset gitignore_global)" "$home/.gitignore_global"
   dotfiles_install_shell_repos
   dotfiles_install_tmux_plugins
+  dotfiles_reload_tmux_if_running
   dotfiles_configure_login_shell
   dotfiles_configure_xfce_theme
   dotfiles_configure_xfce_qol
@@ -607,7 +634,7 @@ dotfiles_doctor() {
   local branch
 
   home="$(dev_server_home)"
-  for file in .zshenv .zshrc .zsh_helpers .p10k.zsh .tmux.conf .gitignore_global; do
+  for file in .zshenv .zshrc .zsh_helpers .p10k.zsh .gitignore_global; do
     id="dotfiles.${file#.}"
     if [[ -f "$home/$file" ]]; then
       doctor_pass "$id" "$home/$file"
@@ -615,6 +642,7 @@ dotfiles_doctor() {
       doctor_fail "$id" "missing $home/$file"
     fi
   done
+  dotfiles_doctor_tmux
 
   if command -v zsh >/dev/null 2>&1; then
     doctor_local_cmd dotfiles.zsh "zsh config parses" "zsh -n '$home/.zshenv' && zsh -n '$home/.zshrc' && zsh -n '$home/.zsh_helpers'"
