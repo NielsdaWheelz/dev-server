@@ -186,9 +186,14 @@ test_assets_and_operator_copy() {
   ' "$pin" >/dev/null || fail 'release pin must be wholly pending or wholly canonical'
   cmp -s "$pin" <(jq -S . "$pin") || fail 'release pin keys are not stored in sorted order'
   jq -e '
-    .version != "v0.2.8" and
-    .sourceSha != "3ce6a0e315fa836df59aad82f1398c5206f077f8"
-  ' "$pin" >/dev/null || fail 'retired providerless Skidbladnir release remains active'
+    if ([.[]] | all(. == "PENDING")) then true
+    else
+      (.version | capture("^v(?<major>0|[1-9][0-9]*)\\.(?<minor>0|[1-9][0-9]*)\\.(?<patch>0|[1-9][0-9]*)$") |
+        ((.major | tonumber) * 1000000) +
+        ((.minor | tonumber) * 1000) +
+        (.patch | tonumber)) >= 2010
+    end
+  ' "$pin" >/dev/null || fail 'pre-agent-identity Skidbladnir release remains active'
 
   workstation_skid_line="$(grep -nF '  skidbladnir_converge "$(platform_id)"' \
     "$repo_dir/workstation" | cut -d: -f1)"
@@ -706,6 +711,25 @@ test_converge_and_doctor() {
   if skidbladnir_release_values arch >/dev/null 2>&1; then
     fail 'release pin accepted a noncanonical leading-zero version'
   fi
+  mv "$fixture/release-pin.valid.json" "$skidbladnir_release_pin_file"
+  cp "$skidbladnir_release_pin_file" "$fixture/release-pin.valid.json"
+  local release_case_version release_case_source release_case_expected release_case_observed
+  while read -r release_case_version release_case_source release_case_expected; do
+    jq --arg version "$release_case_version" --arg source "$release_case_source" \
+      '.version = $version | .sourceSha = $source' \
+      "$fixture/release-pin.valid.json" >"$skidbladnir_release_pin_file"
+    if skidbladnir_release_values arch >/dev/null 2>&1; then
+      release_case_observed=accept
+    else
+      release_case_observed=reject
+    fi
+    assert_eq "$release_case_expected" "$release_case_observed" \
+      "Skidbladnir release compatibility boundary for $release_case_version"
+  done <<'RELEASE_CASES'
+v0.2.9 40b29223c0e474ec1c5e910cf8b9ad8a746a2602 reject
+v0.2.10 96da47a1239c8b3e96fbcc8998ad3eba23fa69fa accept
+v0.3.0 3333333333333333333333333333333333333333 accept
+RELEASE_CASES
   mv "$fixture/release-pin.valid.json" "$skidbladnir_release_pin_file"
   cp "$skidbladnir_release_pin_file" "$fixture/release-pin.valid.json"
   sed 's/"version": "v1.2.3"/"version": "v1.2.3", "version": "v1.2.3"/' \

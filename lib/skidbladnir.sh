@@ -24,6 +24,7 @@ skidbladnir_release_values() {
   )" || return 1
   [[ "$observed_keys" == $'androidApkSha256\nandroidSigningCertAssetSha256\ndarwinArm64Sha256\nlinuxAmd64Sha256\nsha256SumsAssetSha256\nsourceSha\nversion' ]] || return 1
 
+  # v0.2.10 is the first immutable release with the provider-aware host contract.
   jq -er --arg digest_field "$digest_field" '
     if type == "object" and
       (keys == ["androidApkSha256", "androidSigningCertAssetSha256", "darwinArm64Sha256", "linuxAmd64Sha256", "sha256SumsAssetSha256", "sourceSha", "version"]) and
@@ -35,7 +36,7 @@ skidbladnir_release_values() {
         ($semver.major | tonumber) <= 2100 and
         ((($semver.major | tonumber) * 1000000) +
           (($semver.minor | tonumber) * 1000) +
-          ($semver.patch | tonumber)) > 1 and
+          ($semver.patch | tonumber)) >= 2010 and
         ((($semver.major | tonumber) * 1000000) +
           (($semver.minor | tonumber) * 1000) +
           ($semver.patch | tonumber)) <= 2100000000) and
