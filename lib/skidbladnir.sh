@@ -1117,7 +1117,7 @@ skidbladnir_activate_macos_service() {
     launchctl bootstrap "$domain" "$target"
   elif ((was_loaded)); then
     launchctl kickstart "$domain/$label"
-  elif ((!was_loaded)); then
+  elif ((! was_loaded)); then
     launchctl bootstrap "$domain" "$target"
   fi
 }
