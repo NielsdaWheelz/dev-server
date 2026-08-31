@@ -67,6 +67,14 @@ gateway starts automatically and publishes only its dedicated HTTPS `:8443`
 Tailscale Serve mapping to loopback `:7341`. Convergence never resets another
 Serve mapping and never replaces an existing machine handle or bearer.
 
+tmux owns session truth. The Codex hook projects only content-free,
+process-lifetime agent identity from `SessionStart`; Claude uses the equivalent
+process-lifetime adapter. `skid-notify` is terminal-local output: it validates
+the current pane, resolves that pane's terminal through the configured absolute
+tmux executable, and writes one BEL without changing gateway or session state.
+The inventory reports tmux-derived `Active` or `Quiet` activity and may include
+agent identity when one of those lifetime adapters is present.
+
 After all three machines are signed in to Tailscale and converged, create the
 local origins manifest on the MacBook:
 
@@ -95,7 +103,10 @@ bearer off that host.
 The release pin is `assets/skidbladnir/release-pin.json`. Its version, source
 SHA, APK, both host bundles, checksum manifest, and signing-certificate asset
 digests must be replaced together from one published immutable release;
-`PENDING` fails closed.
+`PENDING` fails closed. Each host bundle's strict `release.json` must also carry
+exactly `platform`, `sourceSha`, and `version`; missing or widened manifests fail
+before a release transaction begins. Compatibility is release-atomic; the
+manifest has no independent version dimension.
 
 The operator surface is deliberately closed:
 

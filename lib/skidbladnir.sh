@@ -3,11 +3,42 @@
 : "${dev_server_root:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)}"
 : "${skidbladnir_release_pin_file:=$dev_server_root/assets/skidbladnir/release-pin.json}"
 
+# jq normally resolves duplicate object members last-wins. Compare the raw streaming paths with
+# the parsed document's own paths before any semantic query, and admit exactly one JSON value.
+# Paths contain schema names and array indexes only; values never enter diagnostics or shell state.
+skidbladnir_strict_single_json_file() {
+  local file="$1"
+  local raw_paths
+  local semantic_paths
+  [[ -f "$file" && ! -L "$file" ]] || return 1
+  raw_paths="$(jq --stream -c 'select(length == 2) | .[0]' "$file")" || return 1
+  semantic_paths="$(jq -c 'tostream | select(length == 2) | .[0]' "$file")" || return 1
+  [[ "$(LC_ALL=C sort <<<"$raw_paths")" == "$(LC_ALL=C sort <<<"$semantic_paths")" ]] || return 1
+  jq -es 'length == 1' "$file" >/dev/null
+}
+
+skidbladnir_release_manifest_matches() {
+  local manifest="$1"
+  local platform="$2"
+  local source_sha="$3"
+  local version="$4"
+  skidbladnir_strict_single_json_file "$manifest" || return 1
+  jq -e \
+    --arg platform "$platform" \
+    --arg source "$source_sha" \
+    --arg version "$version" '
+    type == "object" and
+    keys == ["platform", "sourceSha", "version"] and
+    .platform == $platform and
+    .sourceSha == $source and
+    .version == $version
+  ' "$manifest" >/dev/null
+}
+
 skidbladnir_release_values() {
   local platform="$1"
   local digest_field
   local pin_bytes
-  local observed_keys
   case "$platform" in
   devbox | arch) digest_field=linuxAmd64Sha256 ;;
   macos) digest_field=darwinArm64Sha256 ;;
@@ -17,14 +48,9 @@ skidbladnir_release_values() {
   [[ -f "$skidbladnir_release_pin_file" && ! -L "$skidbladnir_release_pin_file" ]] || return 1
   pin_bytes="$(LC_ALL=C wc -c <"$skidbladnir_release_pin_file" | tr -d '[:space:]')"
   [[ "$pin_bytes" =~ ^[1-9][0-9]{0,3}$ && "$pin_bytes" -le 4096 ]] || return 1
-  observed_keys="$(
-    jq --stream -er \
-      'select(length == 2 and (.[0] | length) == 1) | .[0][0]' \
-      "$skidbladnir_release_pin_file" | LC_ALL=C sort
-  )" || return 1
-  [[ "$observed_keys" == $'androidApkSha256\nandroidSigningCertAssetSha256\ndarwinArm64Sha256\nlinuxAmd64Sha256\nsha256SumsAssetSha256\nsourceSha\nversion' ]] || return 1
+  skidbladnir_strict_single_json_file "$skidbladnir_release_pin_file" || return 1
 
-  # v0.2.10 is the first immutable release with the provider-aware host contract.
+  # v0.2.10 is the minimum immutable release admitted by this deployer.
   jq -er --arg digest_field "$digest_field" '
     if type == "object" and
       (keys == ["androidApkSha256", "androidSigningCertAssetSha256", "darwinArm64Sha256", "linuxAmd64Sha256", "sha256SumsAssetSha256", "sourceSha", "version"]) and
@@ -560,6 +586,37 @@ skidbladnir_release_transaction_restore() {
   else
     die "Skidbladnir release transaction marker is invalid: $backup"
   fi
+}
+
+# One kernel lock serializes recovery, candidate promotion, activation, and Serve convergence.
+# The stable regular lock file is never unlinked, avoiding inode-replacement races between waiters.
+# It is acquired before any admission, because recovery must be serialized too, so a converge that
+# fails closed still creates this directory and this empty file on a host that has never converged.
+# They are transaction scaffolding, not a release target: no binary, hook, notifier, catalogue, or
+# manifest byte is written before the pin and exact release manifest are both admitted. The
+# pristine-home case in tests/skidbladnir.sh pins that exact boundary.
+skidbladnir_acquire_converge_lock() {
+  local home="$1"
+  local share_dir="$home/.local/share/skidbladnir"
+  local lock_file="$share_dir/.converge.lock"
+  install -d -m 0755 "$share_dir"
+  [[ ! -L "$lock_file" && (! -e "$lock_file" || -f "$lock_file") ]] ||
+    die "Skidbladnir convergence lock boundary is invalid"
+  case "$(uname -s)" in
+  Darwin) require_cmd lockf ;;
+  Linux) require_cmd flock ;;
+  *) die "Skidbladnir convergence locking supports only Linux and Darwin" ;;
+  esac
+  exec 9>"$lock_file" || die "Could not open the Skidbladnir convergence lock"
+  chmod 0600 "$lock_file" || die "Could not secure the Skidbladnir convergence lock"
+  case "$(uname -s)" in
+  Darwin)
+    lockf -s -t 0 9 || die "Skidbladnir convergence is already running"
+    ;;
+  Linux)
+    flock -n 9 || die "Skidbladnir convergence is already running"
+    ;;
+  esac
 }
 
 skidbladnir_recover_release_transaction() {
@@ -1152,8 +1209,15 @@ skidbladnir_converge() (
   require_cmd tar
   home="$(dev_server_home)"
   share_dir="$home/.local/share/skidbladnir"
-  skidbladnir_changed=0
+  skidbladnir_acquire_converge_lock "$home"
+  # Recovery restores this host's own journalled prior bytes and reads nothing
+  # from the candidate, so the no-mutation rule for an unadmitted manifest does
+  # not govern it. It must stay ahead of the pin: the pin is deliberately
+  # PENDING across a release transition, and an interrupted host whose launcher
+  # already refuses to start would otherwise have no repair path until a new
+  # release is published.
   skidbladnir_recover_release_transaction "$platform" "$home"
+  skidbladnir_changed=0
   asset="$(skidbladnir_asset_name "$platform")"
   manifest_platform="$(skidbladnir_manifest_platform "$platform")"
   pin_line="$(skidbladnir_release_values "$platform")" || die "Skidbladnir release pin is pending; root must publish and pin the exact release"
@@ -1173,11 +1237,10 @@ skidbladnir_converge() (
     die "Skidbladnir release catalogue is not a regular file"
   [[ -f "$staging/release.json" && ! -L "$staging/release.json" ]] ||
     die "Skidbladnir release manifest is not a regular file"
+  skidbladnir_release_manifest_matches \
+    "$staging/release.json" "$manifest_platform" "$source_sha" "$version" ||
+    die "Skidbladnir release manifest differs from the deployment"
   [[ "$("$staging/skidbladnir" version)" == "$version $source_sha" ]] || die "Skidbladnir binary version differs from the pin"
-  jq -e --arg platform "$manifest_platform" --arg source "$source_sha" --arg version "$version" '
-    type == "object" and keys == ["platform", "sourceSha", "version"] and
-    .platform == $platform and .sourceSha == $source and .version == $version
-  ' "$staging/release.json" >/dev/null || die "Skidbladnir release manifest differs from the pin"
   skidbladnir_require_tmux_runtime "$platform"
 
   config_dir="$home/.config/skidbladnir"
@@ -1263,10 +1326,8 @@ skidbladnir_doctor() {
       -f "$binary" && ! -L "$binary" && -x "$binary" &&
       "$current_version" == "$version $source_sha" &&
       -f "$share_dir/release.json" && ! -L "$share_dir/release.json" ]] &&
-      jq -e --arg platform "$(skidbladnir_manifest_platform "$platform")" --arg source "$source_sha" --arg version "$version" '
-        type == "object" and keys == ["platform", "sourceSha", "version"] and
-        .platform == $platform and .sourceSha == $source and .version == $version
-      ' "$share_dir/release.json" >/dev/null 2>&1; then
+      skidbladnir_release_manifest_matches "$share_dir/release.json" \
+        "$(skidbladnir_manifest_platform "$platform")" "$source_sha" "$version" 2>/dev/null; then
       skidbladnir_doctor_pass skidbladnir.artifact.version "$version at source $source_sha"
     else
       skidbladnir_doctor_fail skidbladnir.artifact.version "installed artifact differs; run the platform converge command"
@@ -1430,28 +1491,132 @@ skidbladnir_doctor() {
 
 skidbladnir_reconciled_lifetime_digest_local() (
   set -euo pipefail
-  local home config_dir
+  umask 077
+  local home config_dir inventory_parent inventory_file
   home="$(dev_server_home)"
   config_dir="$home/.config/skidbladnir"
-  skidbladnir_authenticated_loopback "$config_dir" sessions 2>/dev/null |
-    jq -ceS '
+  inventory_parent="${TMPDIR:-/tmp}"
+  inventory_parent="${inventory_parent%/}"
+  case "$inventory_parent" in
+  /*) ;;
+  *) inventory_parent=/tmp ;;
+  esac
+  inventory_file="$(mktemp "$inventory_parent/skidbladnir-lifetime.XXXXXX")"
+  skidbladnir_lifetime_cleanup() {
+    local lifetime_exit=$?
+    trap - EXIT
+    if [[ -f "$inventory_file" && ! -L "$inventory_file" ]]; then
+      /bin/unlink "$inventory_file" || lifetime_exit=1
+    else
+      lifetime_exit=1
+    fi
+    exit "$lifetime_exit"
+  }
+  trap skidbladnir_lifetime_cleanup EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  case "$inventory_file" in
+  "$inventory_parent"/skidbladnir-lifetime.*) ;;
+  *) die "Unexpected Skidbladnir lifetime staging file" ;;
+  esac
+  [[ -f "$inventory_file" && ! -L "$inventory_file" &&
+    "$(skidbladnir_file_mode "$inventory_file")" == 600 ]] ||
+    die "Skidbladnir lifetime staging boundary is invalid"
+  skidbladnir_authenticated_loopback "$config_dir" sessions >"$inventory_file" 2>/dev/null || return 1
+  skidbladnir_strict_single_json_file "$inventory_file" || return 1
+  jq -ceS -s '
+      def instant_parts:
+        if type != "string" or . == "0001-01-01T00:00:00Z" then
+          error("invalid projection instant")
+        else
+          capture("^(?<base>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\\.(?<fraction>[0-9]{1,9}))?Z$") as $instant |
+          ($instant.base + "Z") as $base |
+          ($instant.fraction // "") as $fraction |
+          ($base | fromdateiso8601) as $seconds |
+          if ($seconds | strftime("%Y-%m-%dT%H:%M:%SZ")) != $base or
+            ($fraction | endswith("0"))
+          then error("noncanonical projection instant")
+          else [$seconds, (($fraction + "000000000")[0:9] | tonumber)]
+          end
+        end;
+      def contains_forbidden_identity_text:
+        test("[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]");
+      def valid_identity_text($maximum):
+        type == "string" and length > 0 and length <= $maximum and
+        (contains_forbidden_identity_text | not);
+      def valid_provider_session:
+        type == "object" and
+        (keys == ["id"] or keys == ["name"] or keys == ["id", "name"]) and
+        ((has("id") | not) or (.id | type == "string" and test("^[!-~]{1,128}$"))) and
+        ((has("name") | not) or (.name | valid_identity_text(128)));
+      def valid_agent($profiles):
+        . as $agent |
+        type == "object" and
+        ((keys - ["pid", "profile", "provider", "providerSession"]) | length == 0) and
+        has("provider") and has("pid") and
+        (.provider == "Codex" or .provider == "Claude") and
+        (.pid | type == "number" and . > 0 and . <= 9223372036854775807 and floor == .) and
+        ((has("profile") | not) or
+          (.profile as $profile |
+            ($profile | type == "string" and test("^[a-z][a-z0-9_-]{0,31}$")) and
+            any($profiles[]; .key == $profile and .provider == $agent.provider))) and
+        ((has("providerSession") | not) or (.providerSession | valid_provider_session)) and
+        (.provider != "Codex" or (has("providerSession") | not) or
+          (.providerSession | has("name") | not));
+      def valid_profile:
+        type == "object" and keys == ["key", "label", "provider"] and
+        (.key | type == "string" and test("^[a-z][a-z0-9_-]{0,31}$")) and
+        (.label | valid_identity_text(64) and test("\\S")) and
+        (.provider == "Codex" or .provider == "Claude");
+      def valid_character:
+        type == "object" and keys == ["displayName", "key"] and
+        (.key | type == "string" and length > 0) and
+        (.displayName | type == "string" and length > 0);
+      def valid_session($profiles):
+        . as $session |
+        type == "object" and
+        ((keys - ["activeCommand", "agent", "attachedClients", "activity", "character", "cwd",
+          "identityToken", "launchProfile", "objective", "tmuxId", "tmuxName"]) | length == 0) and
+        ((["attachedClients", "activity", "character", "identityToken", "tmuxId", "tmuxName"] - keys) | length == 0) and
+        (.tmuxId | type == "string" and test("^\\$[0-9]+$")) and
+        (.tmuxName | type == "string" and length > 0) and
+        (.identityToken as $token |
+          ($token | type == "string") and
+          ($token |
+            capture("^v1-[0-9a-f]{32}\\.[1-9][0-9]*\\.[1-9][0-9]*\\.(?<tmux_id>[0-9]+)$") as $identity |
+            ("$" + $identity.tmux_id) == $session.tmuxId)) and
+        (.character | valid_character) and
+        (.attachedClients | type == "number" and . >= 0 and floor == .) and
+        (.activity == "Active" or .activity == "Quiet") and
+        ((has("launchProfile") | not) or
+          (.launchProfile as $profile |
+            ($profile | type == "string" and test("^[a-z][a-z0-9_-]{0,31}$")) and
+            any($profiles[]; .key == $profile))) and
+        ((has("agent") | not) or (.agent | valid_agent($profiles))) and
+        ((has("objective") | not) or (.objective | type == "string" and length > 0)) and
+        ((has("cwd") | not) or (.cwd | type == "string" and length > 0)) and
+        ((has("activeCommand") | not) or (.activeCommand | type == "string" and length > 0));
+      if length == 1 then .[0] else error("lifetime inventory must contain one document") end |
+      (.observedAt | instant_parts) as $_observed_parts |
+      .profiles as $profiles |
       if (
         type == "object" and
-        (.machine | type == "object" and (.handle | type == "string" and test("^mh-[0-9a-f]{32}$"))) and
+        keys == ["machine", "observedAt", "profiles", "sessions"] and
+        (.machine | type == "object" and keys == ["handle", "platform"] and
+          (.handle | type == "string" and test("^mh-[0-9a-f]{32}$")) and
+          (.platform == "Linux" or .platform == "Darwin")) and
+        (.profiles | type == "array" and length > 0 and all(.[]; valid_profile) and
+          ([.[].key] | unique | length) == length and
+          ([.[].label] | unique | length) == length) and
         (.sessions | type == "array") and
-        all(.sessions[];
-          type == "object" and
-          (.tmuxId | type == "string" and test("^\\$[0-9]+$")) and
-          (.tmuxName | type == "string" and length > 0) and
-          (.identityToken | type == "string" and test("^v1-[0-9a-f]{32}\\.[1-9][0-9]*\\.[1-9][0-9]*\\.[0-9]+$"))) and
+        all(.sessions[]; valid_session($profiles)) and
+        ([.sessions[].tmuxId] | unique | length) == (.sessions | length) and
         ([.sessions[].identityToken] | unique | length) == (.sessions | length)
       ) then
-        {
-          machineHandle: .machine.handle,
-          sessions: (.sessions | map({tmuxId, tmuxName, identityToken}) | sort_by(.tmuxId, .tmuxName, .identityToken))
-        }
+        .sessions | map({tmuxId, identityToken}) | sort_by(.tmuxId, .identityToken)
       else error("invalid lifetime inventory") end
-    ' 2>/dev/null | skidbladnir_sha256_stream
+    ' "$inventory_file" 2>/dev/null | skidbladnir_sha256_stream
 )
 
 skidbladnir_credentials_digest_local() (
