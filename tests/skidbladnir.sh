@@ -233,19 +233,37 @@ test_assets_and_operator_copy() {
     jq -e --arg home "$home" '
       type == "object" and keys == ["description", "hooks"] and
       .description == "Skíðblaðnir agent identity projection" and
-      (.hooks | keys == ["SessionStart", "Stop", "UserPromptSubmit"]) and
-      .hooks.SessionStart == [{
-        matcher:"^(startup|resume|clear)$",
-        hooks:[{type:"command",command:($home + "/.local/bin/skidbladnir agent-hook --host-config=" + $home + "/.config/skidbladnir/host-config.json Codex SessionStart"),timeout:5,async:false}]
-      }] and
-      .hooks.UserPromptSubmit == [{
-        hooks:[{type:"command",command:($home + "/.local/bin/skidbladnir agent-hook --host-config=" + $home + "/.config/skidbladnir/host-config.json Codex UserPromptSubmit"),timeout:5,async:false}]
-      }] and
-      .hooks.Stop == [{
-        hooks:[{type:"command",command:($home + "/.local/bin/skidbladnir agent-hook --host-config=" + $home + "/.config/skidbladnir/host-config.json Codex Stop"),timeout:5,async:false}]
-      }]
-    ' "$hooks" >/dev/null || fail "strict lifecycle hooks differ: $hooks"
+      .hooks == {
+        SessionStart: [{
+          matcher:"^(startup|resume|clear)$",
+          hooks:[{type:"command",command:($home + "/.local/bin/skidbladnir agent-hook --host-config=" + $home + "/.config/skidbladnir/host-config.json Codex SessionStart"),timeout:5,async:false}]
+        }]
+      }
+    ' "$hooks" >/dev/null || fail "strict agent hooks differ: $hooks"
   done
+
+  cmp -s "$repo_dir/assets/skidbladnir/skid-notify-linux" <(printf '%s\n' \
+    '#!/bin/sh' \
+    'set -eu' \
+    '[ -n "${TMUX_PANE:-}" ] || exit 0' \
+    'case "$TMUX_PANE" in' \
+    '  % | %*[!0-9]* | [!%]*) exit 0 ;;' \
+    'esac' \
+    'pane_tty="$(/usr/bin/tmux display-message -p -t "$TMUX_PANE" '\''#{pane_tty}'\'' 2>/dev/null)" || exit 0' \
+    '[ -c "$pane_tty" ] || exit 0' \
+    'printf '\''\a'\'' >"$pane_tty" 2>/dev/null || exit 0') ||
+    fail 'Linux notifier is not exact terminal-local BEL output'
+  cmp -s "$repo_dir/assets/skidbladnir/skid-notify-macbook" <(printf '%s\n' \
+    '#!/bin/sh' \
+    'set -eu' \
+    '[ -n "${TMUX_PANE:-}" ] || exit 0' \
+    'case "$TMUX_PANE" in' \
+    '  % | %*[!0-9]* | [!%]*) exit 0 ;;' \
+    'esac' \
+    'pane_tty="$(/opt/homebrew/bin/tmux display-message -p -t "$TMUX_PANE" '\''#{pane_tty}'\'' 2>/dev/null)" || exit 0' \
+    '[ -c "$pane_tty" ] || exit 0' \
+    'printf '\''\a'\'' >"$pane_tty" 2>/dev/null || exit 0') ||
+    fail 'macOS notifier is not exact terminal-local BEL output'
 
   local plugin="$repo_dir/assets/skidbladnir/claude-agent-identity"
   jq -e '
@@ -378,6 +396,9 @@ write_release_fixture() {
 set -euo pipefail
 case "${1:-}" in
   version)
+    if [[ -n "${SKIDBLADNIR_TEST_CANDIDATE_VERSION_MUTATION:-}" ]]; then
+      : >"$SKIDBLADNIR_TEST_CANDIDATE_VERSION_MUTATION"
+    fi
     printf 'v1.2.3 1111111111111111111111111111111111111111\n'
     ;;
   machine)
@@ -400,7 +421,8 @@ EOF
   chmod 0755 "$release_dir/skidbladnir"
   printf '{}\n' >"$release_dir/characters.json"
   jq -n --arg source "$source_sha" \
-    '{platform:"linux-amd64",sourceSha:$source,version:"v1.2.3"}' >"$release_dir/release.json"
+    '{platform:"linux-amd64",sourceSha:$source,version:"v1.2.3"}' \
+    >"$release_dir/release.json"
   tar -czf "$fixture/skidbladnir-linux-amd64.tar.gz" -C "$release_dir" \
     skidbladnir characters.json release.json
   local archive_sha
@@ -675,6 +697,33 @@ test_converge_and_doctor() {
   # dev_server_home reads this shared library seam.
   # shellcheck disable=SC2034
   dev_server_home_dir="$test_home"
+  local lock_acquired_fifo="$fixture/converge-lock-acquired"
+  local lock_release_fifo="$fixture/converge-lock-release"
+  local lock_holder_pid lock_signal lock_contention_status
+  mkfifo "$lock_acquired_fifo" "$lock_release_fifo"
+  exec 7<>"$lock_acquired_fifo"
+  exec 8<>"$lock_release_fifo"
+  (
+    skidbladnir_acquire_converge_lock "$test_home"
+    printf 'held\n' >&7
+    IFS= read -r lock_signal <&8
+  ) &
+  lock_holder_pid=$!
+  IFS= read -r -t 5 lock_signal <&7 || fail 'convergence lock holder did not acquire the kernel lock'
+  assert_eq held "$lock_signal" 'convergence lock acquisition signal'
+  set +e
+  (skidbladnir_acquire_converge_lock "$test_home") \
+    >"$fixture/converge-lock-output" 2>"$fixture/converge-lock-error"
+  lock_contention_status=$?
+  set -e
+  [[ "$lock_contention_status" -ne 0 ]] || fail 'concurrent convergence acquired the same kernel lock'
+  assert_contains "$fixture/converge-lock-error" 'Skidbladnir convergence is already running'
+  printf 'release\n' >&8
+  wait "$lock_holder_pid"
+  (skidbladnir_acquire_converge_lock "$test_home") ||
+    fail 'convergence lock was not released with its owner process'
+  exec 7>&-
+  exec 8>&-
   # shellcheck disable=SC2034
   skidbladnir_release_pin_file="$fixture/release-pin.json"
   skidbladnir_host_config_source() { printf '%s\n' "$fixture/host-config.json"; }
@@ -683,6 +732,47 @@ test_converge_and_doctor() {
   skidbladnir_claude_plugin_topology_is_exact \
     "$repo_dir/assets/skidbladnir/claude-agent-identity" ||
     fail 'deployment source Claude plugin topology is not the exact seven-node tree'
+
+  local release_manifest_case="$fixture/release-manifest-case.json"
+  skidbladnir_release_manifest_matches "$fixture/release/release.json" \
+    linux-amd64 1111111111111111111111111111111111111111 v1.2.3 ||
+    fail 'exact three-key release manifest was rejected'
+  jq 'del(.platform)' "$fixture/release/release.json" >"$release_manifest_case"
+  if skidbladnir_release_manifest_matches "$release_manifest_case" \
+    linux-amd64 1111111111111111111111111111111111111111 v1.2.3; then
+    fail 'release manifest without its platform was accepted'
+  fi
+  jq '.extra = true' "$fixture/release/release.json" >"$release_manifest_case"
+  if skidbladnir_release_manifest_matches "$release_manifest_case" \
+    linux-amd64 1111111111111111111111111111111111111111 v1.2.3; then
+    fail 'release manifest with an unknown field was accepted'
+  fi
+  sed 's/"version": "v1.2.3"/"version": "v1.2.3", "version": "v1.2.3"/' \
+    "$fixture/release/release.json" >"$release_manifest_case"
+  if skidbladnir_release_manifest_matches "$release_manifest_case" \
+    linux-amd64 1111111111111111111111111111111111111111 v1.2.3; then
+    fail 'release manifest with a duplicate version was accepted'
+  fi
+  sed 's/"version": "v1.2.3"/"version": {"nested": true}, "version": "v1.2.3"/' \
+    "$fixture/release/release.json" >"$release_manifest_case"
+  if skidbladnir_release_manifest_matches "$release_manifest_case" \
+    linux-amd64 1111111111111111111111111111111111111111 v1.2.3; then
+    fail 'release manifest accepted an object-valued duplicate version'
+  fi
+  {
+    cat "$fixture/release/release.json"
+    cat "$fixture/release/release.json"
+  } >"$release_manifest_case"
+  if skidbladnir_release_manifest_matches "$release_manifest_case" \
+    linux-amd64 1111111111111111111111111111111111111111 v1.2.3; then
+    fail 'concatenated release manifests were accepted'
+  fi
+  jq 'map_values({nested: true})' "$fixture/release/release.json" >"$release_manifest_case"
+  cat "$fixture/release/release.json" >>"$release_manifest_case"
+  if skidbladnir_release_manifest_matches "$release_manifest_case" \
+    linux-amd64 1111111111111111111111111111111111111111 v1.2.3; then
+    fail 'nested invalid manifest followed by a valid manifest was accepted'
+  fi
 
   if skidbladnir_observed_tmux_version "$fixture/missing-tmux" >/dev/null 2>&1; then
     fail 'missing tmux executable was accepted'
@@ -738,12 +828,86 @@ RELEASE_CASES
     fail 'release pin accepted a duplicate version member'
   fi
   mv "$fixture/release-pin.valid.json" "$skidbladnir_release_pin_file"
+  cp "$skidbladnir_release_pin_file" "$fixture/release-pin.valid.json"
+  sed 's/"version": "v1.2.3"/"version": {"nested": true}, "version": "v1.2.3"/' \
+    "$fixture/release-pin.valid.json" >"$skidbladnir_release_pin_file"
+  if skidbladnir_release_values arch >/dev/null 2>&1; then
+    fail 'release pin accepted an object-valued duplicate version member'
+  fi
+  jq 'map_values({nested: true})' "$fixture/release-pin.valid.json" \
+    >"$skidbladnir_release_pin_file"
+  cat "$fixture/release-pin.valid.json" >>"$skidbladnir_release_pin_file"
+  if skidbladnir_release_values arch >/dev/null 2>&1; then
+    fail 'nested invalid release pin followed by a valid pin was accepted'
+  fi
+  mv "$fixture/release-pin.valid.json" "$skidbladnir_release_pin_file"
 
   local old_path="$PATH"
   local installed_plugin="$test_home/.local/share/skidbladnir/claude-agent-identity"
   install -d -m 0755 "$installed_plugin/.claude-plugin"
   PATH="$test_bin:$PATH"
   export PATH
+  cp "$fixture/release/release.json" "$fixture/release.valid.json"
+  cp "$fixture/skidbladnir-linux-amd64.tar.gz" "$fixture/release.valid.tar.gz"
+  cp "$skidbladnir_release_pin_file" "$fixture/release-pin.valid.json"
+  jq '.extra = true' \
+    "$fixture/release.valid.json" >"$fixture/release/release.json"
+  tar -czf "$fixture/skidbladnir-linux-amd64.tar.gz" -C "$fixture/release" \
+    skidbladnir characters.json release.json
+  local unadmitted_archive_sha
+  unadmitted_archive_sha="$(skidbladnir_sha256 "$fixture/skidbladnir-linux-amd64.tar.gz")"
+  jq --arg digest "$unadmitted_archive_sha" '.linuxAmd64Sha256 = $digest' \
+    "$fixture/release-pin.valid.json" >"$skidbladnir_release_pin_file"
+  local home_before_unadmitted_manifest
+  local unadmitted_candidate_mutation="$test_home/.unadmitted-candidate-version-ran"
+  home_before_unadmitted_manifest="$(find "$test_home" -mindepth 1 -print | LC_ALL=C sort)"
+  : >"$SKIDBLADNIR_TEST_CALLS"
+  export SKIDBLADNIR_TEST_CANDIDATE_VERSION_MUTATION="$unadmitted_candidate_mutation"
+  set +e
+  skidbladnir_converge arch >/dev/null 2>"$fixture/unadmitted-manifest-error"
+  local unadmitted_manifest_status=$?
+  set -e
+  unset SKIDBLADNIR_TEST_CANDIDATE_VERSION_MUTATION
+  [[ "$unadmitted_manifest_status" -ne 0 ]] ||
+    fail 'unadmitted release manifest permitted convergence'
+  assert_contains "$fixture/unadmitted-manifest-error" \
+    'Skidbladnir release manifest differs from the deployment'
+  [[ ! -e "$unadmitted_candidate_mutation" ]] ||
+    fail 'unadmitted release manifest executed the candidate binary'
+  assert_eq "$home_before_unadmitted_manifest" \
+    "$(find "$test_home" -mindepth 1 -print | LC_ALL=C sort)" \
+    'unadmitted release manifest changed the deployment-owned home tree'
+  # The assertion above runs against a home that already holds the convergence
+  # lock, so on its own it cannot see what a rejected candidate creates on a
+  # host that has never converged. Force that question open against a pristine
+  # home: exactly the lock directory and the empty lock file may appear, and
+  # nothing else.
+  local pristine_home="$fixture/pristine-home"
+  local pristine_home_before pristine_home_after
+  install -d -m 0755 "$pristine_home"
+  pristine_home_before="$(find "$pristine_home" -mindepth 1 -print | LC_ALL=C sort)"
+  [[ -z "$pristine_home_before" ]] || fail 'the pristine convergence home fixture is not empty'
+  (
+    # shellcheck disable=SC2030
+    dev_server_home_dir="$pristine_home"
+    skidbladnir_converge arch >/dev/null 2>&1
+  ) && fail 'an unadmitted release manifest permitted convergence on a pristine host'
+  pristine_home_after="$(find "$pristine_home" -mindepth 1 -print | LC_ALL=C sort)"
+  assert_eq "$(printf '%s\n%s\n%s\n%s' \
+    "$pristine_home/.local" \
+    "$pristine_home/.local/share" \
+    "$pristine_home/.local/share/skidbladnir" \
+    "$pristine_home/.local/share/skidbladnir/.converge.lock")" \
+    "$pristine_home_after" \
+    'a rejected candidate created deployment-owned paths beyond the convergence lock'
+  [[ ! -s "$pristine_home/.local/share/skidbladnir/.converge.lock" ]] ||
+    fail 'the convergence lock file carries content'
+  ! grep -Eq '^(systemctl|tailscale)' "$SKIDBLADNIR_TEST_CALLS" ||
+    fail 'unadmitted release manifest reached a host mutation boundary'
+  mv "$fixture/release.valid.json" "$fixture/release/release.json"
+  mv "$fixture/release.valid.tar.gz" "$fixture/skidbladnir-linux-amd64.tar.gz"
+  mv "$fixture/release-pin.valid.json" "$skidbladnir_release_pin_file"
+  : >"$SKIDBLADNIR_TEST_CALLS"
   skidbladnir_converge arch
   local handle_before bearer_before
   handle_before="$(cat "$test_home/.config/skidbladnir/machine-handle")"
@@ -1375,18 +1539,106 @@ RELEASE_CASES
   skidbladnir_sha256 "$test_home/.local/bin/skidbladnir" \
     >"$test_home/.local/share/skidbladnir/binary.sha256"
 
+  local lifetime_inventory_before='{"machine":{"handle":"mh-11111111111111111111111111111111","platform":"Linux"},"observedAt":"2026-08-28T12:00:00Z","profiles":[{"key":"personal","label":"Codex · Personal","provider":"Codex"},{"key":"work","label":"Claude · Work","provider":"Claude"}],"sessions":[{"tmuxId":"$2","tmuxName":"second","identityToken":"v1-22222222222222222222222222222222.20.30.2","character":{"key":"norse.two","displayName":"Two"},"objective":"mutable two","attachedClients":0,"activity":"Quiet"},{"tmuxId":"$0","tmuxName":"first","identityToken":"v1-11111111111111111111111111111111.20.30.0","character":{"key":"norse.one","displayName":"One"},"objective":"mutable one","attachedClients":1,"activity":"Active","launchProfile":"personal","agent":{"provider":"Codex","pid":23,"profile":"personal","providerSession":{"id":"thread-1"}}}]}'
+  local lifetime_inventory_after='{"machine":{"handle":"mh-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","platform":"Darwin"},"observedAt":"2026-08-28T12:00:01.123456789Z","profiles":[{"key":"work","label":"Claude · Changed","provider":"Claude"},{"key":"personal","label":"Codex · Changed","provider":"Codex"}],"sessions":[{"tmuxId":"$0","tmuxName":"first-renamed","identityToken":"v1-11111111111111111111111111111111.20.30.0","character":{"key":"norse.changed-one","displayName":"Changed One"},"objective":"changed","attachedClients":4,"activity":"Quiet"},{"tmuxId":"$2","tmuxName":"second-renamed","identityToken":"v1-22222222222222222222222222222222.20.30.2","character":{"key":"norse.changed-two","displayName":"Changed Two"},"attachedClients":2,"activity":"Active","launchProfile":"work","cwd":"/tmp","activeCommand":"claude","agent":{"provider":"Claude","pid":1234,"profile":"work","providerSession":{"id":"session-2","name":"named"}}}]}'
+  local lifetime_tmp="$fixture/lifetime-tmp"
+  local empty_lifetime expected_empty_lifetime expected_lifetime
+  local lifetime_before lifetime_after duplicate_lifetime_inventory
+  install -d -m 0700 "$lifetime_tmp"
+  test_lifetime_digest() {
+    TMPDIR="$lifetime_tmp" skidbladnir_reconciled_lifetime_digest_local
+  }
+  assert_lifetime_inventory_rejected() {
+    local inventory="$1"
+    local message="$2"
+    SKIDBLADNIR_TEST_INVENTORY="$inventory"
+    if test_lifetime_digest >/dev/null 2>&1; then
+      fail "$message"
+    fi
+  }
   export SKIDBLADNIR_TEST_INVENTORY
-  SKIDBLADNIR_TEST_INVENTORY='{"machine":{"handle":"mh-11111111111111111111111111111111"},"observedAt":"first","sessions":[{"tmuxId":"$2","tmuxName":"second","identityToken":"v1-22222222222222222222222222222222.20.30.2","objective":"private two"},{"tmuxId":"$0","tmuxName":"first","identityToken":"v1-11111111111111111111111111111111.20.30.1","objective":"private one"}]}'
-  local lifetime_before lifetime_after
-  lifetime_before="$(skidbladnir_reconciled_lifetime_digest_local)"
-  SKIDBLADNIR_TEST_INVENTORY='{"machine":{"handle":"mh-11111111111111111111111111111111"},"observedAt":"later","sessions":[{"tmuxId":"$0","tmuxName":"first","identityToken":"v1-11111111111111111111111111111111.20.30.1","objective":"changed"},{"tmuxId":"$2","tmuxName":"second","identityToken":"v1-22222222222222222222222222222222.20.30.2","attention":true}]}'
-  lifetime_after="$(skidbladnir_reconciled_lifetime_digest_local)"
-  assert_eq "$lifetime_before" "$lifetime_after" 'lifetime digest ignores inventory order and mutable card facts'
+  SKIDBLADNIR_TEST_INVENTORY="$lifetime_inventory_before"
+  lifetime_before="$(test_lifetime_digest)"
+  SKIDBLADNIR_TEST_INVENTORY="$lifetime_inventory_after"
+  lifetime_after="$(test_lifetime_digest)"
+  expected_lifetime="$(printf '%s\n' '[{"identityToken":"v1-11111111111111111111111111111111.20.30.0","tmuxId":"$0"},{"identityToken":"v1-22222222222222222222222222222222.20.30.2","tmuxId":"$2"}]' | skidbladnir_sha256_stream)"
+  assert_eq "$expected_lifetime" "$lifetime_before" \
+    'lifetime digest is derived only from sorted tmux IDs and identity tokens'
+  assert_eq "$lifetime_before" "$lifetime_after" \
+    'lifetime digest ignores machine, inventory order, activity, agent, and mutable card facts'
   [[ "$lifetime_before" =~ ^[0-9a-f]{64}$ ]] || fail 'lifetime digest is not one lowercase SHA-256'
-  SKIDBLADNIR_TEST_INVENTORY='{"machine":{"handle":"mh-11111111111111111111111111111111"},"sessions":[{"id":"$0","tmuxName":"first","identityToken":"v1-11111111111111111111111111111111.20.30.1"}]}'
-  if skidbladnir_reconciled_lifetime_digest_local >/dev/null 2>&1; then
-    fail 'lifetime digest accepted the retired session id field'
+  SKIDBLADNIR_TEST_INVENTORY="$(jq -c '.sessions = []' <<<"$lifetime_inventory_before")"
+  empty_lifetime="$(test_lifetime_digest)"
+  expected_empty_lifetime="$(printf '[]\n' | skidbladnir_sha256_stream)"
+  assert_eq "$expected_empty_lifetime" "$empty_lifetime" \
+    'lifetime digest accepts an exact empty session inventory as a non-null array'
+  SKIDBLADNIR_TEST_INVENTORY="${lifetime_inventory_before/2026-08-28T12:00:00Z/not-a-time}"
+  if test_lifetime_digest >/dev/null 2>&1; then
+    fail 'lifetime digest accepted a non-RFC3339 projection clock'
   fi
+  SKIDBLADNIR_TEST_INVENTORY="${lifetime_inventory_before/2026-08-28T12:00:00Z/2026-08-28T12:00:00.0Z}"
+  if test_lifetime_digest >/dev/null 2>&1; then
+    fail 'lifetime digest accepted a noncanonical projection clock'
+  fi
+  SKIDBLADNIR_TEST_INVENTORY="$(jq -c 'del(.sessions[0].activity)' <<<"$lifetime_inventory_before")"
+  if test_lifetime_digest >/dev/null 2>&1; then
+    fail 'lifetime digest accepted a session without activity'
+  fi
+  SKIDBLADNIR_TEST_INVENTORY="$(jq -c '.sessions[0].activity = "Idle"' <<<"$lifetime_inventory_before")"
+  if test_lifetime_digest >/dev/null 2>&1; then
+    fail 'lifetime digest accepted activity outside Active or Quiet'
+  fi
+  SKIDBLADNIR_TEST_INVENTORY="$(jq -c '.sessions[1].agent.providerSession.name = "not-allowed"' <<<"$lifetime_inventory_before")"
+  if test_lifetime_digest >/dev/null 2>&1; then
+    fail 'lifetime digest accepted a noncanonical optional Codex agent'
+  fi
+  SKIDBLADNIR_TEST_INVENTORY="$(jq -c '.sessions[1].agent.profile = "work"' <<<"$lifetime_inventory_before")"
+  if test_lifetime_digest >/dev/null 2>&1; then
+    fail 'lifetime digest accepted an agent profile owned by another provider'
+  fi
+  SKIDBLADNIR_TEST_INVENTORY="$(jq -c '.sessions[0].launchProfile = "missing"' <<<"$lifetime_inventory_before")"
+  if test_lifetime_digest >/dev/null 2>&1; then
+    fail 'lifetime digest accepted an unknown launch profile'
+  fi
+  duplicate_lifetime_inventory="$(
+    printf '%s' "$lifetime_inventory_before" |
+      sed 's/"observedAt":"2026-08-28T12:00:00Z"/"observedAt":"2026-08-28T11:59:59Z","observedAt":"2026-08-28T12:00:00Z"/'
+  )"
+  SKIDBLADNIR_TEST_INVENTORY="$duplicate_lifetime_inventory"
+  if test_lifetime_digest >/dev/null 2>&1; then
+    fail 'lifetime digest accepted a duplicate inventory member'
+  fi
+  SKIDBLADNIR_TEST_INVENTORY="$lifetime_inventory_before$lifetime_inventory_before"
+  if test_lifetime_digest >/dev/null 2>&1; then
+    fail 'lifetime digest accepted concatenated inventory documents'
+  fi
+  SKIDBLADNIR_TEST_INVENTORY="$(jq -c '.sessions[0].tmuxId = .sessions[1].tmuxId' <<<"$lifetime_inventory_before")"
+  if test_lifetime_digest >/dev/null 2>&1; then
+    fail 'lifetime digest accepted duplicate tmux IDs'
+  fi
+  SKIDBLADNIR_TEST_INVENTORY="$(jq -c '.sessions[0].extra = true' <<<"$lifetime_inventory_before")"
+  if test_lifetime_digest >/dev/null 2>&1; then
+    fail 'lifetime digest accepted a widened session object'
+  fi
+  assert_lifetime_inventory_rejected \
+    "$(jq -c '.profiles = []' <<<"$lifetime_inventory_before")" \
+    'lifetime digest accepted an empty configured-profile set'
+  assert_lifetime_inventory_rejected \
+    "$(jq -c '.profiles += [{"key":"duplicate-label","label":"Codex · Personal","provider":"Codex"}]' <<<"$lifetime_inventory_before")" \
+    'lifetime digest accepted duplicate profile labels'
+  assert_lifetime_inventory_rejected \
+    "$(jq -c '.sessions[0].identityToken = "v1-22222222222222222222222222222222.20.30.7"' <<<"$lifetime_inventory_before")" \
+    'lifetime digest accepted an identity token bound to another tmux ID'
+  assert_lifetime_inventory_rejected \
+    "$(jq -c '.sessions[0].agent = {"provider":"Claude","pid":12,"profile":"work","providerSession":{"name":"\u0001"}}' <<<"$lifetime_inventory_before")" \
+    'lifetime digest accepted control text in a provider session name'
+  assert_lifetime_inventory_rejected \
+    "$(jq -c '.sessions[0].agent = {"provider":"Codex","pid":1e100}' <<<"$lifetime_inventory_before")" \
+    'lifetime digest accepted a PID outside the deployed 64-bit domain'
+  [[ -z "$(find "$lifetime_tmp" -mindepth 1 -print -quit)" ]] ||
+    fail 'lifetime digest retained a private raw inventory file'
+  unset -f assert_lifetime_inventory_rejected
+  unset -f test_lifetime_digest
   unset SKIDBLADNIR_TEST_INVENTORY
 
   printf 'catalogue drift\n' >>"$test_home/.local/share/skidbladnir/characters.json"
@@ -1610,6 +1862,8 @@ RELEASE_CASES
 
   skidbladnir_begin_release_transaction arch "$test_home"
   skidbladnir_install_owned "$fixture/release/skidbladnir" "$test_home/.local/bin/skidbladnir" 0755
+  local pending_partial_binary_sha
+  pending_partial_binary_sha="$(skidbladnir_sha256 "$test_home/.local/bin/skidbladnir")"
   cp "$skidbladnir_release_pin_file" "$fixture/release-pin.before-pending.json"
   jq 'map_values("PENDING")' "$skidbladnir_release_pin_file" >"$fixture/release-pin.pending.json"
   mv "$fixture/release-pin.pending.json" "$skidbladnir_release_pin_file"
@@ -1621,6 +1875,8 @@ RELEASE_CASES
   [[ "$pending_pin_recovery_status" -ne 0 ]] ||
     fail 'pending release pin unexpectedly permitted convergence'
   assert_contains "$fixture/pending-pin-recovery-error" 'Skidbladnir release pin is pending'
+  [[ "$pending_partial_binary_sha" != "$old_binary_sha" ]] ||
+    fail 'the pending-pin fixture did not install a candidate to recover from'
   [[ ! -e "$test_home/.local/share/skidbladnir/.release-transaction" ]] ||
     fail 'pending release pin stranded the prior release transaction journal'
   assert_eq "$old_binary_sha" "$(skidbladnir_sha256 "$test_home/.local/bin/skidbladnir")" \
