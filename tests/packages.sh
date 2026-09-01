@@ -633,9 +633,10 @@ test_absent_desktop_needs_no_touchpad_deferral() (
     fail 'running desktop did not retain its activation deferral'
 )
 
-test_interrupted_zram_activation_retries_from_live_state() (
+test_boot_consumed_zram_seals_without_reload() (
   local asset_root="$fixture/zram-assets"
   local daemon_reloads=0 starts=0
+  local output="$fixture/zram-boot-consumed-output"
   local desired_sha home="$fixture/zram-retry-home"
 
   mkdir -p "$asset_root/assets/systemd" "$home/.local/state/dev-server/active"
@@ -661,11 +662,12 @@ test_interrupted_zram_activation_retries_from_live_state() (
   }
   sudo() { "$@"; }
 
-  personal_arch_configure_zram >/dev/null
+  personal_arch_configure_zram >"$output"
   dev_server_active_sha_matches zram "$desired_sha" ||
-    fail 'interrupted zram activation retry did not record live desired state'
-  assert_eq 1 "$daemon_reloads" 'interrupted zram daemon reload count'
-  assert_eq 0 "$starts" 'interrupted zram unnecessary start count'
+    fail 'boot-consumed zram did not record live desired state'
+  assert_eq 0 "$daemon_reloads" 'boot-consumed zram daemon reload count'
+  assert_eq 0 "$starts" 'boot-consumed zram unnecessary start count'
+  assert_empty "$output"
 )
 
 test_cursor_key_is_atomic_and_narrow() (
@@ -802,7 +804,7 @@ test_root_boot_identity_uses_privileged_metadata
 pass
 test_absent_desktop_needs_no_touchpad_deferral
 pass
-test_interrupted_zram_activation_retries_from_live_state
+test_boot_consumed_zram_seals_without_reload
 pass
 test_cursor_key_is_atomic_and_narrow
 pass

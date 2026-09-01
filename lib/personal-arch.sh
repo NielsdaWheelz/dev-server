@@ -622,9 +622,6 @@ personal_arch_configure_zram() {
   desired_sha="$(dev_server_sha256 "$(personal_arch_asset systemd/zram-generator.conf)")"
   if dev_server_active_sha_matches zram "$desired_sha"; then
     activation_required=0
-  else
-    sudo systemctl daemon-reload
-    render_result RELOADED systemd "zram activation inputs changed"
   fi
 
   if systemctl is-active --quiet systemd-zram-setup@zram0.service; then
@@ -635,8 +632,14 @@ personal_arch_configure_zram() {
       dev_server_record_active_sha zram "$desired_sha"
       return 0
     fi
+    sudo systemctl daemon-reload
+    render_result RELOADED systemd "zram activation inputs changed"
     record_change system.reboot
     return 0
+  fi
+  if ((activation_required)); then
+    sudo systemctl daemon-reload
+    render_result RELOADED systemd "zram activation inputs changed"
   fi
   if ! sudo systemctl start systemd-zram-setup@zram0.service; then
     if personal_arch_reboot_pending; then
