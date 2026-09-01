@@ -1,3 +1,2 @@
-arc-gtk-theme
 cursor-bin
 qogir-icon-theme

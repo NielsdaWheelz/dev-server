@@ -94,9 +94,9 @@ test_arch_native_reconciliation() (
 
   assert_eq 2 "$(grep -c '^-Syu' <(sed 's/^pacman //' "$calls"))" \
     'full pacman transaction count'
-  assert_eq 2 "$(grep -c '^yay -S --needed arc-gtk-theme cursor-bin qogir-icon-theme$' "$calls")" \
+  assert_eq 2 "$(grep -c '^yay -S --needed cursor-bin qogir-icon-theme$' "$calls")" \
     'declared AUR transaction count'
-  assert_contains "$calls" 'pacman -Syu --needed atuin base-devel'
+  assert_contains "$calls" 'pacman -Syu --needed arc-gtk-theme-eos atuin base-devel'
   assert_contains "$calls" 'dracut eos-bash-shared eza'
   assert_contains "$calls" 'xorg-xinput yay yazi zoxide zram-generator'
   if grep -Eq -- '(^|[[:space:]])-R|paccache|tldr|reflector\.service|pkgfile-update\.service' "$calls"; then
@@ -692,6 +692,10 @@ test_static_policy() {
     fail 'pacman manifest is not sorted and unique'
   LC_ALL=C sort -cu "$repo_dir/packages/arch.aur.txt" >/dev/null ||
     fail 'AUR manifest is not sorted and unique'
+  grep -Fqx arc-gtk-theme-eos "$repo_dir/packages/arch.pacman.txt" ||
+    fail 'Arc is not sourced from the native EndeavourOS repository'
+  ! grep -Fqx arc-gtk-theme "$repo_dir/packages/arch.aur.txt" ||
+    fail 'stale Arc AUR build remains declared'
   if grep -Eq 'pacman[[:space:]]+-R|paccache[[:space:]]+-|tldr[[:space:]]+--update|systemctl[[:space:]]+start[[:space:]]+(reflector|pkgfile-update)' \
     "$repo_dir/lib/packages-arch.sh" "$repo_dir/lib/personal-arch.sh"; then
     fail 'automatic removal or per-apply maintenance one-shot remains'

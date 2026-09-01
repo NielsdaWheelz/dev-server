@@ -1,3 +1,4 @@
+arc-gtk-theme-eos
 atuin
 base-devel
 bat
