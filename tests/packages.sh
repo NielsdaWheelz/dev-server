@@ -309,6 +309,7 @@ test_macos_native_reconciliation() (
   local tailscale_running=0
   : >"$calls"
   mkdir -p "$home"
+  unset HOMEBREW_NO_AUTO_UPDATE
   dev_server_home_dir="$home"
 
   # shellcheck source=lib/common.sh
