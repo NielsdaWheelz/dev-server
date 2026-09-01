@@ -912,6 +912,7 @@ skidbladnir_record_active_identity() (
 skidbladnir_service_state() {
   local platform="$1"
   local output rc line state='' matches=0
+  local launchd_state_pattern=$'^\tstate[[:space:]]=[[:space:]]([A-Za-z][A-Za-z[:space:]-]{0,63})$'
 
   case "$platform" in
   arch | devbox)
@@ -939,9 +940,8 @@ skidbladnir_service_state() {
     fi
     ((rc == 0 && ${#output} <= 65536)) || return 2
     while IFS= read -r line; do
-      [[ "$line" == *'state = '* ]] || continue
-      [[ "$line" =~ ^[[:space:]]*state[[:space:]]=[[:space:]]([A-Za-z][A-Za-z[:space:]-]{0,63})$ ]] ||
-        return 2
+      [[ "$line" == $'\tstate = '* ]] || continue
+      [[ "$line" =~ $launchd_state_pattern ]] || return 2
       matches=$((matches + 1))
       state="${BASH_REMATCH[1]}"
     done <<<"$output"

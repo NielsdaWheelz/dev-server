@@ -764,10 +764,12 @@ test_macos_exact_service_lifecycle() (
     print)
       [[ -f "$loaded" ]] || return 113
       if [[ -f "$running" ]]; then
-        printf '%s\n' 'state = running'
+        printf '\tstate = running\n'
       else
-        printf '%s\n' 'state = exited'
+        printf '\tstate = exited\n'
       fi
+      printf '\tresource coalition = {\n\t\tstate = active\n\t}\n'
+      printf '\tjetsam coalition = {\n\t\tstate = active\n\t}\n'
       ;;
     enable) rm -f -- "$launchd_disabled_marker" ;;
     disable) : >"$launchd_disabled_marker" ;;
