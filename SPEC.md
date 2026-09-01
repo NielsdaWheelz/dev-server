@@ -309,6 +309,10 @@ Trade-off: AI/tool lock updates are manual in this cut; this avoids a privileged
 
 Trade-off: CI does not perform a destructive real-host apply. Failure injection and the final local Arch apply cover the lifecycle without creating a disposable fleet.
 
+Arch live acceptance MUST use an attached operator terminal and normal sudo
+authentication. Do not grant the user/agent account blanket passwordless
+elevation to make automation unattended.
+
 ## 9. Files
 
 Delete:

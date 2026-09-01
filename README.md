@@ -27,7 +27,7 @@ Fleet invitation, acceptance, reboot, and outage workflows live in the
 Prerequisites:
 
 - macOS on the owned MacBook with Homebrew; or Arch Linux on the exact owned
-  `arch` host with `pacman`, `yay`, and passwordless elevation for declared
+  `arch` host with `pacman`, `yay`, and interactive sudo elevation for declared
   machine policy;
 - Git, curl, Python 3, tmux, Tailscale, and the platform's standard service
   tools;
@@ -296,3 +296,6 @@ Skíðblaðnir health/Serve postconditions.
   those repositories remain the freshness authority and may advance majors.
 - CI is hermetic and non-deploying. Final live applies, fleet/device acceptance,
   and release publication remain explicit operator actions.
+- Arch fleet acceptance runs from an attached operator terminal and may prompt
+  for sudo; the user/agent account never receives blanket passwordless
+  elevation.
