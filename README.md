@@ -26,9 +26,9 @@ Fleet invitation, acceptance, reboot, and outage workflows live in the
 
 Prerequisites:
 
-- macOS on the owned MacBook with Homebrew; or Arch Linux on the exact owned
-  `arch` host with `pacman`, `yay`, and interactive sudo elevation for declared
-  machine policy;
+- macOS on the owned MacBook with Homebrew and the App Store Tailscale app
+  installed and signed in; or Arch Linux on the exact owned `arch` host with
+  `pacman`, `yay`, and interactive sudo elevation for declared machine policy;
 - Git, curl, Python 3, tmux, Tailscale, and the platform's standard service
   tools;
 - existing GitHub, AI-tool, Tailscale, SSH, and Skíðblaðnir credentials where
@@ -44,6 +44,8 @@ The order is native packages, repo-owned files, exact-host personal policy,
 pinned AI tools, and Skíðblaðnir. Package managers may refresh their own
 metadata. Apply never removes Arch packages, restarts tmux, reboots, logs out,
 or interrupts running containers. Those cases are reported as `DEFERRED`.
+On macOS, apply verifies and may start the exact App Store Tailscale app but
+never installs, upgrades, replaces, or signs in to it.
 
 Plain `codex` and `claude` remain upstream personal commands. The only managed
 account wrappers are `codex-work`, `codex-work2`, and `claude-work`; authenticate

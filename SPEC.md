@@ -50,6 +50,7 @@ Trade-off: the upstream handoff adds one cross-repository dependency, and safe a
 - Multi-user or generic host configuration.
 - A profile/plugin framework, interactive setup wizard, or modes such as minimal/full/repair/force.
 - Generic process discovery or automatic restart of arbitrary user work.
+- Installing, upgrading, replacing, or signing in to Tailscale on macOS.
 - A standalone doctor, drift mirror, monitoring system, dashboard, or machine-readable public API.
 - Automatic package removal, VPS recreation/deletion, reboot, tmux termination, or interruption of running containers.
 - Nix/Home Manager, OpenTofu, a new package manager, SBOM/SLSA infrastructure, or cross-platform abstraction beyond the three owned hosts.
@@ -153,14 +154,14 @@ Trade-off: host names remain hard-coded. This is safer and smaller than pretendi
 
 ### 8.2 Packages
 
-- macOS: `brew update` plus `brew bundle`; let Homebrew decide missing/outdated/no-op state.
+- macOS: `brew update` plus `brew bundle`; let Homebrew decide missing/outdated/no-op state. Tailscale MUST be absent from the Brewfile. The exact `/Applications/Tailscale.app` bundle, App Store receipt, and executable CLI are preconditions; apply may start that app and reconcile its owned private Serve mapping, but MUST NOT install, upgrade, replace, uninstall, or sign in to Tailscale.
 - Arch: full `pacman -Syu --needed`, then the declared AUR manifest. Partial upgrades are forbidden.
 - Ubuntu: Ansible apt cache plus declared packages at the configured repository candidate; unattended security updates remain. Distribution upgrades and automatic reboot are forbidden.
 - Delete `packages/arch.remove.txt`. Removal is an explicit operator action outside apply.
 - Configure maintenance timers, but do not run reflector, pkgfile, cache cleanup, or `tldr` refresh merely because apply ran.
 - Native package/service scripts may perform their supported activation. Repository-managed services still use the closed registry. Other stale services/sessions are named as `DEFERRED` using native advice where available; apply MUST NOT restart an unregistered consumer or kill arbitrary processes.
 
-Trade-off: rolling OS repositories favor freshness over byte-for-byte replay of an old apply.
+Trade-offs: rolling OS repositories favor freshness over byte-for-byte replay of an old apply. App Store ownership makes Tailscale installation and upgrades manual, avoiding competing macOS network extensions and identities.
 
 ### 8.3 Files, personal policy, and AI tools
 

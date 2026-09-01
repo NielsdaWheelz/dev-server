@@ -305,12 +305,19 @@ test_arch_invalid_manifest_is_read_only() (
 test_macos_native_reconciliation() (
   local calls="$fixture/macos-calls"
   local home="$fixture/macos-home"
+  local tailscale_app="$fixture/macos-Tailscale.app"
+  local tailscale_cli="$tailscale_app/Contents/MacOS/Tailscale"
+  local tailscale_receipt="$tailscale_app/Contents/_MASReceipt/receipt"
   local packages_installed=0
   local tailscale_running=0
   : >"$calls"
-  mkdir -p "$home"
+  mkdir -p "$home" "$(dirname "$tailscale_cli")" "$(dirname "$tailscale_receipt")"
+  printf '#!/bin/sh\n' >"$tailscale_cli"
+  printf 'receipt\n' >"$tailscale_receipt"
+  chmod 0755 "$tailscale_cli"
   unset HOMEBREW_NO_AUTO_UPDATE
   dev_server_home_dir="$home"
+  packages_macos_tailscale_app="$tailscale_app"
 
   # shellcheck source=lib/common.sh
   source "$repo_dir/lib/common.sh"
@@ -349,7 +356,7 @@ test_macos_native_reconciliation() (
     'brew update count'
   assert_eq 2 "$(grep -c '^brew auto-update=1 bundle --file ' "$calls")" \
     'brew bundle count'
-  assert_eq 1 "$(grep -c '^open -gj -a Tailscale$' "$calls")" \
+  assert_eq 1 "$(grep -Fxc "open -gj $tailscale_app" "$calls")" \
     'Tailscale start count'
   assert_eq 1 "$(grep -c '^result STARTED Tailscale$' "$calls")" \
     'Tailscale result count'
@@ -360,9 +367,16 @@ test_macos_native_reconciliation() (
 test_macos_start_requires_postcondition() (
   local home="$fixture/macos-start-home"
   local results="$fixture/macos-start-results"
+  local tailscale_app="$fixture/macos-start-Tailscale.app"
+  local tailscale_cli="$tailscale_app/Contents/MacOS/Tailscale"
+  local tailscale_receipt="$tailscale_app/Contents/_MASReceipt/receipt"
   : >"$results"
-  mkdir -p "$home"
+  mkdir -p "$home" "$(dirname "$tailscale_cli")" "$(dirname "$tailscale_receipt")"
+  printf '#!/bin/sh\n' >"$tailscale_cli"
+  printf 'receipt\n' >"$tailscale_receipt"
+  chmod 0755 "$tailscale_cli"
   dev_server_home_dir="$home"
+  packages_macos_tailscale_app="$tailscale_app"
 
   # shellcheck source=lib/common.sh
   source "$repo_dir/lib/common.sh"
@@ -388,14 +402,17 @@ test_macos_start_requires_postcondition() (
 )
 
 test_macos_tailscale_cli_resolution() (
-  local app_cli="$fixture/Tailscale.app/Contents/MacOS/Tailscale"
+  local app="$fixture/Tailscale.app"
+  local app_cli="$app/Contents/MacOS/Tailscale"
+  local receipt="$app/Contents/_MASReceipt/receipt"
   local path_cli="$fixture/bin/tailscale"
   local resolved referent="$fixture/tailscale-referent"
 
-  mkdir -p "$(dirname "$app_cli")" "$(dirname "$path_cli")"
+  mkdir -p "$(dirname "$app_cli")" "$(dirname "$receipt")" "$(dirname "$path_cli")"
   printf '#!/bin/sh\n' >"$app_cli"
+  printf 'receipt\n' >"$receipt"
   chmod 0755 "$app_cli"
-  packages_macos_tailscale_app_cli="$app_cli"
+  packages_macos_tailscale_app="$app"
   # shellcheck source=lib/common.sh
   source "$repo_dir/lib/common.sh"
   # shellcheck source=lib/packages-macos.sh
@@ -406,18 +423,20 @@ test_macos_tailscale_cli_resolution() (
     printf '%s\n' "$path_cli"
   }
   resolved="$(packages_macos_tailscale_cli)"
-  assert_eq "$path_cli" "$resolved" 'PATH Tailscale CLI preference'
+  assert_eq "$app_cli" "$resolved" 'exact App Store Tailscale CLI selection'
 
-  type() { return 1; }
-  resolved="$(packages_macos_tailscale_cli)"
-  assert_eq "$app_cli" "$resolved" 'Tailscale app CLI fallback'
+  rm "$receipt"
+  if packages_macos_tailscale_cli >/dev/null 2>&1; then
+    fail 'Tailscale app without an App Store receipt was accepted'
+  fi
+  printf 'receipt\n' >"$receipt"
 
   printf '#!/bin/sh\n' >"$referent"
   chmod 0755 "$referent"
   rm "$app_cli"
   ln -s "$referent" "$app_cli"
   if packages_macos_tailscale_cli >/dev/null 2>&1; then
-    fail 'Tailscale app CLI fallback accepted a symlink'
+    fail 'App Store Tailscale CLI accepted a symlink'
   fi
 )
 
@@ -741,8 +760,8 @@ test_cursor_key_is_atomic_and_narrow() (
 test_static_policy() {
   [[ ! -e "$repo_dir/packages/arch.remove.txt" ]] ||
     fail 'automatic Arch removal manifest remains'
-  grep -Fqx 'cask "tailscale-app"' "$repo_dir/packages/Brewfile" ||
-    fail 'Tailscale app is not declared in the Brewfile'
+  ! grep -Eiq 'tailscale' "$repo_dir/packages/Brewfile" ||
+    fail 'externally owned Tailscale entered the Brewfile'
   ! grep -Fqx eos-apps-info "$repo_dir/packages/arch.pacman.txt" ||
     fail 'retired EndeavourOS onboarding package remains declared'
   LC_ALL=C sort -cu "$repo_dir/packages/arch.pacman.txt" >/dev/null ||

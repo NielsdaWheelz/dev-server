@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 : "${dev_server_root:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-: "${packages_macos_tailscale_app_cli:=/Applications/Tailscale.app/Contents/MacOS/Tailscale}"
+: "${packages_macos_tailscale_app:=/Applications/Tailscale.app}"
 
 packages_macos_tmux_version() {
   command -v tmux >/dev/null 2>&1 || return 0
@@ -16,17 +16,14 @@ packages_macos_snapshot() {
 }
 
 packages_macos_tailscale_cli() {
-  local cli
+  local cli="$packages_macos_tailscale_app/Contents/MacOS/Tailscale"
+  local receipt="$packages_macos_tailscale_app/Contents/_MASReceipt/receipt"
 
-  cli="$(type -P tailscale 2>/dev/null || true)"
-  if [[ -n "$cli" ]]; then
-    printf '%s\n' "$cli"
-    return 0
-  fi
-  [[ -f "$packages_macos_tailscale_app_cli" &&
-    ! -L "$packages_macos_tailscale_app_cli" &&
-    -x "$packages_macos_tailscale_app_cli" ]] || return 1
-  printf '%s\n' "$packages_macos_tailscale_app_cli"
+  [[ -d "$packages_macos_tailscale_app" &&
+    ! -L "$packages_macos_tailscale_app" &&
+    -f "$cli" && ! -L "$cli" && -x "$cli" &&
+    -f "$receipt" && ! -L "$receipt" ]] || return 1
+  printf '%s\n' "$cli"
 }
 
 packages_macos_reconcile_tmux_activation() {
@@ -77,6 +74,8 @@ packages_install() {
   require_cmd pgrep
   require_cmd sleep
   require_cmd sort
+  packages_macos_tailscale_cli >/dev/null ||
+    die "App Store Tailscale installation is unavailable"
 
   packages_before="$(packages_macos_snapshot)"
   brew update
@@ -92,7 +91,7 @@ packages_install() {
   packages_macos_reconcile_tmux_activation "$tmux_after"
 
   if ! pgrep -x Tailscale >/dev/null 2>&1; then
-    open -gj -a Tailscale
+    open -gj "$packages_macos_tailscale_app"
     for attempt in {1..20}; do
       pgrep -x Tailscale >/dev/null 2>&1 && break
       ((attempt < 20)) || die "Tailscale did not start"
