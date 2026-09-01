@@ -963,6 +963,22 @@ skidbladnir_service_active() {
   [[ "$state" == active ]]
 }
 
+skidbladnir_wait_for_active() {
+  local platform="$1"
+  local attempt observation
+
+  for attempt in 1 2 3 4 5; do
+    if skidbladnir_service_active "$platform"; then
+      return 0
+    else
+      observation=$?
+    fi
+    ((observation == 1)) || return 2
+    ((attempt == 5)) || sleep 1
+  done
+  return 1
+}
+
 skidbladnir_service_loaded() {
   local state
 
@@ -1837,7 +1853,7 @@ skidbladnir_apply() {
   if ! skidbladnir_activate_service "$platform" "$home" "$was_active" \
     "$needs_activation" "$needs_unit_reload"; then
     activation_failed=1
-  elif skidbladnir_service_active "$platform"; then
+  elif skidbladnir_wait_for_active "$platform"; then
     skidbladnir_authenticated_health "$home" "$version" "$platform" ||
       activation_failed=1
   else

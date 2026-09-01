@@ -741,10 +741,11 @@ test_private_serve_actions_and_public_failure() (
 )
 
 test_macos_exact_service_lifecycle() (
-  local loaded running launchd_disabled_marker
+  local loaded pending running launchd_disabled_marker
 
   setup_case macos-service
   loaded="$case_dir/launchd-loaded"
+  pending="$case_dir/launchd-pending"
   running="$case_dir/launchd-running"
   launchd_disabled_marker="$case_dir/launchd-disabled"
   launchctl() {
@@ -763,7 +764,10 @@ test_macos_exact_service_lifecycle() (
       ;;
     print)
       [[ -f "$loaded" ]] || return 113
-      if [[ -f "$running" ]]; then
+      if [[ -f "$pending" ]]; then
+        mv "$pending" "$running"
+        printf '\tstate = spawn scheduled\n'
+      elif [[ -f "$running" ]]; then
         printf '\tstate = running\n'
       else
         printf '\tstate = exited\n'
@@ -775,10 +779,11 @@ test_macos_exact_service_lifecycle() (
     disable) : >"$launchd_disabled_marker" ;;
     bootstrap | kickstart)
       : >"$loaded"
-      : >"$running"
+      rm -f -- "$running"
+      : >"$pending"
       ;;
     bootout)
-      rm -f -- "$loaded" "$running"
+      rm -f -- "$loaded" "$pending" "$running"
       ;;
     *) return 64 ;;
     esac
@@ -790,7 +795,8 @@ test_macos_exact_service_lifecycle() (
   assert_eq 1 "$skidbladnir_enablement_changed" 'macOS enablement change'
   assert_eq 1 "$(count_calls '^launchctl enable ')" 'macOS enable count'
   assert_eq 1 "$(count_calls '^launchctl bootstrap ')" 'macOS bootstrap count'
-  skidbladnir_service_active macos || fail 'macOS started service was not observed running'
+  sleep() { :; }
+  skidbladnir_wait_for_active macos || fail 'macOS delayed service was not observed running'
 
   : >"$test_calls"
   skidbladnir_activate_service macos "$test_home" 1 0 0
@@ -809,7 +815,7 @@ test_macos_exact_service_lifecycle() (
   assert_eq 1 "$(count_calls '^launchctl kickstart .*dev\.niels\.skidbladnir$')" \
     'macOS runtime kickstart count'
 
-  rm -f -- "$running"
+  rm -f -- "$pending" "$running"
   : >"$test_calls"
   skidbladnir_activate_service macos "$test_home" 0 1 0
   assert_eq STARTED "$skidbladnir_activation_status" 'macOS loaded-stopped start status'
