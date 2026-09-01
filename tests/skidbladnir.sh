@@ -299,9 +299,19 @@ test_pin_and_config_contract() (
 
 test_fresh_noop_and_exact_activation() (
   local source_sha=1111111111111111111111111111111111111111
-  local current inode_before output="$fixture/happy-output" stale_stage
+  local current inode_before output="$fixture/happy-output" signing_sha stale_stage
   setup_case happy
   write_release v1.2.3 "$source_sha"
+  mkdir -p "$test_home/.config/skidbladnir"
+  for name in android-signing.p12 android-signing.properties android-signing.password; do
+    printf 'preserve %s\n' "$name" >"$test_home/.config/skidbladnir/$name"
+    chmod 0600 "$test_home/.config/skidbladnir/$name"
+  done
+  signing_sha="$({
+    for name in android-signing.p12 android-signing.properties android-signing.password; do
+      dev_server_sha256 "$test_home/.config/skidbladnir/$name"
+    done
+  } | dev_server_sha256_stream)"
 
   skidbladnir_apply arch >"$output"
   current="$(readlink "$test_home/.local/share/skidbladnir/current")"
@@ -311,6 +321,9 @@ test_fresh_noop_and_exact_activation() (
   [[ ! -e "$test_home/.local/share/skidbladnir/previous" ]] || fail 'fresh install created previous'
   assert_mode 0600 "$test_home/.config/skidbladnir/bearer" 'bearer mode'
   assert_mode 0600 "$test_home/.config/skidbladnir/machine-handle" 'machine-handle mode'
+  for name in android-signing.p12 android-signing.properties android-signing.password; do
+    assert_mode 0600 "$test_home/.config/skidbladnir/$name" "$name mode"
+  done
   assert_mode 0600 "$test_home/.local/state/dev-server/active/skid.runtime.sha256" 'runtime identity mode'
   assert_eq 1 "$(count_calls '^systemctl .* start ')" 'fresh start count'
   assert_eq 0 "$(count_calls '^systemctl .* restart ')" 'fresh restart count'
@@ -337,6 +350,11 @@ test_fresh_noop_and_exact_activation() (
   assert_eq "$inode_before" \
     "$(stat -c '%i' "$test_home/.local/share/skidbladnir/current" 2>/dev/null || stat -f '%i' "$test_home/.local/share/skidbladnir/current")" \
     'second apply current-link inode'
+  assert_eq "$signing_sha" "$({
+    for name in android-signing.p12 android-signing.properties android-signing.password; do
+      dev_server_sha256 "$test_home/.config/skidbladnir/$name"
+    done
+  } | dev_server_sha256_stream)" 'Android signing credential preservation'
 )
 
 test_admission_failures_preserve_state() (
@@ -665,6 +683,18 @@ test_credentials_and_protected_symlinks_fail_closed() (
   assert_eq "$current" "$(readlink "$test_home/.local/share/skidbladnir/current")" \
     'credential-mode current preservation'
   chmod 0600 "$test_home/.config/skidbladnir/bearer"
+
+  printf 'preserve signing password\n' >"$test_home/.config/skidbladnir/android-signing.password"
+  chmod 0644 "$test_home/.config/skidbladnir/android-signing.password"
+  set +e
+  (skidbladnir_apply arch) >"$case_dir/signing-mode-output" 2>&1
+  status=$?
+  set -e
+  ((status != 0)) || fail 'wrong Android signing credential mode was accepted'
+  assert_eq 'preserve signing password' \
+    "$(tr -d '\n' <"$test_home/.config/skidbladnir/android-signing.password")" \
+    'Android signing credential preservation'
+  chmod 0600 "$test_home/.config/skidbladnir/android-signing.password"
 
   rm "$test_home/.local/share/skidbladnir/current"
   printf 'not a link\n' >"$test_home/.local/share/skidbladnir/current"

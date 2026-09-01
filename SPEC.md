@@ -239,6 +239,9 @@ Keep a small local installer; product packaging is outside this 80/20 cut. Layou
 ~/.config/skidbladnir/
   bearer
   machine-handle
+  android-signing.p12          # upstream-owned release credential, if present
+  android-signing.properties   # upstream-owned release credential, if present
+  android-signing.password     # upstream-owned release credential, if present
 ~/.local/state/dev-server/active/
   skid.runtime.sha256
   skid.unit.sha256
@@ -246,7 +249,7 @@ Keep a small local installer; product packaging is outside this 80/20 cut. Layou
 
 Rules:
 
-- Release and credential directories are user-private. Bearer and machine handle are regular, non-symlink, mode `0600` files and are never regenerated or replaced when present; invalid state fails closed.
+- Release and credential directories are user-private. Bearer, machine handle, and the three exact upstream-owned Android signing files are regular, non-symlink, mode `0600` files and are never replaced when present; bearer and machine handle are minted only when absent. Invalid state fails closed.
 - `current`, `previous`, and `~/.local/bin/skidbladnir` are the only intentional Skíðblaðnir symlinks. Create each as a validated relative temporary symlink and atomically rename it; reject every unexpected symlink in protected paths.
 - Under one nonblocking OS lock: download to same-filesystem staging; verify archive SHA, exact three release members, release manifest, executable version/source; add validated host config; rename the complete generation; atomically switch `current`.
 - Gateway runtime identity covers binary, catalogue, release manifest, and host
@@ -348,7 +351,7 @@ Do not create a framework directory, schema package, generated-code layer, or do
 
 - Remove old CLI commands and code in the same release that introduces `apply`.
 - Do not read old transaction markers, release layout, command names, release-pin schema, or state formats.
-- Before the first new apply on each host, use one explicit operator runbook to stop Skíðblaðnir; remove the old regular binary, flat catalogue/manifest/archive/host-config, `.release-transaction`, and `.release-activation-required`; and remove old devbox shell state. Never glob. Preserve `bearer`, `machine-handle`, integrations, AI credentials, Docker data, SSH identity, and Tailscale identity.
+- Before the first new apply on each host, use one explicit operator runbook to stop Skíðblaðnir; remove the old regular binary, flat catalogue/manifest/archive/host-config, `.release-transaction`, and `.release-activation-required`; and remove old devbox shell state. Never glob. Preserve `bearer`, `machine-handle`, the three exact `android-signing.*` release credentials, integrations, AI credentials, Docker data, SSH identity, and Tailscale identity.
 - Run the new apply, verify health/private exposure, then remove the runbook. No migration logic remains in runtime code.
 
 Trade-off: one brief manual cutover per host and no rollback to the legacy layout. This is the cost of eliminating permanent compatibility machinery; rollback between new immutable generations remains required.

@@ -173,8 +173,9 @@ add one-time work; remote agents no longer inherit deployment privilege.
 ### Every host: remove exact legacy installer state
 
 Stop the Skíðblaðnir service using the native service manager. Preserve
-`~/.config/skidbladnir/bearer`, `machine-handle`, AI credentials, Docker data,
-SSH keys, Tailscale identity, and existing integration settings. Remove only:
+`~/.config/skidbladnir/bearer`, `machine-handle`, the three
+`android-signing.*` release credentials, AI credentials, Docker data, SSH keys,
+Tailscale identity, and existing integration settings. Remove only:
 
 ```sh
 rm -f "$HOME/.local/bin/skidbladnir"

@@ -314,6 +314,7 @@ skidbladnir_secret_valid() (
 
 skidbladnir_validate_present_credentials() {
   local config="$1"
+  local path
 
   if [[ -e "$config/machine-handle" || -L "$config/machine-handle" ]]; then
     skidbladnir_secret_valid "$config/machine-handle" '^mh-[0-9a-f]{32}$' ||
@@ -323,6 +324,15 @@ skidbladnir_validate_present_credentials() {
     skidbladnir_secret_valid "$config/bearer" \
       '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$' || return 1
   fi
+  for path in \
+    "$config/android-signing.p12" \
+    "$config/android-signing.properties" \
+    "$config/android-signing.password"; do
+    if [[ -e "$path" || -L "$path" ]]; then
+      [[ -f "$path" && ! -L "$path" &&
+        "$(file_mode "$path" 2>/dev/null)" == 600 ]] || return 1
+    fi
+  done
 }
 
 skidbladnir_ensure_directory() {
@@ -417,7 +427,12 @@ skidbladnir_validate_protected_paths() {
     skidbladnir_validate_link "$link" binary >/dev/null ||
       die "protected Skidbladnir link is invalid: $link"
   fi
-  for path in "$config/bearer" "$config/machine-handle"; do
+  for path in \
+    "$config/bearer" \
+    "$config/machine-handle" \
+    "$config/android-signing.p12" \
+    "$config/android-signing.properties" \
+    "$config/android-signing.password"; do
     if [[ -e "$path" || -L "$path" ]]; then
       [[ -f "$path" && ! -L "$path" ]] || die "protected Skidbladnir credential is invalid: $path"
     fi
@@ -509,7 +524,7 @@ skidbladnir_validate_owned_roots() {
   while IFS= read -r entry; do
     name="$(basename "$entry")"
     case "$name" in
-    bearer | machine-handle) ;;
+    bearer | machine-handle | android-signing.p12 | android-signing.properties | android-signing.password) ;;
     *) return 1 ;;
     esac
   done < <(find "$config" -mindepth 1 -maxdepth 1 -print)
