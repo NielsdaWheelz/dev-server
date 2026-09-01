@@ -161,12 +161,15 @@ personal_arch_reboot_pending() {
 }
 
 personal_arch_boot_consumed() {
-  local path="$1"
+  (($# == 2)) || die 'personal_arch_boot_consumed needs privilege and path'
+  local privilege="$1"
+  local path="$2"
   local boot_time
   local file_time
 
   boot_time="$(awk '$1 == "btime" { print $2; exit }' /proc/stat)"
-  file_time="$(stat -c '%Y' "$path")"
+  file_time="$(_dev_server_run "$privilege" stat -c '%Y' "$path")" ||
+    die "could not inspect boot identity input: $path"
   [[ "$boot_time" =~ ^[0-9]+$ && "$file_time" =~ ^[0-9]+$ ]] ||
     die "could not compare boot identity for $path"
   ((boot_time >= file_time))
@@ -555,7 +558,7 @@ personal_arch_configure_root_files() {
     dev_server_record_active_sha dracut "$dracut_sha"
     render_result UPDATED initramfs
   fi
-  if ! personal_arch_boot_consumed "$(dev_server_active_dir)/dracut.sha256"; then
+  if ! personal_arch_boot_consumed user "$(dev_server_active_dir)/dracut.sha256"; then
     record_change system.reboot
   fi
 
@@ -568,7 +571,7 @@ personal_arch_configure_root_files() {
   personal_arch_install_root_file \
     "$(personal_arch_asset systemd-boot/loader.conf)" \
     /efi/loader/loader.conf 0640
-  if ! personal_arch_boot_consumed /efi/loader/loader.conf; then
+  if ! personal_arch_boot_consumed root /efi/loader/loader.conf; then
     record_change system.reboot
   fi
   personal_arch_install_root_file \
@@ -605,7 +608,7 @@ personal_arch_configure_zram() {
     if ((activation_required == 0)); then
       return 0
     fi
-    if personal_arch_boot_consumed /etc/systemd/zram-generator.conf; then
+    if personal_arch_boot_consumed root /etc/systemd/zram-generator.conf; then
       dev_server_record_active_sha zram "$desired_sha"
       return 0
     fi

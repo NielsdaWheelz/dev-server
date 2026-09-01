@@ -578,6 +578,36 @@ test_active_identity() (
     fail 'idempotent zram identity did not match'
 )
 
+test_root_boot_identity_uses_privileged_metadata() (
+  local calls="$fixture/boot-metadata-calls"
+  : >"$calls"
+
+  # shellcheck source=lib/common.sh
+  source "$repo_dir/lib/common.sh"
+  # shellcheck source=lib/personal-arch.sh
+  source "$repo_dir/lib/personal-arch.sh"
+
+  awk() {
+    [[ "$*" == '$1 == "btime" { print $2; exit } /proc/stat' ]] || return 64
+    printf '100\n'
+  }
+  stat() {
+    [[ "$*" == "-c %Y /efi/loader/loader.conf" ]] || return 64
+    printf '0\n'
+  }
+  sudo() {
+    printf '%s\n' "$*" >>"$calls"
+    [[ "$1" == -- ]] || return 64
+    shift
+    "$@"
+  }
+
+  personal_arch_boot_consumed root /efi/loader/loader.conf ||
+    fail 'root-managed boot metadata was not compared'
+  assert_eq '-- stat -c %Y /efi/loader/loader.conf' "$(<"$calls")" \
+    'root-managed boot metadata privilege'
+)
+
 test_interrupted_zram_activation_retries_from_live_state() (
   local asset_root="$fixture/zram-assets"
   local daemon_reloads=0 starts=0
@@ -742,6 +772,8 @@ pass
 test_unit_activation_is_exact
 pass
 test_active_identity
+pass
+test_root_boot_identity_uses_privileged_metadata
 pass
 test_interrupted_zram_activation_retries_from_live_state
 pass
