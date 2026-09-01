@@ -608,6 +608,31 @@ test_root_boot_identity_uses_privileged_metadata() (
     'root-managed boot metadata privilege'
 )
 
+test_absent_desktop_needs_no_touchpad_deferral() (
+  local results="$fixture/touchpad-session-results"
+  : >"$results"
+
+  # shellcheck source=lib/common.sh
+  source "$repo_dir/lib/common.sh"
+  # shellcheck source=lib/personal-arch.sh
+  source "$repo_dir/lib/personal-arch.sh"
+
+  personal_arch_touchpad_runtime_configured() { return 1; }
+  personal_arch_apply_touchpad_runtime() { return 1; }
+  render_result() { printf '%s\n' "$*" >>"$results"; }
+  pgrep() { return 1; }
+
+  personal_arch_reconcile_touchpad_runtime 0
+  ! has_change desktop.session ||
+    fail 'absent desktop was treated as a pending activation'
+  assert_empty "$results"
+
+  pgrep() { return 0; }
+  personal_arch_reconcile_touchpad_runtime 0
+  has_change desktop.session ||
+    fail 'running desktop did not retain its activation deferral'
+)
+
 test_interrupted_zram_activation_retries_from_live_state() (
   local asset_root="$fixture/zram-assets"
   local daemon_reloads=0 starts=0
@@ -774,6 +799,8 @@ pass
 test_active_identity
 pass
 test_root_boot_identity_uses_privileged_metadata
+pass
+test_absent_desktop_needs_no_touchpad_deferral
 pass
 test_interrupted_zram_activation_retries_from_live_state
 pass

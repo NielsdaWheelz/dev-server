@@ -123,6 +123,7 @@ personal_arch_require_runtime() {
   require_cmd gammastep
   require_cmd ghostty
   require_cmd gsettings
+  require_cmd pgrep
   require_cmd stat
   require_cmd sudo
   require_cmd systemctl
@@ -537,6 +538,34 @@ personal_arch_touchpad_runtime_configured() {
       <<<"$properties"
 }
 
+personal_arch_desktop_session_running() {
+  local status
+
+  if pgrep -u "$(id -u)" -x xfce4-session >/dev/null 2>&1; then
+    return 0
+  else
+    status=$?
+  fi
+  ((status == 1)) || die 'could not inspect the XFCE session process'
+  return 1
+}
+
+personal_arch_reconcile_touchpad_runtime() {
+  (($# == 1)) || die 'personal_arch_reconcile_touchpad_runtime needs change state'
+  local changed="$1"
+  [[ "$changed" == 0 || "$changed" == 1 ]] ||
+    die 'invalid touchpad change state'
+
+  if ((changed == 0)) && personal_arch_touchpad_runtime_configured; then
+    return 0
+  fi
+  if personal_arch_apply_touchpad_runtime; then
+    render_result RELOADED "touchpad policy"
+  elif personal_arch_desktop_session_running; then
+    record_change desktop.session
+  fi
+}
+
 personal_arch_configure_root_files() {
   local dracut_sha
   local touchpad_changed=0
@@ -583,13 +612,7 @@ personal_arch_configure_root_files() {
     /etc/X11/xorg.conf.d/90-dev-server-huawei-touchpad.conf 0644
   [[ "$dev_server_install_status" == "UP TO DATE" ]] || touchpad_changed=1
 
-  if ((touchpad_changed)) || ! personal_arch_touchpad_runtime_configured; then
-    if personal_arch_apply_touchpad_runtime; then
-      render_result RELOADED "touchpad policy"
-    else
-      record_change desktop.session
-    fi
-  fi
+  personal_arch_reconcile_touchpad_runtime "$touchpad_changed"
 }
 
 personal_arch_configure_zram() {
