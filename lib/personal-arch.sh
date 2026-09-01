@@ -35,7 +35,6 @@ personal_arch_validate_declared_inputs() {
   )
 
   personal_arch_owned_host || die "workstation apply supports only the owned arch host"
-  [[ -d /efi/loader ]] || die "owned arch host is not using systemd-boot at /efi/loader"
 
   require_cmd findmnt
   [[ "$(findmnt -n -o FSTYPE --target /efi)" == vfat ]] ||

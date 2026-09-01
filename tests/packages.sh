@@ -698,6 +698,9 @@ test_static_policy() {
   fi
   assert_contains "$repo_dir/lib/personal-arch.sh" 'fmask=0137'
   assert_contains "$repo_dir/lib/personal-arch.sh" '/efi/loader/loader.conf 0640'
+  if grep -Fq '[[ -d /efi/loader ]]' "$repo_dir/lib/personal-arch.sh"; then
+    fail 'unprivileged Arch preflight traverses the root-only ESP'
+  fi
   assert_eq 'TerminalEmulator=ghostty' \
     "$(<"$repo_dir/assets/dotfiles/xfce4-helpers.rc")" \
     'fully owned XFCE helper'
