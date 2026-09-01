@@ -687,6 +687,27 @@ skidbladnir_prepare_unit_generation() {
   skidbladnir_unit_generation_owned "$installed"
 }
 
+skidbladnir_replace_path() {
+  python3 - "$1" "$2" <<'PY'
+import os
+import sys
+
+os.replace(sys.argv[1], sys.argv[2])
+PY
+}
+
+skidbladnir_promote_secret() {
+  python3 - "$1" "$2" <<'PY'
+import os
+import sys
+
+# A hard-link promotion is same-filesystem and fails rather than replacing a
+# credential created concurrently. Unlinking the staging name leaves one file.
+os.link(sys.argv[1], sys.argv[2], follow_symlinks=False)
+os.unlink(sys.argv[1])
+PY
+}
+
 skidbladnir_atomic_symlink() (
   local target="$1"
   local relative="$2"
@@ -731,13 +752,7 @@ skidbladnir_atomic_symlink() (
     rm -f -- "$temporary"
     return 1
   fi
-  if ! python3 - "$temporary" "$target" <<'PY'
-import os
-import sys
-
-os.replace(sys.argv[1], sys.argv[2])
-PY
-  then
+  if ! skidbladnir_replace_path "$temporary" "$target"; then
     rm -f -- "$temporary"
     return 1
   fi
@@ -829,16 +844,7 @@ skidbladnir_mint_secret() (
   skidbladnir_secret_valid "$temporary" "$pattern" || {
     return 1
   }
-  if ! python3 - "$temporary" "$target" <<'PY'
-import os
-import sys
-
-# A hard-link promotion is same-filesystem and fails rather than replacing a
-# credential created concurrently. Unlinking the staging name leaves one file.
-os.link(sys.argv[1], sys.argv[2], follow_symlinks=False)
-os.unlink(sys.argv[1])
-PY
-  then
+  if ! skidbladnir_promote_secret "$temporary" "$target"; then
     skidbladnir_secret_valid "$target" "$pattern"
     return
   fi
@@ -1806,7 +1812,7 @@ skidbladnir_apply() {
   if ((skidbladnir_unit_changed)) || [[ "$active_unit" != "$unit_identity" ]]; then
     needs_unit_reload=1
   fi
-  if ((! was_active || needs_unit_reload)) ||
+  if ((was_active == 0 || needs_unit_reload != 0)) ||
     [[ "$active_runtime" != "$runtime_identity" ]]; then
     needs_activation=1
   fi
