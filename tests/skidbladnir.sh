@@ -291,7 +291,7 @@ test_pin_and_config_contract() (
   ' \
     "$repo_dir"/assets/skidbladnir/host-config-*.json >/dev/null ||
     fail 'safe host configs do not activate only the fixed Claude plugin'
-  if rg -n 'dangerously-bypass-approvals-and-sandbox|permission-mode|skip-permissions' \
+  if grep -En 'dangerously-bypass-approvals-and-sandbox|permission-mode|skip-permissions' \
     "$repo_dir"/assets/skidbladnir/host-config-*.json >"$fixture/unsafe-host-config"; then
     fail 'host configs contain an approval or permission bypass'
   fi
@@ -817,7 +817,7 @@ test_forbidden_residue_and_layout() (
   for path in skidbladnir lib/skidbladnir-invite.sh lib/skidbladnir-operator.sh; do
     [[ ! -e "$repo_dir/$path" ]] || fail "removed production path remains: $path"
   done
-  if rg -n \
+  if grep -Ern \
     'skidbladnir_(doctor|converge)|release-transaction|release-activation-required|LocalAPI|localapi/v|dangerously-bypass-approvals-and-sandbox|permission-mode.*auto' \
     "$repo_dir/lib/skidbladnir.sh" "$repo_dir/assets/skidbladnir" >"$fixture/residue"; then
     cat "$fixture/residue" >&2

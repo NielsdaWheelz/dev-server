@@ -880,7 +880,10 @@ test_static_boundary_contract() {
     "$repo_dir/lib/remote-devbox.sh" \
     "$repo_dir/cloud-init-devbox.template.yaml" \
     >"$production"
-  rg --files "$repo_dir/ansible" >>"$production"
+  git -C "$repo_dir" ls-files -z ansible |
+    while IFS= read -r -d '' path; do
+      printf '%s/%s\n' "$repo_dir" "$path"
+    done >>"$production"
   while IFS= read -r path; do
     if grep -Eqi 'devbox-state|STATE_BOOTSTRAP|doctor|converge|curl[^|]*\|[[:space:]]*(ba)?sh|@latest' "$path"; then
       fail "legacy state or mutable installer remains: $path"
