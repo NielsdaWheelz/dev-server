@@ -40,6 +40,10 @@ assert_eq() {
     fail "$label: expected <$expected>, got <$actual>"
 }
 
+file_inode() {
+  stat -c '%i' "$1" 2>/dev/null || stat -f '%i' "$1"
+}
+
 write_executable() {
   local path="$1"
   shift
@@ -425,14 +429,14 @@ test_existing_server_never_bootstraps() {
   ! find "$case_dir/home/.ssh/config.d" -name '.dev-server.candidate.*' | grep -q . ||
     fail 'apply left an SSH include staging file'
 
-  inode="$(stat -f '%i' "$case_dir/home/.ssh/config.d/dev-server" 2>/dev/null || stat -c '%i' "$case_dir/home/.ssh/config.d/dev-server")"
+  inode="$(file_inode "$case_dir/home/.ssh/config.d/dev-server")"
   : >"$case_dir/calls"
   run_apply "$case_dir" existing "$output" || {
     sed -n '1,240p' "$output" >&2
     fail 'second existing server apply failed'
   }
   assert_eq "$inode" \
-    "$(stat -f '%i' "$case_dir/home/.ssh/config.d/dev-server" 2>/dev/null || stat -c '%i' "$case_dir/home/.ssh/config.d/dev-server")" \
+    "$(file_inode "$case_dir/home/.ssh/config.d/dev-server")" \
     'second-apply SSH include inode'
   assert_contains "$output" 'UP TO DATE  devbox' 'second-apply summary'
   assert_not_contains "$output" 'PLAY RECAP' 'successful Ansible chatter'
@@ -620,8 +624,7 @@ test_new_server_failure_still_closes_ingress() {
   output="$case_dir/output"
   printf 'preserved-host-key\n' >"$case_dir/home/.ssh/known_hosts"
   printf 'preserved-operator-backup\n' >"$case_dir/home/.ssh/known_hosts.old"
-  known_hosts_inode="$(stat -f '%i' "$case_dir/home/.ssh/known_hosts" 2>/dev/null ||
-    stat -c '%i' "$case_dir/home/.ssh/known_hosts")"
+  known_hosts_inode="$(file_inode "$case_dir/home/.ssh/known_hosts")"
 
   set +e
   run_apply "$case_dir" new-failure "$output"
@@ -647,8 +650,7 @@ PY
   assert_eq preserved-host-key "$(tr -d '\n' <"$case_dir/home/.ssh/known_hosts")" \
     'failed bootstrap known-hosts bytes'
   assert_eq "$known_hosts_inode" \
-    "$(stat -f '%i' "$case_dir/home/.ssh/known_hosts" 2>/dev/null ||
-      stat -c '%i' "$case_dir/home/.ssh/known_hosts")" \
+    "$(file_inode "$case_dir/home/.ssh/known_hosts")" \
     'failed bootstrap known-hosts inode'
   assert_eq preserved-operator-backup \
     "$(tr -d '\n' <"$case_dir/home/.ssh/known_hosts.old")" \
@@ -664,8 +666,7 @@ test_new_host_key_no_write_preserves_trust() {
   output="$case_dir/output"
   printf 'preserved-host-key\n' >"$case_dir/home/.ssh/known_hosts"
   printf 'preserved-operator-backup\n' >"$case_dir/home/.ssh/known_hosts.old"
-  known_hosts_inode="$(stat -f '%i' "$case_dir/home/.ssh/known_hosts" 2>/dev/null ||
-    stat -c '%i' "$case_dir/home/.ssh/known_hosts")"
+  known_hosts_inode="$(file_inode "$case_dir/home/.ssh/known_hosts")"
 
   set +e
   run_apply "$case_dir" hostkey-no-write "$output"
@@ -678,8 +679,7 @@ test_new_host_key_no_write_preserves_trust() {
   assert_eq preserved-host-key "$(tr -d '\n' <"$case_dir/home/.ssh/known_hosts")" \
     'missing-record known-hosts bytes'
   assert_eq "$known_hosts_inode" \
-    "$(stat -f '%i' "$case_dir/home/.ssh/known_hosts" 2>/dev/null ||
-      stat -c '%i' "$case_dir/home/.ssh/known_hosts")" \
+    "$(file_inode "$case_dir/home/.ssh/known_hosts")" \
     'missing-record known-hosts inode'
   assert_eq preserved-operator-backup \
     "$(tr -d '\n' <"$case_dir/home/.ssh/known_hosts.old")" \
@@ -699,8 +699,7 @@ test_new_host_key_mismatch_preserves_trust() {
   output="$case_dir/output"
   printf 'preserved-host-key\n' >"$case_dir/home/.ssh/known_hosts"
   printf 'preserved-operator-backup\n' >"$case_dir/home/.ssh/known_hosts.old"
-  known_hosts_inode="$(stat -f '%i' "$case_dir/home/.ssh/known_hosts" 2>/dev/null ||
-    stat -c '%i' "$case_dir/home/.ssh/known_hosts")"
+  known_hosts_inode="$(file_inode "$case_dir/home/.ssh/known_hosts")"
 
   set +e
   run_apply "$case_dir" hostkey-mismatch "$output"
@@ -712,8 +711,7 @@ test_new_host_key_mismatch_preserves_trust() {
   assert_eq preserved-host-key "$(tr -d '\n' <"$case_dir/home/.ssh/known_hosts")" \
     'mismatch known-hosts bytes'
   assert_eq "$known_hosts_inode" \
-    "$(stat -f '%i' "$case_dir/home/.ssh/known_hosts" 2>/dev/null ||
-      stat -c '%i' "$case_dir/home/.ssh/known_hosts")" \
+    "$(file_inode "$case_dir/home/.ssh/known_hosts")" \
     'mismatch known-hosts inode'
   assert_eq preserved-operator-backup \
     "$(tr -d '\n' <"$case_dir/home/.ssh/known_hosts.old")" \

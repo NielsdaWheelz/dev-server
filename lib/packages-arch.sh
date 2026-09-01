@@ -93,8 +93,10 @@ packages_arch_reconcile_docker_activation() {
 
 packages_validate_inputs() {
   local aur_manifest="$dev_server_root/packages/arch.aur.txt"
+  local aur_seen='|'
   local package
   local pacman_manifest="$dev_server_root/packages/arch.pacman.txt"
+  local pacman_seen='|'
   local raw_line
 
   packages_arch_aur_packages=()
@@ -110,10 +112,11 @@ packages_validate_inputs() {
     [[ -n "$package" ]] || continue
     [[ "$package" =~ ^[a-z0-9@._+:-]+$ ]] ||
       die "invalid package name in $pacman_manifest: $package"
-    case " ${packages_arch_pacman_packages[*]} " in
-    *" $package "*) die "duplicate package in $pacman_manifest: $package" ;;
+    case "$pacman_seen" in
+    *"|$package|"*) die "duplicate package in $pacman_manifest: $package" ;;
     esac
     packages_arch_pacman_packages+=("$package")
+    pacman_seen+="$package|"
   done <"$pacman_manifest"
   while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
     package="$(printf '%s\n' "${raw_line%%#*}" |
@@ -121,14 +124,15 @@ packages_validate_inputs() {
     [[ -n "$package" ]] || continue
     [[ "$package" =~ ^[a-z0-9@._+:-]+$ ]] ||
       die "invalid package name in $aur_manifest: $package"
-    case " ${packages_arch_aur_packages[*]} " in
-    *" $package "*) die "duplicate package in $aur_manifest: $package" ;;
+    case "$aur_seen" in
+    *"|$package|"*) die "duplicate package in $aur_manifest: $package" ;;
     esac
     packages_arch_aur_packages+=("$package")
+    aur_seen+="$package|"
   done <"$aur_manifest"
 
   if ((${#packages_arch_aur_packages[@]} > 0)) &&
-    [[ " ${packages_arch_pacman_packages[*]} " != *' yay '* ]] &&
+    [[ "$pacman_seen" != *'|yay|'* ]] &&
     ! command -v yay >/dev/null 2>&1; then
     die "AUR packages require declared package helper yay"
   fi
@@ -136,6 +140,7 @@ packages_validate_inputs() {
 
 packages_install() {
   local docker_after
+  local -a pacman_arguments=(-Syu --needed)
   local packages_after
   local packages_before
   local tmux_after
@@ -149,7 +154,10 @@ packages_install() {
 
   packages_before="$(packages_arch_snapshot)"
 
-  sudo pacman -Syu --needed "${packages_arch_pacman_packages[@]}"
+  if ((${#packages_arch_pacman_packages[@]} > 0)); then
+    pacman_arguments+=("${packages_arch_pacman_packages[@]}")
+  fi
+  sudo pacman "${pacman_arguments[@]}"
 
   if ((${#packages_arch_aur_packages[@]} > 0)); then
     require_cmd yay

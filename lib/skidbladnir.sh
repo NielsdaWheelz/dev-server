@@ -486,9 +486,11 @@ skidbladnir_cleanup_stale_stages() {
   shopt -s nullglob
   stages=("$share"/.apply.stage.*)
   shopt -u nullglob
-  for stage in "${stages[@]}"; do
-    skidbladnir_cleanup_stage "$share" "$stage" || return 1
-  done
+  if ((${#stages[@]} > 0)); then
+    for stage in "${stages[@]}"; do
+      skidbladnir_cleanup_stage "$share" "$stage" || return 1
+    done
+  fi
 }
 
 skidbladnir_validate_owned_roots() {
