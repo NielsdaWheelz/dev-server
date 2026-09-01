@@ -9,7 +9,6 @@ personal_arch_asset() {
 personal_arch_owned_host() {
   [[ "$(uname -s)" == Linux ]] &&
     [[ -f /etc/arch-release ]] &&
-    [[ "$(hostname -s)" == arch ]] &&
     [[ -r /sys/class/dmi/id/sys_vendor ]] &&
     [[ -r /sys/class/dmi/id/product_name ]] &&
     [[ "$(</sys/class/dmi/id/sys_vendor)" == HUAWEI ]] &&

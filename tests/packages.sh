@@ -709,6 +709,9 @@ test_static_policy() {
     "$repo_dir/lib/personal-arch.sh"; then
     fail 'runtime legacy cleanup or partial XFCE helper ownership remains'
   fi
+  if grep -Eq 'hostname([[:space:]]+-s)?' "$repo_dir/lib/personal-arch.sh"; then
+    fail 'owned Arch hardware identity depends on a mutable hostname'
+  fi
 }
 
 test_arch_native_reconciliation
