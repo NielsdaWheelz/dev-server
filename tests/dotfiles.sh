@@ -1,776 +1,329 @@
 #!/usr/bin/env bash
+# Globals in this fixture are consumed by sourced production functions.
+# shellcheck disable=SC2034
 set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 fixture="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-dotfiles.XXXXXX")"
-state_file="$fixture/xfconf-state"
-calls_file="$fixture/xfconf-calls"
-bus_names_file="$fixture/bus-names"
-doctor_output="$fixture/doctor-output"
-tests_run=0
-
-cleanup() {
-  rm -rf -- "$fixture"
-}
-trap cleanup EXIT
+trap 'rm -rf "$fixture"' EXIT
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
   exit 1
 }
 
-assert_eq() {
-  local want="$1"
-  local got="$2"
-  local label="$3"
-  [[ "$got" == "$want" ]] || fail "$label: got <$got>, want <$want>"
-}
-
-assert_contains() {
-  grep -Fq -- "$2" "$1" || fail "$1 does not contain: $2"
-}
-
 pass() {
   tests_run=$((tests_run + 1))
 }
 
+assert_eq() {
+  local expected="$1"
+  local actual="$2"
+  local label="$3"
+
+  [[ "$actual" == "$expected" ]] ||
+    fail "$label: expected [$expected], got [$actual]"
+}
+
+test_mode() {
+  stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"
+}
+
+file_inode() {
+  stat -c '%i' "$1" 2>/dev/null || stat -f '%i' "$1"
+}
+
+reset_results() {
+  dev_server_changes='|'
+  dev_server_change_count=0
+  dev_server_result_mutations=0
+  dev_server_result_activations=0
+  dev_server_result_deferrals=0
+  dev_server_result_actions=0
+  dev_server_result_errors=0
+  dev_server_install_status='UP TO DATE'
+}
+
+test_home="$fixture/home"
+test_assets="$fixture/assets"
+install -d -m 0755 "$test_home"
+cp -R "$repo_dir/assets" "$test_assets"
+
+dev_server_home_dir="$test_home"
+dev_server_assets_root="$test_assets"
 # shellcheck source=lib/common.sh
 source "$repo_dir/lib/common.sh"
-# shellcheck source=lib/doctor.sh
-source "$repo_dir/lib/doctor.sh"
 # shellcheck source=lib/dotfiles.sh
 source "$repo_dir/lib/dotfiles.sh"
-doctor_failures=0
-doctor_warnings=0
 
-declare -F dotfiles_configure_xfce_idle_policy >/dev/null ||
-  fail 'missing focused XFCE idle-policy convergence boundary'
-declare -F dotfiles_doctor_xfce_idle_policy >/dev/null ||
-  fail 'missing focused XFCE idle-policy doctor boundary'
-
-platform_id() { printf 'arch\n'; }
-unset XDG_CURRENT_DESKTOP
-
-: >"$state_file"
-: >"$calls_file"
-: >"$bus_names_file"
-
-state_get() {
-  local channel="$1"
-  local property="$2"
-  awk -F '|' -v channel="$channel" -v property="$property" '
-    $1 == channel && $2 == property { found = 1; type = $3; value = $4 }
-    END {
-      if (!found) exit 1
-      print type "|" value
-    }
-  ' "$state_file"
+tmux_running=1
+tmux_calls="$fixture/tmux-calls"
+tmux_config_sha=''
+tmux() {
+  case "$1" in
+  list-sessions)
+    [[ "$tmux_running" == 1 ]]
+    ;;
+  source-file)
+    printf '%s\n' "$2" >>"$tmux_calls"
+    ;;
+  show-options)
+    [[ -n "$tmux_config_sha" ]] || return 1
+    printf '%s\n' "$tmux_config_sha"
+    ;;
+  set-option)
+    tmux_config_sha="$4"
+    ;;
+  *) fail "unexpected tmux call: $*" ;;
+  esac
 }
 
-state_put() {
-  local channel="$1"
-  local property="$2"
-  local type="$3"
-  local value="$4"
-  local temporary
-  temporary="$(mktemp "$fixture/xfconf-state.XXXXXX")"
-  awk -F '|' -v channel="$channel" -v property="$property" \
-    '!(($1 == channel) && ($2 == property))' "$state_file" >"$temporary"
-  printf '%s|%s|%s|%s\n' "$channel" "$property" "$type" "$value" >>"$temporary"
-  mv "$temporary" "$state_file"
-}
+test_atomic_files_and_tmux_activation() {
+  local inode
 
-xfconf-query() {
-  local channel=""
-  local property=""
-  local type=""
-  local value=""
-  local create=0
-  local write=0
-  local current
+  reset_results
+  dotfiles_install_dirs >/dev/null
+  dotfiles_install_files >/dev/null
+  has_change shell.config || fail 'fresh shell files did not record shell.config'
+  has_change tmux.config || fail 'fresh tmux file did not record tmux.config'
+  dotfiles_reload_tmux_if_changed >/dev/null
+  assert_eq 1 "$(wc -l <"$tmux_calls" | tr -d ' ')" \
+    'fresh tmux activation count'
+  cmp -s "$test_assets/dotfiles/tmux.conf" "$test_home/.tmux.conf" ||
+    fail 'tmux configuration bytes differ'
+  cmp -s "$test_assets/dotfiles/gitconfig" "$test_home/.gitconfig" ||
+    fail 'global Git configuration bytes differ'
+  assert_eq 644 "$(test_mode "$test_home/.tmux.conf")" 'tmux mode'
+  assert_eq 700 "$(test_mode "$test_home/.ssh")" 'SSH directory mode'
 
-  while (($# > 0)); do
-    case "$1" in
-    -c)
-      channel="$2"
-      shift 2
-      ;;
-    -p)
-      property="$2"
-      shift 2
-      ;;
-    -n)
-      create=1
-      shift
-      ;;
-    -t)
-      type="$2"
-      shift 2
-      ;;
-    -s)
-      value="$2"
-      write=1
-      shift 2
-      ;;
-    *) fail "unexpected xfconf-query argument: $1" ;;
-    esac
-  done
-  [[ -n "$channel" && -n "$property" ]] || fail 'xfconf-query omitted channel or property'
+  inode="$(file_inode "$test_home/.tmux.conf")"
+  reset_results
+  dotfiles_install_dirs >/dev/null
+  dotfiles_install_files >/dev/null
+  dotfiles_reload_tmux_if_changed >/dev/null
+  assert_eq "$inode" "$(file_inode "$test_home/.tmux.conf")" \
+    'unchanged tmux file inode'
+  assert_eq 1 "$(wc -l <"$tmux_calls" | tr -d ' ')" \
+    'second-apply tmux activation count'
+  ((dev_server_result_mutations == 0)) ||
+    fail 'second file apply reported a durable mutation'
 
-  if ((write == 0)); then
-    current="$(state_get "$channel" "$property")" || return 1
-    printf '%s\n' "${current#*|}"
-    return
+  printf '\n# shell-only change\n' >>"$test_assets/dotfiles/zshrc"
+  reset_results
+  dotfiles_install_files >/dev/null
+  has_change shell.config || fail 'shell update did not record shell.config'
+  if has_change tmux.config; then
+    fail 'shell-only update recorded tmux.config'
   fi
+  dotfiles_reload_tmux_if_changed >/dev/null
+  assert_eq 1 "$(wc -l <"$tmux_calls" | tr -d ' ')" \
+    'unrelated-change tmux activation count'
 
-  if ((create)); then
-    [[ -n "$type" ]] || fail "xfconf create omitted type: $channel $property"
-    ! state_get "$channel" "$property" >/dev/null 2>&1 ||
-      fail "xfconf create replaced existing state: $channel $property"
-    printf 'create|%s|%s|%s|%s\n' "$channel" "$property" "$type" "$value" >>"$calls_file"
-  else
-    current="$(state_get "$channel" "$property")" ||
-      fail "xfconf set targeted missing state: $channel $property"
-    if [[ -z "$type" ]]; then
-      type="${current%%|*}"
+  printf '\n# tmux change\n' >>"$test_assets/dotfiles/tmux.conf"
+  reset_results
+  dotfiles_install_files >/dev/null
+  dotfiles_reload_tmux_if_changed >/dev/null
+  assert_eq 2 "$(wc -l <"$tmux_calls" | tr -d ' ')" \
+    'changed tmux activation count'
+
+  chmod 0600 "$test_home/.tmux.conf"
+  reset_results
+  dotfiles_install_files >/dev/null
+  dotfiles_reload_tmux_if_changed >/dev/null
+  assert_eq 2 "$(wc -l <"$tmux_calls" | tr -d ' ')" \
+    'tmux mode-repair activation count'
+
+  tmux_config_sha=''
+  reset_results
+  dotfiles_install_files >/dev/null
+  dotfiles_reload_tmux_if_changed >/dev/null
+  assert_eq 3 "$(wc -l <"$tmux_calls" | tr -d ' ')" \
+    'interrupted tmux activation retry count'
+
+  tmux_running=0
+  printf '\n# next server reads this\n' >>"$test_assets/dotfiles/tmux.conf"
+  reset_results
+  dotfiles_install_files >/dev/null
+  dotfiles_reload_tmux_if_changed >/dev/null
+  assert_eq 3 "$(wc -l <"$tmux_calls" | tr -d ' ')" \
+    'inactive-server tmux activation count'
+  pass
+}
+
+test_protected_target_rejected() {
+  rm "$test_home/.tmux.conf"
+  ln -s "$fixture/not-managed" "$test_home/.tmux.conf"
+  if (dotfiles_install_files) >/dev/null 2>&1; then
+    fail 'managed dotfile accepted a symlink target'
+  fi
+  rm "$test_home/.tmux.conf"
+  install -m 0644 "$test_assets/dotfiles/tmux.conf" "$test_home/.tmux.conf"
+  pass
+}
+
+test_pinned_git_repositories() {
+  local source_repo="$fixture/source-plugin"
+  local installed_repo="$fixture/installed-plugin"
+  local first_commit
+  local second_commit
+
+  git init --quiet "$source_repo"
+  git -C "$source_repo" config user.email test@example.invalid
+  git -C "$source_repo" config user.name 'dev-server test'
+  printf 'first\n' >"$source_repo/plugin.zsh"
+  git -C "$source_repo" add plugin.zsh
+  git -C "$source_repo" commit --quiet -m first
+  first_commit="$(git -C "$source_repo" rev-parse HEAD)"
+
+  reset_results
+  dotfiles_install_git_repo "$source_repo" "$first_commit" \
+    "$installed_repo" shell.config >/dev/null
+  assert_eq "$first_commit" "$(git -C "$installed_repo" rev-parse HEAD)" \
+    'fresh plugin commit'
+  has_change shell.config || fail 'fresh plugin did not record shell.config'
+
+  reset_results
+  dotfiles_install_git_repo "$source_repo" "$first_commit" \
+    "$installed_repo" shell.config >/dev/null
+  if has_change shell.config; then
+    fail 'unchanged plugin recorded a change'
+  fi
+  ((dev_server_result_mutations == 0)) ||
+    fail 'unchanged plugin reported a mutation'
+
+  printf 'second\n' >"$source_repo/plugin.zsh"
+  git -C "$source_repo" commit --quiet -am second
+  second_commit="$(git -C "$source_repo" rev-parse HEAD)"
+  reset_results
+  dotfiles_install_git_repo "$source_repo" "$second_commit" \
+    "$installed_repo" shell.config >/dev/null
+  assert_eq "$second_commit" "$(git -C "$installed_repo" rev-parse HEAD)" \
+    'updated plugin commit'
+  has_change shell.config || fail 'plugin update did not record shell.config'
+
+  printf 'local edit\n' >>"$installed_repo/plugin.zsh"
+  if (dotfiles_install_git_repo "$source_repo" "$second_commit" \
+    "$installed_repo" shell.config) >/dev/null 2>&1; then
+    fail 'plugin reconciliation overwrote a local edit'
+  fi
+  pass
+}
+
+test_interrupted_git_checkout_retries_cleanly() (
+  local source_repo="$fixture/interrupted-source-plugin"
+  local installed_repo="$test_home/.zsh/interrupted-plugin"
+  local commit fail_once="$fixture/interrupted-checkout"
+
+  git init --quiet "$source_repo"
+  git -C "$source_repo" config user.email test@example.invalid
+  git -C "$source_repo" config user.name 'dev-server test'
+  printf 'plugin\n' >"$source_repo/plugin.zsh"
+  git -C "$source_repo" add plugin.zsh
+  git -C "$source_repo" commit --quiet -m plugin
+  commit="$(git -C "$source_repo" rev-parse HEAD)"
+  dotfiles_install_dirs >/dev/null
+
+  git() {
+    if [[ "$*" == *' checkout --quiet --detach FETCH_HEAD' && ! -e "$fail_once" ]]; then
+      : >"$fail_once"
+      return 73
     fi
-    printf 'set|%s|%s|%s|%s\n' "$channel" "$property" "$type" "$value" >>"$calls_file"
+    command git "$@"
+  }
+
+  if (dotfiles_install_git_repo "$source_repo" "$commit" \
+    "$installed_repo" shell.config) >/dev/null 2>&1; then
+    fail 'interrupted Git checkout unexpectedly succeeded'
   fi
-  state_put "$channel" "$property" "$type" "$value"
-}
+  [[ ! -e "$installed_repo" && ! -L "$installed_repo" ]] ||
+    fail 'interrupted Git checkout published a plugin'
+  assert_eq 0 "$(find "$test_home/.local/share/dev-server/git-plugins/interrupted-plugin" \
+    -mindepth 1 -maxdepth 1 -name '.git-stage.*' | wc -l | tr -d ' ')" \
+    'interrupted Git stage residue count'
 
-busctl() {
-  [[ "$#" == 3 && "$1" == --user && "$2" == status ]] ||
-    fail "unexpected busctl invocation: $*"
-  grep -Fqx -- "$3" "$bus_names_file"
-}
+  dotfiles_install_git_repo "$source_repo" "$commit" \
+    "$installed_repo" shell.config >/dev/null
+  [[ -L "$installed_repo" ]] || fail 'Git retry did not publish an immutable link'
+  assert_eq "$commit" "$(git -C "$installed_repo" rev-parse HEAD)" \
+    'Git retry commit'
+)
 
-expected_idle_creates() {
+test_git_config_is_fully_owned() {
+  local inode
+
+  export HOME="$test_home"
   printf '%s\n' \
-    'create|xfce4-power-manager|/xfce4-power-manager/dpms-enabled|bool|true' \
-    'create|xfce4-power-manager|/xfce4-power-manager/dpms-on-ac-sleep|uint|0' \
-    'create|xfce4-power-manager|/xfce4-power-manager/dpms-on-ac-off|uint|5' \
-    'create|xfce4-power-manager|/xfce4-power-manager/dpms-on-battery-sleep|uint|0' \
-    'create|xfce4-power-manager|/xfce4-power-manager/dpms-on-battery-off|uint|2' \
-    'create|xfce4-power-manager|/xfce4-power-manager/inactivity-on-ac|uint|0' \
-    'create|xfce4-power-manager|/xfce4-power-manager/inactivity-on-battery|uint|5' \
-    'create|xfce4-power-manager|/xfce4-power-manager/inactivity-sleep-mode-on-ac|uint|1' \
-    'create|xfce4-power-manager|/xfce4-power-manager/inactivity-sleep-mode-on-battery|uint|1' \
-    'create|xfce4-power-manager|/xfce4-power-manager/lock-screen-suspend-hibernate|bool|true' \
-    'create|xfce4-power-manager|/xfce4-power-manager/presentation-mode|bool|false' \
-    'create|xfce4-screensaver|/saver/enabled|bool|true' \
-    'create|xfce4-screensaver|/saver/mode|int|0' \
-    'create|xfce4-screensaver|/saver/idle-activation/enabled|bool|true' \
-    'create|xfce4-screensaver|/saver/idle-activation/delay|int|30' \
-    'create|xfce4-screensaver|/lock/enabled|bool|true' \
-    'create|xfce4-screensaver|/lock/saver-activation/enabled|bool|true' \
-    'create|xfce4-screensaver|/lock/saver-activation/delay|int|0' \
-    'create|xfce4-screensaver|/lock/sleep-activation|bool|true'
-}
-
-test_exact_idle_policy_convergence() {
-  local expected="$fixture/expected-creates"
-  local expected_updates="$fixture/expected-updates"
-  expected_idle_creates >"$expected"
-
-  dotfiles_configure_xfce_idle_policy
-  cmp -s "$expected" "$calls_file" || fail 'first idle-policy convergence used the wrong properties, types, values, or order'
-  dotfiles_xfce_idle_policy_configured || fail 'fresh exact idle policy did not validate'
-
-  : >"$calls_file"
-  dotfiles_configure_xfce_idle_policy
-  awk -F '|' '{ print "set|" $2 "|" $3 "|" $4 "|" $5 }' "$expected" >"$expected_updates"
-  cmp -s "$expected_updates" "$calls_file" || fail 'repeat idle-policy convergence was not a stable update'
-  dotfiles_xfce_idle_policy_configured || fail 'repeated exact idle policy did not validate'
+    '[user]' \
+    '  name = Local Identity' \
+    '[init]' \
+    '  defaultBranch = unmanaged' >"$test_home/.gitconfig.local"
+  assert_eq main "$(git -C "$test_home" config init.defaultBranch)" \
+    'Git default branch'
+  assert_eq 'Local Identity' "$(git -C "$test_home" config user.name)" \
+    'Git personal include identity'
+  inode="$(file_inode "$test_home/.gitconfig")"
+  reset_results
+  dotfiles_install_files >/dev/null
+  assert_eq "$inode" "$(file_inode "$test_home/.gitconfig")" \
+    'unchanged Git config inode'
+  ((dev_server_result_mutations == 0)) ||
+    fail 'unchanged Git configuration reported a mutation'
+  grep -Fq 'path = ~/.gitconfig.local' "$test_home/.gitconfig" ||
+    fail 'fully owned Git config does not expose its personal include'
   pass
 }
 
-test_idle_policy_type_repair() {
-  state_put xfce4-power-manager /xfce4-power-manager/dpms-on-ac-off int 5
-  : >"$calls_file"
+test_static_reduction_contract() {
+  local source="$repo_dir/lib/dotfiles.sh"
 
-  dotfiles_configure_xfce_idle_policy
-
-  assert_eq 'uint|5' \
-    "$(state_get xfce4-power-manager /xfce4-power-manager/dpms-on-ac-off)" \
-    'wrong XFConf type was not repaired'
-  pass
-}
-
-test_idle_policy_drift() {
-  state_put xfce4-power-manager /xfce4-power-manager/presentation-mode bool true
-  if dotfiles_xfce_idle_policy_configured; then
-    fail 'presentation mode bypassed the idle-policy doctor'
+  if grep -Eq 'doctor|xfce|ghostty|gammastep|clipman|systemctl' "$source"; then
+    fail 'host policy or diagnostics remain in dotfiles.sh'
   fi
-  state_put xfce4-power-manager /xfce4-power-manager/presentation-mode bool false
-  state_put xfce4-screensaver /saver/idle-activation/delay int 29
-  if dotfiles_xfce_idle_policy_configured; then
-    fail 'idle delay drift bypassed the idle-policy doctor'
+  if grep -Eq 'git (pull|clone)|kill-server|restart-server' "$source"; then
+    fail 'mutable Git or destructive tmux behavior remains'
   fi
-  state_put xfce4-screensaver /saver/idle-activation/delay int 30
+  assert_eq 5 "$(grep -Eoc '^[[:space:]]+[0-9a-f]{40} \\$' "$source")" \
+    'pinned Git plugin count'
+  grep -F '@dev-server-config-sha' "$source" >/dev/null ||
+    fail 'tmux reload is not gated by its live config identity'
+  if grep -Eq 'git config --global|insteadOf' "$source"; then
+    fail 'partial or legacy global Git configuration remains'
+  fi
+  assert_eq 1 "$(grep -Fhl 'ai-tools/node_modules/.bin' \
+    "$repo_dir/assets/dotfiles/zshenv" \
+    "$repo_dir/assets/dotfiles/zshrc" \
+    "$repo_dir/assets/dotfiles/zsh_helpers" | wc -l | tr -d ' ')" \
+    'AI PATH owner count'
   pass
 }
 
-test_idle_policy_runtime_doctor() {
-  printf '%s\n' \
-    org.xfce.SessionManager \
-    org.xfce.PowerManager \
-    org.xfce.ScreenSaver >"$bus_names_file"
-  doctor_reset
-  dotfiles_doctor_xfce_idle_policy >"$doctor_output"
-  assert_eq 0 "$doctor_failures" 'healthy idle-policy doctor failure count'
-  assert_eq 0 "$doctor_warnings" 'healthy idle-policy doctor warning count'
-  assert_contains "$doctor_output" 'pass  dotfiles.idle-policy'
+test_invalid_input_is_read_only() {
+  local invalid_assets="$fixture/invalid-assets"
+  local invalid_home="$fixture/invalid-home"
 
-  printf '%s\n' org.xfce.SessionManager org.xfce.PowerManager >"$bus_names_file"
-  doctor_reset
-  dotfiles_doctor_xfce_idle_policy >"$doctor_output"
-  assert_eq 1 "$doctor_failures" 'missing screensaver owner failure count'
-  assert_contains "$doctor_output" 'fail  dotfiles.idle-policy'
-
-  printf '%s\n' org.xfce.SessionManager org.xfce.ScreenSaver >"$bus_names_file"
-  doctor_reset
-  dotfiles_doctor_xfce_idle_policy >"$doctor_output"
-  assert_eq 1 "$doctor_failures" 'missing power-manager owner failure count'
-  assert_contains "$doctor_output" 'fail  dotfiles.idle-policy'
-
-  : >"$bus_names_file"
-  doctor_reset
-  dotfiles_doctor_xfce_idle_policy >"$doctor_output"
-  assert_eq 0 "$doctor_failures" 'headless idle-policy doctor failure count'
-  assert_eq 1 "$doctor_warnings" 'headless idle-policy doctor warning count'
-  assert_contains "$doctor_output" 'warn  dotfiles.idle-policy'
-
-  state_put xfce4-power-manager /xfce4-power-manager/presentation-mode bool true
-  doctor_reset
-  dotfiles_doctor_xfce_idle_policy >"$doctor_output"
-  assert_eq 1 "$doctor_failures" 'headless idle-policy drift failure count'
-  assert_eq 0 "$doctor_warnings" 'headless idle-policy drift warning count'
-  assert_contains "$doctor_output" 'fail  dotfiles.idle-policy'
-  state_put xfce4-power-manager /xfce4-power-manager/presentation-mode bool false
-  pass
-}
-
-test_declared_platform_boundary() {
-  export XDG_CURRENT_DESKTOP=GNOME
-  dotfiles_xfce_workstation || fail 'declared Arch workstation depended on transient desktop environment'
-
-  platform_id() { printf 'macos\n'; }
-  : >"$calls_file"
-  dotfiles_configure_xfce_idle_policy
-  [[ ! -s "$calls_file" ]] || fail 'unsupported platform reached XFCE mutation'
-  doctor_reset
-  dotfiles_doctor_xfce_idle_policy >"$doctor_output"
-  assert_eq 0 "$doctor_failures" 'unsupported platform idle doctor failure count'
-  [[ ! -s "$doctor_output" ]] || fail 'unsupported platform emitted an idle-policy doctor fact'
-  platform_id() { printf 'arch\n'; }
-  unset XDG_CURRENT_DESKTOP
-  pass
-}
-
-test_declared_packages() {
-  local package
-  for package in xfconf xfce4-power-manager xfce4-screensaver; do
-    [[ "$(grep -Fxc -- "$package" "$repo_dir/packages/arch.pacman.txt")" == 1 ]] ||
-      fail "Arch package manifest must contain exactly one $package entry"
-  done
-  pass
-}
-
-test_xfce_session_app_convergence() {
-  local qol_home="$fixture/xfce-qol-home"
-  local systemctl_calls="$fixture/xfce-qol-systemctl-calls"
-  local expected_systemctl="$fixture/xfce-qol-systemctl-expected"
-
-  install -d -m 0755 \
-    "$qol_home/.config/autostart" \
-    "$qol_home/.config/systemd/user"
-  printf 'retired clipman service\n' >"$qol_home/.config/systemd/user/xfce4-clipman.service"
-  printf 'retired gammastep service\n' >"$qol_home/.config/systemd/user/gammastep.service"
-  : >"$systemctl_calls"
-
-  (
-    command() {
-      if [[ "$1" == -v &&
-        ("$2" == xfce4-clipman || "$2" == gammastep || "$2" == systemctl) ]]; then
-        return 0
-      fi
-      builtin command "$@"
-    }
-    dev_server_home() { printf '%s\n' "$qol_home"; }
-    dotfiles_xfce_brightness_floor_value() { return 1; }
-    dotfiles_xfconf_set() { :; }
-    dotfiles_xfwm_shortcut_set() { :; }
-    dotfiles_configure_xfce_idle_policy() { :; }
-    busctl() { fail 'XFCE convergence inspected session runtime ownership'; }
-    systemd-run() { fail 'XFCE convergence launched a GUI process through the headless user manager'; }
-    systemctl() {
-      printf '%s\n' "$*" >>"$systemctl_calls"
-      return 0
-    }
-
-    dotfiles_configure_xfce_qol
-  ) || fail 'XFCE session-app convergence failed'
-
-  printf '%s\n' \
-    '--user disable --now xfce4-clipman.service' \
-    '--user disable --now gammastep.service' \
-    '--user daemon-reload' \
-    '--user reset-failed xfce4-clipman.service' \
-    '--user reset-failed gammastep.service' >"$expected_systemctl"
-  cmp -s "$expected_systemctl" "$systemctl_calls" ||
-    fail 'XFCE convergence did not retire the two headless GUI services exactly'
-  [[ ! -e "$qol_home/.config/systemd/user/xfce4-clipman.service" ]] ||
-    fail 'XFCE convergence retained the retired Clipman user service'
-  [[ ! -e "$qol_home/.config/systemd/user/gammastep.service" ]] ||
-    fail 'XFCE convergence retained the retired Gammastep user service'
-  cmp -s "$repo_dir/assets/dotfiles/xfce4-clipman-autostart.desktop" \
-    "$qol_home/.config/autostart/xfce4-clipman-plugin-autostart.desktop" ||
-    fail 'XFCE convergence did not install the exact Clipman autostart'
-  cmp -s "$repo_dir/assets/dotfiles/gammastep-autostart.desktop" \
-    "$qol_home/.config/autostart/gammastep.desktop" ||
-    fail 'XFCE convergence did not install the exact Gammastep autostart'
-  cmp -s "$repo_dir/assets/dotfiles/gammastep.config" \
-    "$qol_home/.config/gammastep/config.ini" ||
-    fail 'XFCE convergence did not install the exact Gammastep configuration'
-  grep -Fqx 'Exec=/usr/bin/gammastep' \
-    "$repo_dir/assets/dotfiles/gammastep-autostart.desktop" ||
-    fail 'Gammastep is not owned directly by the graphical XFCE session'
-  [[ ! -e "$repo_dir/assets/systemd-user/gammastep.service" ]] ||
-    fail 'the retired headless Gammastep service remains in the asset catalogue'
-  pass
-}
-
-test_xfce_session_app_doctor() {
-  local qol_home="$fixture/xfce-qol-doctor-home"
-  local gammastep_active="$fixture/gammastep-active"
-
-  install -d -m 0755 \
-    "$qol_home/.config/autostart" \
-    "$qol_home/.config/gammastep" \
-    "$qol_home/.config/systemd/user"
-  install -m 0644 "$repo_dir/assets/dotfiles/xfce4-clipman-autostart.desktop" \
-    "$qol_home/.config/autostart/xfce4-clipman-plugin-autostart.desktop"
-  install -m 0644 "$repo_dir/assets/dotfiles/gammastep-autostart.desktop" \
-    "$qol_home/.config/autostart/gammastep.desktop"
-  install -m 0644 "$repo_dir/assets/dotfiles/gammastep.config" \
-    "$qol_home/.config/gammastep/config.ini"
-  state_put xfce4-keyboard-shortcuts '/commands/custom/<Super>v' string \
-    /usr/bin/xfce4-clipman-history
-  state_put xfce4-panel /plugins/clipman/settings/max-texts-in-history uint 50
-
-  (
-    dev_server_home() { printf '%s\n' "$qol_home"; }
-    dotfiles_gammastep_runtime_active() { [[ -s "$gammastep_active" ]]; }
-
-    printf '%s\n' org.xfce.SessionManager org.xfce.clipman >"$bus_names_file"
-    printf 'active\n' >"$gammastep_active"
-    doctor_reset
-    {
-      dotfiles_doctor_xfce_clipboard_history
-      dotfiles_doctor_xfce_night_color
-    } >"$doctor_output"
-    assert_eq 0 "$doctor_failures" 'healthy XFCE session-app doctor failure count'
-    assert_eq 0 "$doctor_warnings" 'healthy XFCE session-app doctor warning count'
-    assert_contains "$doctor_output" 'pass  dotfiles.clipboard-history'
-    assert_contains "$doctor_output" 'pass  dotfiles.night-color'
-
-    : >"$bus_names_file"
-    : >"$gammastep_active"
-    doctor_reset
-    {
-      dotfiles_doctor_xfce_clipboard_history
-      dotfiles_doctor_xfce_night_color
-    } >"$doctor_output"
-    assert_eq 0 "$doctor_failures" 'headless XFCE session-app doctor failure count'
-    assert_eq 2 "$doctor_warnings" 'headless XFCE session-app doctor warning count'
-    assert_contains "$doctor_output" 'warn  dotfiles.clipboard-history'
-    assert_contains "$doctor_output" 'warn  dotfiles.night-color'
-
-    printf '%s\n' org.xfce.SessionManager >"$bus_names_file"
-    doctor_reset
-    {
-      dotfiles_doctor_xfce_clipboard_history
-      dotfiles_doctor_xfce_night_color
-    } >"$doctor_output"
-    assert_eq 2 "$doctor_failures" 'active broken XFCE session-app doctor failure count'
-    assert_eq 0 "$doctor_warnings" 'active broken XFCE session-app doctor warning count'
-    assert_contains "$doctor_output" 'fail  dotfiles.clipboard-history'
-    assert_contains "$doctor_output" 'fail  dotfiles.night-color'
-
-    : >"$bus_names_file"
-    printf '# drift\n' >>"$qol_home/.config/autostart/gammastep.desktop"
-    doctor_reset
-    dotfiles_doctor_xfce_night_color >"$doctor_output"
-    assert_eq 1 "$doctor_failures" 'headless Gammastep configuration drift failure count'
-    assert_eq 0 "$doctor_warnings" 'headless Gammastep configuration drift warning count'
-    assert_contains "$doctor_output" 'fail  dotfiles.night-color'
-  ) || fail 'XFCE session-app doctor policy failed'
-  pass
-}
-
-test_headless_ghostty_default() {
-  local ghostty_home="$fixture/ghostty-home"
-  local helpers_file="$ghostty_home/.config/xfce4/helpers.rc"
-  local stable_helpers="$fixture/stable-helpers.rc"
-  local systemctl_calls="$fixture/ghostty-systemctl-calls"
-
-  install -d -m 0755 \
-    "$ghostty_home/.config/xfce4" \
-    "$ghostty_home/.local/share/xfce4/helpers"
-  : >"$systemctl_calls"
-  printf '%s\n' \
-    'WebBrowser=firefox' \
-    '[Helpers]' \
-    'MailReader=thunderbird' \
-    'TerminalEmulator=xfce4-terminal' \
-    '[Other] # still a section to XFCE' \
-    'FileManager=thunar' \
-    '[]' \
-    'TerminalEmulator=preserve-me' >"$helpers_file"
-
-  (
-    command() {
-      if [[ "$1" == -v && "$2" == ghostty ]]; then
-        return 0
-      fi
-      builtin command "$@"
-    }
-    uname() { printf 'Linux\n'; }
-    systemctl() {
-      [[ "$#" == 3 && "$1" == --user && "$2" == disable &&
-        "$3" == app-com.mitchellh.ghostty.service ]] ||
-        fail 'Ghostty convergence used the wrong systemctl argument vector'
-      printf 'called\n' >>"$systemctl_calls"
-    }
-    dev_server_home() { printf '%s\n' "$ghostty_home"; }
-    dotfiles_configure_ghostty
-  ) || fail 'Ghostty convergence did not repair the XFCE preferred-terminal file'
-
-  assert_eq 1 "$(wc -l <"$systemctl_calls" | tr -d ' ')" \
-    'Ghostty convergence did not remove exactly one stale service enablement'
-  cmp -s "$repo_dir/assets/dotfiles/ghostty-autostart.desktop" \
-    "$ghostty_home/.config/autostart/ghostty.desktop" ||
-    fail 'Ghostty convergence did not install the exact XFCE service autostart'
-
-  grep -Fqx 'TerminalEmulator=ghostty' "$helpers_file" ||
-    fail 'Ghostty convergence did not write XFCE native root-level syntax'
-  grep -Fqx 'WebBrowser=firefox' "$helpers_file" ||
-    fail 'Ghostty convergence discarded an unrelated XFCE helper preference'
-  grep -Fqx 'MailReader=thunderbird' "$helpers_file" ||
-    fail 'Ghostty convergence discarded a helper preference from the legacy section'
-  grep -Fqx 'FileManager=thunar' "$helpers_file" ||
-    fail 'Ghostty convergence discarded a helper preference from another invalid section'
-  [[ "$(grep -Ec '^[[:space:]]*TerminalEmulator[[:space:]]*=' "$helpers_file")" == 1 ]] ||
-    fail 'Ghostty convergence did not normalize exactly one preferred terminal'
-  ! grep -Eq '^[[:space:]]*\[.*\]' "$helpers_file" ||
-    fail 'Ghostty convergence retained a section that changes XFCE lookup scope'
-
-  cp "$helpers_file" "$stable_helpers"
-  : >"$systemctl_calls"
-  (
-    command() {
-      if [[ "$1" == -v && "$2" == ghostty ]]; then
-        return 0
-      fi
-      builtin command "$@"
-    }
-    uname() { printf 'Linux\n'; }
-    systemctl() {
-      [[ "$#" == 3 && "$1" == --user && "$2" == disable &&
-        "$3" == app-com.mitchellh.ghostty.service ]] ||
-        fail 'repeat Ghostty convergence used the wrong systemctl argument vector'
-      printf 'called\n' >>"$systemctl_calls"
-    }
-    dev_server_home() { printf '%s\n' "$ghostty_home"; }
-    dotfiles_configure_ghostty
-  ) || fail 'repeat Ghostty convergence failed'
-  assert_eq 1 "$(wc -l <"$systemctl_calls" | tr -d ' ')" \
-    'repeat Ghostty convergence did not keep legacy enablement disabled'
-  cmp -s "$stable_helpers" "$helpers_file" ||
-    fail 'repeat Ghostty convergence rewrote stable XFCE helper state'
-
+  cp -R "$repo_dir/assets" "$invalid_assets"
+  install -d -m 0755 "$invalid_home"
+  rm "$invalid_assets/dotfiles/zshrc"
   if (
-    printf() {
-      [[ "$1" == 'TerminalEmulator=ghostty\n' ]] && return 1
-      builtin printf "$@"
-    }
-    dev_server_home() { printf '%s\n' "$ghostty_home"; }
-    dotfiles_configure_xfce_ghostty_default
-  ); then
-    fail 'Ghostty convergence masked a failed canonical preference write'
+    dev_server_home_dir="$invalid_home"
+    dev_server_assets_root="$invalid_assets"
+    dotfiles_install
+  ) >/dev/null 2>&1; then
+    fail 'dotfiles accepted an incomplete desired state'
   fi
-  cmp -s "$stable_helpers" "$helpers_file" ||
-    fail 'failed Ghostty convergence replaced the last-known-good helper state'
-
-  (
-    dev_server_home() { printf '%s\n' "$ghostty_home"; }
-    xfce4-mime-helper() { fail 'headless Ghostty default check invoked the display-dependent helper'; }
-    dotfiles_xfce_ghostty_default_configured
-  ) || fail 'persisted Ghostty default did not validate without a display'
-
-  printf '%s\n' 'TerminalEmulator=ghostty' '[Other]' 'FileManager=thunar' >"$helpers_file"
-  if (
-    dev_server_home() { printf '%s\n' "$ghostty_home"; }
-    dotfiles_xfce_ghostty_default_configured
-  ); then
-    fail 'sectioned XFCE helper state passed the flat-file doctor boundary'
-  fi
-
-  printf '%s\n' 'TerminalEmulator=ghostty' '[]' >"$helpers_file"
-  if (
-    dev_server_home() { printf '%s\n' "$ghostty_home"; }
-    dotfiles_xfce_ghostty_default_configured
-  ); then
-    fail 'empty XFCE helper section passed the flat-file doctor boundary'
-  fi
-
-  printf 'TerminalEmulator=xfce4-terminal\n' >"$helpers_file"
-  if (
-    dev_server_home() { printf '%s\n' "$ghostty_home"; }
-    dotfiles_xfce_ghostty_default_configured
-  ); then
-    fail 'drifted Ghostty default passed the doctor boundary'
-  fi
-
-  printf '%s\n' '[Helpers]' 'TerminalEmulator=ghostty' >"$helpers_file"
-  if (
-    dev_server_home() { printf '%s\n' "$ghostty_home"; }
-    dotfiles_xfce_ghostty_default_configured
-  ); then
-    fail 'legacy Git-style Ghostty section passed the XFCE-native doctor boundary'
-  fi
-
-  printf 'TerminalEmulator=ghostty\n' >"$helpers_file"
-  printf '# drift\n' >>"$ghostty_home/.local/share/xfce4/helpers/ghostty.desktop"
-  if (
-    dev_server_home() { printf '%s\n' "$ghostty_home"; }
-    dotfiles_xfce_ghostty_default_configured
-  ); then
-    fail 'drifted Ghostty helper definition passed the doctor boundary'
-  fi
+  assert_eq 0 "$(find "$invalid_home" -mindepth 1 | wc -l | tr -d ' ')" \
+    'invalid dotfile input mutation count'
   pass
 }
 
-test_ghostty_xfce_autostart() {
-  local ghostty_home="$fixture/ghostty-home"
-  local autostart="$ghostty_home/.config/autostart/ghostty.desktop"
+tests_run=0
+test_atomic_files_and_tmux_activation
+test_protected_target_rejected
+test_pinned_git_repositories
+test_interrupted_git_checkout_retries_cleanly
+pass
+test_git_config_is_fully_owned
+test_static_reduction_contract
+test_invalid_input_is_read_only
 
-  (
-    systemctl() {
-      [[ "$#" == 3 && "$1" == --user && "$2" == is-enabled &&
-        "$3" == app-com.mitchellh.ghostty.service ]] ||
-        fail 'Ghostty service doctor used the wrong systemctl argument vector'
-      printf 'disabled\n'
-    }
-    dev_server_home() { printf '%s\n' "$ghostty_home"; }
-    dotfiles_ghostty_service_configured
-  ) || fail 'Ghostty service doctor rejected exact XFCE autostart state'
-
-  if (
-    systemctl() { printf 'enabled\n'; }
-    dev_server_home() { printf '%s\n' "$ghostty_home"; }
-    dotfiles_ghostty_service_configured
-  ); then
-    fail 'Ghostty service doctor accepted stale systemd enablement'
-  fi
-
-  printf '# drift\n' >>"$autostart"
-  if (
-    systemctl() { printf 'disabled\n'; }
-    dev_server_home() { printf '%s\n' "$ghostty_home"; }
-    dotfiles_ghostty_service_configured
-  ); then
-    fail 'Ghostty service doctor accepted a drifted XFCE autostart'
-  fi
-  install -m 0644 "$repo_dir/assets/dotfiles/ghostty-autostart.desktop" "$autostart"
-  pass
-}
-
-test_ghostty_non_xfce_convergence() {
-  local ghostty_home="$fixture/non-xfce-ghostty-home"
-  local systemctl_calls="$fixture/non-xfce-ghostty-systemctl-calls"
-
-  : >"$systemctl_calls"
-  (
-    platform_id() { printf 'devbox\n'; }
-    command() {
-      if [[ "$1" == -v && "$2" == ghostty ]]; then
-        return 0
-      fi
-      builtin command "$@"
-    }
-    uname() { printf 'Linux\n'; }
-    systemctl() {
-      [[ "$#" == 4 && "$1" == --user && "$2" == enable && "$3" == --now &&
-        "$4" == app-com.mitchellh.ghostty.service ]] ||
-        fail 'non-XFCE Ghostty convergence used the wrong systemctl argument vector'
-      printf 'called\n' >>"$systemctl_calls"
-    }
-    dev_server_home() { printf '%s\n' "$ghostty_home"; }
-    dotfiles_configure_ghostty
-  ) || fail 'non-XFCE Ghostty convergence failed'
-
-  assert_eq 1 "$(wc -l <"$systemctl_calls" | tr -d ' ')" \
-    'non-XFCE Ghostty convergence did not start the user service exactly once'
-  [[ ! -e "$ghostty_home/.config/autostart/ghostty.desktop" ]] ||
-    fail 'non-XFCE Ghostty convergence installed an XFCE-only autostart'
-  pass
-}
-
-test_tmux_session_title_convergence() {
-  local tmux_asset="$repo_dir/assets/dotfiles/tmux.conf"
-  local tmux_calls="$fixture/tmux-calls"
-  local tmux_doctor_failures="$fixture/tmux-doctor-failures"
-  local tmux_doctor_output="$fixture/tmux-doctor-output"
-  local tmux_home="$fixture/tmux-home"
-
-  assert_eq 1 "$(grep -Fxc -- 'set -g set-titles on' "$tmux_asset")" \
-    'managed tmux config must enable terminal titles exactly once'
-  assert_eq 1 "$(grep -Fxc -- "set -g set-titles-string '#{session_name}'" "$tmux_asset")" \
-    'managed tmux config must use only the session name as the terminal title'
-
-  install -d -m 0755 "$tmux_home"
-  install -m 0644 "$tmux_asset" "$tmux_home/.tmux.conf"
-
-  : >"$tmux_calls"
-  (
-    dev_server_home() { printf '%s\n' "$tmux_home"; }
-    tmux() {
-      printf '%s\n' "$*" >>"$tmux_calls"
-      return 0
-    }
-
-    dotfiles_reload_tmux_if_running
-  ) || fail 'active tmux server reload failed'
-  assert_eq $'list-sessions\nsource-file '"$tmux_home/.tmux.conf" \
-    "$(cat "$tmux_calls")" \
-    'active tmux server did not reload the managed config exactly once'
-
-  : >"$tmux_calls"
-  (
-    dev_server_home() { printf '%s\n' "$tmux_home"; }
-    tmux() {
-      printf '%s\n' "$*" >>"$tmux_calls"
-      return 1
-    }
-
-    dotfiles_reload_tmux_if_running
-  ) || fail 'inactive tmux server reload path failed'
-  assert_eq 'list-sessions' "$(cat "$tmux_calls")" \
-    'inactive tmux server path attempted to source the managed config'
-
-  (
-    doctor_reset
-    dev_server_home() { printf '%s\n' "$tmux_home"; }
-    dotfiles_doctor_tmux
-    printf '%s\n' "$doctor_failures" >"$tmux_doctor_failures"
-  ) >"$tmux_doctor_output"
-  assert_eq 0 "$(cat "$tmux_doctor_failures")" 'exact managed tmux config failed its doctor'
-  assert_contains "$tmux_doctor_output" 'pass  dotfiles.tmux.conf'
-
-  printf '# drift\n' >>"$tmux_home/.tmux.conf"
-  (
-    doctor_reset
-    dev_server_home() { printf '%s\n' "$tmux_home"; }
-    dotfiles_doctor_tmux
-    printf '%s\n' "$doctor_failures" >"$tmux_doctor_failures"
-  ) >"$tmux_doctor_output"
-  assert_eq 1 "$(cat "$tmux_doctor_failures")" 'drifted tmux config passed its doctor'
-  assert_contains "$tmux_doctor_output" 'fail  dotfiles.tmux.conf'
-  pass
-}
-
-test_production_wiring() {
-  local configure_calls="$fixture/configure-wiring-calls"
-  local doctor_calls="$fixture/doctor-wiring-calls"
-  local ghostty_doctor_calls="$fixture/ghostty-doctor-wiring-calls"
-  local ghostty_service_doctor_calls="$fixture/ghostty-service-doctor-wiring-calls"
-  local non_xfce_doctor_output="$fixture/non-xfce-doctor-output"
-
-  : >"$configure_calls"
-  : >"$doctor_calls"
-  : >"$ghostty_doctor_calls"
-  : >"$ghostty_service_doctor_calls"
-  (
-    unset XDG_CURRENT_DESKTOP
-    command() {
-      if [[ "$1" == -v && "$2" == xfconf-query ]]; then
-        return 0
-      fi
-      if [[ "$1" == -v && "$2" == systemctl ]]; then
-        return 0
-      fi
-      if [[ "$1" == -v && ("$2" == xfce4-clipman || "$2" == gammastep) ]]; then
-        return 1
-      fi
-      builtin command "$@"
-    }
-    dev_server_home() { printf '%s\n' "$fixture"; }
-    dotfiles_xfce_brightness_floor_value() { return 1; }
-    dotfiles_xfconf_set() { :; }
-    dotfiles_xfwm_shortcut_set() { :; }
-    dotfiles_configure_xfce_idle_policy() { printf 'called\n' >>"$configure_calls"; }
-    systemctl() { :; }
-
-    dotfiles_configure_xfce_qol
-  )
-  assert_eq 1 "$(wc -l <"$configure_calls" | tr -d ' ')" \
-    'quality-of-life convergence did not call the focused idle-policy boundary exactly once'
-
-  (
-    unset XDG_CURRENT_DESKTOP
-    command() {
-      [[ "$1" == -v && ("$2" == xfconf-query || "$2" == ghostty) ]]
-    }
-    uname() { printf 'Linux\n'; }
-    systemctl() { return 1; }
-    dev_server_home() { printf '%s\n' "$fixture"; }
-    dotfiles_xfce_brightness_floor_value() { return 1; }
-    dotfiles_doctor_xfce_idle_policy() { printf 'called\n' >>"$doctor_calls"; }
-    dotfiles_xfce_ghostty_default_configured() {
-      printf 'called\n' >>"$ghostty_doctor_calls"
-    }
-    dotfiles_ghostty_service_configured() {
-      printf 'called\n' >>"$ghostty_service_doctor_calls"
-    }
-    git() { printf 'main\n'; }
-
-    dotfiles_doctor >/dev/null
-  )
-  assert_eq 1 "$(wc -l <"$doctor_calls" | tr -d ' ')" \
-    'dotfiles doctor did not call the focused idle-policy boundary exactly once'
-  assert_eq 1 "$(wc -l <"$ghostty_doctor_calls" | tr -d ' ')" \
-    'dotfiles doctor did not call the headless Ghostty-default boundary exactly once'
-  assert_eq 1 "$(wc -l <"$ghostty_service_doctor_calls" | tr -d ' ')" \
-    'dotfiles doctor did not check the XFCE Ghostty autostart exactly once'
-
-  (
-    platform_id() { printf 'devbox\n'; }
-    command() { [[ "$1" == -v && "$2" == ghostty ]]; }
-    uname() { printf 'Linux\n'; }
-    dev_server_home() { printf '%s\n' "$fixture"; }
-    dotfiles_ghostty_service_configured() { return 0; }
-    git() { printf 'main\n'; }
-
-    dotfiles_doctor
-  ) >"$non_xfce_doctor_output"
-  assert_contains "$non_xfce_doctor_output" 'Ghostty user service enabled'
-  pass
-}
-
-test_exact_idle_policy_convergence
-test_idle_policy_type_repair
-test_idle_policy_drift
-test_idle_policy_runtime_doctor
-test_declared_platform_boundary
-test_declared_packages
-test_xfce_session_app_convergence
-test_xfce_session_app_doctor
-test_headless_ghostty_default
-test_ghostty_xfce_autostart
-test_ghostty_non_xfce_convergence
-test_tmux_session_title_convergence
-test_production_wiring
-
-printf 'PASS: %d XFCE dotfiles test groups\n' "$tests_run"
+printf 'PASS: %d dotfile test groups\n' "$tests_run"

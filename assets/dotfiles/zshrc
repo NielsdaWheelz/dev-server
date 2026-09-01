@@ -12,14 +12,6 @@ fi
 export EDITOR="${EDITOR:-vim}"
 export PAGER="${PAGER:-less}"
 
-for _devbox_path_dir in "$HOME/.local/share/mise/shims" "$HOME/.local/bin" "$HOME/bin"; do
-  case ":$PATH:" in
-    *":$_devbox_path_dir:"*) ;;
-    *) export PATH="$_devbox_path_dir:$PATH" ;;
-  esac
-done
-unset _devbox_path_dir
-
 if [[ -r "$HOME/.config/devbox-docker-env" ]]; then
   source "$HOME/.config/devbox-docker-env"
 fi

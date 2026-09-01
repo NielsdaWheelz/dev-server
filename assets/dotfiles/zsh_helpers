@@ -25,13 +25,3 @@ alias t='tmux new -A -s main'
 alias work='cd ~/src/work'
 alias personal='cd ~/src/personal'
 alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
-
-# Later entries are prepended, so command shortcuts in ~/bin win over package
-# manager binaries in ~/.local/bin while npm still owns the real executables.
-for _devbox_path_dir in "$HOME/.local/share/mise/shims" "$HOME/.local/bin" "$HOME/bin"; do
-  case ":$PATH:" in
-    *":$_devbox_path_dir:"*) ;;
-    *) export PATH="$_devbox_path_dir:$PATH" ;;
-  esac
-done
-unset _devbox_path_dir

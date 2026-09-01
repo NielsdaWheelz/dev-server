@@ -1,4 +1,20 @@
 ---
-- name: Validate and restart ssh
-  ansible.builtin.shell: sshd -t && systemctl restart ssh
-  changed_when: true
+- name: Validate SSH before reload
+  ansible.builtin.command: sshd -t
+  listen: Reload SSH safely
+  changed_when: false
+
+- name: Reload SSH daemon
+  ansible.builtin.systemd_service:
+    name: ssh.service
+    state: reloaded
+  listen: Reload SSH safely
+
+- name: Record active SSH input identity
+  ansible.builtin.copy:
+    dest: /var/lib/dev-server/active/ssh.sha256
+    owner: root
+    group: root
+    mode: "0600"
+    content: "{{ security_ssh_desired_identity }}\n"
+  listen: Reload SSH safely

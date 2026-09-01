@@ -2,7 +2,7 @@
 set -eu
 [ -n "${TMUX_PANE:-}" ] || exit 0
 case "$TMUX_PANE" in
-  % | %*[!0-9]* | [!%]*) exit 0 ;;
+% | %*[!0-9]* | [!%]*) exit 0 ;;
 esac
 pane_tty="$(/usr/bin/tmux display-message -p -t "$TMUX_PANE" '#{pane_tty}' 2>/dev/null)" || exit 0
 [ -c "$pane_tty" ] || exit 0

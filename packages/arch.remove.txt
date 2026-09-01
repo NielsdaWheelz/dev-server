@@ -1,8 +1,0 @@
-# EndeavourOS onboarding and obsolete dependency runtimes.
-electron41
-electron42
-eos-apps-info
-eos-packagelist
-eos-quickstart
-tldr
-welcome

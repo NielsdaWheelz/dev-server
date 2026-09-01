@@ -1,5 +1,5 @@
 ---
-- name: Ensure shared dev-server directory exists
+- name: Ensure remote dev-server directories exist
   ansible.builtin.file:
     path: "/home/{{ devbox_user }}/.local/share/dev-server/{{ item }}"
     state: directory
@@ -10,19 +10,87 @@
     - ""
     - lib
     - assets
+    - assets/ai
+    - assets/dotfiles
+    - assets/routers
+    - assets/skidbladnir
+    - assets/skidbladnir/claude-agent-identity
+    - assets/skidbladnir/claude-agent-identity/.claude-plugin
+    - assets/skidbladnir/claude-agent-identity/bin
+    - assets/skidbladnir/claude-agent-identity/hooks
 
-- name: Install shared library files
+- name: Install exact runtime libraries
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../lib/"
-    dest: "/home/{{ devbox_user }}/.local/share/dev-server/lib/"
+    src: "{{ playbook_dir }}/../../lib/{{ item }}"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/lib/{{ item }}"
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
-    mode: preserve
+    mode: "0644"
+  loop:
+    - common.sh
+    - dotfiles.sh
+    - ai-tools.sh
+    - skidbladnir.sh
 
-- name: Install shared asset files
+- name: Install exact dotfile assets
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../assets/"
-    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/"
+    src: "{{ playbook_dir }}/../../assets/dotfiles/{{ item }}"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/dotfiles/{{ item }}"
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
-    mode: preserve
+    mode: "0644"
+  loop:
+    - gitconfig
+    - gitignore_global
+    - p10k.zsh
+    - tmux.conf
+    - zsh_helpers
+    - zshenv
+    - zshrc
+
+- name: Install exact AI package locks
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/ai/{{ item }}"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/ai/{{ item }}"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0644"
+  loop:
+    - package.json
+    - package-lock.json
+
+- name: Install explicit AI profile wrapper
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/routers/ai-profile"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/routers/ai-profile"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0755"
+
+- name: Install exact Skíðblaðnir assets
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/skidbladnir/{{ item.path }}"
+    dest: >-
+      /home/{{ devbox_user }}/.local/share/dev-server/assets/skidbladnir/{{ item.path }}
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: release-pin.json
+      mode: "0644"
+    - path: host-config-devbox.json
+      mode: "0644"
+    - path: agent-hooks-devbox.json
+      mode: "0644"
+    - path: skidbladnir.service
+      mode: "0644"
+    - path: skidbladnir-launch
+      mode: "0755"
+    - path: skid-notify-linux
+      mode: "0755"
+    - path: claude-agent-identity/.claude-plugin/plugin.json
+      mode: "0644"
+    - path: claude-agent-identity/hooks/hooks.json
+      mode: "0644"
+    - path: claude-agent-identity/bin/agent-hook
+      mode: "0755"

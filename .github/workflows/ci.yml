@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Install native static tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            sudo apt-get update
+            sudo apt-get install --yes jq shellcheck shfmt zsh
+          else
+            brew install jq shellcheck shfmt
+          fi
+
+      - name: Install pinned Python test tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/dev-server-ci"
+          "$RUNNER_TEMP/dev-server-ci/bin/python" -m pip install \
+            --disable-pip-version-check \
+            ansible-core==2.19.2 \
+            PyYAML==6.0.3
+          printf '%s\n' "$RUNNER_TEMP/dev-server-ci/bin" >>"$GITHUB_PATH"
+
+      - name: Run tracked static, schema, Ansible, and contract checks
+        run: ./test

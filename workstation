@@ -1,104 +1,222 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 # shellcheck source=lib/common.sh
 source "$base_dir/lib/common.sh"
-# shellcheck source=lib/doctor.sh
-source "$base_dir/lib/doctor.sh"
 # shellcheck source=lib/dotfiles.sh
 source "$base_dir/lib/dotfiles.sh"
-# shellcheck source=lib/ai-tools.sh
-source "$base_dir/lib/ai-tools.sh"
+# shellcheck source=lib/personal-arch.sh
+source "$base_dir/lib/personal-arch.sh"
 # shellcheck source=lib/skidbladnir.sh
 source "$base_dir/lib/skidbladnir.sh"
+# shellcheck source=lib/ai-tools.sh
+source "$base_dir/lib/ai-tools.sh"
+
+workstation_platform=''
+workstation_target=''
+workstation_desired_snapshot=''
+workstation_declared_stage=''
 
 usage() {
-  cat <<EOF
-Usage: ./workstation <command>
-
-Commands:
-  converge   Install packages, dotfiles, Skidbladnir, AI tools, then doctor.
-  doctor     Run local positive health checks.
-EOF
+  printf '%s\n' \
+    'Usage: ./workstation apply' \
+    '       ./workstation help'
 }
 
-platform_id() {
+workstation_select_target() {
   case "$(uname -s)" in
   Darwin)
-    printf 'macos\n'
-    ;;
-  Linux)
-    if [[ -f /etc/arch-release ]]; then
-      printf 'arch\n'
-    else
-      die "unsupported Linux platform; workstation supports Arch only"
-    fi
-    ;;
-  *)
-    die "unsupported platform: $(uname -s)"
-    ;;
-  esac
-}
-
-source_platform_packages() {
-  case "$(platform_id)" in
-  macos)
+    workstation_platform=macos
+    workstation_target=macbook
     # shellcheck source=lib/packages-macos.sh
     source "$base_dir/lib/packages-macos.sh"
     ;;
-  arch)
+  Linux)
+    personal_arch_owned_host ||
+      die 'workstation apply supports only the owned arch host'
+    workstation_platform=arch
+    workstation_target=arch
     # shellcheck source=lib/packages-arch.sh
     source "$base_dir/lib/packages-arch.sh"
     ;;
+  *) die "unsupported workstation platform: $(uname -s)" ;;
   esac
 }
 
-cmd_doctor() {
-  doctor_reset
-  log "configuration"
-  printf 'platform: %s\n' "$(platform_id)"
-  printf 'home: %s\n' "$(dev_server_home)"
-  printf 'assets: %s\n' "$(dev_server_assets_dir)"
-
-  source_platform_packages
-  packages_doctor
-  dotfiles_doctor
-  skidbladnir_doctor "$(platform_id)"
-  ai_doctor
-  doctor_summary
+workstation_report_deferrals() {
+  if has_change desktop.session; then
+    render_result DEFERRED "desktop session" \
+      "log out and back in to activate session changes"
+  fi
+  if has_change system.reboot; then
+    render_result DEFERRED reboot \
+      "reboot to activate kernel or boot-time changes"
+  fi
 }
 
-cmd_converge() {
-  source_platform_packages
+workstation_snapshot() {
+  (($# == 1)) || die 'workstation_snapshot needs one declared-input root'
+  local root="$1"
+
+  case "$workstation_platform" in
+  macos)
+    dev_server_declared_snapshot "$root" assets packages/Brewfile
+    ;;
+  arch)
+    dev_server_declared_snapshot "$root" \
+      assets packages/arch.pacman.txt packages/arch.aur.txt
+    ;;
+  *) return 1 ;;
+  esac
+}
+
+workstation_cleanup_on_exit() {
+  local rc=$?
+
+  trap - EXIT HUP INT TERM
+  if [[ -n "$workstation_declared_stage" ]]; then
+    case "$workstation_declared_stage" in
+    "${TMPDIR:-/tmp}"/workstation-declared.??????)
+      if [[ -d "$workstation_declared_stage" &&
+        ! -L "$workstation_declared_stage" ]]; then
+        chmod -R u+rwX "$workstation_declared_stage" 2>/dev/null || rc=1
+        rm -R -- "$workstation_declared_stage" || rc=1
+      elif [[ -e "$workstation_declared_stage" ||
+        -L "$workstation_declared_stage" ]]; then
+        rc=1
+      fi
+      ;;
+    *) rc=1 ;;
+    esac
+  fi
+  exit "$rc"
+}
+
+workstation_stage_declared_inputs() {
+  local staged_snapshot
+
+  workstation_declared_stage="$(
+    mktemp -d "${TMPDIR:-/tmp}/workstation-declared.XXXXXX"
+  )" || die 'could not stage workstation desired inputs'
+  chmod 0700 "$workstation_declared_stage" ||
+    die 'could not secure workstation desired inputs'
+  install -d -m 0700 "$workstation_declared_stage/packages" ||
+    die 'could not stage workstation package inputs'
+  cp -Rp "$base_dir/assets" "$workstation_declared_stage/assets" ||
+    die 'could not stage workstation assets'
+  case "$workstation_platform" in
+  macos)
+    cp -p "$base_dir/packages/Brewfile" \
+      "$workstation_declared_stage/packages/Brewfile" ||
+      die 'could not stage workstation package manifest'
+    ;;
+  arch)
+    cp -p \
+      "$base_dir/packages/arch.pacman.txt" \
+      "$base_dir/packages/arch.aur.txt" \
+      "$workstation_declared_stage/packages/" ||
+      die 'could not stage workstation package manifests'
+    ;;
+  *) die "unsupported workstation platform: $workstation_platform" ;;
+  esac
+  staged_snapshot="$(workstation_snapshot "$workstation_declared_stage")" ||
+    die 'could not verify staged workstation desired inputs'
+  [[ "$staged_snapshot" == "$workstation_desired_snapshot" ]] ||
+    die 'staged workstation desired inputs differ from their validated source'
+
+  dev_server_root="$workstation_declared_stage"
+  dev_server_assets_root="$workstation_declared_stage/assets"
+  # Read dynamically by the already-sourced Skidbladnir library.
+  # shellcheck disable=SC2034
+  skidbladnir_release_pin_file="$dev_server_assets_root/skidbladnir/release-pin.json"
+}
+
+workstation_preflight() {
+  local serve_status
+
+  workstation_select_target
+  packages_validate_inputs
+  dotfiles_validate_declared_inputs
+  dotfiles_validate_local_state
+  ai_validate_inputs
+  if [[ "$workstation_platform" == arch ]]; then
+    personal_arch_validate_declared_inputs
+  fi
+  skidbladnir_validate_declared_inputs "$workstation_platform"
+  skidbladnir_validate_local_state "$(dev_server_home)"
+  if skidbladnir_preflight_existing_serve; then
+    serve_status=0
+  else
+    serve_status=$?
+  fi
+  case "$serve_status" in
+  0) ;;
+  2) finish_results "$workstation_target" ;;
+  3) die 'public Tailscale exposure is enabled for Skidbladnir HTTPS 8443' ;;
+  *) die 'could not inspect the private Skidbladnir Serve boundary' ;;
+  esac
+  workstation_desired_snapshot="$(workstation_snapshot "$base_dir")" ||
+    die 'could not resolve workstation desired inputs'
+  workstation_stage_declared_inputs
+}
+
+workstation_verify_desired_inputs() {
+  local observed
+
+  observed="$(workstation_snapshot "$workstation_declared_stage")" ||
+    die 'could not verify workstation desired inputs'
+  [[ "$observed" == "$workstation_desired_snapshot" ]] ||
+    die 'workstation desired inputs changed during apply; rerun'
+}
+
+workstation_apply() {
+  trap workstation_cleanup_on_exit EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  workstation_preflight
   packages_install
-  skidbladnir_require_tmux_runtime "$(platform_id)"
   dotfiles_install
-  skidbladnir_converge "$(platform_id)"
+  if [[ "$workstation_platform" == arch ]]; then
+    personal_arch_apply
+  fi
   ai_install
-  cmd_doctor
+  skidbladnir_apply "$workstation_platform"
+  workstation_verify_desired_inputs
+  workstation_report_deferrals
+  finish_results "$workstation_target"
 }
 
 main() {
-  local command="${1:-}"
-  shift || true
+  local operation
 
-  case "$command" in
-  converge)
-    [[ $# -eq 0 ]] || die "Usage: ./workstation converge"
-    cmd_converge
+  if (($# == 0)); then
+    usage >&2
+    return 64
+  fi
+  operation="$1"
+  shift
+
+  case "$operation" in
+  apply)
+    (($# == 0)) || {
+      usage >&2
+      return 64
+    }
+    workstation_apply
     ;;
-  doctor)
-    [[ $# -eq 0 ]] || die "Usage: ./workstation doctor"
-    cmd_doctor
-    ;;
-  -h | --help | help | "")
+  help | --help | -h)
+    (($# == 0)) || {
+      usage >&2
+      return 64
+    }
     usage
     ;;
   *)
     usage >&2
-    return 1
+    return 64
     ;;
   esac
 }

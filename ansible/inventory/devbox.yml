@@ -2,7 +2,7 @@
 all:
   hosts:
     devbox:
-      ansible_host: dev-server
-      ansible_user: niels
+      ansible_host: dev-server-deploy
+      ansible_user: dev-server-deploy
       ansible_python_interpreter: /usr/bin/python3
       ansible_become: true

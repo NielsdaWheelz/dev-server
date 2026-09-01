@@ -1,13 +1,4 @@
 ---
-- name: Reload sysctl
-  ansible.builtin.command: sysctl --system
-
-- name: Restart journald
-  ansible.builtin.systemd:
-    name: systemd-journald
-    state: restarted
-
-- name: Restart earlyoom
-  ansible.builtin.systemd:
-    name: earlyoom
-    state: restarted
+- name: Generate locale
+  ansible.builtin.command: locale-gen
+  changed_when: true

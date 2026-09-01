@@ -1,41 +1,161 @@
 ---
-- name: Configure SSH daemon hardening
+- name: Ensure root-owned activation state directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  loop:
+    - /var/lib/dev-server
+    - /var/lib/dev-server/active
+
+- name: Inspect recorded active SSH input identity
+  ansible.builtin.stat:
+    path: /var/lib/dev-server/active/ssh.sha256
+    follow: false
+  register: security_ssh_active_identity
+
+- name: Validate recorded active SSH input identity path
+  ansible.builtin.assert:
+    that:
+      - not (security_ssh_active_identity.stat.islnk | default(false))
+      - >-
+        not security_ssh_active_identity.stat.exists or
+        security_ssh_active_identity.stat.isreg
+      - >-
+        not security_ssh_active_identity.stat.exists or
+        security_ssh_active_identity.stat.mode == "0600"
+    fail_msg: Invalid recorded active SSH input identity
+
+- name: Read recorded active SSH input identity
+  ansible.builtin.slurp:
+    path: /var/lib/dev-server/active/ssh.sha256
+  register: security_ssh_active_identity_content
+  when: security_ssh_active_identity.stat.exists
+
+- name: Validate recorded active SSH input identity value
+  ansible.builtin.assert:
+    that:
+      - (security_ssh_active_identity_content.content | b64decode | length) == 65
+      - >-
+        (security_ssh_active_identity_content.content | b64decode)
+        is match('^[0-9a-f]{64}\n\Z')
+    fail_msg: Invalid recorded active SSH input identity
+  when: security_ssh_active_identity.stat.exists
+
+- name: Ensure the deployment principal exists
+  ansible.builtin.user:
+    name: "{{ devbox_deploy_user }}"
+    shell: /bin/bash
+    groups: sudo
+    append: false
+    create_home: true
+
+- name: Remove operator elevation groups
+  ansible.builtin.user:
+    name: "{{ devbox_user }}"
+    groups: ""
+    append: false
+
+- name: Install deployment-only elevation policy
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-{{ devbox_deploy_user }}"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+    content: "{{ devbox_deploy_user }} ALL=(ALL:ALL) NOPASSWD:ALL\n"
+
+- name: Remove operator elevation policy
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/90-devbox-{{ devbox_user }}"
+    state: absent
+
+- name: Install SSH daemon policy
   ansible.builtin.copy:
     dest: /etc/ssh/sshd_config.d/99-devbox.conf
     owner: root
     group: root
     mode: "0644"
+    validate: "/usr/sbin/sshd -t -f %s"
     content: |
       PasswordAuthentication no
       KbdInteractiveAuthentication no
       PubkeyAuthentication yes
       PermitRootLogin no
       X11Forwarding no
-      AllowUsers {{ devbox_user }}
-  notify: Validate and restart ssh
+      AllowUsers {{ devbox_user }} {{ devbox_deploy_user }}
 
-- name: Ensure UFW denies incoming by default
-  ansible.builtin.command: ufw default deny incoming
-  changed_when: false
+- name: Read desired SSH input identity
+  ansible.builtin.stat:
+    path: /etc/ssh/sshd_config.d/99-devbox.conf
+    checksum_algorithm: sha256
+  register: security_ssh_config_identity
 
-- name: Ensure UFW allows outgoing by default
-  ansible.builtin.command: ufw default allow outgoing
-  changed_when: false
+- name: Resolve SSH activation identities
+  ansible.builtin.set_fact:
+    security_ssh_desired_identity: "{{ security_ssh_config_identity.stat.checksum }}"
+    security_ssh_active_identity_value: >-
+      {{ (security_ssh_active_identity_content.content | b64decode | trim)
+         if security_ssh_active_identity.stat.exists else '' }}
 
-- name: Allow Tailscale interface ingress
-  ansible.builtin.command: ufw allow in on tailscale0
-  changed_when: "'Skipping' not in devbox_ufw_tailscale.stdout"
-  register: devbox_ufw_tailscale
+- name: Ensure SSH is enabled and active
+  ansible.builtin.systemd_service:
+    name: ssh.service
+    enabled: true
+    state: started
 
-- name: Enable UFW
-  ansible.builtin.command: ufw --force enable
-  changed_when: false
+- name: Schedule required SSH configuration activation
+  ansible.builtin.debug:
+    msg: Activating changed SSH inputs
+  changed_when: true
+  notify: Reload SSH safely
+  when: security_ssh_desired_identity != security_ssh_active_identity_value
 
-- name: Keep passwordless sudo for the single-user dev box
-  ansible.builtin.copy:
-    dest: "/etc/sudoers.d/90-devbox-{{ devbox_user }}"
-    owner: root
-    group: root
-    mode: "0440"
-    validate: "visudo -cf %s"
-    content: "{{ devbox_user }} ALL=(ALL) NOPASSWD:ALL\n"
+- name: Reconcile the exact UFW ingress boundary
+  ansible.builtin.shell: |
+    set -euo pipefail
+    before="$(ufw status verbose)"
+    changed=0
+    if ! grep -Fq 'Status: active' <<<"$before"; then
+      ufw --force reset
+      before="$(ufw status verbose)"
+      changed=1
+    fi
+    public_rules="$(
+      while IFS= read -r rule; do
+        [[ "$rule" =~ ^\[[[:space:]]*([0-9]+)\] ]] || continue
+        rule_number="${BASH_REMATCH[1]}"
+        rule="$(sed 's/^[^]]*]//' <<<"$rule")"
+        [[ "$rule" == *'ALLOW IN'* ]] || continue
+        target="${rule%%ALLOW IN*}"
+        [[ "$target" != *'on tailscale0'* ]] || continue
+        printf '%s\n' "$rule_number"
+      done < <(ufw status numbered)
+    )"
+    public_rules="$(sort -rn <<<"$public_rules")"
+    while IFS= read -r rule_number; do
+      if [[ -n "$rule_number" ]]; then
+        ufw --force delete "$rule_number"
+        changed=1
+      fi
+    done <<<"$public_rules"
+    if ! grep -Fq 'Default: deny (incoming), allow (outgoing)' <<<"$before"; then
+      ufw default deny incoming
+      ufw default allow outgoing
+      changed=1
+    fi
+    if ! grep -Eq '^Anywhere( \(v6\))? on tailscale0[[:space:]]+ALLOW IN' <<<"$before"; then
+      ufw allow in on tailscale0
+      changed=1
+    fi
+    if ! grep -Fq 'Status: active' <<<"$before"; then
+      ufw --force enable
+      changed=1
+    fi
+    ((changed == 0)) || printf 'DEV_SERVER_UFW_CHANGED=1\n'
+  args:
+    executable: /bin/bash
+  register: security_ufw_apply
+  changed_when: "'DEV_SERVER_UFW_CHANGED=1' in security_ufw_apply.stdout"

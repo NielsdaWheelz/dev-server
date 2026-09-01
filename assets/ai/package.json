@@ -1,0 +1,12 @@
+{
+  "name": "dev-server-ai-tools",
+  "version": "1.0.0",
+  "private": true,
+  "allowScripts": {
+    "@anthropic-ai/claude-code@2.1.252": true
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.252",
+    "@openai/codex": "0.152.0"
+  }
+}
