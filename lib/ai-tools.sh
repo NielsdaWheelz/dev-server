@@ -119,7 +119,7 @@ ai_install_codex() {
     render_result CHANGED "npm global prefix" "$prefix"
   fi
 
-  candidate="$(ai_codex_candidate)"
+  candidate="$(ai_codex_candidate)" || return 1
   if ai_codex_matches "$candidate"; then
     return 0
   fi
