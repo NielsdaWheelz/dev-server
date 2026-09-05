@@ -2,7 +2,12 @@
 
 # Remote commands, including Mosh's SSH bootstrap, do not read .zprofile or
 # .zshrc. Keep the minimal executable search path available in every zsh.
-for _devbox_path_dir in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin" "$HOME/bin"; do
+for _devbox_path_dir in \
+  /opt/homebrew/bin \
+  /usr/local/bin \
+  "$HOME/.local/share/mise/shims" \
+  "$HOME/bin" \
+  "$HOME/.local/bin"; do
   if [[ -d "$_devbox_path_dir" ]]; then
     case ":$PATH:" in
       *":$_devbox_path_dir:"*) ;;

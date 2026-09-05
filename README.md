@@ -1,290 +1,326 @@
 # Dev Server
 
-Personal machine bootstrap for a disposable Hetzner dev box and local
-workstations.
+One-user convergence for the owned `macbook`, `arch`, and Hetzner `devbox` hosts.
+It installs declared state, activates only affected consumers, proves critical
+postconditions, and reports mutations, deferrals, or required actions.
 
-The goal is fast, malleable coding machines, not a compliance framework. Remote
-boxes are converged in place. Local machines use their native package managers
-and shared repo-owned dotfiles.
-
-## Files
-
-- `devbox`: converge and doctor the Hetzner dev box.
-- `workstation`: converge and doctor a local macOS or Arch machine.
-- `skidbladnir`: fixed-fleet doctor, invitation, and bounded outage proof.
-- `test`: routine static and fixture verification; it invokes no live boundary.
-- `lib/`: shared shell libraries for logging, doctors, dotfiles, AI tools, and
-  platform package commands.
-- `assets/`: managed routers and dotfiles.
-- `packages/`: native package manifests for Homebrew and Arch.
-- `cloud-init-devbox.template.yaml`: first-boot bootstrap for SSH, Tailscale,
-  and the temporary host firewall.
-- `ansible/`: Ubuntu system setup for the remote dev box.
-
-## One Command
-
-Create a short-lived, reusable, non-ephemeral Tailscale auth key and place it in
-`secrets/tailscale-auth-key`:
+The public surface is intentionally complete and small:
 
 ```sh
-mkdir -p secrets
-chmod 700 secrets
-printf '%s' 'tskey-auth-...' > secrets/tailscale-auth-key
-chmod 600 secrets/tailscale-auth-key
+./workstation apply
+./devbox apply
+./test
 ```
 
-Then run:
+An omitted or unknown operation exits `64`. Apply exits `0` when declared state
+is installed, `2` when a manual action is required, and `1` on an operational or
+invariant failure. Rerunning is safe. With fixed native package candidates, an
+immediate second apply reports `UP TO DATE` and performs no managed-state
+mutation or activation.
+
+The detailed capability contract and acceptance criteria are in [SPEC.md](SPEC.md).
+Fleet invitation, acceptance, reboot, and outage workflows live in the
+[Skíðblaðnir repository](https://github.com/NielsdaWheelz/skidbladnir).
+
+## Workstation
+
+Prerequisites:
+
+- macOS on the owned MacBook with Homebrew and the App Store Tailscale app
+  installed and signed in; or Arch Linux on the exact owned `arch` host with
+  `pacman`, `yay`, and interactive sudo elevation for declared machine policy;
+- Git, curl, Python 3, tmux, Tailscale, and the platform's standard service
+  tools;
+- existing GitHub, AI-tool, Tailscale, SSH, and Skíðblaðnir credentials where
+  enrollment has already occurred.
+
+Run:
 
 ```sh
-./devbox converge
+./workstation apply
 ```
 
-`converge` creates the Hetzner VPS if it is missing, reuses it when it already
-exists, waits for Tailscale, rewrites the SSH alias to the Tailscale IP, locks
-down public SSH, runs Ansible, and runs a lightweight doctor.
+The order is native packages, repo-owned files, exact-host personal policy,
+the current stable Codex plus native Claude, and Skíðblaðnir. Package managers
+may refresh their own metadata. Apply never removes Arch packages, restarts
+tmux, reboots, logs out, or interrupts running containers. Those cases are
+reported as `DEFERRED`.
+On macOS, apply verifies and may start the exact App Store Tailscale app but
+never installs, upgrades, replaces, or signs in to it.
 
-## Daily Commands
+Plain `codex` and `claude` remain upstream personal commands. Every Codex
+profile executes one npm user-global binary at `~/.local/bin/codex`; every
+Claude profile executes one Anthropic-native binary at `~/.local/bin/claude`.
+The managed `codex-work`, `codex-work2`, and `claude-work` wrappers isolate only
+account state and notification configuration. Running sessions are never
+restarted for an upgrade; new launches use the reconciled binary. Authenticate
+isolated homes directly when first required.
 
-```sh
-./devbox converge
-./devbox doctor
-```
+## Devbox
 
-Local workstation commands:
+Prerequisites:
 
-```sh
-./workstation converge
-./workstation doctor
-```
+- authenticated `hcloud` context `dev-infra`, local Tailscale, `gh`, SSH,
+  Python 3, and `uvx`;
+- operator key `~/.ssh/id_ed25519` and distinct deployment key
+  `~/.ssh/dev-server-deploy`, both regular private-key files with mode `0600`;
+- `Include ~/.ssh/config.d/*` in the operator's top-level SSH config;
+- for a new server only, a short-lived reusable Tailscale auth key in
+  `secrets/tailscale-auth-key`, containing exactly one newline-terminated value
+  with mode `0600`.
 
-## Skíðblaðnir public fleet
-
-The public [Skíðblaðnir releases](https://github.com/NielsdaWheelz/skidbladnir/releases)
-carry one signed Android APK and pinned host bundles. This repo owns the exact
-Devbox, MacBook, and Arch deployment. `./devbox converge` installs the Devbox
-gateway; `./workstation converge` installs the MacBook or Arch gateway. Each
-gateway starts automatically and publishes only its dedicated HTTPS `:8443`
-Tailscale Serve mapping to loopback `:7341`. Convergence never resets another
-Serve mapping and never replaces an existing machine handle or bearer.
-
-tmux owns session truth. The Codex hook projects only content-free,
-process-lifetime agent identity from `SessionStart`; Claude uses the equivalent
-process-lifetime adapter. `skid-notify` is terminal-local output: it validates
-the current pane, resolves that pane's terminal through the configured absolute
-tmux executable, and writes one BEL without changing gateway or session state.
-The inventory reports tmux-derived `Active` or `Quiet` activity and may include
-agent identity when one of those lifetime adapters is present.
-
-After all three machines are signed in to Tailscale and converged, create the
-local origins manifest on the MacBook:
+Create the deployment key once if needed:
 
 ```sh
+ssh-keygen -t ed25519 -f "$HOME/.ssh/dev-server-deploy" -C dev-server-deploy
+chmod 0600 "$HOME/.ssh/dev-server-deploy"
 install -d -m 0700 secrets
-install -m 0600 /dev/null secrets/skidbladnir-origins.json
+printf '%s\n' 'tskey-auth-...' >secrets/tailscale-auth-key
+chmod 0600 secrets/tailscale-auth-key
 ```
 
-Its strict shape is:
-
-```json
-{
-  "Arch": "https://arch.example-tailnet.ts.net:8443/",
-  "DevServer": "https://dev-server.example-tailnet.ts.net:8443/",
-  "Local": "https://macbook.example-tailnet.ts.net:8443/"
-}
-```
-
-Run `./skidbladnir invite`. It calls only the fixed local, `dev-server`, and
-`arch` commands, then displays one five-minute, single-use QR if every host
-succeeds. It stores no token, bearer, response, or QR payload. On each Android
-phone, install `skidbladnir-android.apk`, sign in to Tailscale, tap `Connect`,
-and scan a newly generated QR. Never commit the origins manifest or copy a host
-bearer off that host.
-
-The release pin is `assets/skidbladnir/release-pin.json`. Its version, source
-SHA, APK, both host bundles, checksum manifest, and signing-certificate asset
-digests must be replaced together from one published immutable release;
-`PENDING` fails closed. Each host bundle's strict `release.json` must also carry
-exactly `platform`, `sourceSha`, and `version`; missing or widened manifests fail
-before a release transaction begins. Compatibility is release-atomic; the
-manifest has no independent version dimension.
-
-The operator surface is deliberately closed:
+Run:
 
 ```sh
-./skidbladnir doctor
-./skidbladnir reconcile-lifetime-digests
-SKIDBLADNIR_ALLOW_HOST_ACCEPTANCE=host-acceptance-v1 \
-  ./skidbladnir accept-host Arch \
-  --allow-host-convergence --allow-inventory-reconciliation
-SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1 \
-  ./skidbladnir prepare-reboot Arch --allow-reboot-acceptance
-# Reboot only the named, separately approved host.
-SKIDBLADNIR_ALLOW_REBOOT_ACCEPTANCE=reboot-acceptance-v1 \
-  ./skidbladnir verify-reboot Arch --allow-reboot-acceptance
-./skidbladnir outage Arch
-./skidbladnir recover Arch
+./devbox apply
 ```
 
-`doctor` checks Local, DevServer, and Arch even if one fails. `outage` and
-`recover` accept only those three labels and stop or start only that gateway;
-they never touch tmux or Tailscale Serve. `reconcile-lifetime-digests` makes
-each host authenticate to its own loopback gateway, performs the gateway's
-bounded character normalization and stale phone-shadow reconciliation, and emits only
-`Local|DevServer|Arch <sha256>`. Capture it before and after an approved outage
-journey and require exact equality; no bearer or inventory content leaves its
-host. This command can reconcile host-local tmux character/shadow state;
-`doctor` instead uses the tmux-free pressure endpoint and changes nothing.
+When the server is absent, apply creates it, limits temporary public SSH to the
+operator's exact IPv4 `/32`, establishes the OpenSSH host key over the tailnet,
+and removes bootstrap ingress on success or failure. When it exists, apply uses
+only strict tailnet OpenSSH as `dev-server-deploy`; it never opens public SSH or
+resets host keys. Ansible owns Ubuntu state. `dev-server` remains the unprivileged
+`niels` operator alias.
 
-`accept-host` is a separate mutation gate for exactly one fixed host. Both
-literal flags and the exact environment capability are required before any
-local or SSH boundary. It validates existing credentials and reconciled
-lifetime, converges twice, requires a doctor with no failures, requires the
-credentials and lifetime to remain unchanged, and checks the owned service
-definition plus boot/login intent. Advisory warnings remain visible but do not
-block acceptance. It proves an identity-preserving reinstall,
-not first installation. `prepare-reboot` then stores a user-owned mode-0600,
-digest-only checkpoint for that exact host. After the separately approved
-reboot, `verify-reboot` requires a changed boot identity, an unchanged release
-pin and credentials, plus a failure-free doctor and service boot/login
-intent. It removes the checkpoint only after a pass. tmux intentionally starts
-a new lifetime after a machine reboot; the preceding `accept-host` gate proves
-that convergence itself preserved the old lifetime. Neither reboot command
-performs the reboot. Run `./test` for the routine hermetic proof.
+Missing GitHub enrollment is reported as one exact `ACTION`. Apply does not
+mutate GitHub accounts or keys. Controller inputs are validated, copied with
+their modes to one immutable per-run stage, and consumed only from that stage.
+Rootless Docker's supported unit/context setup is rebuilt only when its
+package, generated unit, or daemon config identity changed and no container is
+running; otherwise activation is deferred.
 
-Arch convergence installs Mosh and Tailscale, enables `tailscaled`, and leaves
-the one-time tailnet login to
-`sudo tailscale up --operator="$(id -un)"`. macOS convergence installs Mosh,
-reuses an existing Tailscale app or installs the recommended standalone app
-when missing, and leaves its one-time system-extension approval and login to
-the app.
+## One-time hard cutover
 
-The fixed Arch login is `nnandal`. MacBook fleet commands select
-`nnandal@arch` explicitly, so a stale user in the local SSH alias cannot
-silently retarget convergence, doctor, invitation, outage, or reboot gates.
+This release does not read, migrate, alias, or fall back to any legacy command,
+layout, state file, or release-pin schema. The cut is deliberately irreversible;
+preserve credentials and identities, then remove only the exact obsolete paths
+below before the first new apply on each host.
 
-On the Huawei MACH-WX9, workstation convergence installs a device-matched
-libinput preset for the `SYNA1D31` touchpad. It uses a custom curve with
-libinput's precise low-speed response and a proportional 64-point ramp from
-approximately `0.4x` to `20x`, natural two-finger scrolling, clickfinger
-buttons, tap-to-click, and disable-while-typing. The custom profile affects
-pointer motion only. It is applied immediately under X11 and stored under
-`/etc/X11/xorg.conf.d/` for subsequent sessions.
+### Existing devbox: establish the privilege boundary
 
-On EndeavourOS, workstation convergence also installs an LTS fallback kernel,
-an 8 GiB zram policy, Intel thermal management, firmware and NVMe tooling,
-shell linters, and package maintenance tools. It removes the installer
-onboarding applications and stale Electron runtimes, disables public-zone SSH
-access while enabling the SSH daemon for the fixed tailnet operator boundary,
-enables weekly mirror refreshes using health-ranked US and Canadian mirrors,
-configures `eos-update` to include AUR updates through `yay`, and keeps
-local-NVMe dracut images free of unneeded network storage modules. The normal
-Arch kernel remains the systemd-boot default while LTS stays available as a
-fallback.
-
-Firmware metadata, SMART disk health, package-file indexes, and package-cache
-cleanup run automatically. XFCE also gets persistent searchable clipboard
-history on `Super+V`, a hardware-scaled 1% minimum screen brightness, balanced
-AC and power-saver battery profiles, and an explicit idle policy. Under ordinary
-uninhibited idle time, the display turns off after 5 minutes on AC or 2 minutes
-on battery, the idle saver locks after 30 minutes, and the system suspends after
-5 minutes only on battery; every suspend also locks. XFCE also
-gets a Qogir-Dark cursor, workspace and window shortcuts, and a San Francisco
-solar schedule for Gammastep night color.
-
-Clipman and Gammastep are owned exclusively by XFCE autostart so they inherit
-the graphical session instead of a headless user-service environment. Over SSH
-with no XFCE login, convergence still validates their exact configuration and
-reports runtime ownership as advisory; configuration drift still fails, and a
-logged-in XFCE session with either runtime missing also fails.
-
-Arch convergence installs Cursor from the explicit AUR manifest and adds
-Anysphere's Remote SSH extension. The `dev-server` and `macbook` aliases are
-preclassified as Linux and macOS remotes. A remote repository can be opened
-directly from a shell with a folder URI:
+Use the Hetzner console, not an unverified SSH session. Install both public keys,
+the deployment principal, tailnet-only OpenSSH, and its constrained ownership:
 
 ```sh
-cursor --folder-uri 'vscode-remote://ssh-remote+dev-server/home/niels/src/personal/dev-server'
-cursor --folder-uri 'vscode-remote://ssh-remote+macbook/Users/nnandal/Documents/code/dev-server'
+sudo useradd --create-home --shell /bin/bash dev-server-deploy
+sudo install -d -m 0700 -o dev-server-deploy -g dev-server-deploy \
+  /home/dev-server-deploy/.ssh
+printf '%s\n' 'DEPLOYMENT_PUBLIC_KEY' | sudo tee \
+  /home/dev-server-deploy/.ssh/authorized_keys >/dev/null
+sudo chown dev-server-deploy:dev-server-deploy \
+  /home/dev-server-deploy/.ssh/authorized_keys
+sudo chmod 0600 /home/dev-server-deploy/.ssh/authorized_keys
+printf '%s\n' 'dev-server-deploy ALL=(ALL:ALL) NOPASSWD:ALL' | sudo tee \
+  /etc/sudoers.d/90-dev-server-deploy >/dev/null
+sudo chmod 0440 /etc/sudoers.d/90-dev-server-deploy
+sudo visudo -cf /etc/sudoers.d/90-dev-server-deploy
+sudo ufw allow in on tailscale0 to any port 22 proto tcp
+sudo systemctl enable --now ssh
+sudo tailscale set --ssh=false
 ```
 
-Arch convergence also installs Ghostty from the official repositories and
-makes it XFCE's preferred terminal while retaining XFCE Terminal as a fallback.
-The managed Ghostty profile uses the existing Meslo Nerd Font, dark native UI,
-automatic zsh integration, five-minute background reuse, and desktop
-notifications for commands that finish after 30 seconds while unfocused.
-
-## Guardrails
-
-- Public SSH is temporary. After Tailscale is up, `converge` removes host and
-  Hetzner SSH ingress.
-- `converge` installs and updates the desired packages, services, shell config,
-  and AI-tool shortcuts. It does not clean unrelated drift or delete/recreate
-  the server.
-- `doctor` checks the health of required pieces. It does not audit for the
-  absence of unrelated state.
-- Local workstation packages are native: Homebrew on macOS, pacman plus an
-  explicit AUR list on Arch.
-- AI tool shortcuts are shared across platforms. Codex and Claude use the
-  managed router under `~/.local/libexec/ai-router` for separate account state.
-- Convergence follows the stable channels for Codex and Claude and the current
-  native-package release for tmux. Tool versions are not pinned; tmux drift
-  from the last tested version is an advisory doctor warning.
-- Generated cloud-init is secret-bearing. Normal commands use temporary files;
-  keep `cloud-init-devbox.yaml` out of git.
-- The `secrets/` directory is ignored and should stay local.
-
-## Codex account shortcuts
-
-Convergence installs one Codex binary with three isolated account homes:
-
-- `codex-personal` uses `~/.codex-personal`.
-- `codex-work` uses `~/.codex-work`.
-- `codex-work2` uses `~/.codex-work2`.
-
-Plain `codex` continues to select personal or work state from the target path.
-The second work account is explicit-only and is never selected by path. Each
-home is a complete `CODEX_HOME`, so authentication, configuration, sessions,
-skills, plugins, logs, and other Codex state remain separate.
-
-Credentials are intentionally not provisioned. After the first convergence on
-a local machine, authenticate the new ChatGPT subscription in a private browser
-session so an existing account is not selected accidentally:
+Ensure `niels` still has the operator public key and no blanket passwordless
+sudo. Record the server's Ed25519 host-key fingerprint from the console:
 
 ```sh
-codex-work2 login
-codex-work2 login status
+sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256
 ```
 
-On the headless dev box, first enable device-code login in the new account's
-ChatGPT security settings, then enroll that machine separately:
+On the workstation, set the exact tailnet FQDN, scan only its Ed25519 key,
+rewrite its host field to the stable alias, and compare the displayed SHA256
+fingerprint byte-for-byte with the console value. Stop if they differ.
 
 ```sh
-ssh dev-server
-codex-work2 login --device-auth
-codex-work2 login status
+TAILNET_FQDN='dev-server.example-tailnet.ts.net'
+scan_file="$(mktemp "$HOME/.ssh/dev-server.scan.XXXXXX")"
+ssh-keyscan -T 10 -t ed25519 "$TAILNET_FQDN" 2>/dev/null |
+  awk '{$1="dev-server"; print}' >"$scan_file"
+chmod 0600 "$scan_file"
+ssh-keygen -lf "$scan_file" -E sha256
 ```
 
-`login status` confirms the authentication method, not the account identity.
-Verify the new account in the browser flow. Use ChatGPT login for subscription
-access; API-key login is usage-billed separately. Never put `auth.json`, access
-tokens, or device codes in this repo, Ansible, shell startup files, or chat.
+After verification, replace only the exact `dev-server` entry atomically:
 
-## Docker
+```sh
+known_hosts="$HOME/.ssh/known_hosts"
+known_candidate="$(mktemp "$HOME/.ssh/known_hosts.cutover.XXXXXX")"
+touch "$known_hosts"
+chmod 0600 "$known_hosts"
+cat "$known_hosts" >"$known_candidate"
+ssh-keygen -R dev-server -f "$known_candidate" >/dev/null
+rm -f "$known_candidate.old"
+cat "$scan_file" >>"$known_candidate"
+chmod 0600 "$known_candidate"
+mv "$known_candidate" "$known_hosts"
+rm -f "$scan_file"
+ssh -o BatchMode=yes -o IdentitiesOnly=yes \
+  -o HostKeyAlias=dev-server -o StrictHostKeyChecking=yes \
+  -i "$HOME/.ssh/id_ed25519" "niels@$TAILNET_FQDN" true
+ssh -o BatchMode=yes -o IdentitiesOnly=yes \
+  -o HostKeyAlias=dev-server -o StrictHostKeyChecking=yes \
+  -i "$HOME/.ssh/dev-server-deploy" \
+  "dev-server-deploy@$TAILNET_FQDN" sudo -n true
+```
 
-Rootless Docker is the configured default. `./devbox converge` installs the
-rootless service, log policy, and shell environment. Do not keep long-lived
-state only in Docker on this box.
+Trade-off: two SSH credentials and a manual, console-anchored host-key ceremony
+add one-time work; remote agents no longer inherit deployment privilege.
 
-The Arch workstation uses the distribution Docker service. Convergence enables
-it and adds the workstation user to the `docker` group, which grants
-root-equivalent access. Log out and back in before first use. If a full system
-upgrade replaced the running kernel, convergence leaves Docker enabled, reports
-a doctor warning, and waits for the required reboot instead of aborting the rest
-of workstation setup.
+### Every host: remove exact legacy installer state
 
-## Philosophy
+Stop the Skíðblaðnir service using the native service manager. Preserve
+`~/.config/skidbladnir/bearer`, `machine-handle`, the three
+`android-signing.*` release credentials, AI credentials, Docker data, SSH keys,
+Tailscale identity, and existing integration settings. Remove only:
 
-This is a one-user prototype machine. Prefer small shell and Ansible that are easy
-to read and edit. Destructive server replacement is intentionally manual because
-server identity and pricing can matter. Add heavier systems only when the box has
-a real repeated failure mode.
+```sh
+rm -f "$HOME/.local/bin/skidbladnir"
+rm -f "$HOME/.local/share/skidbladnir/characters.json"
+rm -f "$HOME/.local/share/skidbladnir/release.json"
+rm -f "$HOME/.local/share/skidbladnir/release-bundle.tar.gz"
+rm -f "$HOME/.local/share/skidbladnir/.release-activation-required"
+rm -f "$HOME/.local/share/skidbladnir/.converge.lock"
+rm -f "$HOME/.config/skidbladnir/host-config.json"
+rm -R "$HOME/.local/share/skidbladnir/.release-transaction"
+```
+
+On Arch, also disable and remove the exact retired user units and autostart:
+
+```sh
+systemctl --user disable --now xfce4-clipman.service
+systemctl --user disable --now gammastep.service
+systemctl --user disable --now app-com.mitchellh.ghostty.service
+rm -f "$HOME/.config/systemd/user/xfce4-clipman.service"
+rm -f "$HOME/.config/systemd/user/gammastep.service"
+rm -f "$HOME/.config/systemd/user/app-com.mitchellh.ghostty.service"
+rm -f "$HOME/.config/autostart/xfce4-clipman.desktop"
+systemctl --user daemon-reload
+```
+
+Remove the former local cloud-state duplicate. On the devbox, also remove the
+exact stale files from the user cache; do not use globs:
+
+```sh
+rm -f secrets/devbox-state.env
+cache="$HOME/.local/share/dev-server"
+rm -f "$cache/lib/doctor.sh"
+rm -f "$cache/lib/packages-arch.sh"
+rm -f "$cache/lib/packages-macos.sh"
+rm -f "$cache/lib/remote-devbox.sh"
+rm -f "$cache/lib/skidbladnir-invite.sh"
+rm -f "$cache/lib/skidbladnir-operator.sh"
+rm -f "$cache/skidbladnir"
+rm -f "$cache/assets/routers/ai-router"
+rm -f "$cache/assets/ai/package.json"
+rm -f "$cache/assets/ai/package-lock.json"
+rmdir "$cache/assets/ai"
+rm -f "$cache/assets/dotfiles/gammastep-autostart.desktop"
+rm -f "$cache/assets/dotfiles/gammastep.config"
+rm -f "$cache/assets/dotfiles/ghostty-autostart.desktop"
+rm -f "$cache/assets/dotfiles/ghostty-xfce-helper.desktop"
+rm -f "$cache/assets/dotfiles/ghostty.config"
+rm -f "$cache/assets/dotfiles/xfce4-clipman-autostart.desktop"
+rm -f "$cache/assets/dotfiles/xfce4-helpers.rc"
+rm -f "$cache/assets/skidbladnir/agent-hooks-arch.json"
+rm -f "$cache/assets/skidbladnir/agent-hooks-macbook.json"
+rm -f "$cache/assets/skidbladnir/host-config-arch.json"
+rm -f "$cache/assets/skidbladnir/host-config-macbook.json"
+rm -f "$cache/assets/skidbladnir/dev.niels.skidbladnir.plist"
+rm -f "$cache/assets/skidbladnir/skid-notify-macbook"
+```
+
+Finally retire only wrapper symlinks that still target the old router; preserve
+plain upstream binaries and never remove `.codex*` or `.claude*` state:
+
+```sh
+router="$HOME/.local/libexec/ai-router"
+for wrapper in \
+  "$HOME/bin/codex" \
+  "$HOME/bin/codex-personal" \
+  "$HOME/bin/codex-work" \
+  "$HOME/bin/codex-work2" \
+  "$HOME/bin/claude" \
+  "$HOME/bin/claude-personal" \
+  "$HOME/bin/claude-work"
+do
+  if [ -L "$wrapper" ] && [ "$(readlink "$wrapper")" = "$router" ]; then
+    rm -f "$wrapper"
+  fi
+done
+rm -f "$router"
+```
+
+After `~/.local/bin/claude --version` succeeds and that path is a symlink into
+`~/.local/share/claude/versions/`, remove the exact retired private npm tree:
+
+```sh
+test -L "$HOME/.local/bin/claude"
+case "$(readlink "$HOME/.local/bin/claude")" in
+  "$HOME/.local/share/claude/versions/"*) ;;
+  *) exit 1 ;;
+esac
+"$HOME/.local/bin/claude" --version
+rm -R "$HOME/.local/share/dev-server/ai-tools"
+```
+
+Ensure `~/.gitconfig.local` contains any machine-only identity/settings. Retire
+the exact former GitHub SSH rewrite without hiding inspection errors:
+
+```sh
+if git config --global --get-all 'url.git@github.com:.insteadOf' >/dev/null; then
+  git config --global --unset-all 'url.git@github.com:.insteadOf'
+fi
+```
+
+The new pinned plugins are immutable generations behind managed links. They do
+not adopt legacy in-place clones. Inspect each old clone with `git status`,
+preserve any local work, then remove only these exact paths before apply:
+
+```sh
+rm -R "$HOME/.zsh/fzf-tab"
+rm -R "$HOME/.zsh/powerlevel10k"
+rm -R "$HOME/.tmux/plugins/tpm"
+rm -R "$HOME/.tmux/plugins/tmux-resurrect"
+rm -R "$HOME/.tmux/plugins/tmux-continuum"
+```
+
+Then run the appropriate apply command and verify the reported private
+Skíðblaðnir health/Serve postconditions.
+
+## Boundaries and trade-offs
+
+- Native OS repositories, Codex stable, and Anthropic-native Claude are rolling
+  rather than byte-replayable. Git plugins, Cursor extensions, and Skíðblaðnir
+  are exact reviewable pins and therefore can lag upstream until manually
+  bumped.
+- Native package and npm updates can partially complete; rerun their native
+  reconcilers. Git plugin candidates are isolated until an atomic link switch.
+  Only Skíðblaðnir has repository-owned service rollback.
+- Skíðblaðnir no-op apply re-downloads its small archive to re-prove admission.
+  A host-config-only change needs a new release pin because generation identity
+  is release-keyed.
+- Desktop login, reboot, busy Docker, and tmux-server activation are never
+  forced. Public exposure, credentials, checksums, host-key continuity, and the
+  last healthy Skíðblaðnir generation are never traded away for convenience.
+- Existing-devbox safety repair may close or attach only the exact steady
+  Hetzner firewall before tailnet reachability is available. An inactive UFW
+  store is reset and rebuilt because its persisted rules cannot be observed
+  safely while disabled.
+- Immutable per-run input copies cost a small amount of local disk and I/O.
+  Devbox Node.js is constrained to rolling major 24 rather than exact package
+  bytes. Workstations accept their native candidate at version 24 or newer;
+  those repositories remain the freshness authority and may advance majors.
+- CI is hermetic and non-deploying. Final live applies, fleet/device acceptance,
+  and release publication remain explicit operator actions.
+- Arch fleet acceptance runs from an attached operator terminal and may prompt
+  for sudo; the user/agent account never receives blanket passwordless
+  elevation.

@@ -1,38 +1,75 @@
 ---
-- name: Get devbox user uid
-  ansible.builtin.command: "id -u {{ devbox_user }}"
-  register: devbox_user_uid
+- name: Inspect recorded active rootless Docker identity
+  ansible.builtin.stat:
+    path: "/home/{{ devbox_user }}/.local/state/dev-server/active/docker.sha256"
+    follow: false
+  register: rootless_docker_active_identity
+
+- name: Validate recorded active rootless Docker identity path
+  ansible.builtin.assert:
+    that:
+      - not (rootless_docker_active_identity.stat.islnk | default(false))
+      - >-
+        not rootless_docker_active_identity.stat.exists or
+        rootless_docker_active_identity.stat.isreg
+      - >-
+        not rootless_docker_active_identity.stat.exists or
+        rootless_docker_active_identity.stat.mode == "0600"
+    fail_msg: Invalid recorded active rootless Docker identity
+
+- name: Read recorded active rootless Docker identity
+  ansible.builtin.slurp:
+    path: "/home/{{ devbox_user }}/.local/state/dev-server/active/docker.sha256"
+  register: rootless_docker_active_identity_content
+  when: rootless_docker_active_identity.stat.exists
+
+- name: Validate recorded active rootless Docker identity value
+  ansible.builtin.assert:
+    that:
+      - (rootless_docker_active_identity_content.content | b64decode | length) == 65
+      - >-
+        (rootless_docker_active_identity_content.content | b64decode)
+        is match('^[0-9a-f]{64}\n\Z')
+    fail_msg: Invalid recorded active rootless Docker identity
+  when: rootless_docker_active_identity.stat.exists
+
+- name: Inspect rootful Docker daemon state
+  ansible.builtin.service_facts:
+
+- name: Validate rootful Docker daemon state
+  ansible.builtin.assert:
+    that:
+      - "'docker.service' in ansible_facts.services"
+      - ansible_facts.services['docker.service'].source == 'systemd'
+      - ansible_facts.services['docker.service'].state in ['running', 'stopped', 'failed']
+    fail_msg: Rootful Docker service state is missing or ambiguous
+
+- name: Inspect rootful Docker containers before disabling its daemon
+  ansible.builtin.command:
+    argv: [docker, --host, "unix:///var/run/docker.sock", ps, -q]
+  register: rootless_docker_rootful_containers
   changed_when: false
+  failed_when: rootless_docker_rootful_containers.rc != 0
+  when: ansible_facts.services['docker.service'].state == 'running'
 
-- name: Ensure devbox user remains in sudo group
-  ansible.builtin.user:
-    name: "{{ devbox_user }}"
-    groups: sudo
-    append: true
+- name: Disable the unused rootful Docker daemon
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: false
+    state: stopped
+  loop:
+    - docker.socket
+    - docker.service
+  when: >-
+    ansible_facts.services['docker.service'].state != 'running' or
+    (rootless_docker_rootful_containers.stdout | default('') | trim == '')
 
-- name: Enable linger for rootless Docker user service
-  ansible.builtin.command: "loginctl enable-linger {{ devbox_user }}"
-  changed_when: false
-
-- name: Start user systemd manager for rootless Docker
-  ansible.builtin.systemd:
-    name: "user@{{ devbox_user_uid.stdout }}.service"
-    state: started
-
-- name: Wait for user D-Bus socket
-  ansible.builtin.wait_for:
-    path: "/run/user/{{ devbox_user_uid.stdout }}/bus"
-    state: present
-    timeout: 30
-
-- name: Install rootless Docker service
-  ansible.builtin.command: dockerd-rootless-setuptool.sh install
-  args:
-    creates: "/home/{{ devbox_user }}/.config/systemd/user/docker.service"
-  become: true
-  become_user: "{{ devbox_user }}"
-  environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ devbox_user_uid.stdout }}"
+- name: Report deferred rootful Docker shutdown
+  ansible.builtin.debug:
+    msg: DEV_SERVER_DOCKER_DEFERRED
+  when:
+    - ansible_facts.services['docker.service'].state == 'running'
+    - rootless_docker_rootful_containers.stdout | trim != ""
 
 - name: Ensure rootless Docker config directory exists
   ansible.builtin.file:
@@ -42,7 +79,7 @@
     group: "{{ devbox_user }}"
     mode: "0755"
 
-- name: Configure rootless Docker log rotation
+- name: Install rootless Docker log policy
   ansible.builtin.copy:
     dest: "/home/{{ devbox_user }}/.config/docker/daemon.json"
     owner: "{{ devbox_user }}"
@@ -56,28 +93,215 @@
           "max-file": "{{ devbox_docker_log_max_file }}"
         }
       }
-  register: devbox_rootless_docker_config
 
-- name: Enable rootless Docker user service
-  ansible.builtin.command: systemctl --user enable --now docker.service
+- name: Inspect generated rootless Docker unit
+  ansible.builtin.stat:
+    path: "/home/{{ devbox_user }}/.config/systemd/user/docker.service"
+    follow: false
+    checksum_algorithm: sha256
+  register: rootless_docker_unit
+
+- name: Validate generated rootless Docker unit topology
+  ansible.builtin.assert:
+    that:
+      - not (rootless_docker_unit.stat.islnk | default(false))
+      - not rootless_docker_unit.stat.exists or rootless_docker_unit.stat.isreg
+      - >-
+        not rootless_docker_unit.stat.exists or
+        rootless_docker_unit.stat.mode == "0644"
+      - >-
+        not rootless_docker_unit.stat.exists or
+        rootless_docker_unit.stat.pw_name == devbox_user
+      - >-
+        not rootless_docker_unit.stat.exists or
+        rootless_docker_unit.stat.gr_name == devbox_user
+    fail_msg: Invalid generated rootless Docker unit
+
+- name: Validate rootless Docker CLI context
+  ansible.builtin.shell: |
+    set -euo pipefail
+    docker --context=default context inspect rootless |
+      python3 -c '
+    import json, sys
+    value = json.load(sys.stdin)
+    expected = sys.argv[1]
+    valid = (isinstance(value, list) and len(value) == 1 and
+             isinstance(value[0], dict) and
+             ((value[0].get("Endpoints") or {}).get("docker") or {}).get("Host") == expected)
+    raise SystemExit(0 if valid else 1)
+    ' "unix:///run/user/{{ base_user_uid.stdout }}/docker.sock"
+  args:
+    executable: /bin/bash
   become: true
   become_user: "{{ devbox_user }}"
   environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ devbox_user_uid.stdout }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ devbox_user_uid.stdout }}/bus"
+    HOME: "/home/{{ devbox_user }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ base_user_uid.stdout }}"
+  register: rootless_docker_context
+  changed_when: false
+  failed_when: false
+
+- name: Read rootless Docker configuration identity
+  ansible.builtin.stat:
+    path: "/home/{{ devbox_user }}/.config/docker/daemon.json"
+    checksum_algorithm: sha256
+  register: rootless_docker_config_identity
+
+- name: Resolve observed rootless Docker setup identity
+  ansible.builtin.set_fact:
+    rootless_docker_observed_identity: >-
+      {{ ((rootless_docker_config_identity.stat.checksum ~ '\n' ~
+           base_docker_version_after.stdout ~ '\n' ~
+           rootless_docker_unit.stat.checksum ~ '\n') | hash('sha256'))
+         if (rootless_docker_unit.stat.exists and
+             rootless_docker_context.rc == 0) else '' }}
+    rootless_docker_active_identity_value: >-
+      {{ (rootless_docker_active_identity_content.content | b64decode | trim)
+         if rootless_docker_active_identity.stat.exists else '' }}
+
+- name: Repair and verify changed rootless Docker setup
+  ansible.builtin.shell: |
+    set -euo pipefail
+    unit="$HOME/.config/systemd/user/docker.service"
+    socket="unix:///run/user/{{ base_user_uid.stdout }}/docker.sock"
+    set +e
+    systemctl --user is-active --quiet docker.service
+    service_status=$?
+    set -e
+    case "$service_status" in
+      0)
+        containers="$(docker --host "$socket" ps -q)"
+        if [[ -n "$containers" ]]; then
+          printf 'DEV_SERVER_DOCKER_DEFERRED\n'
+          exit 0
+        fi
+        ;;
+      3) ;;
+      4)
+        [[ ! -e "$unit" && ! -L "$unit" ]] || exit 1
+        ;;
+      *) exit 1 ;;
+    esac
+    if [[ -e "$unit" || -L "$unit" ]] ||
+      docker --context=default context inspect rootless >/dev/null 2>&1; then
+      dockerd-rootless-setuptool.sh --force uninstall
+    fi
+    dockerd-rootless-setuptool.sh --force install
+    systemctl --user is-active --quiet docker.service
+    docker --host "$socket" version >/dev/null
+    printf 'DEV_SERVER_DOCKER_REPAIRED\n'
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: "{{ devbox_user }}"
+  environment:
+    HOME: "/home/{{ devbox_user }}"
+    PATH: "/usr/local/bin:/usr/bin:/bin"
+    XDG_RUNTIME_DIR: "/run/user/{{ base_user_uid.stdout }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ base_user_uid.stdout }}/bus"
+  register: rootless_docker_setup
+  changed_when: "'DEV_SERVER_DOCKER_REPAIRED' in rootless_docker_setup.stdout"
+  when: >-
+    not rootless_docker_unit.stat.exists or
+    rootless_docker_context.rc != 0 or
+    rootless_docker_observed_identity != rootless_docker_active_identity_value
+
+- name: Resolve deferred rootless Docker setup
+  ansible.builtin.set_fact:
+    rootless_docker_setup_deferred: >-
+      {{ 'DEV_SERVER_DOCKER_DEFERRED' in
+         (rootless_docker_setup.stdout | default('')) }}
+
+- name: Report deferred rootless Docker setup
+  ansible.builtin.debug:
+    msg: DEV_SERVER_DOCKER_DEFERRED
+  when: rootless_docker_setup_deferred
+
+- name: Stop rootless Docker reconciliation after a safe deferral
+  ansible.builtin.meta: end_role
+  when: rootless_docker_setup_deferred
+
+- name: Reinspect generated rootless Docker unit
+  ansible.builtin.stat:
+    path: "/home/{{ devbox_user }}/.config/systemd/user/docker.service"
+    follow: false
+    checksum_algorithm: sha256
+  register: rootless_docker_final_unit
+
+- name: Revalidate rootless Docker CLI context
+  ansible.builtin.shell: |
+    set -euo pipefail
+    docker --context=default context inspect rootless |
+      python3 -c '
+    import json, sys
+    value = json.load(sys.stdin)
+    expected = sys.argv[1]
+    valid = (isinstance(value, list) and len(value) == 1 and
+             isinstance(value[0], dict) and
+             ((value[0].get("Endpoints") or {}).get("docker") or {}).get("Host") == expected)
+    raise SystemExit(0 if valid else 1)
+    ' "unix:///run/user/{{ base_user_uid.stdout }}/docker.sock"
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: "{{ devbox_user }}"
+  environment:
+    HOME: "/home/{{ devbox_user }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ base_user_uid.stdout }}"
   changed_when: false
 
-- name: Restart rootless Docker when log policy changed
-  ansible.builtin.command: systemctl --user restart docker.service
+- name: Validate repaired rootless Docker unit
+  ansible.builtin.assert:
+    that:
+      - rootless_docker_final_unit.stat.exists
+      - rootless_docker_final_unit.stat.isreg
+      - not (rootless_docker_final_unit.stat.islnk | default(false))
+      - rootless_docker_final_unit.stat.mode == "0644"
+      - rootless_docker_final_unit.stat.pw_name == devbox_user
+      - rootless_docker_final_unit.stat.gr_name == devbox_user
+    fail_msg: Supported rootless Docker setup did not produce its exact unit
+
+- name: Ensure rootless Docker is enabled and active
+  ansible.builtin.systemd_service:
+    name: docker.service
+    scope: user
+    enabled: true
+    state: started
   become: true
   become_user: "{{ devbox_user }}"
   environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ devbox_user_uid.stdout }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ devbox_user_uid.stdout }}/bus"
-  changed_when: true
-  when:
-    - devbox_rootless_docker_config is defined
-    - devbox_rootless_docker_config.changed
+    HOME: "/home/{{ devbox_user }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ base_user_uid.stdout }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ base_user_uid.stdout }}/bus"
+
+- name: Verify active rootless Docker API
+  ansible.builtin.command:
+    argv:
+      - docker
+      - --host
+      - "unix:///run/user/{{ base_user_uid.stdout }}/docker.sock"
+      - version
+  become: true
+  become_user: "{{ devbox_user }}"
+  environment:
+    HOME: "/home/{{ devbox_user }}"
+    XDG_RUNTIME_DIR: "/run/user/{{ base_user_uid.stdout }}"
+  changed_when: false
+
+- name: Resolve verified rootless Docker activation identity
+  ansible.builtin.set_fact:
+    rootless_docker_desired_identity: >-
+      {{ (rootless_docker_config_identity.stat.checksum ~ '\n' ~
+          base_docker_version_after.stdout ~ '\n' ~
+          rootless_docker_final_unit.stat.checksum ~ '\n') | hash('sha256') }}
+
+- name: Record verified active rootless Docker identity
+  ansible.builtin.copy:
+    dest: "/home/{{ devbox_user }}/.local/state/dev-server/active/docker.sha256"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0600"
+    content: "{{ rootless_docker_desired_identity }}\n"
 
 - name: Install rootless Docker shell environment
   ansible.builtin.copy:
@@ -86,5 +310,5 @@
     group: "{{ devbox_user }}"
     mode: "0644"
     content: |
-      export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/{{ devbox_user_uid.stdout }}}"
-      export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/{{ devbox_user_uid.stdout }}/docker.sock}"
+      export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/{{ base_user_uid.stdout }}}"
+      export DOCKER_HOST="${DOCKER_HOST:-unix:///run/user/{{ base_user_uid.stdout }}/docker.sock}"

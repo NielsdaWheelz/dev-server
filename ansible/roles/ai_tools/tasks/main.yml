@@ -1,43 +1,69 @@
 ---
-- name: Check whether mise is installed
-  ansible.builtin.command: test -x /home/{{ devbox_user }}/.local/bin/mise
-  register: devbox_mise_installed
-  changed_when: false
-  failed_when: false
-  become: true
-  become_user: "{{ devbox_user }}"
+- name: Inspect devbox GitHub identity paths
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "/home/{{ devbox_user }}/.ssh/id_ed25519_github"
+    - "/home/{{ devbox_user }}/.ssh/id_ed25519_github.pub"
+  register: ai_tools_github_identity_paths
 
-- name: Install mise
+- name: Validate devbox GitHub identity topology
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (ai_tools_github_identity_paths.results[0].stat.islnk |
+             default(false))
+      - >-
+        not (ai_tools_github_identity_paths.results[1].stat.islnk |
+             default(false))
+      - >-
+        ai_tools_github_identity_paths.results[0].stat.exists ==
+        ai_tools_github_identity_paths.results[1].stat.exists
+      - >-
+        not ai_tools_github_identity_paths.results[0].stat.exists or
+        (ai_tools_github_identity_paths.results[0].stat.isreg and
+         ai_tools_github_identity_paths.results[0].stat.mode == "0600")
+      - >-
+        not ai_tools_github_identity_paths.results[1].stat.exists or
+        (ai_tools_github_identity_paths.results[1].stat.isreg and
+         ai_tools_github_identity_paths.results[1].stat.mode == "0644")
+    fail_msg: Invalid devbox GitHub identity topology
+
+- name: Validate existing devbox GitHub identity material
   ansible.builtin.shell: |
     set -euo pipefail
-    curl -fsSL https://mise.run | sh
+    derived="$(ssh-keygen -y -f /home/{{ devbox_user }}/.ssh/id_ed25519_github)"
+    observed="$(awk 'NF >= 2 { print $1 " " $2; exit }' /home/{{ devbox_user }}/.ssh/id_ed25519_github.pub)"
+    [[ "$derived" == "$observed" ]]
   args:
     executable: /bin/bash
   become: true
   become_user: "{{ devbox_user }}"
-  when: devbox_mise_installed.rc != 0
-
-- name: Install mise-managed tools
-  ansible.builtin.command: >
-    /home/{{ devbox_user }}/.local/bin/mise use -g -y
-    atuin@latest
-    eza@latest
-    delta@latest
-    lazygit@latest
-    yazi@latest
-  become: true
-  become_user: "{{ devbox_user }}"
-  environment:
-    MISE_YES: "1"
-    PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
   changed_when: false
+  when: ai_tools_github_identity_paths.results[0].stat.exists
 
-- name: Install AI npm globals and routers
+- name: Inspect managed GitHub SSH client policy path
+  ansible.builtin.stat:
+    path: "/home/{{ devbox_user }}/.ssh/config"
+    follow: false
+  register: ai_tools_github_ssh_config
+
+- name: Validate managed GitHub SSH client policy path
+  ansible.builtin.assert:
+    that:
+      - not (ai_tools_github_ssh_config.stat.islnk | default(false))
+      - >-
+        not ai_tools_github_ssh_config.stat.exists or
+        ai_tools_github_ssh_config.stat.isreg
+    fail_msg: Invalid managed GitHub SSH client policy path
+
+- name: Install canonical AI commands and explicit profiles
   ansible.builtin.shell: |
     set -euo pipefail
-    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
     dev_server_home_dir="/home/{{ devbox_user }}"
     dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/ai-tools.sh"
     ai_install
   args:
@@ -45,52 +71,20 @@
   become: true
   become_user: "{{ devbox_user }}"
   environment:
-    PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
-  changed_when: false
+    HOME: "/home/{{ devbox_user }}"
+    PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+  register: ai_tools_apply
+  changed_when: >-
+    ai_tools_apply.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED)  ')
 
-- name: Verify managed AI tools
-  ansible.builtin.shell: |
-    set -euo pipefail
-    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
-    dev_server_home_dir="/home/{{ devbox_user }}"
-    dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
-    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/doctor.sh"
-    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/ai-tools.sh"
-    doctor_reset
-    ai_doctor
-    doctor_summary "ai-tools"
-  args:
-    executable: /bin/bash
-  become: true
-  become_user: "{{ devbox_user }}"
-  environment:
-    PATH: "/home/{{ devbox_user }}/.local/bin:{{ ansible_facts['env']['PATH'] }}"
-  changed_when: false
-
-- name: Generate server GitHub SSH key when absent
-  ansible.builtin.command: ssh-keygen -t ed25519 -C '{{ devbox_user }}-dev-server-github' -f /home/{{ devbox_user }}/.ssh/id_ed25519_github -N ''
-  args:
-    creates: "/home/{{ devbox_user }}/.ssh/id_ed25519_github"
-  become: true
-  become_user: "{{ devbox_user }}"
-
-- name: Ensure GitHub SSH config file exists
+- name: Install exact GitHub SSH client policy
   ansible.builtin.copy:
     dest: "/home/{{ devbox_user }}/.ssh/config"
-    content: ""
-    force: false
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: "0600"
-
-- name: Install GitHub SSH config block
-  ansible.builtin.blockinfile:
-    path: "/home/{{ devbox_user }}/.ssh/config"
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    mode: "0600"
-    marker: "# {mark} DEVBOX GITHUB SSH"
-    block: |
+    validate: "/usr/bin/ssh -G -F %s github.com"
+    content: |
       Host github.com
         HostName github.com
         User git

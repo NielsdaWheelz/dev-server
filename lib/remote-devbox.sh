@@ -2,7 +2,7 @@
 
 run_ansible_playbook() {
   require_cmd uvx
-  uvx --from ansible-core ansible-playbook "$@"
+  uvx --from ansible-core==2.19.2 ansible-playbook "$@"
 }
 
 quote_remote_args() {

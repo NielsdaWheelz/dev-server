@@ -1,59 +1,244 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export LC_ALL=C.UTF-8
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
-shellcheck --severity=warning \
-  "$repo_dir/skidbladnir" "$repo_dir/test" "$repo_dir/workstation" \
-  "$repo_dir/lib/common.sh" "$repo_dir/lib/ai-tools.sh" "$repo_dir/lib/dotfiles.sh" \
-  "$repo_dir/lib/packages-arch.sh" \
-  "$repo_dir/lib/skidbladnir.sh" "$repo_dir/lib/skidbladnir-invite.sh" \
-  "$repo_dir/lib/skidbladnir-operator.sh" "$repo_dir/lib/packages-macos.sh" \
-  "$repo_dir/tests/ai-router.sh" "$repo_dir/tests/dotfiles.sh" "$repo_dir/tests/platform-skips.sh" \
-  "$repo_dir/tests/skidbladnir.sh"
-shfmt -d -i 2 \
-  "$repo_dir/skidbladnir" "$repo_dir/test" "$repo_dir/workstation" \
-  "$repo_dir/lib/common.sh" "$repo_dir/lib/ai-tools.sh" "$repo_dir/lib/dotfiles.sh" "$repo_dir/lib/packages-arch.sh" \
-  "$repo_dir/lib/skidbladnir.sh" "$repo_dir/lib/skidbladnir-invite.sh" \
-  "$repo_dir/lib/skidbladnir-operator.sh" "$repo_dir/lib/packages-macos.sh" \
-  "$repo_dir/tests/ai-router.sh" "$repo_dir/tests/dotfiles.sh" \
-  "$repo_dir/tests/platform-skips.sh" "$repo_dir/tests/skidbladnir.sh"
+for command_name in ansible-playbook git python3 shellcheck shfmt zsh; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    printf 'ERROR  test dependency is missing: %s\n' "$command_name" >&2
+    exit 1
+  fi
+done
 
-while IFS= read -r file; do
-  bash -n "$file"
-done < <(find "$repo_dir" -type f \( -name '*.sh' -o -path "$repo_dir/devbox" -o -path "$repo_dir/workstation" -o -path "$repo_dir/skidbladnir" -o -path "$repo_dir/test" \) | LC_ALL=C sort)
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-test.XXXXXX")"
+cleanup() {
+  case "$scratch" in
+  "${TMPDIR:-/tmp}"/dev-server-test.*) rm -rf -- "$scratch" ;;
+  *)
+    printf 'ERROR  refusing to clean unexpected test path: %s\n' "$scratch" >&2
+    return 1
+    ;;
+  esac
+}
+trap cleanup EXIT HUP INT TERM
 
-while IFS= read -r file; do
-  jq -e . "$file" >/dev/null
-done < <(find "$repo_dir/assets" -type f -name '*.json' | LC_ALL=C sort)
+shell_files=()
+zsh_files=()
+json_files=()
+yaml_files=()
+plist_files=()
+playbook_files=()
+production_files=()
 
-yaml_files=(
-  "$repo_dir/ansible/playbooks/converge.yml"
-  "$repo_dir/ansible/roles/ai_tools/tasks/main.yml"
-  "$repo_dir/ansible/roles/base/tasks/main.yml"
-  "$repo_dir/ansible/roles/skidbladnir/tasks/main.yml"
+while IFS= read -r -d '' relative; do
+  full_path="$repo_dir/$relative"
+  [[ -f "$full_path" ]] || continue
+
+  first_line=''
+  IFS= read -r first_line <"$full_path" || true
+  case "$relative:$first_line" in
+  *.sh:* | *:'#!'*sh*) shell_files+=("$full_path") ;;
+  esac
+  case "$relative" in
+  *.zsh | assets/dotfiles/zshenv | assets/dotfiles/zshrc | assets/dotfiles/zsh_helpers)
+    zsh_files+=("$full_path")
+    ;;
+  esac
+  case "$relative" in
+  *.json) json_files+=("$full_path") ;;
+  *.yml | *.yaml) yaml_files+=("$full_path") ;;
+  *.plist) plist_files+=("$full_path") ;;
+  esac
+  case "$relative" in
+  ansible/playbooks/*.yml | ansible/playbooks/*.yaml)
+    [[ "${relative#ansible/playbooks/}" == */* ]] || playbook_files+=("$full_path")
+    ;;
+  esac
+  case "$relative" in
+  workstation | devbox | skidbladnir | lib/*.sh | assets/* | ansible/* | packages/* | cloud-init-devbox.template.yaml)
+    production_files+=("$relative")
+    ;;
+  esac
+done < <(git -C "$repo_dir" ls-files -z --cached --others --exclude-standard)
+
+if ((${#shell_files[@]} > 0)); then
+  shellcheck --severity=warning "${shell_files[@]}"
+  shfmt -d -i 2 "${shell_files[@]}"
+  for file in "${shell_files[@]}"; do
+    bash -n "$file"
+  done
+fi
+
+if ((${#zsh_files[@]} > 0)); then
+  zsh -n "${zsh_files[@]}"
+fi
+
+if ((${#json_files[@]} > 0)); then
+  python3 - "${json_files[@]}" <<'PY'
+import json
+import pathlib
+import sys
+
+
+def reject_duplicate_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate object key: {key}")
+        result[key] = value
+    return result
+
+
+def reject_constant(value):
+    raise ValueError(f"non-JSON numeric constant: {value}")
+
+
+for name in sys.argv[1:]:
+    path = pathlib.Path(name)
+    with path.open(encoding="utf-8") as stream:
+        json.load(
+            stream,
+            object_pairs_hook=reject_duplicate_keys,
+            parse_constant=reject_constant,
+        )
+PY
+fi
+
+if ((${#yaml_files[@]} > 0)); then
+  python3 - "${yaml_files[@]}" <<'PY'
+import pathlib
+import sys
+
+import yaml
+
+
+class UniqueKeyLoader(yaml.SafeLoader):
+    pass
+
+
+def construct_unique_mapping(loader, node, deep=False):
+    result = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in result:
+            raise ValueError(f"duplicate YAML mapping key: {key}")
+        result[key] = loader.construct_object(value_node, deep=deep)
+    return result
+
+
+UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    construct_unique_mapping,
 )
-if python3 -c 'import yaml' >/dev/null 2>&1; then
-  python3 -c 'import sys, yaml; [yaml.safe_load(open(path, encoding="utf-8")) for path in sys.argv[1:]]' \
-    "${yaml_files[@]}"
-elif command -v ruby >/dev/null 2>&1; then
-  ruby -ryaml -e 'ARGV.each { |file| YAML.safe_load(File.read(file), permitted_classes: [], permitted_symbols: [], aliases: true) }' \
-    "${yaml_files[@]}"
-else
-  printf 'A safe YAML parser (Python PyYAML or Ruby) is required\n' >&2
-  exit 1
-fi
-plist="$repo_dir/assets/skidbladnir/dev.niels.skidbladnir.plist"
-if [[ "$(uname -s)" == Darwin ]]; then
-  /usr/bin/plutil -lint "$plist" >/dev/null
-elif command -v python3 >/dev/null 2>&1; then
-  python3 -c 'import plistlib, sys; plistlib.load(open(sys.argv[1], "rb"))' "$plist"
-else
-  printf 'A plist parser (macOS plutil or Python 3) is required\n' >&2
-  exit 1
+
+for name in sys.argv[1:]:
+    path = pathlib.Path(name)
+    with path.open(encoding="utf-8") as stream:
+        list(yaml.load_all(stream, Loader=UniqueKeyLoader))
+PY
 fi
 
-bash "$repo_dir/tests/ai-router.sh"
-bash "$repo_dir/tests/dotfiles.sh"
-bash "$repo_dir/tests/platform-skips.sh"
-bash "$repo_dir/tests/skidbladnir.sh"
+if ((${#plist_files[@]} > 0)); then
+  python3 - "${plist_files[@]}" <<'PY'
+import pathlib
+import plistlib
+import sys
+
+for name in sys.argv[1:]:
+    with pathlib.Path(name).open("rb") as stream:
+        plistlib.load(stream)
+PY
+fi
+
+if ((${#production_files[@]} > 0)); then
+  python3 - "$repo_dir" "${production_files[@]}" <<'PY'
+import pathlib
+import re
+import sys
+
+root = pathlib.Path(sys.argv[1])
+paths = sys.argv[2:]
+forbidden_paths = {
+    "skidbladnir",
+    "lib/doctor.sh",
+    "lib/skidbladnir-invite.sh",
+    "lib/skidbladnir-operator.sh",
+    "packages/arch.remove.txt",
+    "ansible/playbooks/converge.yml",
+}
+patterns = (
+    (
+        "doctor/converge symbol",
+        re.compile(r"(?<![A-Za-z0-9_])(?:doctor|converge)(?![A-Za-z0-9_])"),
+    ),
+    (
+        "unsafe agent bypass",
+        re.compile(
+            r"dangerously-bypass-approvals-and-sandbox|"
+            r"dangerously-skip-permissions|bypassPermissions|"
+            r"--full-auto\b|--yolo\b|--permission-mode(?:=|[\s\"']+)auto\b"
+        ),
+    ),
+    (
+        "private Tailscale LocalAPI",
+        re.compile(r"LocalAPI|localapi/v[0-9]+|local-tailscaled\.sock", re.IGNORECASE),
+    ),
+    (
+        "public Tailscale Funnel",
+        re.compile(r"\btailscale\s+funnel\b|\bfunnel\s+(?:on|enable)\b", re.IGNORECASE),
+    ),
+    ("executable @latest", re.compile(r"@latest\b", re.IGNORECASE)),
+    (
+        "automatic Arch removal",
+        re.compile(r"\b(?:pacman|paru|yay)\b[^\n]*(?:--remove\b|-[A-Za-z]*R[A-Za-z]*\b)"),
+    ),
+)
+pipe_to_shell = re.compile(
+    r"\b(?:curl|wget)\b[^\n|]{0,1000}\|\s*(?:(?:sudo|env)\s+)*(?:ba)?sh\b"
+)
+
+failures = []
+for relative in paths:
+    if relative in forbidden_paths:
+        failures.append(f"{relative}: forbidden legacy production path")
+    path = root / relative
+    text = path.read_text(encoding="utf-8")
+    for label, pattern in patterns:
+        for match in pattern.finditer(text):
+            line = text.count("\n", 0, match.start()) + 1
+            failures.append(f"{relative}:{line}: {label}: {match.group(0)}")
+    joined = text.replace("\\\n", " ")
+    for match in pipe_to_shell.finditer(joined):
+        line = joined.count("\n", 0, match.start()) + 1
+        failures.append(f"{relative}:{line}: pipe-to-shell installer")
+
+if failures:
+    print("\n".join(failures), file=sys.stderr)
+    raise SystemExit(1)
+PY
+fi
+
+if ((${#playbook_files[@]} > 0)); then
+  mkdir "$scratch/ansible-local"
+  for playbook in "${playbook_files[@]}"; do
+    ANSIBLE_CONFIG="$repo_dir/ansible.cfg" \
+      ANSIBLE_LOCAL_TEMP="$scratch/ansible-local" \
+      ANSIBLE_NOCOLOR=1 \
+      ANSIBLE_RETRY_FILES_ENABLED=false \
+      ansible-playbook \
+      --inventory "$repo_dir/ansible/inventory/devbox.yml" \
+      --syntax-check "$playbook"
+  done
+fi
+
+test_count=0
+for test_file in "$repo_dir"/tests/*.sh; do
+  [[ -f "$test_file" ]] || continue
+  bash "$test_file"
+  test_count=$((test_count + 1))
+done
+
+printf 'test: %d shell, %d zsh, %d JSON, %d YAML, %d plist, %d contract suites passed\n' \
+  "${#shell_files[@]}" "${#zsh_files[@]}" "${#json_files[@]}" \
+  "${#yaml_files[@]}" "${#plist_files[@]}" "$test_count"

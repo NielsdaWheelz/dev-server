@@ -1,0 +1,14 @@
+[include]
+	path = ~/.gitconfig.local
+[core]
+	excludesfile = ~/.gitignore_global
+	pager = delta
+[init]
+	defaultBranch = main
+[interactive]
+	diffFilter = delta --color-only
+[delta]
+	navigate = true
+	side-by-side = false
+[merge]
+	conflictStyle = zdiff3

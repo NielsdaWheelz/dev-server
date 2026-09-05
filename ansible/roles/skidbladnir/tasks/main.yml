@@ -1,52 +1,65 @@
 ---
-- name: Read devbox user id for the user service
-  ansible.builtin.command: "id -u {{ devbox_user }}"
-  register: devbox_skidbladnir_uid
-  changed_when: false
-
-- name: Read devbox lingering state
-  ansible.builtin.command: "loginctl show-user {{ devbox_user }} -p Linger --value"
-  register: devbox_skidbladnir_linger
-  changed_when: false
-  failed_when: false
-
-- name: Enable devbox user services at boot
-  ansible.builtin.command: "loginctl enable-linger {{ devbox_user }}"
-  when: devbox_skidbladnir_linger.stdout != "yes"
-
-- name: Converge pinned Skidbladnir gateway
+- name: Apply pinned Skíðblaðnir generation
   ansible.builtin.shell: |
-    set -euo pipefail
+    set -uo pipefail
+    dev_server_home_dir="/home/{{ devbox_user }}"
+    dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/skidbladnir.sh"
-    skidbladnir_converge devbox
+    output="$(
+      set -e
+      skidbladnir_apply devbox
+      finish_results devbox
+    )"
+    status=$?
+    printf '%s\n' "$output"
+    if ((status == 2)); then
+      action=''
+      while IFS= read -r line; do
+        case "$line" in
+          'ACTION  tailscale.serve: install and sign in to Tailscale, then rerun apply')
+            next=INSTALL_TAILSCALE
+            ;;
+          'ACTION  tailscale.serve: sign in to Tailscale, then rerun apply')
+            next=SIGN_IN_TAILSCALE
+            ;;
+          "ACTION  tailscale.serve: remove the stale HTTPS 8443 mapping with 'tailscale serve --https=8443 off', then rerun apply")
+            next=CLEAR_STALE_SERVE
+            ;;
+          *) continue ;;
+        esac
+        [[ -z "$action" ]] || exit 1
+        action="$next"
+      done <<<"$output"
+      [[ -n "$action" ]] || exit 1
+      printf 'DEV_SERVER_SKID_ACTION_%s\n' "$action"
+    fi
+    exit "$status"
   args:
     executable: /bin/bash
   become: true
   become_user: "{{ devbox_user }}"
   environment:
-    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ devbox_skidbladnir_uid.stdout }}/bus"
     HOME: "/home/{{ devbox_user }}"
     PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
-    XDG_RUNTIME_DIR: "/run/user/{{ devbox_skidbladnir_uid.stdout }}"
-  changed_when: false
+    XDG_RUNTIME_DIR: "/run/user/{{ base_user_uid.stdout }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ base_user_uid.stdout }}/bus"
+  register: skidbladnir_apply_result
+  changed_when: >-
+    skidbladnir_apply_result.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ')
+  failed_when: skidbladnir_apply_result.rc not in [0, 2]
 
-- name: Diagnose pinned Skidbladnir gateway
-  ansible.builtin.shell: |
-    set -euo pipefail
-    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
-    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/doctor.sh"
-    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/skidbladnir.sh"
-    doctor_reset
-    skidbladnir_doctor devbox
-    doctor_summary skidbladnir
-  args:
-    executable: /bin/bash
-  become: true
-  become_user: "{{ devbox_user }}"
-  environment:
-    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ devbox_skidbladnir_uid.stdout }}/bus"
-    HOME: "/home/{{ devbox_user }}"
-    PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
-    XDG_RUNTIME_DIR: "/run/user/{{ devbox_skidbladnir_uid.stdout }}"
-  changed_when: false
+- name: Report missing Tailscale action code
+  ansible.builtin.debug:
+    msg: DEV_SERVER_SKID_ACTION_INSTALL_TAILSCALE
+  when: "'DEV_SERVER_SKID_ACTION_INSTALL_TAILSCALE' in skidbladnir_apply_result.stdout_lines"
+
+- name: Report signed-out Tailscale action code
+  ansible.builtin.debug:
+    msg: DEV_SERVER_SKID_ACTION_SIGN_IN_TAILSCALE
+  when: "'DEV_SERVER_SKID_ACTION_SIGN_IN_TAILSCALE' in skidbladnir_apply_result.stdout_lines"
+
+- name: Report stale Serve action code
+  ansible.builtin.debug:
+    msg: DEV_SERVER_SKID_ACTION_CLEAR_STALE_SERVE
+  when: "'DEV_SERVER_SKID_ACTION_CLEAR_STALE_SERVE' in skidbladnir_apply_result.stdout_lines"

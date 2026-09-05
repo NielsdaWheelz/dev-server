@@ -6,10 +6,10 @@
       "key": "personal",
       "label": "Codex · Personal",
       "provider": "Codex",
-      "command": "/Users/nnandal/bin/codex-personal",
-      "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-personal"}],
+      "command": "/Users/nnandal/.local/bin/codex",
+      "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
-      "arguments": ["--dangerously-bypass-approvals-and-sandbox"]
+      "arguments": []
     },
     {
       "key": "work",
@@ -18,7 +18,7 @@
       "command": "/Users/nnandal/bin/codex-work",
       "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-work"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
-      "arguments": ["--dangerously-bypass-approvals-and-sandbox"]
+      "arguments": []
     },
     {
       "key": "work2",
@@ -27,16 +27,16 @@
       "command": "/Users/nnandal/bin/codex-work2",
       "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-work2"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
-      "arguments": ["--dangerously-bypass-approvals-and-sandbox"]
+      "arguments": []
     },
     {
       "key": "claude-personal",
       "label": "Claude · Personal",
       "provider": "Claude",
-      "command": "/Users/nnandal/bin/claude-personal",
-      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/Users/nnandal/.claude-personal"}],
+      "command": "/Users/nnandal/.local/bin/claude",
+      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/Users/nnandal/.claude"}],
       "foregroundSignatures": [{"argument0": "/Users/nnandal/.local/bin/claude"}],
-      "arguments": ["--permission-mode", "auto"]
+      "arguments": ["--plugin-dir", "/Users/nnandal/.local/share/skidbladnir/claude-agent-identity"]
     },
     {
       "key": "claude-work",
@@ -45,7 +45,7 @@
       "command": "/Users/nnandal/bin/claude-work",
       "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/Users/nnandal/.claude-work"}],
       "foregroundSignatures": [{"argument0": "/Users/nnandal/.local/bin/claude"}],
-      "arguments": ["--permission-mode", "auto"]
+      "arguments": ["--plugin-dir", "/Users/nnandal/.local/share/skidbladnir/claude-agent-identity"]
     }
   ]
 }

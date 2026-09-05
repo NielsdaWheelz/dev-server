@@ -1,6 +1,6 @@
 {
   "description": "Skíðblaðnir agent identity projection",
   "hooks": {
-    "SessionStart": [{"matcher": "^(startup|resume|clear)$", "hooks": [{"type": "command", "command": "/home/nnandal/.local/bin/skidbladnir agent-hook --host-config=/home/nnandal/.config/skidbladnir/host-config.json Codex SessionStart", "timeout": 5, "async": false}]}]
+    "SessionStart": [{"matcher": "^(startup|resume|clear)$", "hooks": [{"type": "command", "command": "/home/nnandal/.local/bin/skidbladnir agent-hook --host-config=/home/nnandal/.local/share/skidbladnir/current/host-config.json Codex SessionStart", "timeout": 5, "async": false}]}]
   }
 }

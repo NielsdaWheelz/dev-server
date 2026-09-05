@@ -1,7 +1,8 @@
 ---
 devbox_user: niels
+devbox_deploy_user: dev-server-deploy
 devbox_timezone: America/Los_Angeles
 devbox_locale: en_US.UTF-8
-devbox_node_major: "22"
+devbox_node_major: "24"
 devbox_docker_log_max_size: "50m"
 devbox_docker_log_max_file: "3"

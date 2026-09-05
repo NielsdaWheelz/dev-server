@@ -1,265 +1,255 @@
 #!/usr/bin/env bash
 
-ai_tools_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-# shellcheck source=lib/skidbladnir.sh
-source "$ai_tools_lib_dir/skidbladnir.sh"
+ai_require_codex_runtime() {
+  local npm_version
 
-ai_tools() {
-  printf 'codex claude\n'
+  require_cmd node
+  require_cmd npm
+  node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)' ||
+    die "Codex requires Node.js 24 or newer"
+  npm_version="$(npm --version)" || die "could not read the npm version"
+  node - "$npm_version" <<'NODE' || die "Codex requires npm 11.17.0 or newer"
+const actual = process.argv[2];
+if (!/^\d+\.\d+\.\d+$/.test(actual)) process.exit(1);
+const parts = actual.split('.').map(Number);
+const minimum = [11, 17, 0];
+for (let index = 0; index < minimum.length; index += 1) {
+  if (parts[index] > minimum[index]) process.exit(0);
+  if (parts[index] < minimum[index]) process.exit(1);
+}
+NODE
 }
 
-ai_tool_contexts() {
-  case "$1" in
-  codex) printf 'personal work work2\n' ;;
-  claude) printf 'personal work\n' ;;
-  *) die "unknown routed AI tool: $1" ;;
-  esac
-}
+ai_validate_inputs() {
+  local profile
 
-ai_tool_package() {
-  case "$1" in
-  codex) printf '@openai/codex@latest\n' ;;
-  claude) printf '@anthropic-ai/claude-code\n' ;;
-  *) die "unknown AI tool: $1" ;;
-  esac
-}
-
-ai_tool_install_method() {
-  case "$1" in
-  codex) printf 'npm\n' ;;
-  claude) printf 'native\n' ;;
-  *) die "unknown AI tool: $1" ;;
-  esac
-}
-
-ai_native_channel() {
-  printf 'stable\n'
-}
-
-ai_tool_real_binary() {
-  printf '%s/.local/bin/%s\n' "$(dev_server_home)" "$1"
-}
-
-ai_tool_home() {
-  local tool="$1"
-  local context="$2"
-
-  case "$tool:$context" in
-  codex:personal) printf '%s/.codex-personal\n' "$(dev_server_home)" ;;
-  codex:work) printf '%s/.codex-work\n' "$(dev_server_home)" ;;
-  codex:work2) printf '%s/.codex-work2\n' "$(dev_server_home)" ;;
-  claude:personal) printf '%s/.claude-personal\n' "$(dev_server_home)" ;;
-  claude:work) printf '%s/.claude-work\n' "$(dev_server_home)" ;;
-  *) die "unknown AI tool/context: $tool/$context" ;;
-  esac
-}
-
-ai_router_source() {
-  printf '%s/routers/ai-router\n' "$(dev_server_assets_dir)"
-}
-
-ai_router_dest() {
-  printf '%s/.local/libexec/ai-router\n' "$(dev_server_home)"
-}
-
-ai_claude_plugin_ready() {
-  skidbladnir_claude_plugin_installation_matches "$(dev_server_home)"
+  profile="$(dev_server_assets_dir)/routers/ai-profile"
+  [[ -f "$profile" && ! -L "$profile" ]] ||
+    die "invalid AI profile wrapper: $profile"
 }
 
 ai_install_dirs() {
   local home
-  local tool
-  local context
 
   home="$(dev_server_home)"
-  install -d -m 0755 "$home/bin" "$home/.local/bin" "$home/.local/libexec" "$home/.npm"
-  for tool in $(ai_tools); do
-    for context in $(ai_tool_contexts "$tool"); do
-      install -d -m 0700 "$(ai_tool_home "$tool" "$context")"
-    done
-  done
+  ensure_directory "$home/bin" 0755 || return 1
+  ensure_directory "$home/.local" 0755 || return 1
+  ensure_directory "$home/.local/bin" 0755 || return 1
+  ensure_directory "$home/.local/share" 0755 || return 1
+  ensure_directory "$home/.codex-work" 0700 || return 1
+  ensure_directory "$home/.codex-work2" 0700 || return 1
+  ensure_directory "$home/.claude-work" 0700 || return 1
 }
 
-ai_install_router() {
-  local router_source
-  local router_dest
+ai_package_version() {
+  local manifest="$1"
+  local package="$2"
+
+  node -e '
+    const manifest = require(process.argv[1]);
+    const packageName = process.argv[2];
+    const version = manifest.name === packageName
+      ? manifest.version
+      : manifest.dependencies?.[packageName];
+    if (typeof version !== "string" || !/^\d+\.\d+\.\d+$/.test(version)) {
+      process.exit(1);
+    }
+    process.stdout.write(version);
+  ' "$manifest" "$package"
+}
+
+ai_codex_binary() {
+  printf '%s/.local/bin/codex\n' "$(dev_server_home)"
+}
+
+ai_codex_manifest() {
+  printf '%s/.local/lib/node_modules/@openai/codex/package.json\n' \
+    "$(dev_server_home)"
+}
+
+ai_codex_candidate() {
+  local value
+
+  value="$(npm view @openai/codex dist-tags.latest --json)" ||
+    die "could not resolve the current stable Codex release"
+  node -e '
+    const value = JSON.parse(process.argv[1]);
+    if (typeof value !== "string" || !/^\d+\.\d+\.\d+$/.test(value)) {
+      process.exit(1);
+    }
+    process.stdout.write(value);
+  ' "$value" || die "npm returned an invalid stable Codex release"
+}
+
+ai_codex_matches() {
+  local expected="$1"
+  local binary
+  local manifest
+  local output
+
+  binary="$(ai_codex_binary)"
+  manifest="$(ai_codex_manifest)"
+  [[ -x "$binary" && -f "$manifest" && ! -L "$manifest" ]] || return 1
+  [[ "$(ai_package_version "$manifest" @openai/codex 2>/dev/null || true)" == "$expected" ]] || return 1
+  output="$(CODEX_HOME="$(dev_server_home)/.codex-work" "$binary" --version)" ||
+    return 1
+  [[ "$output" == "codex-cli $expected" ]]
+}
+
+ai_install_codex() {
+  local binary
+  local candidate
   local home
-  local tool
-  local context
-  local shortcut
+  local npm_prefix
+  local prefix
+  local status
 
   home="$(dev_server_home)"
-  router_source="$(ai_router_source)"
-  router_dest="$(ai_router_dest)"
-  ai_claude_plugin_ready ||
-    die "Claude identity plugin is unavailable; converge Skidbladnir before activating the AI router"
-  [[ -f "$router_source" ]] || die "missing AI router asset: $router_source"
+  prefix="$home/.local"
+  binary="$(ai_codex_binary)"
+  npm_prefix="$(npm config get prefix)" || die "could not read the npm global prefix"
+  if [[ "$npm_prefix" != "$prefix" ]]; then
+    npm config set --location=user prefix "$prefix" ||
+      die "could not configure the npm user-global prefix"
+    [[ "$(npm config get prefix)" == "$prefix" ]] ||
+      die "npm did not retain the user-global prefix"
+    render_result CHANGED "npm global prefix" "$prefix"
+  fi
 
-  install -m 0755 "$router_source" "$router_dest"
-
-  for tool in $(ai_tools); do
-    ln -sfn "$router_dest" "$home/bin/$tool"
-    for context in $(ai_tool_contexts "$tool"); do
-      shortcut="$home/bin/$tool-$context"
-      ln -sfn "$router_dest" "$shortcut"
-    done
-  done
+  candidate="$(ai_codex_candidate)"
+  if ai_codex_matches "$candidate"; then
+    return 0
+  fi
+  if [[ -e "$(ai_codex_manifest)" || -L "$(ai_codex_manifest)" ||
+  -e "$binary" || -L "$binary" ]]; then
+    status=UPDATED
+  else
+    status=INSTALLED
+  fi
+  npm install --global --prefix "$prefix" --ignore-scripts \
+    --no-audit --no-fund "@openai/codex@$candidate" || return 1
+  ai_codex_matches "$candidate" ||
+    die "installed Codex does not match npm's stable candidate"
+  render_result "$status" "AI tool" "codex@$candidate"
 }
 
-ai_install_npm_globals() {
-  local packages=()
-  local tool
+ai_claude_binary() {
+  printf '%s/.local/bin/claude\n' "$(dev_server_home)"
+}
 
-  for tool in $(ai_tools); do
-    [[ "$(ai_tool_install_method "$tool")" == "npm" ]] || continue
-    packages+=("$(ai_tool_package "$tool")")
-  done
+ai_claude_version() {
+  local binary="$1"
+  local output
 
-  if ((${#packages[@]} == 0)); then
+  output="$(CLAUDE_CONFIG_DIR="$(dev_server_home)/.claude" \
+    "$binary" --version)" || return 1
+  [[ "$output" =~ ^([0-9]+\.[0-9]+\.[0-9]+)' (Claude Code)'$ ]] || return 1
+  printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
+ai_claude_native_version() {
+  local binary
+  local expected_prefix
+  local target
+  local version
+
+  binary="$(ai_claude_binary)"
+  expected_prefix="$(dev_server_home)/.local/share/claude/versions/"
+  [[ -L "$binary" ]] || return 1
+  target="$(readlink "$binary")" || return 1
+  [[ "$target" == "$expected_prefix"* && -f "$target" &&
+    ! -L "$target" && -x "$target" ]] || return 1
+  version="$(ai_claude_version "$binary")" || return 1
+  [[ "$target" == "$expected_prefix$version" ]] || return 1
+  printf '%s\n' "$version"
+}
+
+ai_bootstrap_claude_native() (
+  set -euo pipefail
+
+  local bytes
+  local home
+  local installer
+
+  require_cmd bash
+  require_cmd curl
+  home="$(dev_server_home)"
+  installer="$(mktemp "${TMPDIR:-/tmp}/dev-server-claude-install.XXXXXX")" ||
+    die "could not allocate a Claude installer candidate"
+  trap 'rm -f -- "$installer"' EXIT
+  curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
+    --output "$installer" https://claude.ai/install.sh ||
+    die "could not download the official Claude installer"
+  [[ -f "$installer" && ! -L "$installer" ]] ||
+    die "invalid Claude installer candidate"
+  bytes="$(wc -c <"$installer" | tr -d ' ')"
+  [[ "$bytes" =~ ^[0-9]+$ && "$bytes" -gt 0 && "$bytes" -le 1048576 ]] ||
+    die "invalid Claude installer candidate size"
+  bash -n "$installer" || die "invalid Claude installer syntax"
+  HOME="$home" bash "$installer" latest ||
+    die "Claude native installation failed"
+)
+
+ai_install_claude() {
+  local before
+  local binary
+  local home
+  local status
+  local version
+
+  home="$(dev_server_home)"
+  binary="$(ai_claude_binary)"
+  if before="$(ai_claude_native_version)"; then
+    HOME="$home" CLAUDE_CONFIG_DIR="$home/.claude" "$binary" update ||
+      die "Claude native update failed"
+    version="$(ai_claude_native_version)" ||
+      die "Claude native update produced an invalid installation"
+    if [[ "$version" != "$before" ]]; then
+      render_result UPDATED "AI tool" "claude@$version"
+    fi
     return 0
   fi
 
-  require_cmd npm
-  npm config set prefix "$(dev_server_home)/.local"
-  npm install -g "${packages[@]}"
-
-  if command -v corepack >/dev/null 2>&1; then
-    corepack enable --install-directory "$(dev_server_home)/.local/bin"
+  if [[ -e "$binary" || -L "$binary" ]]; then
+    die "canonical Claude command is not an Anthropic native installation: $binary"
   fi
+  if [[ -e "$home/.local/share/claude" || -L "$home/.local/share/claude" ]]; then
+    status=UPDATED
+  else
+    status=INSTALLED
+  fi
+  ai_bootstrap_claude_native || return 1
+  version="$(ai_claude_native_version)" ||
+    die "Claude native installer produced an invalid installation"
+  render_result "$status" "AI tool" "claude@$version"
 }
 
-ai_install_native_tool() {
-  local tool="$1"
-  local pkg
-
-  case "$tool" in
-  claude) ;;
-  *) die "no native installer defined for AI tool: $tool" ;;
-  esac
-
-  require_cmd curl
-
-  # Retire any npm-managed copy so the native launcher owns ~/.local/bin/<tool>.
-  pkg="$(ai_tool_package "$tool")"
-  if command -v npm >/dev/null 2>&1 && npm ls -g --depth=0 "$pkg" >/dev/null 2>&1; then
-    log "removing npm-managed $tool ($pkg); native install supersedes it"
-    npm uninstall -g "$pkg" >/dev/null 2>&1 || warn "failed to uninstall npm $pkg; continuing"
-  fi
-
-  log "installing native $tool ($(ai_native_channel))"
-  curl -fsSL https://claude.ai/install.sh | bash -s -- "$(ai_native_channel)"
+ai_install_packages() {
+  ai_install_codex || return 1
+  ai_install_claude || return 1
 }
 
-ai_install_native() {
-  local tool
+ai_install_profiles() {
+  local home
+  local profile
 
-  for tool in $(ai_tools); do
-    [[ "$(ai_tool_install_method "$tool")" == "native" ]] || continue
-    ai_install_native_tool "$tool"
-  done
+  home="$(dev_server_home)"
+  profile="$(dev_server_assets_dir)/routers/ai-profile"
+  [[ -f "$profile" && ! -L "$profile" ]] ||
+    die "missing AI profile wrapper: $profile"
+
+  install_managed_file "$profile" \
+    "$home/bin/codex-work" 0755 shell.config || return 1
+  install_managed_file "$profile" \
+    "$home/bin/codex-work2" 0755 shell.config || return 1
+  install_managed_file "$profile" \
+    "$home/bin/claude-work" 0755 shell.config || return 1
 }
 
 ai_install() {
-  ai_install_dirs
-  ai_install_npm_globals
-  ai_install_native
-  ai_install_router
-}
-
-ai_doctor_tool() {
-  local tool="$1"
-  local expected
-  local router
-  local home
-  local context
-  local shortcut
-  local shortcut_target
-  local shortcuts=()
-  local version
-
-  expected="$(ai_tool_real_binary "$tool")"
-  router="$(ai_router_dest)"
-  home="$(dev_server_home)"
-
-  if [[ ! -x "$expected" ]]; then
-    doctor_fail "ai.$tool" "missing managed binary: $expected"
-    return
-  fi
-
-  if [[ ! -x "$router" ]]; then
-    doctor_fail "ai.$tool" "missing AI router: $router"
-    return
-  fi
-
-  shortcuts+=("$home/bin/$tool")
-  for context in $(ai_tool_contexts "$tool"); do
-    shortcuts+=("$home/bin/$tool-$context")
-  done
-
-  for shortcut in "${shortcuts[@]}"; do
-    if [[ ! -x "$shortcut" ]]; then
-      doctor_fail "ai.$tool" "missing shortcut: $shortcut"
-      return
-    fi
-    if [[ ! -L "$shortcut" ]]; then
-      doctor_fail "ai.$tool" "shortcut is not a symlink: $shortcut"
-      return
-    fi
-    shortcut_target="$(readlink "$shortcut")"
-    if [[ "$shortcut_target" != "$router" ]]; then
-      doctor_fail "ai.$tool" "$shortcut links to $shortcut_target, expected $router"
-      return
-    fi
-  done
-
-  for context in $(ai_tool_contexts "$tool"); do
-    if [[ ! -d "$(ai_tool_home "$tool" "$context")" ]]; then
-      doctor_fail "ai.$tool" "missing state dir: $(ai_tool_home "$tool" "$context")"
-      return
-    fi
-  done
-
-  if [[ "$tool" == claude ]] && ! ai_claude_plugin_ready; then
-    doctor_fail "ai.$tool" "Claude identity plugin is unavailable; converge Skidbladnir"
-    return
-  fi
-  if ! version="$("$home/bin/$tool" --version 2>/dev/null)"; then
-    doctor_fail "ai.$tool" "managed binary version check failed"
-    return
-  fi
-  doctor_pass "ai.$tool" "[$(ai_tool_install_method "$tool")] $version via $router -> $expected"
-}
-
-ai_doctor_codex_auth() {
-  local context
-  local home
-  local output
-  local shortcut
-  local status_line
-
-  home="$(dev_server_home)"
-  for context in $(ai_tool_contexts codex); do
-    shortcut="$home/bin/codex-$context"
-    [[ -x "$shortcut" ]] || continue
-
-    if output="$("$shortcut" login status 2>&1)"; then
-      doctor_pass "ai.codex.auth.$context" "credential cache present"
-    else
-      status_line="${output##*$'\n'}"
-      if [[ "$status_line" == "Not logged in" ]]; then
-        doctor_warn "ai.codex.auth.$context" "not enrolled; run: codex-$context login"
-      else
-        doctor_fail "ai.codex.auth.$context" "login status failed; run: codex-$context login status"
-      fi
-    fi
-  done
-}
-
-ai_doctor() {
-  local tool
-
-  for tool in $(ai_tools); do
-    ai_doctor_tool "$tool"
-  done
-  ai_doctor_codex_auth
+  ai_require_codex_runtime
+  ai_validate_inputs
+  ai_install_dirs || return 1
+  ai_install_packages || return 1
+  ai_install_profiles || return 1
 }

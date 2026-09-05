@@ -2,17 +2,20 @@
 - name: Install managed dotfiles
   ansible.builtin.shell: |
     set -euo pipefail
-    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
     dev_server_home_dir="/home/{{ devbox_user }}"
     dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/dotfiles.sh"
     dotfiles_install
   args:
     executable: /bin/bash
   become: true
   become_user: "{{ devbox_user }}"
-  register: devbox_dotfiles_install
-  changed_when: false
+  register: shell_dotfiles_apply
+  environment:
+    HOME: "/home/{{ devbox_user }}"
+  changed_when: >-
+    shell_dotfiles_apply.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED)  ')
 
 - name: Set user shell to zsh
   ansible.builtin.user:

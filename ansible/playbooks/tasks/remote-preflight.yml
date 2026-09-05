@@ -1,0 +1,225 @@
+---
+- name: Admit exact existing protected state without changing it
+  ansible.builtin.shell: |
+    set -euo pipefail
+    /usr/bin/python3 - <<'PY'
+    import grp
+    import os
+    import pathlib
+    import pwd
+    import re
+    import stat
+    import sys
+
+    def reject(message):
+        print(f"remote managed-state preflight: {message}", file=sys.stderr)
+        raise SystemExit(1)
+
+    def admit(path, kind, mode, uid, gid, single_link=False):
+        path = pathlib.Path(path)
+        if not os.path.lexists(path):
+            return None
+        value = os.lstat(path)
+        predicates = {"directory": stat.S_ISDIR, "file": stat.S_ISREG, "symlink": stat.S_ISLNK}
+        if not predicates[kind](value.st_mode):
+            reject(f"protected path is not a {kind}: {path}")
+        if (stat.S_IMODE(value.st_mode) != mode or value.st_uid != uid or
+                value.st_gid != gid or (single_link and value.st_nlink != 1)):
+            reject(f"protected path metadata is invalid: {path}")
+        return value
+
+    def exact_content(path, pattern, label):
+        path = pathlib.Path(path)
+        if not os.path.lexists(path):
+            return ""
+        before = os.lstat(path)
+        flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags)
+        with os.fdopen(descriptor, "rb") as stream:
+            after = os.fstat(stream.fileno())
+            if ((before.st_dev, before.st_ino) != (after.st_dev, after.st_ino) or
+                    not stat.S_ISREG(after.st_mode)):
+                reject(f"protected file changed during preflight: {path}")
+            value = stream.read(4097)
+        if re.fullmatch(pattern, value) is None:
+            reject(f"{label} content is invalid: {path}")
+        return value[:-1].decode("ascii")
+
+    def managed_link(path, admitted, label):
+        path = pathlib.Path(path)
+        if not os.path.lexists(path):
+            return ""
+        admit(path, "symlink", 0o777, user_uid, user_gid)
+        target = os.readlink(path)
+        valid = admitted(target) if callable(admitted) else target in admitted
+        if not valid:
+            reject(f"{label} target is invalid: {path}")
+        return target
+
+    def entries(path):
+        return sorted(entry.name for entry in os.scandir(path)) if os.path.lexists(path) else []
+
+    user_name = os.environ["DEV_SERVER_PREFLIGHT_USER"]
+    try:
+        account = pwd.getpwnam(user_name)
+        primary_group = grp.getgrgid(account.pw_gid).gr_name
+    except KeyError:
+        reject(f"managed account topology is incomplete: {user_name}")
+    home = pathlib.Path(f"/home/{user_name}")
+    if account.pw_uid == 0 or account.pw_dir != str(home) or primary_group != user_name:
+        reject(f"managed account topology is invalid: {user_name}")
+    user_uid, user_gid = account.pw_uid, account.pw_gid
+    share = home / ".local/share/skidbladnir"
+    releases, units = share / "releases", share / "units"
+    config = home / ".config/skidbladnir"
+    active = home / ".local/state/dev-server/active"
+    systemd_user = home / ".config/systemd/user"
+    plugin_root = home / ".local/share/dev-server/git-plugins"
+
+    root_directories = [
+        ("/var/lib/dev-server", 0o700),
+        ("/var/lib/dev-server/active", 0o700),
+    ]
+    user_directories = [
+        (home, 0o755), (home / ".local", 0o755), (home / ".local/bin", 0o755),
+        (home / ".local/share", 0o755), (home / ".local/share/dev-server", 0o755),
+        (plugin_root, 0o755), (share, 0o700), (releases, 0o700), (units, 0o700),
+        (home / ".local/state", 0o755), (home / ".local/state/dev-server", 0o700),
+        (active, 0o700), (home / ".local/state/skidbladnir", 0o700),
+        (home / ".config", 0o755), (config, 0o700),
+        (home / ".config/docker", 0o755), (home / ".config/systemd", 0o755),
+        (systemd_user, 0o755), (systemd_user / "default.target.wants", 0o755),
+        (home / ".ssh", 0o700), (home / ".zsh", 0o755),
+        (home / ".tmux", 0o755), (home / ".tmux/plugins", 0o755),
+    ]
+    for path, mode in root_directories:
+        admit(path, "directory", mode, 0, 0)
+    for path, mode in user_directories:
+        admit(path, "directory", mode, user_uid, user_gid)
+
+    root_files = [
+        ("/etc/ssh/sshd_config.d/99-devbox.conf", 0o644),
+        ("/var/lib/dev-server/active/ssh.sha256", 0o600),
+    ]
+    user_files = [
+        (active / "docker.sha256", 0o600), (active / "skid.runtime.sha256", 0o600),
+        (active / "skid.unit.sha256", 0o600), (config / "bearer", 0o600),
+        (config / "machine-handle", 0o600), (share / ".apply.lock", 0o600),
+        (home / ".local/bin/skidbladnir-launch", 0o755),
+        (systemd_user / "skidbladnir.service", 0o644),
+        (systemd_user / "docker.service", 0o644),
+        (home / ".config/docker/daemon.json", 0o644),
+        (home / ".config/devbox-docker-env", 0o644),
+        (home / ".ssh/id_ed25519_github", 0o600),
+        (home / ".ssh/id_ed25519_github.pub", 0o644), (home / ".ssh/config", 0o600),
+    ]
+    for path, mode in root_files:
+        admit(path, "file", mode, 0, 0, single_link=True)
+    for path, mode in user_files:
+        admit(path, "file", mode, user_uid, user_gid, single_link=True)
+
+    digest = rb"[0-9a-f]{64}\n"
+    exact_content("/var/lib/dev-server/active/ssh.sha256", digest, "SSH journal")
+    exact_content(active / "docker.sha256", digest, "Docker journal")
+    runtime_active = exact_content(active / "skid.runtime.sha256", digest, "Skid runtime journal")
+    unit_active = exact_content(active / "skid.unit.sha256", digest, "Skid unit journal")
+    exact_content(config / "machine-handle", rb"mh-[0-9a-f]{32}\n", "machine credential")
+    exact_content(
+        config / "bearer", rb"[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]\n",
+        "bearer credential",
+    )
+
+    generation = re.compile(
+        r"v(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})\."
+        r"(0|[1-9][0-9]{0,3})-[0-9a-f]{64}"
+    )
+    generation_target = re.compile(r"releases/" + generation.pattern)
+    for name in entries(releases):
+        if generation.fullmatch(name) is None:
+            reject(f"unowned Skid generation remains: {releases / name}")
+        admit(releases / name, "directory", 0o700, user_uid, user_gid)
+    for name in entries(units):
+        if re.fullmatch(r"[0-9a-f]{64}", name) is None:
+            reject(f"unowned Skid unit generation remains: {units / name}")
+        admit(units / name, "directory", 0o700, user_uid, user_gid)
+
+    current = managed_link(
+        share / "current", lambda value: generation_target.fullmatch(value) is not None,
+        "Skid current pointer",
+    )
+    previous = managed_link(
+        share / "previous", lambda value: generation_target.fullmatch(value) is not None,
+        "Skid previous pointer",
+    )
+    for label, target in (("current", current), ("previous", previous)):
+        if target and admit(share / target, "directory", 0o700, user_uid, user_gid) is None:
+            reject(f"Skid {label} pointer target is absent")
+    managed_link(
+        home / ".local/bin/skidbladnir",
+        {"../share/skidbladnir/current/skidbladnir"}, "Skid command link",
+    )
+    managed_link(
+        systemd_user / "default.target.wants/skidbladnir.service",
+        {"../skidbladnir.service", str(systemd_user / "skidbladnir.service")},
+        "Skid enablement link",
+    )
+    managed_link(
+        systemd_user / "default.target.wants/docker.service",
+        {"../docker.service", str(systemd_user / "docker.service")},
+        "Docker enablement link",
+    )
+    if runtime_active and not current:
+        reject("Skid runtime journal has no current generation")
+    if (unit_active and
+            admit(units / unit_active, "directory", 0o700, user_uid, user_gid) is None):
+        reject("Skid unit journal target is absent")
+
+    if os.path.lexists(share):
+        allowed = {".apply.lock", "claude-agent-identity", "current", "previous", "releases", "units"}
+        for name in entries(share):
+            if name in allowed:
+                continue
+            if re.fullmatch(r"\.apply\.stage\.[A-Za-z0-9]{6}", name):
+                admit(share / name, "directory", 0o700, user_uid, user_gid)
+            else:
+                reject(f"unowned Skid state remains: {share / name}")
+    if os.path.lexists(config) and set(entries(config)) - {"bearer", "machine-handle"}:
+        reject("unowned Skid credential state remains")
+
+    plugins = {
+        "fzf-tab": home / ".zsh/fzf-tab",
+        "powerlevel10k": home / ".zsh/powerlevel10k",
+        "tpm": home / ".tmux/plugins/tpm",
+        "tmux-resurrect": home / ".tmux/plugins/tmux-resurrect",
+        "tmux-continuum": home / ".tmux/plugins/tmux-continuum",
+    }
+    for slug in entries(plugin_root):
+        if slug not in plugins:
+            reject(f"unowned Git plugin root remains: {plugin_root / slug}")
+        root = plugin_root / slug
+        admit(root, "directory", 0o755, user_uid, user_gid)
+        for name in entries(root):
+            if re.fullmatch(r"[0-9a-f]{40}|\.git-stage\.[A-Za-z0-9]{6}", name) is None:
+                reject(f"unowned Git plugin generation remains: {root / name}")
+            admit(root / name, "directory", 0o700, user_uid, user_gid)
+    for slug, public in plugins.items():
+        prefix = str(plugin_root / slug)
+        target = managed_link(
+            public,
+            lambda value, prefix=prefix: re.fullmatch(re.escape(prefix) + r"/[0-9a-f]{40}", value)
+            is not None,
+            f"{slug} public plugin link",
+        )
+        if target and admit(target, "directory", 0o700, user_uid, user_gid) is None:
+            reject(f"{slug} public plugin target is absent")
+
+    github_private = home / ".ssh/id_ed25519_github"
+    github_public = home / ".ssh/id_ed25519_github.pub"
+    if os.path.lexists(github_private) != os.path.lexists(github_public):
+        reject("GitHub identity must contain both key files")
+    PY
+  args:
+    executable: /bin/bash
+  environment:
+    DEV_SERVER_PREFLIGHT_USER: "{{ devbox_user }}"
+  changed_when: false

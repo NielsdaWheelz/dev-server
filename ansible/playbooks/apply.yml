@@ -1,0 +1,61 @@
+---
+- name: Apply devbox state
+  hosts: devbox
+  gather_facts: true
+  become: true
+  vars_files:
+    - ../group_vars/devbox.yml
+  pre_tasks:
+    - name: Validate the exact Ubuntu devbox target
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] == 'Ubuntu'
+          - ansible_facts['distribution_release'] == 'noble'
+          - ansible_facts['architecture'] == 'x86_64'
+          - ansible_facts['hostname'] == 'dev-server'
+        fail_msg: Refusing to apply outside the exact Ubuntu devbox target
+
+    - name: Validate all existing remote managed state before mutation
+      ansible.builtin.import_tasks: tasks/remote-preflight.yml
+  roles:
+    - role: base
+    - role: workspace_assets
+    - role: security
+    - role: shell
+    - role: ai_tools
+    - role: skidbladnir
+    - role: rootless_docker
+  post_tasks:
+    - name: Activate notified consumers before verification
+      ansible.builtin.meta: flush_handlers
+
+    - name: Validate active SSH configuration
+      ansible.builtin.command: sshd -t
+      changed_when: false
+
+    - name: Verify the host firewall boundary
+      ansible.builtin.shell: |
+        set -euo pipefail
+        status="$(ufw status verbose)"
+        grep -Fq 'Status: active' <<<"$status"
+        grep -Eq '^Default: deny \(incoming\)' <<<"$status"
+        while IFS= read -r rule; do
+          [[ "$rule" == *'ALLOW IN'* ]] || continue
+          target="${rule%%ALLOW IN*}"
+          [[ "$target" != *'on tailscale0'* ]] || continue
+          printf 'non-tailnet inbound allow remains in UFW: %s\n' "$rule" >&2
+          exit 1
+        done <<<"$status"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Inspect pending reboot state
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: devbox_reboot_required
+
+    - name: Report deferred reboot
+      ansible.builtin.debug:
+        msg: DEV_SERVER_REBOOT_DEFERRED
+      when: devbox_reboot_required.stat.exists

@@ -6,10 +6,10 @@
       "key": "personal",
       "label": "Codex · Personal",
       "provider": "Codex",
-      "command": "/home/niels/bin/codex-personal",
-      "environment": [{"name": "CODEX_HOME", "value": "/home/niels/.codex-personal"}],
+      "command": "/home/niels/.local/bin/codex",
+      "environment": [{"name": "CODEX_HOME", "value": "/home/niels/.codex"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/home/niels/.local/bin/codex"}],
-      "arguments": ["--dangerously-bypass-approvals-and-sandbox"]
+      "arguments": []
     },
     {
       "key": "work",
@@ -18,7 +18,7 @@
       "command": "/home/niels/bin/codex-work",
       "environment": [{"name": "CODEX_HOME", "value": "/home/niels/.codex-work"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/home/niels/.local/bin/codex"}],
-      "arguments": ["--dangerously-bypass-approvals-and-sandbox"]
+      "arguments": []
     },
     {
       "key": "work2",
@@ -27,16 +27,16 @@
       "command": "/home/niels/bin/codex-work2",
       "environment": [{"name": "CODEX_HOME", "value": "/home/niels/.codex-work2"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/home/niels/.local/bin/codex"}],
-      "arguments": ["--dangerously-bypass-approvals-and-sandbox"]
+      "arguments": []
     },
     {
       "key": "claude-personal",
       "label": "Claude · Personal",
       "provider": "Claude",
-      "command": "/home/niels/bin/claude-personal",
-      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/home/niels/.claude-personal"}],
+      "command": "/home/niels/.local/bin/claude",
+      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/home/niels/.claude"}],
       "foregroundSignatures": [{"argument0": "/home/niels/.local/bin/claude"}],
-      "arguments": ["--permission-mode", "auto"]
+      "arguments": ["--plugin-dir", "/home/niels/.local/share/skidbladnir/claude-agent-identity"]
     },
     {
       "key": "claude-work",
@@ -45,7 +45,7 @@
       "command": "/home/niels/bin/claude-work",
       "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/home/niels/.claude-work"}],
       "foregroundSignatures": [{"argument0": "/home/niels/.local/bin/claude"}],
-      "arguments": ["--permission-mode", "auto"]
+      "arguments": ["--plugin-dir", "/home/niels/.local/share/skidbladnir/claude-agent-identity"]
     }
   ]
 }

@@ -10,9 +10,9 @@
     <string>gateway</string>
     <string>--listen=127.0.0.1:7341</string>
     <string>--bearer-file=/Users/nnandal/.config/skidbladnir/bearer</string>
-    <string>--catalogue-path=/Users/nnandal/.local/share/skidbladnir/characters.json</string>
+    <string>--catalogue-path=/Users/nnandal/.local/share/skidbladnir/current/characters.json</string>
     <string>--machine-handle-file=/Users/nnandal/.config/skidbladnir/machine-handle</string>
-    <string>--host-config=/Users/nnandal/.config/skidbladnir/host-config.json</string>
+    <string>--host-config=/Users/nnandal/.local/share/skidbladnir/current/host-config.json</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>

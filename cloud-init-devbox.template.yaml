@@ -1,21 +1,34 @@
 #cloud-config
+hostname: __SERVER_NAME__
 timezone: America/Los_Angeles
-package_update: true
-package_upgrade: true
+package_update: false
+package_upgrade: false
+ssh_pwauth: false
+disable_root: true
 
 users:
   - name: __SERVER_USER__
     gecos: Devbox User
     shell: /bin/bash
-    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: true
+    ssh_authorized_keys:
+      - __OPERATOR_PUBLIC_KEY__
+  - name: __DEPLOY_USER__
+    gecos: Devbox Deployment Principal
+    shell: /bin/bash
+    lock_passwd: true
     groups: [sudo]
     ssh_authorized_keys:
-      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwDGkyG3cNfQLY1UYYkxznFfUwkf51pNW1DfHyANAft
-
-ssh_pwauth: false
+      - __DEPLOY_PUBLIC_KEY__
 
 write_files:
+  - path: /etc/sudoers.d/90-__DEPLOY_USER__
+    owner: root:root
+    permissions: "0440"
+    content: |
+      __DEPLOY_USER__ ALL=(ALL:ALL) NOPASSWD:ALL
   - path: /etc/ssh/sshd_config.d/99-devbox.conf
+    owner: root:root
     permissions: "0644"
     content: |
       PasswordAuthentication no
@@ -23,22 +36,37 @@ write_files:
       PubkeyAuthentication yes
       PermitRootLogin no
       X11Forwarding no
-      AllowUsers __SERVER_USER__
+      AllowUsers __SERVER_USER__ __DEPLOY_USER__
   - path: /root/.devbox-tailscale-auth-key
     owner: root:root
     permissions: "0600"
     encoding: b64
     content: "__TAILSCALE_AUTH_KEY_B64__"
-  - path: /usr/local/sbin/devbox-bootstrap.sh
+  - path: /usr/local/sbin/devbox-bootstrap
     owner: root:root
-    permissions: "0755"
+    permissions: "0700"
     content: |
       #!/usr/bin/env bash
       set -euxo pipefail
       export DEBIAN_FRONTEND=noninteractive
+      bootstrap_cidr="__BOOTSTRAP_SSH_CIDR__"
+
+      cleanup() {
+        set +e
+        if command -v ufw >/dev/null 2>&1; then
+          ufw --force delete allow from "$bootstrap_cidr" to any port 22 proto tcp >/dev/null 2>&1 || true
+        fi
+        rm -f \
+          /root/.devbox-tailscale-auth-key \
+          /usr/local/sbin/devbox-bootstrap \
+          /var/lib/cloud/instance/cloud-config.txt \
+          /var/lib/cloud/instance/user-data.txt \
+          /var/lib/cloud/instance/user-data.txt.i
+      }
+      trap cleanup EXIT
 
       apt-get update
-      apt-get install -y \
+      apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         gnupg \
@@ -48,62 +76,29 @@ write_files:
         sudo \
         ufw
 
-      install -m 0755 -d /usr/share/keyrings
-      curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg -o /usr/share/keyrings/tailscale-archive-keyring.gpg
-      curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list -o /etc/apt/sources.list.d/tailscale.list
+      install -d -m 0755 /usr/share/keyrings
+      curl -fsSL \
+        https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg \
+        -o /usr/share/keyrings/tailscale-archive-keyring.gpg
+      curl -fsSL \
+        https://pkgs.tailscale.com/stable/ubuntu/noble.tailscale-keyring.list \
+        -o /etc/apt/sources.list.d/tailscale.list
       apt-get update
-      apt-get install -y tailscale
+      apt-get install -y --no-install-recommends tailscale
 
-      systemctl enable --now tailscaled
-      if [ -s /root/.devbox-tailscale-auth-key ]; then
-        set +e +x
-        if tr -d '\r\n' < /root/.devbox-tailscale-auth-key | grep -q .; then
-          tailscale up --auth-key file:/root/.devbox-tailscale-auth-key --ssh --hostname=__SERVER_NAME__ --operator=__SERVER_USER__
-          tailscale_status=$?
-        else
-          tailscale_status=0
-        fi
-        rm -f /root/.devbox-tailscale-auth-key
-        set -e -x
-        if [ "$tailscale_status" -ne 0 ]; then
-          exit "$tailscale_status"
-        fi
-      fi
-
-      bootstrap_ssh_cidr="__BOOTSTRAP_SSH_CIDR__"
+      sshd -t
+      systemctl reload ssh
       ufw default deny incoming
       ufw default allow outgoing
-      ufw allow from "$bootstrap_ssh_cidr" to any port 22 proto tcp
-      ufw --force delete allow 80/tcp || true
-      ufw --force delete allow 443/tcp || true
+      ufw allow from "$bootstrap_cidr" to any port 22 proto tcp
       ufw allow in on tailscale0
       ufw --force enable
 
-      systemctl restart ssh
-
-      {
-        date
-        uname -a
-        python3 --version
-        tailscale version | head -n 1
-        tailscale ip -4 || true
-        ufw status verbose
-      } > /etc/devbox-bootstrap.log
-  - path: /usr/local/sbin/devbox-lockdown-public-ssh.sh
-    owner: root:root
-    permissions: "0755"
-    content: |
-      #!/usr/bin/env bash
-      set -euxo pipefail
-
-      bootstrap_ssh_cidr="__BOOTSTRAP_SSH_CIDR__"
-      ufw --force delete allow from "$bootstrap_ssh_cidr" to any port 22 proto tcp || true
-      ufw --force delete allow 22/tcp || true
-      ufw --force delete allow 80/tcp || true
-      ufw --force delete allow 443/tcp || true
-      ufw allow in on tailscale0
-      ufw reload
-      ufw status verbose
+      systemctl enable --now tailscaled
+      tailscale up \
+        --auth-key=file:/root/.devbox-tailscale-auth-key \
+        --hostname=__SERVER_NAME__ \
+        --operator=__SERVER_USER__
 
 runcmd:
-  - /usr/local/sbin/devbox-bootstrap.sh
+  - /usr/local/sbin/devbox-bootstrap
