@@ -41,6 +41,27 @@ pass() {
   tests_run=$((tests_run + 1))
 }
 
+test_tmux_version_validation_is_locale_invariant() (
+  local invalid locale_name valid
+
+  # shellcheck source=lib/common.sh
+  source "$repo_dir/lib/common.sh"
+
+  while IFS= read -r locale_name; do
+    for valid in 'tmux 3.7c' 'tmux 3.7_c' 'tmux next-3.7'; do
+      LC_ALL="$locale_name" dev_server_tmux_version_is_valid "$valid" ||
+        fail "valid tmux version was rejected under $locale_name: $valid"
+    done
+  done < <(locale -a)
+
+  for invalid in '' 'tmux' 'tmux ' $'tmux\t3.7c' ' tmux 3.7c' \
+    'tmux 3.7 c' $'tmux 3.7c\nextra'; do
+    if dev_server_tmux_version_is_valid "$invalid"; then
+      fail "invalid tmux version was accepted: $invalid"
+    fi
+  done
+)
+
 test_arch_native_reconciliation() (
   local calls="$fixture/arch-calls"
   local home="$fixture/arch-home"
@@ -797,6 +818,8 @@ test_static_policy() {
   fi
 }
 
+test_tmux_version_validation_is_locale_invariant
+pass
 test_arch_native_reconciliation
 pass
 test_arch_busy_process_deferrals

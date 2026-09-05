@@ -27,7 +27,7 @@ packages_arch_reconcile_tmux_activation() {
 
   client_version="$(tmux -V 2>/dev/null)" ||
     die "could not resolve installed tmux version"
-  [[ "$client_version" =~ ^tmux[[:space:]][!-~]{1,60}$ ]] ||
+  dev_server_tmux_version_is_valid "$client_version" ||
     die "installed tmux version is invalid"
   if tmux list-sessions >/dev/null 2>&1; then
     server_version="$(tmux display-message -p '#{version}' 2>/dev/null)" || {

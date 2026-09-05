@@ -37,6 +37,18 @@ require_cmd() {
   done
 }
 
+dev_server_tmux_version_is_valid() {
+  (($# == 1)) || return 1
+
+  local LC_ALL=C
+  local version="$1"
+
+  [[ "$version" == 'tmux '* ]] || return 1
+  version="${version#tmux }"
+  ((${#version} >= 1 && ${#version} <= 60)) || return 1
+  [[ "$version" =~ ^[!-~]+$ ]]
+}
+
 dev_server_sha256() {
   (($# == 1)) || die 'dev_server_sha256 needs one file'
   local path="$1"
