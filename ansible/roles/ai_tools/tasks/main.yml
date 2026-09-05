@@ -33,7 +33,7 @@
 - name: Validate existing devbox GitHub identity material
   ansible.builtin.shell: |
     set -euo pipefail
-    derived="$(ssh-keygen -y -f /home/{{ devbox_user }}/.ssh/id_ed25519_github)"
+    derived="$(ssh-keygen -y -f /home/{{ devbox_user }}/.ssh/id_ed25519_github | awk 'NF >= 2 { print $1 " " $2; exit }')"
     observed="$(awk 'NF >= 2 { print $1 " " $2; exit }' /home/{{ devbox_user }}/.ssh/id_ed25519_github.pub)"
     [[ "$derived" == "$observed" ]]
   args:
