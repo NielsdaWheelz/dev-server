@@ -229,12 +229,14 @@ skidbladnir_validate_declared_inputs() {
   local hooks host_config path
   local -a regular_files=(
     skidbladnir-launch
-    skid-notify-linux
-    skid-notify-macbook
-    skidbladnir.service
-    dev.niels.skidbladnir.plist
     claude-agent-identity/bin/agent-hook
   )
+
+  case "$platform" in
+  macos) regular_files+=(skid-notify-macbook dev.niels.skidbladnir.plist) ;;
+  arch | devbox) regular_files+=(skid-notify-linux skidbladnir.service) ;;
+  *) die "unsupported Skidbladnir platform: $platform" ;;
+  esac
 
   require_cmd python3
   skidbladnir_release_values "$platform" >/dev/null ||

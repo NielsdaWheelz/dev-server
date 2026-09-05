@@ -297,6 +297,26 @@ test_pin_and_config_contract() (
   fi
 )
 
+test_platform_scoped_declared_inputs() (
+  local platform_root="$fixture/platform-assets"
+
+  mkdir -p "$platform_root/linux" "$platform_root/macos"
+  cp -R "$repo_dir/assets/skidbladnir" "$platform_root/linux/skidbladnir"
+  cp -R "$repo_dir/assets/skidbladnir" "$platform_root/macos/skidbladnir"
+
+  rm "$platform_root/linux/skidbladnir/skid-notify-macbook" \
+    "$platform_root/linux/skidbladnir/dev.niels.skidbladnir.plist"
+  dev_server_assets_root="$platform_root/linux"
+  skidbladnir_release_pin_file="$platform_root/linux/skidbladnir/release-pin.json"
+  skidbladnir_validate_declared_inputs devbox
+
+  rm "$platform_root/macos/skidbladnir/skid-notify-linux" \
+    "$platform_root/macos/skidbladnir/skidbladnir.service"
+  dev_server_assets_root="$platform_root/macos"
+  skidbladnir_release_pin_file="$platform_root/macos/skidbladnir/release-pin.json"
+  skidbladnir_validate_declared_inputs macos
+)
+
 test_fresh_noop_and_exact_activation() (
   local source_sha=1111111111111111111111111111111111111111
   local current inode_before output="$fixture/happy-output" signing_sha stale_stage
@@ -873,6 +893,7 @@ run_test() {
 }
 
 run_test test_pin_and_config_contract
+run_test test_platform_scoped_declared_inputs
 run_test test_fresh_noop_and_exact_activation
 run_test test_admission_failures_preserve_state
 run_test test_upgrade_integration_and_credentials
