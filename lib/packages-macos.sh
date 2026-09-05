@@ -16,14 +16,7 @@ packages_macos_snapshot() {
 }
 
 packages_macos_tailscale_cli() {
-  local cli="$packages_macos_tailscale_app/Contents/MacOS/Tailscale"
-  local receipt="$packages_macos_tailscale_app/Contents/_MASReceipt/receipt"
-
-  [[ -d "$packages_macos_tailscale_app" &&
-    ! -L "$packages_macos_tailscale_app" &&
-    -f "$cli" && ! -L "$cli" && -x "$cli" &&
-    -f "$receipt" && ! -L "$receipt" ]] || return 1
-  printf '%s\n' "$cli"
+  dev_server_app_store_tailscale_cli "$packages_macos_tailscale_app"
 }
 
 packages_macos_reconcile_tmux_activation() {

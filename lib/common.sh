@@ -37,6 +37,30 @@ require_cmd() {
   done
 }
 
+dev_server_app_store_tailscale_cli() {
+  (($# == 1)) || return 1
+
+  local app="$1"
+  local cli="$app/Contents/MacOS/Tailscale"
+  local receipt="$app/Contents/_MASReceipt/receipt"
+
+  [[ -d "$app" && ! -L "$app" &&
+    -f "$cli" && ! -L "$cli" && -x "$cli" &&
+    -f "$receipt" && ! -L "$receipt" ]] || return 1
+  printf '%s\n' "$cli"
+}
+
+dev_server_tailscale_cli() {
+  (($# == 0)) || return 1
+
+  local cli
+  if cli="$(type -P tailscale 2>/dev/null)" && [[ -n "$cli" ]]; then
+    printf '%s\n' "$cli"
+    return 0
+  fi
+  dev_server_app_store_tailscale_cli /Applications/Tailscale.app
+}
+
 dev_server_tmux_version_is_valid() {
   (($# == 1)) || return 1
 
