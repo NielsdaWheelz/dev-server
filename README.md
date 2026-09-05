@@ -41,7 +41,7 @@ Run:
 ```
 
 The order is native packages, repo-owned files, exact-host personal policy,
-the current stable Codex plus locked Claude, and Skíðblaðnir. Package managers
+the current stable Codex plus native Claude, and Skíðblaðnir. Package managers
 may refresh their own metadata. Apply never removes Arch packages, restarts
 tmux, reboots, logs out, or interrupts running containers. Those cases are
 reported as `DEFERRED`.
@@ -49,10 +49,12 @@ On macOS, apply verifies and may start the exact App Store Tailscale app but
 never installs, upgrades, replaces, or signs in to it.
 
 Plain `codex` and `claude` remain upstream personal commands. Every Codex
-profile executes the single npm user-global binary at `~/.local/bin/codex`;
-the managed `codex-work`, `codex-work2`, and `claude-work` wrappers isolate only
-account state and notification configuration. Authenticate their isolated homes
-directly when first required.
+profile executes one npm user-global binary at `~/.local/bin/codex`; every
+Claude profile executes one Anthropic-native binary at `~/.local/bin/claude`.
+The managed `codex-work`, `codex-work2`, and `claude-work` wrappers isolate only
+account state and notification configuration. Running sessions are never
+restarted for an upgrade; new launches use the reconciled binary. Authenticate
+isolated homes directly when first required.
 
 ## Devbox
 
@@ -218,6 +220,9 @@ rm -f "$cache/lib/skidbladnir-invite.sh"
 rm -f "$cache/lib/skidbladnir-operator.sh"
 rm -f "$cache/skidbladnir"
 rm -f "$cache/assets/routers/ai-router"
+rm -f "$cache/assets/ai/package.json"
+rm -f "$cache/assets/ai/package-lock.json"
+rmdir "$cache/assets/ai"
 rm -f "$cache/assets/dotfiles/gammastep-autostart.desktop"
 rm -f "$cache/assets/dotfiles/gammastep.config"
 rm -f "$cache/assets/dotfiles/ghostty-autostart.desktop"
@@ -254,6 +259,19 @@ done
 rm -f "$router"
 ```
 
+After `~/.local/bin/claude --version` succeeds and that path is a symlink into
+`~/.local/share/claude/versions/`, remove the exact retired private npm tree:
+
+```sh
+test -L "$HOME/.local/bin/claude"
+case "$(readlink "$HOME/.local/bin/claude")" in
+  "$HOME/.local/share/claude/versions/"*) ;;
+  *) exit 1 ;;
+esac
+"$HOME/.local/bin/claude" --version
+rm -R "$HOME/.local/share/dev-server/ai-tools"
+```
+
 Ensure `~/.gitconfig.local` contains any machine-only identity/settings. Retire
 the exact former GitHub SSH rewrite without hiding inspection errors:
 
@@ -280,10 +298,10 @@ Skíðblaðnir health/Serve postconditions.
 
 ## Boundaries and trade-offs
 
-- Native OS repositories and Codex stable are rolling rather than
-  byte-replayable. Remote installers, Claude, Git plugins, Cursor extensions,
-  and Skíðblaðnir are exact reviewable pins and therefore can lag upstream
-  until manually bumped.
+- Native OS repositories, Codex stable, and Anthropic-native Claude are rolling
+  rather than byte-replayable. Git plugins, Cursor extensions, and Skíðblaðnir
+  are exact reviewable pins and therefore can lag upstream until manually
+  bumped.
 - Native package and npm updates can partially complete; rerun their native
   reconcilers. Git plugin candidates are isolated until an atomic link switch.
   Only Skíðblaðnir has repository-owned service rollback.

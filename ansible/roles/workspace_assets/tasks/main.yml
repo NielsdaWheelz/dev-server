@@ -10,7 +10,6 @@
     - ""
     - lib
     - assets
-    - assets/ai
     - assets/dotfiles
     - assets/routers
     - assets/skidbladnir
@@ -47,17 +46,6 @@
     - zsh_helpers
     - zshenv
     - zshrc
-
-- name: Install exact Claude package lock
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../assets/ai/{{ item }}"
-    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/ai/{{ item }}"
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    mode: "0644"
-  loop:
-    - package.json
-    - package-lock.json
 
 - name: Install explicit AI profile wrapper
   ansible.builtin.copy:

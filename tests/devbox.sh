@@ -919,7 +919,7 @@ test_static_boundary_contract() {
   done
   deployed_dotfiles="$(
     sed -n \
-      '/^- name: Install exact dotfile assets$/,/^- name: Install exact Claude package lock$/p' \
+      '/^- name: Install exact dotfile assets$/,/^- name: Install explicit AI profile wrapper$/p' \
       "$repo_dir/ansible/roles/workspace_assets/tasks/main.yml" |
       sed -n 's/^    - //p'
   )"

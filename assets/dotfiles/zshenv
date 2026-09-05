@@ -6,7 +6,6 @@ for _devbox_path_dir in \
   /opt/homebrew/bin \
   /usr/local/bin \
   "$HOME/.local/share/mise/shims" \
-  "$HOME/.local/share/dev-server/ai-tools/node_modules/.bin" \
   "$HOME/bin" \
   "$HOME/.local/bin"; do
   if [[ -d "$_devbox_path_dir" ]]; then

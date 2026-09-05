@@ -194,7 +194,7 @@ commands = {
     "personal": home + "/.local/bin/codex",
     "work": home + "/bin/codex-work",
     "work2": home + "/bin/codex-work2",
-    "claude-personal": home + "/.local/share/dev-server/ai-tools/node_modules/.bin/claude",
+    "claude-personal": home + "/.local/bin/claude",
     "claude-work": home + "/bin/claude-work",
 }
 for profile in profiles:

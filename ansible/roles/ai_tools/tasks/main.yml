@@ -58,7 +58,7 @@
         ai_tools_github_ssh_config.stat.isreg
     fail_msg: Invalid managed GitHub SSH client policy path
 
-- name: Install locked AI commands and explicit profiles
+- name: Install canonical AI commands and explicit profiles
   ansible.builtin.shell: |
     set -euo pipefail
     dev_server_home_dir="/home/{{ devbox_user }}"

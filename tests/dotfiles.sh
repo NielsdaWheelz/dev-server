@@ -289,11 +289,11 @@ test_static_reduction_contract() {
   if grep -Eq 'git config --global|insteadOf' "$source"; then
     fail 'partial or legacy global Git configuration remains'
   fi
-  assert_eq 1 "$(grep -Fhl 'ai-tools/node_modules/.bin' \
+  assert_eq 0 "$(grep -Fhl 'ai-tools/node_modules/.bin' \
     "$repo_dir/assets/dotfiles/zshenv" \
     "$repo_dir/assets/dotfiles/zshrc" \
     "$repo_dir/assets/dotfiles/zsh_helpers" | wc -l | tr -d ' ')" \
-    'AI PATH owner count'
+    'private AI PATH owner count'
   pass
 }
 

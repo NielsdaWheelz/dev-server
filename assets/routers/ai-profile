@@ -17,7 +17,7 @@ codex-work2)
 claude-work)
   state_dir="$HOME/.claude-work"
   export CLAUDE_CONFIG_DIR="$state_dir"
-  real_binary="$HOME/.local/share/dev-server/ai-tools/node_modules/.bin/claude"
+  real_binary="$HOME/.local/bin/claude"
   configure_notify=0
   ;;
 *)

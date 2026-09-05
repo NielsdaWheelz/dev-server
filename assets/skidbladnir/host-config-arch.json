@@ -33,9 +33,9 @@
       "key": "claude-personal",
       "label": "Claude · Personal",
       "provider": "Claude",
-      "command": "/home/nnandal/.local/share/dev-server/ai-tools/node_modules/.bin/claude",
+      "command": "/home/nnandal/.local/bin/claude",
       "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/home/nnandal/.claude"}],
-      "foregroundSignatures": [{"argument0": "/home/nnandal/.local/share/dev-server/ai-tools/node_modules/.bin/claude"}],
+      "foregroundSignatures": [{"argument0": "/home/nnandal/.local/bin/claude"}],
       "arguments": ["--plugin-dir", "/home/nnandal/.local/share/skidbladnir/claude-agent-identity"]
     },
     {
@@ -44,7 +44,7 @@
       "provider": "Claude",
       "command": "/home/nnandal/bin/claude-work",
       "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/home/nnandal/.claude-work"}],
-      "foregroundSignatures": [{"argument0": "/home/nnandal/.local/share/dev-server/ai-tools/node_modules/.bin/claude"}],
+      "foregroundSignatures": [{"argument0": "/home/nnandal/.local/bin/claude"}],
       "arguments": ["--plugin-dir", "/home/nnandal/.local/share/skidbladnir/claude-agent-identity"]
     }
   ]

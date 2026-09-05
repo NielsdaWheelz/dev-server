@@ -103,8 +103,7 @@ setup_case() {
   test_fail_action=''
   test_reject_version=''
   mkdir -p "$test_home" "$case_dir/assets" "$case_dir/bin"
-  mkdir -p "$test_home/.local/bin" \
-    "$test_home/.local/share/dev-server/ai-tools/node_modules/.bin"
+  mkdir -p "$test_home/.local/bin"
   cat >"$test_home/.local/bin/codex" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -285,8 +284,8 @@ test_pin_and_config_contract() (
     all(.profiles[] | select(.provider == "Claude");
       .command as $command |
       ($command |
-        if endswith("/.local/share/dev-server/ai-tools/node_modules/.bin/claude")
-        then sub("/\\.local/share/dev-server/ai-tools/node_modules/\\.bin/claude$"; "")
+        if endswith("/.local/bin/claude")
+        then sub("/\\.local/bin/claude$"; "")
         else sub("/bin/claude-work$"; "") end) as $home |
       .arguments == ["--plugin-dir", ($home + "/.local/share/skidbladnir/claude-agent-identity")])
   ' \

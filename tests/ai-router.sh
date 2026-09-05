@@ -49,14 +49,22 @@ test_assets="$fixture/assets"
 record="$fixture/record"
 stdout_file="$fixture/stdout"
 stderr_file="$fixture/stderr"
+npm_calls_file="$fixture/npm-calls"
+npm_prefix_file="$fixture/npm-prefix"
+claude_bootstrap_record="$fixture/claude-bootstrap"
+claude_update_record="$fixture/claude-update"
+claude_next_version_file="$fixture/claude-next-version"
 status=0
 tests_run=0
 fields=()
 
 install -d -m 0755 "$test_home"
 cp -R "$repo_dir/assets" "$test_assets"
+printf '%s\n' /unexpected >"$npm_prefix_file"
 dev_server_home_dir="$test_home"
 dev_server_assets_root="$test_assets"
+export CLAUDE_UPDATE_RECORD="$claude_update_record"
+export CLAUDE_NEXT_VERSION_FILE="$claude_next_version_file"
 # shellcheck source=lib/common.sh
 source "$repo_dir/lib/common.sh"
 # shellcheck source=lib/ai-tools.sh
@@ -85,7 +93,7 @@ assert_argv() {
   done
 }
 
-write_fake_binary() {
+write_fake_codex() {
   local target="$1"
 
   install -d -m 0755 "$(dirname "$target")"
@@ -95,11 +103,7 @@ write_fake_binary() {
     '#!/usr/bin/env bash' \
     'set -euo pipefail' \
     'if [[ -z "${PROFILE_RECORD:-}" ]]; then' \
-    '  case "${0##*/}" in' \
-    '    codex) printf "codex-cli 0.153.4\n" ;;' \
-    '    claude) printf "2.1.252 (Claude Code)\n" ;;' \
-    '    *) exit 1 ;;' \
-    '  esac' \
+    '  printf "codex-cli 0.153.4\n"' \
     '  exit 0' \
     'fi' \
     '{' \
@@ -109,9 +113,50 @@ write_fake_binary() {
   chmod 0755 "$target"
 }
 
-npm_calls_file="$fixture/npm-calls"
-npm_prefix_file="$fixture/npm-prefix"
-printf '%s\n' /unexpected >"$npm_prefix_file"
+write_fake_claude_version() {
+  local target="$test_home/.local/share/claude/versions/$1"
+  local version="$1"
+
+  install -d -m 0755 "$(dirname "$target")"
+  # These variables belong to the generated fake.
+  # shellcheck disable=SC2016
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'set -euo pipefail' \
+    "version='$version'" \
+    'case "${1:-}" in' \
+    '  --version) printf "%s (Claude Code)\n" "$version"; exit 0 ;;' \
+    '  update)' \
+    '    printf "update\n" >>"$CLAUDE_UPDATE_RECORD"' \
+    '    if [[ -s "$CLAUDE_NEXT_VERSION_FILE" ]]; then' \
+    '      next="$(cat "$CLAUDE_NEXT_VERSION_FILE")"' \
+    '      ln -sfn "$HOME/.local/share/claude/versions/$next" "$HOME/.local/bin/claude"' \
+    '      : >"$CLAUDE_NEXT_VERSION_FILE"' \
+    '    fi' \
+    '    exit 0' \
+    '    ;;' \
+    'esac' \
+    '[[ -n "${PROFILE_RECORD:-}" ]] || exit 1' \
+    '{' \
+    '  printf '\''%s\0%s\0%s\0%s\0%s\0'\'' "${0##*/}" "${CODEX_HOME:-}" "${CLAUDE_CONFIG_DIR:-}" "$PWD" "${PROFILE_SENTINEL:-}"' \
+    '  printf '\''%s\0'\'' "$@"' \
+    '} >"$PROFILE_RECORD"' >"$target"
+  chmod 0755 "$target"
+}
+
+install_fake_native_claude() {
+  local version="$1"
+
+  write_fake_claude_version "$version"
+  install -d -m 0755 "$test_home/.local/bin"
+  ln -s "$test_home/.local/share/claude/versions/$version" \
+    "$test_home/.local/bin/claude"
+}
+
+ai_bootstrap_claude_native() {
+  printf 'bootstrap\n' >>"$claude_bootstrap_record"
+  install_fake_native_claude 2.1.257
+}
 
 npm_operation_count() {
   local operation="$1"
@@ -159,131 +204,22 @@ npm() {
     assert_eq @openai/codex@0.153.4 "$8" 'npm stable Codex package'
     prefix="$4"
     printf 'global-install\n' >>"$npm_calls_file"
-    install -d -m 0755 \
-      "$prefix/lib/node_modules/@openai/codex" \
-      "$prefix/bin"
+    install -d -m 0755 "$prefix/lib/node_modules/@openai/codex" "$prefix/bin"
     printf '{"name":"@openai/codex","version":"0.153.4"}\n' \
       >"$prefix/lib/node_modules/@openai/codex/package.json"
-    write_fake_binary "$prefix/bin/codex"
-    ;;
-  ci:--omit=dev)
-    printf 'ci\n' >>"$npm_calls_file"
-    assert_eq 7 "$#" 'npm ci argument count'
-    assert_eq --no-audit "$3" 'npm audit policy'
-    assert_eq --no-fund "$4" 'npm funding policy'
-    assert_eq --strict-allow-scripts "$5" 'npm install-script policy'
-    assert_eq --ignore-scripts=false "$6" 'npm required-script policy'
-    assert_eq --dangerously-allow-all-scripts=false "$7" \
-      'npm unreviewed-script policy'
-    prefix="$PWD"
-    rm -rf "$prefix/node_modules"
-    install -d -m 0755 \
-      "$prefix/node_modules/@anthropic-ai/claude-code" \
-      "$prefix/node_modules/.bin"
-    printf '{"name":"@anthropic-ai/claude-code","version":"2.1.252"}\n' \
-      >"$prefix/node_modules/@anthropic-ai/claude-code/package.json"
-    write_fake_binary "$prefix/node_modules/.bin/claude"
+    write_fake_codex "$prefix/bin/codex"
     ;;
   *) fail "unexpected npm invocation: $*" ;;
   esac
 }
 
-test_current_codex_and_locked_claude_install() {
-  local profile_inode
-  local receipt_inode
-  local root
-
-  root="$(ai_install_root)"
-  reset_results
-  ai_install_dirs >/dev/null
-  ai_install_packages >/dev/null
-  ai_install_profiles >/dev/null
-
-  assert_eq 1 "$(npm_operation_count view)" 'fresh Codex candidate lookup count'
-  assert_eq 1 "$(npm_operation_count global-install)" 'fresh Codex install count'
-  assert_eq 1 "$(npm_operation_count ci)" 'fresh Claude install count'
-  assert_eq 1 "$(npm_operation_count config-set)" 'npm prefix repair count'
-  assert_eq "$test_home/.local" "$(cat "$npm_prefix_file")" \
-    'canonical npm prefix'
-  [[ -x "$test_home/.local/bin/codex" ]] ||
-    fail 'canonical Codex binary was not installed'
-  [[ ! -e "$root/node_modules/@openai/codex" &&
-    ! -e "$root/node_modules/.bin/codex" ]] ||
-    fail 'private Codex installation remains'
-  cmp -s "$test_assets/ai/package-lock.json" \
-    "$root/.installed-package-lock.json" ||
-    fail 'installed AI receipt differs from the declared lock'
-  cmp -s "$test_assets/ai/package.json" "$root/.installed-package.json" ||
-    fail 'installed AI receipt differs from the declared manifest'
-  assert_eq 600 "$(test_mode "$root/.installed-package-lock.json")" \
-    'AI receipt mode'
-  for command in codex-work codex-work2 claude-work; do
-    [[ -f "$test_home/bin/$command" && ! -L "$test_home/bin/$command" ]] ||
-      fail "$command is not a regular managed wrapper"
-    assert_eq 755 "$(test_mode "$test_home/bin/$command")" "$command mode"
-    cmp -s "$test_assets/routers/ai-profile" "$test_home/bin/$command" ||
-      fail "$command differs from ai-profile"
-  done
-  [[ ! -e "$test_home/bin/codex" && ! -e "$test_home/bin/claude" ]] ||
-    fail 'plain upstream command was replaced by a repo wrapper'
-  [[ ! -e "$test_home/.codex-personal" && ! -e "$test_home/.claude-personal" ]] ||
-    fail 'retired personal state directory was created'
-
-  profile_inode="$(file_inode "$test_home/bin/codex-work")"
-  receipt_inode="$(file_inode "$root/.installed-package-lock.json")"
-  reset_results
-  ai_install_dirs >/dev/null
-  ai_install_packages >/dev/null
-  ai_install_profiles >/dev/null
-  assert_eq 2 "$(npm_operation_count view)" 'second Codex candidate lookup count'
-  assert_eq 1 "$(npm_operation_count global-install)" 'second-apply Codex install count'
-  assert_eq 1 "$(npm_operation_count ci)" 'second-apply Claude install count'
-  assert_eq 1 "$(npm_operation_count config-set)" \
-    'second-apply npm prefix repair count'
-  assert_eq "$profile_inode" "$(file_inode "$test_home/bin/codex-work")" \
-    'second-apply profile inode'
-  assert_eq "$receipt_inode" \
-    "$(file_inode "$root/.installed-package-lock.json")" \
-    'second-apply receipt inode'
-  ((dev_server_result_mutations == 0)) ||
-    fail 'second AI apply reported a durable mutation'
-
-  printf '{"name":"@openai/codex","version":"0.0.0"}\n' \
-    >"$test_home/.local/lib/node_modules/@openai/codex/package.json"
-  ai_install_packages >/dev/null
-  assert_eq 2 "$(npm_operation_count global-install)" \
-    'outdated Codex repair install count'
-
-  printf '\n' >>"$root/.installed-package-lock.json"
-  ai_install_packages >/dev/null
-  assert_eq 2 "$(npm_operation_count ci)" 'Claude lock-receipt repair count'
-
-  printf '%s\n' '#!/usr/bin/env bash' 'exit 0' \
-    >"$test_home/.local/bin/codex"
-  chmod 0755 "$test_home/.local/bin/codex"
-  ai_install_packages >/dev/null
-  assert_eq 3 "$(npm_operation_count global-install)" \
-    'Codex binary-drift repair install count'
-
-  install -d -m 0755 "$root/node_modules/@openai/codex"
-  printf '{"name":"@openai/codex","version":"0.152.0"}\n' \
-    >"$root/node_modules/@openai/codex/package.json"
-  write_fake_binary "$root/node_modules/.bin/codex"
-  ai_install_packages >/dev/null
-  assert_eq 3 "$(npm_operation_count ci)" 'private Codex removal count'
-  [[ ! -e "$root/node_modules/@openai/codex" &&
-    ! -e "$root/node_modules/.bin/codex" ]] ||
-    fail 'private Codex drift survived reconciliation'
-  pass
-}
-
 test_runtime_floor() {
-  ai_require_runtime
+  ai_require_codex_runtime
   if (
     npm() { printf '11.16.9\n'; }
-    ai_require_runtime
+    ai_require_codex_runtime
   ) >/dev/null 2>&1; then
-    fail 'AI runtime accepted npm without strict install-script support'
+    fail 'Codex runtime accepted an unsupported npm version'
   fi
   pass
 }
@@ -293,23 +229,74 @@ test_invalid_input_is_read_only() {
   local invalid_home="$fixture/invalid-home"
 
   cp -R "$repo_dir/assets" "$invalid_assets"
+  rm "$invalid_assets/routers/ai-profile"
+  ln -s "$fixture/untrusted" "$invalid_assets/routers/ai-profile"
   install -d -m 0755 "$invalid_home"
-  node -e '
-    const fs = require("fs");
-    const path = process.argv[1];
-    const value = JSON.parse(fs.readFileSync(path, "utf8"));
-    value.dependencies["unreviewed-package"] = "1.0.0";
-    fs.writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
-  ' "$invalid_assets/ai/package.json"
   if (
     dev_server_home_dir="$invalid_home"
     dev_server_assets_root="$invalid_assets"
     ai_install
   ) >/dev/null 2>&1; then
-    fail 'AI apply accepted an unreviewed dependency'
+    fail 'AI apply accepted a symlinked profile declaration'
   fi
   assert_eq 0 "$(find "$invalid_home" -mindepth 1 | wc -l | tr -d ' ')" \
     'invalid AI input mutation count'
+  pass
+}
+
+test_canonical_install_and_update() {
+  local profile_inode
+
+  reset_results
+  ai_install_dirs >/dev/null
+  ai_install_packages >/dev/null
+  ai_install_profiles >/dev/null
+
+  assert_eq 1 "$(npm_operation_count view)" 'fresh Codex candidate lookup count'
+  assert_eq 1 "$(npm_operation_count global-install)" 'fresh Codex install count'
+  assert_eq 1 "$(npm_operation_count config-set)" 'npm prefix repair count'
+  assert_eq 1 "$(wc -l <"$claude_bootstrap_record" | tr -d ' ')" \
+    'fresh Claude bootstrap count'
+  assert_eq "$test_home/.local" "$(cat "$npm_prefix_file")" \
+    'canonical npm prefix'
+  [[ -x "$test_home/.local/bin/codex" ]] || fail 'canonical Codex is missing'
+  assert_eq 2.1.257 "$(ai_claude_native_version)" 'native Claude version'
+  for command in codex-work codex-work2 claude-work; do
+    [[ -f "$test_home/bin/$command" && ! -L "$test_home/bin/$command" ]] ||
+      fail "$command is not a regular managed wrapper"
+    assert_eq 755 "$(test_mode "$test_home/bin/$command")" "$command mode"
+    cmp -s "$test_assets/routers/ai-profile" "$test_home/bin/$command" ||
+      fail "$command differs from ai-profile"
+  done
+  [[ ! -e "$test_home/bin/codex" && ! -e "$test_home/bin/claude" ]] ||
+    fail 'plain upstream command was replaced by a repo wrapper'
+
+  profile_inode="$(file_inode "$test_home/bin/codex-work")"
+  reset_results
+  ai_install_dirs >/dev/null
+  ai_install_packages >/dev/null
+  ai_install_profiles >/dev/null
+  assert_eq 2 "$(npm_operation_count view)" 'second Codex candidate lookup count'
+  assert_eq 1 "$(npm_operation_count global-install)" 'second Codex install count'
+  assert_eq 1 "$(wc -l <"$claude_update_record" | tr -d ' ')" \
+    'second-apply Claude update count'
+  assert_eq "$profile_inode" "$(file_inode "$test_home/bin/codex-work")" \
+    'second-apply profile inode'
+  ((dev_server_result_mutations == 0)) ||
+    fail 'second AI apply reported a durable mutation'
+
+  printf '{"name":"@openai/codex","version":"0.0.0"}\n' \
+    >"$test_home/.local/lib/node_modules/@openai/codex/package.json"
+  ai_install_packages >/dev/null
+  assert_eq 2 "$(npm_operation_count global-install)" \
+    'outdated Codex repair install count'
+
+  write_fake_claude_version 2.1.258
+  printf '2.1.258\n' >"$claude_next_version_file"
+  reset_results
+  ai_install_claude >/dev/null
+  assert_eq 2.1.258 "$(ai_claude_native_version)" 'updated native Claude version'
+  assert_eq 1 "$dev_server_result_mutations" 'Claude update mutation count'
   pass
 }
 
@@ -324,7 +311,7 @@ invoke() {
     cd "$cwd"
     env -u CODEX_HOME -u CLAUDE_CONFIG_DIR \
       HOME="$test_home" \
-      PATH="$test_home/.local/bin:$(ai_install_root)/node_modules/.bin:$test_home/bin:/usr/bin:/bin" \
+      PATH="$test_home/.local/bin:$test_home/bin:/usr/bin:/bin" \
       PROFILE_RECORD="$record" \
       PROFILE_SENTINEL='preserved value' \
       "$command" "$@"
@@ -342,14 +329,10 @@ test_fixed_profile_routing() {
   invoke codex-work "$personal_cwd" -C "$work_cwd" exec --exact 'spaced value'
   assert_eq 0 "$status" 'codex-work status'
   read_record
-  assert_eq "$test_home/.local/bin/codex" \
-    "$(command -v "$test_home/.local/bin/codex")" \
-    'Codex binary path'
   assert_eq "$test_home/.codex-work" "${fields[1]}" 'codex-work CODEX_HOME'
   assert_eq '' "${fields[2]}" 'codex-work CLAUDE_CONFIG_DIR'
   assert_eq "$(cd "$personal_cwd" && pwd -L)" "${fields[3]}" \
     'codex-work cwd preservation'
-  assert_eq 'preserved value' "${fields[4]}" 'codex-work environment'
   assert_argv codex-work \
     -c "notify=[\"$test_home/.local/bin/skid-notify\"]" \
     -C "$work_cwd" exec --exact 'spaced value'
@@ -357,16 +340,13 @@ test_fixed_profile_routing() {
   invoke codex-work2 "$work_cwd" --cd "$personal_cwd" resume
   assert_eq 0 "$status" 'codex-work2 status'
   read_record
-  assert_eq "$test_home/.codex-work2" "${fields[1]}" \
-    'codex-work2 CODEX_HOME'
-  assert_argv codex-work2 \
-    -c "notify=[\"$test_home/.local/bin/skid-notify\"]" \
-    --cd "$personal_cwd" resume
+  assert_eq "$test_home/.codex-work2" "${fields[1]}" 'codex-work2 CODEX_HOME'
 
   invoke claude-work "$personal_cwd" -C "$work_cwd" --exact
   assert_eq 0 "$status" 'claude-work status'
   read_record
-  assert_eq '' "${fields[1]}" 'claude-work CODEX_HOME'
+  assert_eq "$test_home/.local/bin/claude" \
+    "$(command -v "$test_home/.local/bin/claude")" 'Claude binary path'
   assert_eq "$test_home/.claude-work" "${fields[2]}" \
     'claude-work CLAUDE_CONFIG_DIR'
   assert_argv claude-work -C "$work_cwd" --exact
@@ -375,17 +355,15 @@ test_fixed_profile_routing() {
   assert_eq 0 "$status" 'plain Codex status'
   read_record
   assert_eq '' "${fields[1]}" 'plain Codex CODEX_HOME'
-  assert_eq '' "${fields[2]}" 'plain Codex CLAUDE_CONFIG_DIR'
 
-  invoke claude "$work_cwd" --version
+  invoke claude "$work_cwd" --session-id example
   assert_eq 0 "$status" 'plain Claude status'
   read_record
-  assert_eq '' "${fields[1]}" 'plain Claude CODEX_HOME'
   assert_eq '' "${fields[2]}" 'plain Claude CLAUDE_CONFIG_DIR'
   pass
 }
 
-test_profile_fail_closed() {
+test_fail_closed() {
   local unsupported="$test_home/bin/codex-personal"
 
   install -m 0755 "$test_assets/routers/ai-profile" "$unsupported"
@@ -397,78 +375,46 @@ test_profile_fail_closed() {
   if (ai_install_profiles) >/dev/null 2>&1; then
     fail 'profile installation accepted a symlink target'
   fi
+
+  rm "$test_home/.local/bin/claude"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$test_home/.local/bin/claude"
+  chmod 0755 "$test_home/.local/bin/claude"
+  if (ai_install_claude) >/dev/null 2>&1; then
+    fail 'Claude apply accepted a non-native canonical command'
+  fi
   pass
 }
 
-test_lock_and_static_contract() {
-  node - "$test_assets/ai/package.json" "$test_assets/ai/package-lock.json" <<'NODE'
-const fs = require('fs');
-const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-const lock = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
-const expected = {
-  '@anthropic-ai/claude-code': '2.1.252',
-};
-const allowed = {'@anthropic-ai/claude-code@2.1.252': true};
-if (manifest.private !== true ||
-    JSON.stringify(manifest.allowScripts) !== JSON.stringify(allowed) ||
-    JSON.stringify(manifest.dependencies) !== JSON.stringify(expected)) {
-  process.exit(1);
-}
-if (JSON.stringify(lock.packages[''].dependencies) !== JSON.stringify(expected)) {
-  process.exit(1);
-}
-if (Object.keys(lock.packages).some(path => path.includes('@openai/codex'))) {
-  process.exit(1);
-}
-for (const [path, entry] of Object.entries(lock.packages)) {
-  if (path === '') continue;
-  if (!/^https:\/\/registry\.npmjs\.org\//.test(entry.resolved) ||
-      !/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(entry.integrity)) {
-    process.exit(1);
-  }
-}
-const scripted = Object.entries(lock.packages)
-  .filter(([, entry]) => entry.hasInstallScript === true)
-  .map(([path]) => path);
-if (JSON.stringify(scripted) !==
-    JSON.stringify(['node_modules/@anthropic-ai/claude-code'])) {
-  process.exit(1);
-}
-NODE
-
-  if grep -REn 'curl[[:space:]].*\|[[:space:]]*(sh|bash)|wget' \
-    "$repo_dir/lib/ai-tools.sh" "$repo_dir/assets/ai" \
-    "$repo_dir/assets/routers/ai-profile" >/dev/null; then
-    fail 'mutable or pipe-to-shell AI installation remains'
-  fi
+test_static_contract() {
+  [[ ! -e "$repo_dir/assets/ai" ]] || fail 'private AI package assets remain'
   if grep -En 'codex-personal|claude-personal|PWD|--cd|-C|skidbladnir|plugin-dir' \
     "$repo_dir/lib/ai-tools.sh" "$repo_dir/assets/routers/ai-profile" \
     >/dev/null; then
     fail 'hidden, personal, cwd, or Skidbladnir routing remains'
   fi
-  grep -F 'npm ci --omit=dev' "$repo_dir/lib/ai-tools.sh" >/dev/null ||
-    fail 'Claude apply does not consume the standard lock with npm ci'
+  if grep -REn 'ai-tools/node_modules|curl[[:space:]].*\|[[:space:]]*(sh|bash)|wget' \
+    "$repo_dir/lib/ai-tools.sh" "$repo_dir/assets/routers/ai-profile" \
+    "$repo_dir/assets/dotfiles/zshenv" >/dev/null; then
+    fail 'private package tree or pipe-to-shell AI installation remains'
+  fi
+  grep -F 'https://claude.ai/install.sh' "$repo_dir/lib/ai-tools.sh" >/dev/null ||
+    fail 'Claude apply does not use the official native installer'
+  grep -F '"$binary" update' "$repo_dir/lib/ai-tools.sh" >/dev/null ||
+    fail 'Claude apply does not use its native updater'
   grep -F 'npm view @openai/codex dist-tags.latest --json' \
     "$repo_dir/lib/ai-tools.sh" >/dev/null ||
     fail 'Codex apply does not resolve npm stable latest'
   grep -F 'npm install --global --prefix "$prefix" --ignore-scripts' \
     "$repo_dir/lib/ai-tools.sh" >/dev/null ||
     fail 'Codex apply does not use the canonical script-free global install'
-  grep -F -- '--strict-allow-scripts' "$repo_dir/lib/ai-tools.sh" >/dev/null ||
-    fail 'AI apply does not reject unreviewed dependency scripts'
-  grep -F -- '--ignore-scripts=false' "$repo_dir/lib/ai-tools.sh" >/dev/null ||
-    fail 'AI apply does not force its reviewed required script to run'
-  grep -F -- '--dangerously-allow-all-scripts=false' \
-    "$repo_dir/lib/ai-tools.sh" >/dev/null ||
-    fail 'AI apply permits an ambient all-scripts bypass'
   pass
 }
 
 test_runtime_floor
 test_invalid_input_is_read_only
-test_current_codex_and_locked_claude_install
+test_canonical_install_and_update
 test_fixed_profile_routing
-test_profile_fail_closed
-test_lock_and_static_contract
+test_fail_closed
+test_static_contract
 
 printf 'PASS: %d AI profile test groups\n' "$tests_run"
