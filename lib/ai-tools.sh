@@ -73,7 +73,10 @@ ai_codex_candidate() {
   value="$(npm view @openai/codex dist-tags.latest --json)" ||
     die "could not resolve the current stable Codex release"
   node -e '
-    const value = JSON.parse(process.argv[1]);
+    const decoded = JSON.parse(process.argv[1]);
+    const values = Array.isArray(decoded) ? decoded : [decoded];
+    if (values.length !== 1) process.exit(1);
+    const value = values[0];
     if (typeof value !== "string" || !/^\d+\.\d+\.\d+$/.test(value)) {
       process.exit(1);
     }
