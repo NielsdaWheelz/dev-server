@@ -221,6 +221,14 @@
   ansible.builtin.meta: end_role
   when: rootless_docker_setup_deferred
 
+- name: Secure the generated rootless Docker unit
+  ansible.builtin.file:
+    path: "/home/{{ devbox_user }}/.config/systemd/user/docker.service"
+    state: file
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0644"
+
 - name: Reinspect generated rootless Docker unit
   ansible.builtin.stat:
     path: "/home/{{ devbox_user }}/.config/systemd/user/docker.service"

@@ -902,6 +902,9 @@ test_static_boundary_contract() {
   assert_contains "$repo_dir/ansible/roles/rootless_docker/tasks/main.yml" \
     "['running', 'inactive', 'stopped', 'failed']" \
     'current systemd inactive state vocabulary'
+  assert_contains "$repo_dir/ansible/roles/rootless_docker/tasks/main.yml" \
+    'Secure the generated rootless Docker unit' \
+    'generated Docker unit mode normalization'
   assert_not_contains "$repo_dir/ansible/roles/rootless_docker/tasks/main.yml" \
     'rc not in [0, 1]' 'ambiguous Docker observation success'
   assert_contains "$repo_dir/ansible/roles/security/tasks/main.yml" \
