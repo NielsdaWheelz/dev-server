@@ -51,6 +51,8 @@ never installs, upgrades, replaces, or signs in to it.
 Plain `codex` and `claude` remain upstream personal commands. Every Codex
 profile executes one npm user-global binary at `~/.local/bin/codex`; every
 Claude profile executes one Anthropic-native binary at `~/.local/bin/claude`.
+Apply reconciles Claude explicitly to the native `latest` channel without
+reading an account profile's update-channel preference.
 The managed `codex-work`, `codex-work2`, and `claude-work` wrappers isolate only
 account state and notification configuration. Running sessions are never
 restarted for an upgrade; new launches use the reconciled binary. Authenticate

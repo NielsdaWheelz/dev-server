@@ -52,7 +52,7 @@ stderr_file="$fixture/stderr"
 npm_calls_file="$fixture/npm-calls"
 npm_prefix_file="$fixture/npm-prefix"
 claude_bootstrap_record="$fixture/claude-bootstrap"
-claude_update_record="$fixture/claude-update"
+claude_install_record="$fixture/claude-install"
 claude_next_version_file="$fixture/claude-next-version"
 status=0
 tests_run=0
@@ -63,7 +63,7 @@ cp -R "$repo_dir/assets" "$test_assets"
 printf '%s\n' /unexpected >"$npm_prefix_file"
 dev_server_home_dir="$test_home"
 dev_server_assets_root="$test_assets"
-export CLAUDE_UPDATE_RECORD="$claude_update_record"
+export CLAUDE_INSTALL_RECORD="$claude_install_record"
 export CLAUDE_NEXT_VERSION_FILE="$claude_next_version_file"
 # shellcheck source=lib/common.sh
 source "$repo_dir/lib/common.sh"
@@ -126,8 +126,9 @@ write_fake_claude_version() {
     "version='$version'" \
     'case "${1:-}" in' \
     '  --version) printf "%s (Claude Code)\n" "$version"; exit 0 ;;' \
-    '  update)' \
-    '    printf "update\n" >>"$CLAUDE_UPDATE_RECORD"' \
+    '  install)' \
+    '    [[ "${2:-}" == latest ]]' \
+    '    printf "install-latest\n" >>"$CLAUDE_INSTALL_RECORD"' \
     '    if [[ -s "$CLAUDE_NEXT_VERSION_FILE" ]]; then' \
     '      next="$(cat "$CLAUDE_NEXT_VERSION_FILE")"' \
     '      ln -sfn "$HOME/.local/share/claude/versions/$next" "$HOME/.local/bin/claude"' \
@@ -278,8 +279,8 @@ test_canonical_install_and_update() {
   ai_install_profiles >/dev/null
   assert_eq 2 "$(npm_operation_count view)" 'second Codex candidate lookup count'
   assert_eq 1 "$(npm_operation_count global-install)" 'second Codex install count'
-  assert_eq 1 "$(wc -l <"$claude_update_record" | tr -d ' ')" \
-    'second-apply Claude update count'
+  assert_eq 1 "$(wc -l <"$claude_install_record" | tr -d ' ')" \
+    'second-apply Claude latest reconciliation count'
   assert_eq "$profile_inode" "$(file_inode "$test_home/bin/codex-work")" \
     'second-apply profile inode'
   ((dev_server_result_mutations == 0)) ||
@@ -399,8 +400,8 @@ test_static_contract() {
   fi
   grep -F 'https://claude.ai/install.sh' "$repo_dir/lib/ai-tools.sh" >/dev/null ||
     fail 'Claude apply does not use the official native installer'
-  grep -F '"$binary" update' "$repo_dir/lib/ai-tools.sh" >/dev/null ||
-    fail 'Claude apply does not use its native updater'
+  grep -F '"$binary" install latest' "$repo_dir/lib/ai-tools.sh" >/dev/null ||
+    fail 'Claude apply does not reconcile the native latest channel'
   grep -F 'npm view @openai/codex dist-tags.latest --json' \
     "$repo_dir/lib/ai-tools.sh" >/dev/null ||
     fail 'Codex apply does not resolve npm stable latest'
