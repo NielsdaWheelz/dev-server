@@ -107,7 +107,6 @@
       - zsh-syntax-highlighting
     state: latest
     update_cache: true
-    cache_valid_time: 3600
 
 - name: Read installed Docker package version after apply
   ansible.builtin.command:
