@@ -247,6 +247,8 @@
     group: "{{ devbox_user }}"
     mode: "{{ item.mode }}"
   loop:
+    - path: "/home/{{ devbox_user }}"
+      mode: "0750"
     - path: "/home/{{ devbox_user }}/src/work"
       mode: "0755"
     - path: "/home/{{ devbox_user }}/src/personal"

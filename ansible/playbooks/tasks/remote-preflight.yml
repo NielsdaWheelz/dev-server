@@ -81,7 +81,7 @@
         ("/var/lib/dev-server/active", 0o700),
     ]
     user_directories = [
-        (home, 0o755), (home / ".local", 0o755), (home / ".local/bin", 0o755),
+        (home, 0o750), (home / ".local", 0o755), (home / ".local/bin", 0o755),
         (home / ".local/share", 0o755), (home / ".local/share/dev-server", 0o755),
         (plugin_root, 0o755), (share, 0o700), (releases, 0o700), (units, 0o700),
         (home / ".local/state", 0o755), (home / ".local/state/dev-server", 0o700),

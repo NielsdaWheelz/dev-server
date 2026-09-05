@@ -905,6 +905,10 @@ test_static_boundary_contract() {
     'active/ssh.sha256' 'SSH activation identity'
   assert_contains "$repo_dir/ansible/roles/base/tasks/main.yml" \
     'DEV_SERVER_TMUX_DEFERRED' 'busy tmux deferral'
+  assert_contains "$repo_dir/ansible/roles/base/tasks/main.yml" \
+    'mode: "0750"' 'private devbox home mode'
+  assert_contains "$repo_dir/ansible/playbooks/tasks/remote-preflight.yml" \
+    '(home, 0o750)' 'private devbox home preflight'
   assert_contains "$repo_dir/ansible/playbooks/apply.yml" \
     'DEV_SERVER_REBOOT_DEFERRED' 'pending reboot deferral'
   assert_not_contains "$repo_dir/ansible/roles/base/tasks/main.yml" \
