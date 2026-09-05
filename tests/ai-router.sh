@@ -248,6 +248,25 @@ test_codex_candidate_npm_shapes() (
   done
 )
 
+test_codex_candidate_failure_is_read_only() (
+  local install_attempts=0
+
+  npm() {
+    case "${1:-}:${2:-}" in
+    config:get) printf '%s\n' "$test_home/.local" ;;
+    view:@openai/codex) printf '{"latest":"0.153.4"}\n' ;;
+    install:--global) install_attempts=$((install_attempts + 1)) ;;
+    *) fail "unexpected npm invocation while testing candidate failure: $*" ;;
+    esac
+  }
+
+  if ai_install_codex >/dev/null 2>&1; then
+    fail 'Codex install accepted an invalid stable candidate response'
+  fi
+  assert_eq 0 "$install_attempts" \
+    'npm install attempts after stable candidate failure'
+)
+
 test_invalid_input_is_read_only() {
   local invalid_assets="$fixture/invalid-assets"
   local invalid_home="$fixture/invalid-home"
@@ -436,6 +455,8 @@ test_static_contract() {
 
 test_runtime_floor
 test_codex_candidate_npm_shapes
+pass
+test_codex_candidate_failure_is_read_only
 pass
 test_invalid_input_is_read_only
 test_canonical_install_and_update
