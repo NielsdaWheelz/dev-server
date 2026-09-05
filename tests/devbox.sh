@@ -905,6 +905,8 @@ test_static_boundary_contract() {
     'active/ssh.sha256' 'SSH activation identity'
   assert_contains "$repo_dir/ansible/roles/base/tasks/main.yml" \
     'DEV_SERVER_TMUX_DEFERRED' 'busy tmux deferral'
+  assert_not_contains "$repo_dir/ansible/roles/base/tasks/main.yml" \
+    'cache_valid_time:' 'stale apt metadata allowance'
   assert_contains "$repo_dir/ansible/roles/base/tasks/main.yml" \
     'mode: "0750"' 'private devbox home mode'
   assert_contains "$repo_dir/ansible/roles/ai_tools/tasks/main.yml" \
