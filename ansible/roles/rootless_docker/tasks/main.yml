@@ -41,7 +41,7 @@
     that:
       - "'docker.service' in ansible_facts.services"
       - ansible_facts.services['docker.service'].source == 'systemd'
-      - ansible_facts.services['docker.service'].state in ['running', 'stopped', 'failed']
+      - ansible_facts.services['docker.service'].state in ['running', 'inactive', 'stopped', 'failed']
     fail_msg: Rootful Docker service state is missing or ambiguous
 
 - name: Inspect rootful Docker containers before disabling its daemon

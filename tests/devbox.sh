@@ -899,6 +899,9 @@ test_static_boundary_contract() {
     'active/docker.sha256' 'Docker activation identity'
   assert_contains "$repo_dir/ansible/roles/rootless_docker/tasks/main.yml" \
     'systemctl --user is-active --quiet docker.service' 'rootless Docker state observation'
+  assert_contains "$repo_dir/ansible/roles/rootless_docker/tasks/main.yml" \
+    "['running', 'inactive', 'stopped', 'failed']" \
+    'current systemd inactive state vocabulary'
   assert_not_contains "$repo_dir/ansible/roles/rootless_docker/tasks/main.yml" \
     'rc not in [0, 1]' 'ambiguous Docker observation success'
   assert_contains "$repo_dir/ansible/roles/security/tasks/main.yml" \
