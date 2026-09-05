@@ -173,7 +173,7 @@ printf '\n' >>"$FAKE_CALLS"
 case "${1:-}" in
   -y)
     case "${3:-}" in
-      *dev-server-deploy) printf '%s\n' 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDEPLOY000000000000000000000000000000' ;;
+      *dev-server-deploy) printf '%s\n' 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDEPLOY000000000000000000000000000000 dev-server-deploy' ;;
       *) printf '%s\n' 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOPERATOR000000000000000000000000000' ;;
     esac
     ;;
