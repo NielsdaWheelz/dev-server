@@ -30,6 +30,7 @@ ssh_include="$ssh_include_dir/$server_name"
 ssh_known_hosts="$HOME/.ssh/known_hosts"
 ssh_known_hosts_file="$ssh_known_hosts"
 tailscale_auth_key_file="$base_dir/secrets/tailscale-auth-key"
+tailscale_cli=''
 template="$base_dir/cloud-init-devbox.template.yaml"
 ansible_inventory="$base_dir/ansible/inventory/devbox.yml"
 ansible_apply_playbook="$base_dir/ansible/playbooks/apply.yml"
@@ -377,7 +378,7 @@ wait_for_tailnet_host() {
   local attempts=60 status_json
 
   while ((attempts > 0)); do
-    status_json="$(tailscale status --json)" || return 1
+    status_json="$("$tailscale_cli" status --json)" || return 1
     if tailnet_host="$(tailnet_peer "$status_json" 2>/dev/null)"; then
       printf '%s\n' "$tailnet_host"
       return 0
@@ -712,7 +713,9 @@ preflight() {
   local deploy_public_key operator_public_key status_json auth_key auth_key_framed existing_peer
   local peer_rc
 
-  require_cmd gh hcloud python3 ssh ssh-keygen tailscale uvx
+  require_cmd gh hcloud python3 ssh ssh-keygen uvx
+  tailscale_cli="$(dev_server_tailscale_cli)" ||
+    die 'could not resolve the local Tailscale CLI'
   [[ -d "$HOME" && ! -L "$HOME" && -d "$HOME/.ssh" && ! -L "$HOME/.ssh" ]] ||
     die 'operator SSH directory topology is invalid'
   if [[ -e "$ssh_known_hosts" || -L "$ssh_known_hosts" ]]; then
@@ -749,7 +752,7 @@ preflight() {
     return 0
   fi
 
-  status_json="$(tailscale status --json)" ||
+  status_json="$("$tailscale_cli" status --json)" ||
     die 'could not inspect the local tailnet'
   require_cmd awk base64 cat curl tr
   [[ -f "$template" && ! -L "$template" ]] ||
@@ -997,7 +1000,7 @@ cmd_apply() {
 
   if [[ -n "$server_id" ]]; then
     reconcile_existing_firewall_boundary
-    tailnet_host="$(tailnet_peer "$(tailscale status --json)")" ||
+    tailnet_host="$(tailnet_peer "$("$tailscale_cli" status --json)")" ||
       die 'the existing Hetzner devbox has no unique online tailnet node'
     apply_existing_server
   else

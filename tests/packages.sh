@@ -446,6 +446,9 @@ test_macos_tailscale_cli_resolution() (
   resolved="$(packages_macos_tailscale_cli)"
   assert_eq "$app_cli" "$resolved" 'exact App Store Tailscale CLI selection'
 
+  resolved="$(dev_server_tailscale_cli)"
+  assert_eq "$path_cli" "$resolved" 'PATH Tailscale CLI selection'
+
   rm "$receipt"
   if packages_macos_tailscale_cli >/dev/null 2>&1; then
     fail 'Tailscale app without an App Store receipt was accepted'

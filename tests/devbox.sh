@@ -602,6 +602,8 @@ PY
   assert_contains "$case_dir/calls" '203.0.113.10' 'public bootstrap transport'
   assert_contains "$case_dir/calls" 'dev-server.example.ts.net' 'tailnet transport'
   assert_contains "$case_dir/calls" 'uvx --from ansible-core==2.19.2' 'pinned Ansible apply'
+  assert_contains "$case_dir/calls" 'tailscale status --json' \
+    'resolved Tailscale CLI invocation'
   assert_contains "$case_dir/state/rendered-cloud-init.yaml" \
     'name: dev-server-deploy' 'deployment principal rendering'
   assert_contains "$case_dir/state/rendered-cloud-init.yaml" \
