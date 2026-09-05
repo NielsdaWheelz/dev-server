@@ -257,11 +257,11 @@ test_pin_and_config_contract() (
 
   skidbladnir_release_pin_file="$pin"
   line="$(skidbladnir_release_values arch)" || fail 'current release pin was rejected'
-  assert_eq v0.2.25 "${line%%$'\t'*}" 'current release version'
-  [[ "$line" == *$'\thttps://github.com/NielsdaWheelz/skidbladnir/releases/download/v0.2.25/skidbladnir-linux-amd64.tar.gz\tdb733b768fa433c7a71fd37360066da5da0d08a5001b66290105a191b14abacf\tlinux-amd64' ]] ||
+  assert_eq v0.2.27 "${line%%$'\t'*}" 'current release version'
+  [[ "$line" == *$'\thttps://github.com/NielsdaWheelz/skidbladnir/releases/download/v0.2.27/skidbladnir-linux-amd64.tar.gz\tf28d1695f5848fde126d4e5198ddb03fa389710f38c491cc6dd4416a2da73f66\tlinux-amd64' ]] ||
     fail 'current Linux URL or digest differs'
   cp "$pin" "$valid"
-  sed 's/"version": "v0.2.25"/"version": "v0.2.25", "version": "v0.2.25"/' \
+  sed 's/"version": "v0.2.27"/"version": "v0.2.27", "version": "v0.2.27"/' \
     "$valid" >"$duplicate"
   skidbladnir_release_pin_file="$duplicate"
   if skidbladnir_release_values arch >/dev/null 2>&1; then
