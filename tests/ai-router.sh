@@ -225,6 +225,29 @@ test_runtime_floor() {
   pass
 }
 
+test_codex_candidate_npm_shapes() (
+  local invalid payload
+
+  npm() {
+    printf '%s\n' "$payload"
+  }
+
+  for payload in '"0.153.4"' '["0.153.4"]'; do
+    assert_eq 0.153.4 "$(ai_codex_candidate)" \
+      'supported npm stable-tag response'
+  done
+
+  for invalid in '[]' '["0.153.4","0.153.5"]' '"0.154.0-alpha.1"' \
+    '{"latest":"0.153.4"}' 'not-json'; do
+    if (
+      payload="$invalid"
+      ai_codex_candidate
+    ) >/dev/null 2>&1; then
+      fail "invalid npm stable-tag response was accepted: $invalid"
+    fi
+  done
+)
+
 test_invalid_input_is_read_only() {
   local invalid_assets="$fixture/invalid-assets"
   local invalid_home="$fixture/invalid-home"
@@ -412,6 +435,8 @@ test_static_contract() {
 }
 
 test_runtime_floor
+test_codex_candidate_npm_shapes
+pass
 test_invalid_input_is_read_only
 test_canonical_install_and_update
 test_fixed_profile_routing
