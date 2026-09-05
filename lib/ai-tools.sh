@@ -141,8 +141,7 @@ ai_claude_version() {
   local binary="$1"
   local output
 
-  output="$(CLAUDE_CONFIG_DIR="$(dev_server_home)/.claude" \
-    "$binary" --version)" || return 1
+  output="$(HOME="$(dev_server_home)" "$binary" --version)" || return 1
   [[ "$output" =~ ^([0-9]+\.[0-9]+\.[0-9]+)' (Claude Code)'$ ]] || return 1
   printf '%s\n' "${BASH_REMATCH[1]}"
 }
@@ -200,10 +199,10 @@ ai_install_claude() {
   home="$(dev_server_home)"
   binary="$(ai_claude_binary)"
   if before="$(ai_claude_native_version)"; then
-    HOME="$home" CLAUDE_CONFIG_DIR="$home/.claude" "$binary" update ||
-      die "Claude native update failed"
+    HOME="$home" "$binary" install latest ||
+      die "Claude native latest-channel reconciliation failed"
     version="$(ai_claude_native_version)" ||
-      die "Claude native update produced an invalid installation"
+      die "Claude native reconciliation produced an invalid installation"
     if [[ "$version" != "$before" ]]; then
       render_result UPDATED "AI tool" "claude@$version"
     fi
