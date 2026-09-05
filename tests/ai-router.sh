@@ -96,7 +96,7 @@ write_fake_binary() {
     'set -euo pipefail' \
     'if [[ -z "${PROFILE_RECORD:-}" ]]; then' \
     '  case "${0##*/}" in' \
-    '    codex) printf "codex-cli 0.152.0\n" ;;' \
+    '    codex) printf "codex-cli 0.153.4\n" ;;' \
     '    claude) printf "2.1.252 (Claude Code)\n" ;;' \
     '    *) exit 1 ;;' \
     '  esac' \
@@ -110,9 +110,14 @@ write_fake_binary() {
 }
 
 npm_calls_file="$fixture/npm-calls"
-npm_call_count() {
+npm_prefix_file="$fixture/npm-prefix"
+printf '%s\n' /unexpected >"$npm_prefix_file"
+
+npm_operation_count() {
+  local operation="$1"
+
   if [[ -f "$npm_calls_file" ]]; then
-    wc -l <"$npm_calls_file" | tr -d ' '
+    grep -Fxc "$operation" "$npm_calls_file" || true
   else
     printf '0\n'
   fi
@@ -121,35 +126,69 @@ npm_call_count() {
 npm() {
   local prefix
 
-  if [[ "$1" == --version ]]; then
+  if [[ "${1:-}" == --version ]]; then
     printf '11.19.0\n'
     return 0
   fi
-  printf 'ci\n' >>"$npm_calls_file"
-  assert_eq ci "$1" 'npm operation'
-  assert_eq 7 "$#" 'npm argument count'
-  assert_eq --omit=dev "$2" 'npm omit policy'
-  assert_eq --no-audit "$3" 'npm audit policy'
-  assert_eq --no-fund "$4" 'npm funding policy'
-  assert_eq --strict-allow-scripts "$5" 'npm install-script policy'
-  assert_eq --ignore-scripts=false "$6" 'npm required-script policy'
-  assert_eq --dangerously-allow-all-scripts=false "$7" \
-    'npm unreviewed-script policy'
-  prefix="$PWD"
-
-  install -d -m 0755 \
-    "$prefix/node_modules/@openai/codex" \
-    "$prefix/node_modules/@anthropic-ai/claude-code" \
-    "$prefix/node_modules/.bin"
-  printf '{"name":"@openai/codex","version":"0.152.0"}\n' \
-    >"$prefix/node_modules/@openai/codex/package.json"
-  printf '{"name":"@anthropic-ai/claude-code","version":"2.1.252"}\n' \
-    >"$prefix/node_modules/@anthropic-ai/claude-code/package.json"
-  write_fake_binary "$prefix/node_modules/.bin/codex"
-  write_fake_binary "$prefix/node_modules/.bin/claude"
+  case "${1:-}:${2:-}" in
+  config:get)
+    assert_eq 3 "$#" 'npm config-get argument count'
+    assert_eq prefix "$3" 'npm config-get key'
+    cat "$npm_prefix_file"
+    ;;
+  config:set)
+    assert_eq 5 "$#" 'npm config-set argument count'
+    assert_eq --location=user "$3" 'npm config-set location'
+    assert_eq prefix "$4" 'npm config-set key'
+    printf '%s\n' "$5" >"$npm_prefix_file"
+    printf 'config-set\n' >>"$npm_calls_file"
+    ;;
+  view:@openai/codex)
+    assert_eq 4 "$#" 'npm view argument count'
+    assert_eq dist-tags.latest "$3" 'npm stable release selector'
+    assert_eq --json "$4" 'npm stable release encoding'
+    printf 'view\n' >>"$npm_calls_file"
+    printf '"0.153.4"\n'
+    ;;
+  install:--global)
+    assert_eq 8 "$#" 'npm global-install argument count'
+    assert_eq --prefix "$3" 'npm global prefix flag'
+    assert_eq --ignore-scripts "$5" 'Codex install-script policy'
+    assert_eq --no-audit "$6" 'npm global audit policy'
+    assert_eq --no-fund "$7" 'npm global funding policy'
+    assert_eq @openai/codex@0.153.4 "$8" 'npm stable Codex package'
+    prefix="$4"
+    printf 'global-install\n' >>"$npm_calls_file"
+    install -d -m 0755 \
+      "$prefix/lib/node_modules/@openai/codex" \
+      "$prefix/bin"
+    printf '{"name":"@openai/codex","version":"0.153.4"}\n' \
+      >"$prefix/lib/node_modules/@openai/codex/package.json"
+    write_fake_binary "$prefix/bin/codex"
+    ;;
+  ci:--omit=dev)
+    printf 'ci\n' >>"$npm_calls_file"
+    assert_eq 7 "$#" 'npm ci argument count'
+    assert_eq --no-audit "$3" 'npm audit policy'
+    assert_eq --no-fund "$4" 'npm funding policy'
+    assert_eq --strict-allow-scripts "$5" 'npm install-script policy'
+    assert_eq --ignore-scripts=false "$6" 'npm required-script policy'
+    assert_eq --dangerously-allow-all-scripts=false "$7" \
+      'npm unreviewed-script policy'
+    prefix="$PWD"
+    rm -rf "$prefix/node_modules"
+    install -d -m 0755 \
+      "$prefix/node_modules/@anthropic-ai/claude-code" \
+      "$prefix/node_modules/.bin"
+    printf '{"name":"@anthropic-ai/claude-code","version":"2.1.252"}\n' \
+      >"$prefix/node_modules/@anthropic-ai/claude-code/package.json"
+    write_fake_binary "$prefix/node_modules/.bin/claude"
+    ;;
+  *) fail "unexpected npm invocation: $*" ;;
+  esac
 }
 
-test_locked_idempotent_install() {
+test_current_codex_and_locked_claude_install() {
   local profile_inode
   local receipt_inode
   local root
@@ -160,7 +199,17 @@ test_locked_idempotent_install() {
   ai_install_packages >/dev/null
   ai_install_profiles >/dev/null
 
-  assert_eq 1 "$(npm_call_count)" 'fresh npm invocation count'
+  assert_eq 1 "$(npm_operation_count view)" 'fresh Codex candidate lookup count'
+  assert_eq 1 "$(npm_operation_count global-install)" 'fresh Codex install count'
+  assert_eq 1 "$(npm_operation_count ci)" 'fresh Claude install count'
+  assert_eq 1 "$(npm_operation_count config-set)" 'npm prefix repair count'
+  assert_eq "$test_home/.local" "$(cat "$npm_prefix_file")" \
+    'canonical npm prefix'
+  [[ -x "$test_home/.local/bin/codex" ]] ||
+    fail 'canonical Codex binary was not installed'
+  [[ ! -e "$root/node_modules/@openai/codex" &&
+    ! -e "$root/node_modules/.bin/codex" ]] ||
+    fail 'private Codex installation remains'
   cmp -s "$test_assets/ai/package-lock.json" \
     "$root/.installed-package-lock.json" ||
     fail 'installed AI receipt differs from the declared lock'
@@ -186,7 +235,11 @@ test_locked_idempotent_install() {
   ai_install_dirs >/dev/null
   ai_install_packages >/dev/null
   ai_install_profiles >/dev/null
-  assert_eq 1 "$(npm_call_count)" 'second-apply npm invocation count'
+  assert_eq 2 "$(npm_operation_count view)" 'second Codex candidate lookup count'
+  assert_eq 1 "$(npm_operation_count global-install)" 'second-apply Codex install count'
+  assert_eq 1 "$(npm_operation_count ci)" 'second-apply Claude install count'
+  assert_eq 1 "$(npm_operation_count config-set)" \
+    'second-apply npm prefix repair count'
   assert_eq "$profile_inode" "$(file_inode "$test_home/bin/codex-work")" \
     'second-apply profile inode'
   assert_eq "$receipt_inode" \
@@ -196,19 +249,31 @@ test_locked_idempotent_install() {
     fail 'second AI apply reported a durable mutation'
 
   printf '{"name":"@openai/codex","version":"0.0.0"}\n' \
-    >"$root/node_modules/@openai/codex/package.json"
+    >"$test_home/.local/lib/node_modules/@openai/codex/package.json"
   ai_install_packages >/dev/null
-  assert_eq 2 "$(npm_call_count)" 'drift-repair npm invocation count'
+  assert_eq 2 "$(npm_operation_count global-install)" \
+    'outdated Codex repair install count'
 
   printf '\n' >>"$root/.installed-package-lock.json"
   ai_install_packages >/dev/null
-  assert_eq 3 "$(npm_call_count)" 'lock-receipt repair npm invocation count'
+  assert_eq 2 "$(npm_operation_count ci)" 'Claude lock-receipt repair count'
 
   printf '%s\n' '#!/usr/bin/env bash' 'exit 0' \
-    >"$root/node_modules/.bin/codex"
-  chmod 0755 "$root/node_modules/.bin/codex"
+    >"$test_home/.local/bin/codex"
+  chmod 0755 "$test_home/.local/bin/codex"
   ai_install_packages >/dev/null
-  assert_eq 4 "$(npm_call_count)" 'binary-drift repair npm invocation count'
+  assert_eq 3 "$(npm_operation_count global-install)" \
+    'Codex binary-drift repair install count'
+
+  install -d -m 0755 "$root/node_modules/@openai/codex"
+  printf '{"name":"@openai/codex","version":"0.152.0"}\n' \
+    >"$root/node_modules/@openai/codex/package.json"
+  write_fake_binary "$root/node_modules/.bin/codex"
+  ai_install_packages >/dev/null
+  assert_eq 3 "$(npm_operation_count ci)" 'private Codex removal count'
+  [[ ! -e "$root/node_modules/@openai/codex" &&
+    ! -e "$root/node_modules/.bin/codex" ]] ||
+    fail 'private Codex drift survived reconciliation'
   pass
 }
 
@@ -259,7 +324,7 @@ invoke() {
     cd "$cwd"
     env -u CODEX_HOME -u CLAUDE_CONFIG_DIR \
       HOME="$test_home" \
-      PATH="$test_home/bin:$(ai_install_root)/node_modules/.bin:/usr/bin:/bin" \
+      PATH="$test_home/.local/bin:$(ai_install_root)/node_modules/.bin:$test_home/bin:/usr/bin:/bin" \
       PROFILE_RECORD="$record" \
       PROFILE_SENTINEL='preserved value' \
       "$command" "$@"
@@ -277,8 +342,8 @@ test_fixed_profile_routing() {
   invoke codex-work "$personal_cwd" -C "$work_cwd" exec --exact 'spaced value'
   assert_eq 0 "$status" 'codex-work status'
   read_record
-  assert_eq "$(ai_install_root)/node_modules/.bin/codex" \
-    "$(command -v "$(ai_install_root)/node_modules/.bin/codex")" \
+  assert_eq "$test_home/.local/bin/codex" \
+    "$(command -v "$test_home/.local/bin/codex")" \
     'Codex binary path'
   assert_eq "$test_home/.codex-work" "${fields[1]}" 'codex-work CODEX_HOME'
   assert_eq '' "${fields[2]}" 'codex-work CLAUDE_CONFIG_DIR'
@@ -342,7 +407,6 @@ const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const lock = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
 const expected = {
   '@anthropic-ai/claude-code': '2.1.252',
-  '@openai/codex': '0.152.0',
 };
 const allowed = {'@anthropic-ai/claude-code@2.1.252': true};
 if (manifest.private !== true ||
@@ -351,6 +415,9 @@ if (manifest.private !== true ||
   process.exit(1);
 }
 if (JSON.stringify(lock.packages[''].dependencies) !== JSON.stringify(expected)) {
+  process.exit(1);
+}
+if (Object.keys(lock.packages).some(path => path.includes('@openai/codex'))) {
   process.exit(1);
 }
 for (const [path, entry] of Object.entries(lock.packages)) {
@@ -369,7 +436,7 @@ if (JSON.stringify(scripted) !==
 }
 NODE
 
-  if grep -REn '@latest|curl[[:space:]].*\|[[:space:]]*(sh|bash)|wget' \
+  if grep -REn 'curl[[:space:]].*\|[[:space:]]*(sh|bash)|wget' \
     "$repo_dir/lib/ai-tools.sh" "$repo_dir/assets/ai" \
     "$repo_dir/assets/routers/ai-profile" >/dev/null; then
     fail 'mutable or pipe-to-shell AI installation remains'
@@ -380,7 +447,13 @@ NODE
     fail 'hidden, personal, cwd, or Skidbladnir routing remains'
   fi
   grep -F 'npm ci --omit=dev' "$repo_dir/lib/ai-tools.sh" >/dev/null ||
-    fail 'AI apply does not consume the standard lock with npm ci'
+    fail 'Claude apply does not consume the standard lock with npm ci'
+  grep -F 'npm view @openai/codex dist-tags.latest --json' \
+    "$repo_dir/lib/ai-tools.sh" >/dev/null ||
+    fail 'Codex apply does not resolve npm stable latest'
+  grep -F 'npm install --global --prefix "$prefix" --ignore-scripts' \
+    "$repo_dir/lib/ai-tools.sh" >/dev/null ||
+    fail 'Codex apply does not use the canonical script-free global install'
   grep -F -- '--strict-allow-scripts' "$repo_dir/lib/ai-tools.sh" >/dev/null ||
     fail 'AI apply does not reject unreviewed dependency scripts'
   grep -F -- '--ignore-scripts=false' "$repo_dir/lib/ai-tools.sh" >/dev/null ||
@@ -388,16 +461,12 @@ NODE
   grep -F -- '--dangerously-allow-all-scripts=false' \
     "$repo_dir/lib/ai-tools.sh" >/dev/null ||
     fail 'AI apply permits an ambient all-scripts bypass'
-  if grep -E -- '--ignore-scripts([[:space:]]|$)' \
-    "$repo_dir/lib/ai-tools.sh" >/dev/null; then
-    fail 'AI apply disables the required reviewed Claude install script'
-  fi
   pass
 }
 
 test_runtime_floor
 test_invalid_input_is_read_only
-test_locked_idempotent_install
+test_current_codex_and_locked_claude_install
 test_fixed_profile_routing
 test_profile_fail_closed
 test_lock_and_static_contract

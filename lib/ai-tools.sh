@@ -70,7 +70,7 @@ def load(path):
 
 manifest = load(sys.argv[1])
 lock = load(sys.argv[2])
-names = ["@anthropic-ai/claude-code", "@openai/codex"]
+names = ["@anthropic-ai/claude-code"]
 dependencies = manifest.get("dependencies")
 if (manifest.get("private") is not True or not isinstance(dependencies, dict) or
         sorted(dependencies) != names):
@@ -112,6 +112,7 @@ ai_install_dirs() {
   home="$(dev_server_home)"
   ensure_directory "$home/bin" 0755 || return 1
   ensure_directory "$home/.local" 0755 || return 1
+  ensure_directory "$home/.local/bin" 0755 || return 1
   ensure_directory "$home/.local/share" 0755 || return 1
   ensure_directory "$home/.local/share/dev-server" 0755 || return 1
   ensure_directory "$(ai_install_root)" 0755 || return 1
@@ -137,37 +138,101 @@ ai_package_version() {
   ' "$manifest" "$package"
 }
 
-ai_commands_match() {
+ai_codex_binary() {
+  printf '%s/.local/bin/codex\n' "$(dev_server_home)"
+}
+
+ai_codex_manifest() {
+  printf '%s/.local/lib/node_modules/@openai/codex/package.json\n' \
+    "$(dev_server_home)"
+}
+
+ai_codex_candidate() {
+  local value
+
+  value="$(npm view @openai/codex dist-tags.latest --json)" ||
+    die "could not resolve the current stable Codex release"
+  node -e '
+    const value = JSON.parse(process.argv[1]);
+    if (typeof value !== "string" || !/^\d+\.\d+\.\d+$/.test(value)) {
+      process.exit(1);
+    }
+    process.stdout.write(value);
+  ' "$value" || die "npm returned an invalid stable Codex release"
+}
+
+ai_codex_matches() {
+  local expected="$1"
+  local binary
+  local manifest
+  local output
+
+  binary="$(ai_codex_binary)"
+  manifest="$(ai_codex_manifest)"
+  [[ -x "$binary" && -f "$manifest" && ! -L "$manifest" ]] || return 1
+  [[ "$(ai_package_version "$manifest" @openai/codex 2>/dev/null || true)" == "$expected" ]] || return 1
+  output="$(CODEX_HOME="$(dev_server_home)/.codex-work" "$binary" --version)" ||
+    return 1
+  [[ "$output" == "codex-cli $expected" ]]
+}
+
+ai_install_codex() {
+  local binary
+  local candidate
+  local home
+  local npm_prefix
+  local prefix
+  local status
+
+  home="$(dev_server_home)"
+  prefix="$home/.local"
+  binary="$(ai_codex_binary)"
+  npm_prefix="$(npm config get prefix)" || die "could not read the npm global prefix"
+  if [[ "$npm_prefix" != "$prefix" ]]; then
+    npm config set --location=user prefix "$prefix" ||
+      die "could not configure the npm user-global prefix"
+    [[ "$(npm config get prefix)" == "$prefix" ]] ||
+      die "npm did not retain the user-global prefix"
+    render_result CHANGED "npm global prefix" "$prefix"
+  fi
+
+  candidate="$(ai_codex_candidate)"
+  if ai_codex_matches "$candidate"; then
+    return 0
+  fi
+  if [[ -e "$(ai_codex_manifest)" || -L "$(ai_codex_manifest)" ||
+  -e "$binary" || -L "$binary" ]]; then
+    status=UPDATED
+  else
+    status=INSTALLED
+  fi
+  npm install --global --prefix "$prefix" --ignore-scripts \
+    --no-audit --no-fund "@openai/codex@$candidate" || return 1
+  ai_codex_matches "$candidate" ||
+    die "installed Codex does not match npm's stable candidate"
+  render_result "$status" "AI tool" "codex@$candidate"
+}
+
+ai_claude_command_matches() {
   local root="$1"
-  local codex_version="$2"
-  local claude_version="$3"
-  local codex_output
+  local claude_version="$2"
   local claude_output
 
-  [[ -x "$root/node_modules/.bin/codex" &&
-    -x "$root/node_modules/.bin/claude" ]] || return 1
-  codex_output="$(
-    CODEX_HOME="$(dev_server_home)/.codex-work" \
-      "$root/node_modules/.bin/codex" --version
-  )" || return 1
+  [[ -x "$root/node_modules/.bin/claude" ]] || return 1
   claude_output="$(
     CLAUDE_CONFIG_DIR="$(dev_server_home)/.claude-work" \
       "$root/node_modules/.bin/claude" --version
   )" || return 1
-  [[ "$codex_output" == "codex-cli $codex_version" &&
-    "$claude_output" == "$claude_version (Claude Code)" ]]
+  [[ "$claude_output" == "$claude_version (Claude Code)" ]]
 }
 
-ai_packages_current() {
+ai_claude_packages_current() {
   local assets
   local root
-  local codex_version
   local claude_version
 
   assets="$(ai_assets_dir)"
   root="$(ai_install_root)"
-  codex_version="$(ai_package_version "$assets/package.json" @openai/codex)" ||
-    return 1
   claude_version="$(ai_package_version "$assets/package.json" @anthropic-ai/claude-code)" ||
     return 1
 
@@ -178,21 +243,22 @@ ai_packages_current() {
   cmp -s "$assets/package.json" "$root/.installed-package.json" || return 1
   cmp -s "$assets/package-lock.json" \
     "$root/.installed-package-lock.json" || return 1
-  [[ "$(ai_package_version "$root/node_modules/@openai/codex/package.json" \
-    @openai/codex 2>/dev/null || true)" == "$codex_version" ]] || return 1
+  [[ ! -e "$root/node_modules/@openai/codex" &&
+    ! -L "$root/node_modules/@openai/codex" &&
+    ! -e "$root/node_modules/.bin/codex" &&
+    ! -L "$root/node_modules/.bin/codex" ]] || return 1
   [[ "$(ai_package_version \
     "$root/node_modules/@anthropic-ai/claude-code/package.json" \
     @anthropic-ai/claude-code 2>/dev/null || true)" == "$claude_version" ]] || return 1
-  ai_commands_match "$root" "$codex_version" "$claude_version"
+  ai_claude_command_matches "$root" "$claude_version"
 }
 
-ai_install_packages() {
+ai_install_locked_claude() {
   local assets
   local root
   local status
   local manifest_status
   local lock_status
-  local codex_version
   local claude_version
 
   assets="$(ai_assets_dir)"
@@ -205,7 +271,7 @@ ai_install_packages() {
   atomic_install_file "$assets/package-lock.json" \
     "$root/package-lock.json" 0644 || return 1
   lock_status="$dev_server_install_status"
-  if ai_packages_current; then
+  if ai_claude_packages_current; then
     [[ "$manifest_status" == "UP TO DATE" ]] ||
       render_result "$manifest_status" "AI package manifest"
     [[ "$lock_status" == "UP TO DATE" ]] ||
@@ -223,21 +289,24 @@ ai_install_packages() {
     --strict-allow-scripts --ignore-scripts=false \
     --dangerously-allow-all-scripts=false) ||
     return 1
-  codex_version="$(ai_package_version "$assets/package.json" @openai/codex)" ||
-    die "invalid Codex package version"
   claude_version="$(ai_package_version \
     "$assets/package.json" @anthropic-ai/claude-code)" ||
     die "invalid Claude package version"
-  ai_commands_match "$root" "$codex_version" "$claude_version" ||
-    die "installed AI commands do not match their declared versions"
+  ai_claude_command_matches "$root" "$claude_version" ||
+    die "installed Claude command does not match its declared version"
   atomic_install_file "$assets/package.json" \
     "$root/.installed-package.json" 0600 || return 1
   atomic_install_file "$assets/package-lock.json" \
     "$root/.installed-package-lock.json" 0600 || return 1
 
-  ai_packages_current || die "installed AI package tree does not match its lock"
-  render_result "$status" "AI tools" \
-    "codex@$codex_version claude@$claude_version"
+  ai_claude_packages_current ||
+    die "installed Claude package tree does not match its lock"
+  render_result "$status" "AI tool" "claude@$claude_version"
+}
+
+ai_install_packages() {
+  ai_install_codex || return 1
+  ai_install_locked_claude || return 1
 }
 
 ai_install_profiles() {

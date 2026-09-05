@@ -41,15 +41,18 @@ Run:
 ```
 
 The order is native packages, repo-owned files, exact-host personal policy,
-pinned AI tools, and Skíðblaðnir. Package managers may refresh their own
-metadata. Apply never removes Arch packages, restarts tmux, reboots, logs out,
-or interrupts running containers. Those cases are reported as `DEFERRED`.
+the current stable Codex plus locked Claude, and Skíðblaðnir. Package managers
+may refresh their own metadata. Apply never removes Arch packages, restarts
+tmux, reboots, logs out, or interrupts running containers. Those cases are
+reported as `DEFERRED`.
 On macOS, apply verifies and may start the exact App Store Tailscale app but
 never installs, upgrades, replaces, or signs in to it.
 
-Plain `codex` and `claude` remain upstream personal commands. The only managed
-account wrappers are `codex-work`, `codex-work2`, and `claude-work`; authenticate
-their isolated homes directly when first required.
+Plain `codex` and `claude` remain upstream personal commands. Every Codex
+profile executes the single npm user-global binary at `~/.local/bin/codex`;
+the managed `codex-work`, `codex-work2`, and `claude-work` wrappers isolate only
+account state and notification configuration. Authenticate their isolated homes
+directly when first required.
 
 ## Devbox
 
@@ -277,9 +280,10 @@ Skíðblaðnir health/Serve postconditions.
 
 ## Boundaries and trade-offs
 
-- Native OS repositories are rolling rather than byte-replayable. Remote
-  installers, AI CLIs, Git plugins, Cursor extensions, and Skíðblaðnir are exact
-  reviewable pins and therefore can lag upstream until manually bumped.
+- Native OS repositories and Codex stable are rolling rather than
+  byte-replayable. Remote installers, Claude, Git plugins, Cursor extensions,
+  and Skíðblaðnir are exact reviewable pins and therefore can lag upstream
+  until manually bumped.
 - Native package and npm updates can partially complete; rerun their native
   reconcilers. Git plugin candidates are isolated until an atomic link switch.
   Only Skíðblaðnir has repository-owned service rollback.

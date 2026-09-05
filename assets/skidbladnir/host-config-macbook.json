@@ -6,9 +6,9 @@
       "key": "personal",
       "label": "Codex · Personal",
       "provider": "Codex",
-      "command": "/Users/nnandal/.local/share/dev-server/ai-tools/node_modules/.bin/codex",
+      "command": "/Users/nnandal/.local/bin/codex",
       "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/share/dev-server/ai-tools/node_modules/.bin/codex"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
       "arguments": []
     },
     {
@@ -17,7 +17,7 @@
       "provider": "Codex",
       "command": "/Users/nnandal/bin/codex-work",
       "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-work"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/share/dev-server/ai-tools/node_modules/.bin/codex"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
       "arguments": []
     },
     {
@@ -26,7 +26,7 @@
       "provider": "Codex",
       "command": "/Users/nnandal/bin/codex-work2",
       "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-work2"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/share/dev-server/ai-tools/node_modules/.bin/codex"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
       "arguments": []
     },
     {

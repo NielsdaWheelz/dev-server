@@ -48,7 +48,7 @@
     - zshenv
     - zshrc
 
-- name: Install exact AI package locks
+- name: Install exact Claude package lock
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../assets/ai/{{ item }}"
     dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/ai/{{ item }}"

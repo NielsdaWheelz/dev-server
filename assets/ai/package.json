@@ -6,7 +6,6 @@
     "@anthropic-ai/claude-code@2.1.252": true
   },
   "dependencies": {
-    "@anthropic-ai/claude-code": "2.1.252",
-    "@openai/codex": "0.152.0"
+    "@anthropic-ai/claude-code": "2.1.252"
   }
 }

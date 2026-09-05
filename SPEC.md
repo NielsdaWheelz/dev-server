@@ -180,10 +180,10 @@ Trade-offs: rolling OS repositories favor freshness over byte-for-byte replay of
 - Plain `codex` and `claude` are personal upstream commands. Retain only explicit `codex-work`, `codex-work2`, and `claude-work` wrappers.
 - The wrapper dispatches only by its fixed basename; remove cwd/`-C` inference and `*-personal` aliases. Retain isolation tests.
 - AI installation MUST NOT depend on a Skíðblaðnir Claude plugin.
-- Use native/standard lock formats where available. Pin remote installers, Git plugin commits, and Ansible. `curl | sh`, `curl | bash`, executable `@latest`, and mutable branch execution are forbidden.
-- AI CLI updates may be bumped frequently by a reviewable lock-update workflow; apply consumes the lock only.
+- Use native/standard lock formats where available. Pin remote installers, Claude, Git plugin commits, and Ansible. `curl | sh`, `curl | bash`, executable `@latest`, and mutable branch execution are forbidden.
+- Install Codex once per host at the npm user-global prefix `$HOME/.local`; plain and account-specific commands MUST execute that one binary. Apply resolves npm's stable `latest` tag, installs its explicit resolved version only when missing or behind, and MUST NOT retain Codex in the private locked package tree.
 
-Trade-off: newest AI releases can lag the channel briefly; installs become reproducible and reversible.
+Trade-off: Claude remains reproducible and reversible. Codex favors immediate stable-channel access, so hosts can briefly differ when they apply on different sides of a release.
 
 ### 8.4 Devbox provisioning and configuration
 
@@ -362,7 +362,7 @@ Trade-off: one brief manual cutover per host and no rollback to the legacy layou
 |---|---|---|---|
 | A. Shared contract/QA | `lib/common.sh`, `test`, `tests/helpers.sh`, `.github/workflows/ci.yml` | none | atomic install/change/output contracts and tracked-file discovery pass |
 | B. Packages/personal host | `lib/packages-*.sh`, `lib/personal-arch.sh`, `packages/*`, Arch hardware/system assets, `tests/packages.sh` | A | native update policy is idempotent; no removal/maintenance one-shots |
-| C. Dotfiles/AI | `lib/dotfiles.sh`, `lib/ai-tools.sh`, dotfile/router assets, AI locks, `tests/dotfiles.sh`, `tests/ai-router.sh` | A | compare-write, conditional tmux reload, explicit account isolation, pinned installs |
+| C. Dotfiles/AI | `lib/dotfiles.sh`, `lib/ai-tools.sh`, dotfile/router assets, Claude lock, `tests/dotfiles.sh`, `tests/ai-router.sh` | A | compare-write, conditional tmux reload, explicit account isolation, one current stable Codex binary |
 | D. Skíðblaðnir | `lib/skidbladnir.sh`, Skíðblaðnir assets/pin, `tests/skidbladnir.sh`; delete root/operator/invite files | A, G | generation install, exact activation, rollback, identity preservation, private Serve |
 | E. Devbox/Ansible | `devbox`, `lib/remote-devbox.sh`, cloud-init, `ansible/**`, `tests/devbox.sh` | A, D contract | absent/existing firewall paths, truthful handlers, bounded postconditions |
 | F. Workstation/API/docs | `workstation`, `README.md`, `tests/platform-skips.sh` | B, C, D | hard-cut public API, target integration, and user journey match this spec |

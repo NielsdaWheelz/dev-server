@@ -191,7 +191,7 @@ if (not isinstance(profiles, list) or len(profiles) != 5 or
         [profile.get("provider") for profile in profiles if isinstance(profile, dict)] != providers):
     raise SystemExit(1)
 commands = {
-    "personal": home + "/.local/share/dev-server/ai-tools/node_modules/.bin/codex",
+    "personal": home + "/.local/bin/codex",
     "work": home + "/bin/codex-work",
     "work2": home + "/bin/codex-work2",
     "claude-personal": home + "/.local/share/dev-server/ai-tools/node_modules/.bin/claude",

@@ -103,13 +103,14 @@ setup_case() {
   test_fail_action=''
   test_reject_version=''
   mkdir -p "$test_home" "$case_dir/assets" "$case_dir/bin"
-  mkdir -p "$test_home/.local/share/dev-server/ai-tools/node_modules/.bin"
-  cat >"$test_home/.local/share/dev-server/ai-tools/node_modules/.bin/codex" <<'SH'
+  mkdir -p "$test_home/.local/bin" \
+    "$test_home/.local/share/dev-server/ai-tools/node_modules/.bin"
+  cat >"$test_home/.local/bin/codex" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 [[ "$*" == 'features list' ]]
 SH
-  chmod 0755 "$test_home/.local/share/dev-server/ai-tools/node_modules/.bin/codex"
+  chmod 0755 "$test_home/.local/bin/codex"
   cp -R "$repo_dir/assets/skidbladnir" "$case_dir/assets/skidbladnir"
   : >"$test_calls"
   printf '%s\n' '{"BackendState":"Running","Self":{"DNSName":"test.example.ts.net."}}' \
