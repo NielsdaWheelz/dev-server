@@ -907,6 +907,9 @@ test_static_boundary_contract() {
     'DEV_SERVER_TMUX_DEFERRED' 'busy tmux deferral'
   assert_contains "$repo_dir/ansible/roles/base/tasks/main.yml" \
     'mode: "0750"' 'private devbox home mode'
+  assert_contains "$repo_dir/ansible/roles/ai_tools/tasks/main.yml" \
+    'ssh-keygen -y -f /home/{{ devbox_user }}/.ssh/id_ed25519_github | awk' \
+    'canonical GitHub public-key derivation'
   assert_contains "$repo_dir/ansible/playbooks/tasks/remote-preflight.yml" \
     '(home, 0o750)' 'private devbox home preflight'
   assert_contains "$repo_dir/ansible/playbooks/apply.yml" \
