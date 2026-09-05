@@ -104,7 +104,11 @@
     user_files = [
         (active / "docker.sha256", 0o600), (active / "skid.runtime.sha256", 0o600),
         (active / "skid.unit.sha256", 0o600), (config / "bearer", 0o600),
-        (config / "machine-handle", 0o600), (share / ".apply.lock", 0o600),
+        (config / "machine-handle", 0o600),
+        (config / "android-signing.p12", 0o600),
+        (config / "android-signing.properties", 0o600),
+        (config / "android-signing.password", 0o600),
+        (share / ".apply.lock", 0o600),
         (home / ".local/bin/skidbladnir-launch", 0o755),
         (systemd_user / "skidbladnir.service", 0o644),
         (systemd_user / "docker.service", 0o644),
@@ -183,7 +187,11 @@
                 admit(share / name, "directory", 0o700, user_uid, user_gid)
             else:
                 reject(f"unowned Skid state remains: {share / name}")
-    if os.path.lexists(config) and set(entries(config)) - {"bearer", "machine-handle"}:
+    credential_names = {
+        "bearer", "machine-handle", "android-signing.p12",
+        "android-signing.properties", "android-signing.password",
+    }
+    if os.path.lexists(config) and set(entries(config)) - credential_names:
         reject("unowned Skid credential state remains")
 
     plugins = {
