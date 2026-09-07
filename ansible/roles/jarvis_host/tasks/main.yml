@@ -1,0 +1,125 @@
+---
+- name: Install the exact PostgreSQL repository key
+  ansible.builtin.get_url:
+    url: https://www.postgresql.org/media/keys/ACCC4CF8.asc
+    dest: /etc/apt/keyrings/postgresql.asc
+    checksum: sha256:0144068502a1eddd2a0280ede10ef607d1ec592ce819940991203941564e8e76
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the PostgreSQL apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/postgresql.list
+    owner: root
+    group: root
+    mode: "0644"
+    content: >-
+      deb [arch={{ base_apt_architecture }}
+      signed-by=/etc/apt/keyrings/postgresql.asc]
+      https://apt.postgresql.org/pub/repos/apt
+      {{ ansible_facts['distribution_release'] }}-pgdg main
+
+- name: Install PostgreSQL and the qualified pgvector package
+  ansible.builtin.apt:
+    name:
+      - "postgresql-{{ devbox_postgresql_major }}"
+      - "postgresql-client-{{ devbox_postgresql_major }}"
+      - "postgresql-{{ devbox_postgresql_major }}-pgvector={{ devbox_pgvector_package_version }}"
+    state: present
+    update_cache: true
+
+- name: Hold the qualified pgvector package until explicit requalification
+  ansible.builtin.dpkg_selections:
+    name: "postgresql-{{ devbox_postgresql_major }}-pgvector"
+    selection: hold
+
+- name: Create the Jarvis service group
+  ansible.builtin.group:
+    name: "{{ jarvis_service_group }}"
+    system: true
+    state: present
+
+- name: Create the locked Jarvis service account
+  ansible.builtin.user:
+    name: "{{ jarvis_service_user }}"
+    group: "{{ jarvis_service_group }}"
+    home: /var/lib/jarvis
+    create_home: false
+    password_lock: true
+    shell: /usr/sbin/nologin
+    system: true
+    state: present
+
+- name: Create root-owned Jarvis release directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /opt/jarvis
+    - /opt/jarvis/releases
+
+- name: Create private Jarvis state directory
+  ansible.builtin.file:
+    path: /var/lib/jarvis
+    state: directory
+    owner: "{{ jarvis_service_user }}"
+    group: "{{ jarvis_service_group }}"
+    mode: "0700"
+
+- name: Create root-owned Jarvis configuration directory
+  ansible.builtin.file:
+    path: /etc/jarvis
+    state: directory
+    owner: root
+    group: "{{ jarvis_service_group }}"
+    mode: "0750"
+
+- name: Bind native PostgreSQL to loopback
+  ansible.builtin.lineinfile:
+    path: "/etc/postgresql/{{ devbox_postgresql_major }}/main/postgresql.conf"
+    regexp: '^\s*#?\s*listen_addresses\s*='
+    line: "listen_addresses = 'localhost'"
+  notify: Restart PostgreSQL for Jarvis host boundary
+
+- name: Configure native PostgreSQL in UTC
+  ansible.builtin.lineinfile:
+    path: "/etc/postgresql/{{ devbox_postgresql_major }}/main/postgresql.conf"
+    regexp: '^\s*#?\s*timezone\s*='
+    line: "timezone = 'UTC'"
+  notify: Restart PostgreSQL for Jarvis host boundary
+
+- name: Ensure native PostgreSQL is enabled and active
+  ansible.builtin.systemd_service:
+    name: postgresql.service
+    enabled: true
+    state: started
+
+- name: Read the installed pgvector package version
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - -W
+      - "-f=${Version}"
+      - "postgresql-{{ devbox_postgresql_major }}-pgvector"
+  register: jarvis_host_pgvector_version
+  changed_when: false
+  failed_when: >-
+    jarvis_host_pgvector_version.rc != 0 or
+    jarvis_host_pgvector_version.stdout != devbox_pgvector_package_version
+
+- name: Read the pgvector package selection
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - -W
+      - "-f=${db:Status-Abbrev}"
+      - "postgresql-{{ devbox_postgresql_major }}-pgvector"
+  register: jarvis_host_pgvector_selection
+  changed_when: false
+  failed_when: >-
+    jarvis_host_pgvector_selection.rc != 0 or
+    jarvis_host_pgvector_selection.stdout != 'hi '

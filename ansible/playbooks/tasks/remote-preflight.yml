@@ -97,6 +97,33 @@
     for path, mode in user_directories:
         admit(path, "directory", mode, user_uid, user_gid)
 
+    jarvis_paths = [
+        pathlib.Path("/opt/jarvis"), pathlib.Path("/opt/jarvis/releases"),
+        pathlib.Path("/var/lib/jarvis"), pathlib.Path("/etc/jarvis"),
+    ]
+    try:
+        jarvis_account = pwd.getpwnam("jarvis")
+        jarvis_group = grp.getgrgid(jarvis_account.pw_gid)
+    except KeyError:
+        if any(os.path.lexists(path) for path in jarvis_paths):
+            reject("Jarvis paths exist without the managed service account")
+    else:
+        if (jarvis_account.pw_uid == 0 or jarvis_account.pw_gid == 0 or
+                jarvis_account.pw_dir != "/var/lib/jarvis" or
+                jarvis_account.pw_shell != "/usr/sbin/nologin" or
+                jarvis_group.gr_name != "jarvis"):
+            reject("Jarvis service-account topology is invalid")
+        admit("/opt/jarvis", "directory", 0o755, 0, 0)
+        admit("/opt/jarvis/releases", "directory", 0o755, 0, 0)
+        admit(
+            "/var/lib/jarvis", "directory", 0o700,
+            jarvis_account.pw_uid, jarvis_account.pw_gid,
+        )
+        admit(
+            "/etc/jarvis", "directory", 0o750,
+            0, jarvis_account.pw_gid,
+        )
+
     root_files = [
         ("/etc/ssh/sshd_config.d/99-devbox.conf", 0o644),
         ("/var/lib/dev-server/active/ssh.sha256", 0o600),

@@ -224,6 +224,10 @@ Additional rules:
   durable state, and configuration at `/opt/jarvis`, `/var/lib/jarvis`, and
   `/etc/jarvis`. The exact pgvector identity must be observable and must not be
   silently accepted when it differs from Jarvis's qualified release.
+- Install pgvector from PostgreSQL's official Apt repository at the exact
+  Jarvis-qualified package version and hold it. A version change is a reviewed
+  dev-server lock update followed by Jarvis qualification, never an unattended
+  package transition.
 - Do not deploy, migrate, start, stop, back up, or restore Jarvis. Its
   repository owns release contents, virtual environments, database/roles,
   migrations, unit definitions, credentials, backup/restore, and recovery.

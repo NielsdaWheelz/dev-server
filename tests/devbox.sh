@@ -922,6 +922,21 @@ test_static_boundary_contract() {
     '(home, 0o750)' 'private devbox home preflight'
   assert_contains "$repo_dir/ansible/playbooks/apply.yml" \
     'DEV_SERVER_REBOOT_DEFERRED' 'pending reboot deferral'
+  assert_contains "$repo_dir/ansible/playbooks/apply.yml" \
+    'role: jarvis_host' 'Jarvis host-boundary role'
+  assert_contains "$repo_dir/ansible/playbooks/apply.yml" \
+    "devbox_postgresql_boundary.stdout != 'UTC|localhost'" \
+    'PostgreSQL UTC and loopback postcondition'
+  assert_contains "$repo_dir/ansible/roles/jarvis_host/tasks/main.yml" \
+    'devbox_pgvector_package_version' 'qualified pgvector package version'
+  assert_contains "$repo_dir/ansible/roles/jarvis_host/tasks/main.yml" \
+    'selection: hold' 'pgvector requalification hold'
+  assert_contains "$repo_dir/ansible/roles/jarvis_host/tasks/main.yml" \
+    'shell: /usr/sbin/nologin' 'locked Jarvis service account'
+  assert_not_contains "$repo_dir/ansible/roles/jarvis_host/tasks/main.yml" \
+    'jarvis.service' 'dev-server does not own the Jarvis unit'
+  assert_not_contains "$repo_dir/ansible/roles/jarvis_host/tasks/main.yml" \
+    'alembic' 'dev-server does not own Jarvis migrations'
   assert_not_contains "$repo_dir/ansible/roles/base/tasks/main.yml" \
     'unattended-upgrades.service' 'maintenance one-shot activation'
   assert_not_contains "$repo_dir/cloud-init-devbox.template.yaml" \
@@ -1003,6 +1018,10 @@ required = {
     'home / ".tmux/plugins/tpm"': "tpm public plugin link",
     'home / ".tmux/plugins/tmux-resurrect"': "tmux-resurrect public plugin link",
     'home / ".tmux/plugins/tmux-continuum"': "tmux-continuum public plugin link",
+    'pathlib.Path("/opt/jarvis")': "Jarvis release boundary",
+    'pathlib.Path("/var/lib/jarvis")': "Jarvis state boundary",
+    'pathlib.Path("/etc/jarvis")': "Jarvis configuration boundary",
+    'pwd.getpwnam("jarvis")': "Jarvis service account",
 }
 for fragment, label in required.items():
     assert fragment in gate, label
