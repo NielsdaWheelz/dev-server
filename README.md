@@ -101,6 +101,17 @@ Rootless Docker's supported unit/context setup is rebuilt only when its
 package, generated unit, or daemon config identity changed and no container is
 running; otherwise activation is deferred.
 
+The existing Hetzner devbox is also the approved host for Jarvis v1. This
+repository converges only its shared prerequisites: UTC host time, PostgreSQL
+16/pgvector availability, a dedicated `jarvis` service account, and the base
+`/opt/jarvis`, `/var/lib/jarvis`, and `/etc/jarvis` ownership boundary. The
+[Jarvis repository](https://github.com/NielsdaWheelz/jarvis) owns the
+application release, locked Python environment, database and roles,
+migrations, systemd service, credentials, backup/restore, and operational
+recovery. `./devbox apply` never deploys Jarvis, reads its credentials, or
+touches Nexus application state. Jarvis is host-native and is not part of the
+developer's rootless Docker lifecycle.
+
 ## One-time hard cutover
 
 This release does not read, migrate, alias, or fall back to any legacy command,

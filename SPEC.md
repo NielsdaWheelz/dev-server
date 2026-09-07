@@ -215,8 +215,27 @@ Additional rules:
   and API-verified only after an immediate zero-running-container check;
   otherwise it remains unjournaled and `DEFERRED`.
 - Remove blanket passwordless sudo from the agent/user account. The operator-only `dev-server-deploy` principal owns Ansible's passwordless elevation and separate SSH key; it owns no workspace, AI, Tailscale, or user credentials and never runs agents.
+- Converge the host timezone to UTC. Applications that need owner-local time
+  carry their own explicit IANA timezone; the shared host clock is not product
+  configuration.
+- Provide the shared host boundary required by Jarvis v1: PostgreSQL 16 and an
+  explicitly qualified pgvector installation, a locked non-login `jarvis`
+  service account, and root-owned base directories for immutable releases,
+  durable state, and configuration at `/opt/jarvis`, `/var/lib/jarvis`, and
+  `/etc/jarvis`. The exact pgvector identity must be observable and must not be
+  silently accepted when it differs from Jarvis's qualified release.
+- Do not deploy, migrate, start, stop, back up, or restore Jarvis. Its
+  repository owns release contents, virtual environments, database/roles,
+  migrations, unit definitions, credentials, backup/restore, and recovery.
+  Devbox apply must preserve those contents and report incompatible active
+  state rather than taking application ownership.
+- Jarvis is host-native and independent of rootless Docker. Docker rebuild,
+  pruning, or user-service activation cannot become a Jarvis lifecycle action.
+- Co-location with development and CI grants no access to Nexus or Jarvis
+  application files, roles, databases, or credentials. Neither application is
+  a prerequisite or postcondition of devbox convergence.
 
-Trade-off: a separate deployment principal/key adds one credential; it prevents remote agents from inheriting deployment privilege.
+Trade-off: a separate deployment principal/key adds one credential; it prevents remote agents from inheriting deployment privilege. Hosting Jarvis on the existing devbox avoids another recurring server and fleet surface, but shares a host failure and resource-contention domain with development and CI. Separate Unix/database identities, immutable releases, resource controls owned by Jarvis, disk-headroom checks, and off-host restore are the accepted v1 controls.
 
 ### 8.5 Skíðblaðnir installation
 
@@ -290,6 +309,8 @@ Package-manager success proves package state; do not enumerate packages again. A
 - bearer/machine-handle modes and preservation;
 - Tailscale Serve owns only the desired private `/v1` mapping;
 - devbox public bootstrap ingress is absent;
+- the host timezone is UTC and the Jarvis service-account/base-directory
+  boundary is present without dev-server owning application contents;
 - pending reboot/login/container/tmux activation is reported.
 
 No separate code path may reimplement these checks as a doctor.
