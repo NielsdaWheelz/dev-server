@@ -26,6 +26,7 @@
       - "postgresql-{{ devbox_postgresql_major }}"
       - "postgresql-client-{{ devbox_postgresql_major }}"
       - "postgresql-{{ devbox_postgresql_major }}-pgvector={{ devbox_pgvector_package_version }}"
+      - restic
     state: present
     update_cache: true
 
