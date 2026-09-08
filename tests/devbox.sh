@@ -930,11 +930,11 @@ test_static_boundary_contract() {
   assert_contains "$repo_dir/ansible/roles/jarvis_host/tasks/main.yml" \
     'devbox_pgvector_package_version' 'qualified pgvector package version'
   assert_contains "$repo_dir/ansible/roles/jarvis_host/tasks/main.yml" \
-    '- restic' 'Jarvis encrypted-backup client'
-  assert_contains "$repo_dir/ansible/roles/jarvis_host/tasks/main.yml" \
     'selection: hold' 'pgvector requalification hold'
   assert_contains "$repo_dir/ansible/roles/jarvis_host/tasks/main.yml" \
     'shell: /usr/sbin/nologin' 'locked Jarvis service account'
+  assert_contains "$repo_dir/ansible/roles/jarvis_host/tasks/main.yml" \
+    'line: /jarvis/' 'Jarvis credentials excluded from etckeeper'
   assert_not_contains "$repo_dir/ansible/roles/jarvis_host/tasks/main.yml" \
     'jarvis.service' 'dev-server does not own the Jarvis unit'
   assert_not_contains "$repo_dir/ansible/roles/jarvis_host/tasks/main.yml" \

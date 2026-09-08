@@ -26,7 +26,6 @@
       - "postgresql-{{ devbox_postgresql_major }}"
       - "postgresql-client-{{ devbox_postgresql_major }}"
       - "postgresql-{{ devbox_postgresql_major }}-pgvector={{ devbox_pgvector_package_version }}"
-      - restic
     state: present
     update_cache: true
 
@@ -78,6 +77,15 @@
     owner: root
     group: "{{ jarvis_service_group }}"
     mode: "0750"
+
+- name: Exclude Jarvis credentials from the root-local etckeeper repository
+  ansible.builtin.lineinfile:
+    path: /etc/.gitignore
+    line: /jarvis/
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
 
 - name: Bind native PostgreSQL to loopback
   ansible.builtin.lineinfile:
