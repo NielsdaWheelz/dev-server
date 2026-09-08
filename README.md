@@ -15,8 +15,9 @@ The public surface is intentionally complete and small:
 An omitted or unknown operation exits `64`. Apply exits `0` when declared state
 is installed, `2` when a manual action is required, and `1` on an operational or
 invariant failure. Rerunning is safe. With fixed native package candidates, an
-immediate second apply reports `UP TO DATE` and performs no managed-state
-mutation or activation.
+immediate second apply performs no managed-state mutation or activation. It
+reports `UP TO DATE` when no deferral remains; otherwise it repeats the current
+deferrals and the deferral-only host summary.
 
 The detailed capability contract and acceptance criteria are in [SPEC.md](SPEC.md).
 Fleet invitation, acceptance, reboot, and outage workflows live in the

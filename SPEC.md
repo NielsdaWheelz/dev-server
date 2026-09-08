@@ -375,7 +375,7 @@ Packages B and C may run in parallel after A; D may join once G has published th
 ## 12. Acceptance criteria
 
 1. Fresh workstation/devbox apply installs desired state and starts required services.
-2. With fixed package candidates, immediate second apply emits `UP TO DATE`, makes no managed-state change, opens no ingress, and performs no activation; native metadata/cache refresh is allowed.
+2. With fixed package candidates, immediate second apply makes no managed-state change, opens no ingress, and performs no activation; it emits `UP TO DATE` when no deferral remains and otherwise repeats only the current deferrals and deferral-only host summary; native metadata/cache refresh is allowed.
 3. Each registry change activates exactly its declared consumer once; unrelated changes do not.
 4. Existing devbox apply never creates a public firewall rule. New-host success and injected failure both remove bootstrap ingress.
 5. Artifact/schema/checksum/member/version failure leaves the current Skíðblaðnir generation and credentials untouched.
