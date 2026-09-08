@@ -133,6 +133,23 @@ actual capability, response and authority validation stays strict.
 and profiles, with no package/version fields. All hosts and Jarvis use that one
 closed declaration; no old-schema fallback or second account map exists.
 
+Personal instructions for all five profiles live in
+[`assets/agent-instructions.md`](assets/agent-instructions.md). Workstation
+and devbox apply install the same contents into each profile:
+
+| Profile | Managed instruction file |
+|---|---|
+| `codex` | `~/.codex/AGENTS.md` |
+| `codex-work` | `~/.codex-work/AGENTS.md` |
+| `codex-work2` | `~/.codex-work2/AGENTS.md` |
+| `claude` | `~/.claude/CLAUDE.md` |
+| `claude-work` | `~/.claude-work/CLAUDE.md` |
+
+Edit the source file in this repository; apply replaces edits to the installed
+copies, including edits through an app's custom-instructions settings. Start
+new agent sessions after applying. Project instructions and skills still
+provide their own guidance.
+
 ## Devbox
 
 Prerequisites:

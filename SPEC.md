@@ -130,6 +130,7 @@ Closed registry:
 |---|---|
 | `tmux.config` | source a running server once |
 | `shell.config` | none; future shells |
+| `ai.instructions` | none; new agent sessions |
 | `desktop.session` | defer to next login |
 | `ssh.config` | validate, then reload SSH |
 | `docker.config` | restart only with no running containers; otherwise defer |
@@ -190,6 +191,13 @@ Trade-offs: rolling OS repositories favor freshness over byte-for-byte replay of
   bytes under all three basenames. No runtime Python/config dependency, argv
   parser/allowlist, injected notifier/config flags, work-root check or fixed
   human sandbox/approval policy. Native CLI owns all flags and subcommands.
+- `assets/agent-instructions.md` is the single source of personal instructions
+  for all five profiles on each host. Install its exact bytes as mode-`0600`
+  regular files at `~/.codex/AGENTS.md`, `~/.codex-work/AGENTS.md`,
+  `~/.codex-work2/AGENTS.md`, `~/.claude/CLAUDE.md`, and
+  `~/.claude-work/CLAUDE.md`. New sessions load updates; do not restart agents.
+  Authentication, settings, history, project instructions, and skills remain
+  outside this file's ownership.
 - The wrapper dispatches only by its fixed basename; remove cwd/`-C` inference and `*-personal` aliases. Retain isolation tests.
 - AI installation MUST NOT depend on a Skíðblaðnir Claude plugin.
 - Use native/standard lock formats where they preserve the desired update contract. Pin Git plugin commits and Ansible. `curl | sh`, `curl | bash`, executable `@latest`, and mutable branch execution are forbidden.

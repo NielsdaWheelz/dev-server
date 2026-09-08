@@ -67,6 +67,14 @@
     - profiles.json
     - codex-shared.py
 
+- name: Install shared AI instructions
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/agent-instructions.md"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/agent-instructions.md"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0600"
+
 - name: Install exact Skíðblaðnir assets
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../assets/skidbladnir/{{ item.path }}"
