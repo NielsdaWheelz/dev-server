@@ -26,11 +26,6 @@ ai_validate_inputs() {
   profile="$(dev_server_assets_dir)/routers/ai-profile"
   [[ -f "$profile" && ! -L "$profile" ]] ||
     die "invalid AI profile wrapper: $profile"
-  if [[ "${dev_server_ai_host:-devbox}" == devbox ]]; then
-    profile="$(dev_server_assets_dir)/codex/codex-profile"
-    [[ -f "$profile" && ! -L "$profile" ]] ||
-      die "invalid shared Codex wrapper: $profile"
-  fi
   ai_codex_host pin >/dev/null || die 'invalid shared Codex declaration'
 }
 
@@ -41,15 +36,19 @@ ai_codex_host() {
 }
 
 ai_install_dirs() {
-  local home
+  local home account
 
   home="$(dev_server_home)"
   ensure_directory "$home/bin" 0755 || return 1
   ensure_directory "$home/.local" 0755 || return 1
   ensure_directory "$home/.local/bin" 0755 || return 1
   ensure_directory "$home/.local/share" 0755 || return 1
-  ensure_directory "$home/.codex-work" 0700 || return 1
-  ensure_directory "$home/.codex-work2" 0700 || return 1
+  for account in .codex .codex-work .codex-work2; do
+    if [[ -d "$home/$account" && ! -L "$home/$account" ]]; then
+      continue
+    fi
+    ensure_directory "$home/$account" 0700 || return 1
+  done
   ensure_directory "$home/.claude-work" 0700 || return 1
 }
 
@@ -242,22 +241,17 @@ ai_install_profiles() {
   local home
   local profile
   local codex_profile
-  local command generated='' status=0
+  local command status=0
 
   home="$(dev_server_home)"
   profile="$(dev_server_assets_dir)/routers/ai-profile"
   [[ -f "$profile" && ! -L "$profile" ]] ||
     die "missing AI profile wrapper: $profile"
 
-  if [[ "${dev_server_ai_host:-devbox}" == devbox ]]; then
-    codex_profile="$(dev_server_assets_dir)/codex/codex-profile"
-  else
-    codex_profile="$(mktemp "$home/bin/.codex-profile.XXXXXX")" || return 1
-    generated="$codex_profile"
-    if ! ai_codex_host launcher >"$codex_profile"; then
-      rm -f -- "$generated"
-      return 1
-    fi
+  codex_profile="$(mktemp "$home/bin/.codex-profile.XXXXXX")" || return 1
+  if ! ai_codex_host launcher >"$codex_profile"; then
+    rm -f -- "$codex_profile"
+    return 1
   fi
   for command in codex codex-work codex-work2; do
     if ! install_managed_file "$codex_profile" "$home/bin/$command" 0755 shell.config; then
@@ -265,7 +259,7 @@ ai_install_profiles() {
       break
     fi
   done
-  [[ -z "$generated" ]] || rm -f -- "$generated" || return 1
+  rm -f -- "$codex_profile" || return 1
   ((status == 0)) || return 1
   install_managed_file "$profile" \
     "$home/bin/claude-work" 0755 shell.config || return 1

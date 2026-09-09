@@ -182,15 +182,14 @@ Trade-offs: rolling OS repositories favor freshness over byte-for-byte replay of
   path topology, bounded strict JSON with unique keys, and object shape before
   extension or file mutation; rewrite only `remote.SSH.remotePlatform` through
   same-directory atomic promotion.
-- Plain `claude` is the personal upstream command. On all three hosts, `codex`,
-  `codex-work`, and `codex-work2` are closed shared-service clients.
-  `claude-work` remains unchanged. Codex clients accept an empty argument list
-  or `resume <full-thread-id>`, optionally with one manual `--yolo` or
-  `--dangerously-bypass-approvals-and-sandbox` flag. That explicit flag selects
-  native unrestricted/no-approval behavior instead of the normal
-  workspace-write/on-request defaults. It never changes Jarvis's fixed launch
-  policy. Invalid manual arguments show supported usage without echoing input;
-  explicit raw-binary calls own enrollment/admin.
+- Plain `claude` is the personal upstream command; `claude-work` is unchanged.
+  On all three hosts, `codex`, `codex-work`, and `codex-work2` are generated
+  thin Bash account selectors: set the declared `CODEX_HOME`, then `exec` the
+  pinned raw binary with unchanged argv, environment, cwd and exit behavior.
+  Generate once from the existing profile declaration and install identical
+  bytes under all three basenames. No runtime Python/config dependency, argv
+  parser/allowlist, injected notifier/config flags, work-root check or fixed
+  human sandbox/approval policy. Native CLI owns all flags and subcommands.
 - The wrapper dispatches only by its fixed basename; remove cwd/`-C` inference and `*-personal` aliases. Retain isolation tests.
 - AI installation MUST NOT depend on a Skíðblaðnir Claude plugin.
 - Use native/standard lock formats where they preserve the desired update contract. Pin Git plugin commits and Ansible. `curl | sh`, `curl | bash`, executable `@latest`, and mutable branch execution are forbidden.
@@ -226,10 +225,33 @@ HTTPS installer; subsequent selection and verification remain vendor-owned.
   `~/.local/libexec/codex-shared`. Each native server has a private `0700`
   parent and `0600` socket at
   `~/.local/run/codex-shared/<profile>/app-server.sock`, and starts in the empty
-  `~/.local/share/codex-shared/empty` directory. Manual clients retain ordinary
-  cwd choice via explicit remote-TUI `--cd`; resume retains the stored thread
-  cwd. Backend environments are explicit and include native tool paths;
-  caller credentials and tmux attachment variables are not inherited.
+  `~/.local/share/codex-shared/empty` directory. Backend environments are
+  explicit and include native tool paths; calling-shell credentials and tmux
+  variables do not become server environment. Servers use account-owned
+  configuration without installer-forced sandbox/approval defaults. Jarvis
+  supplies its own explicit policy through its existing interfaces.
+- On every host, install each account's native discovery symlink
+  `app-server-control/app-server-control.sock` to its canonical service socket.
+  Keep canonical endpoints and account privacy unchanged; no proxy, second
+  service, new discovery ledger or Jarvis traversal grant. Read-only preflight
+  checks all three paths before drain/coupled replacement; absent account homes
+  are allowed until provisioning. Installation requires all homes exist and
+  validates all three before creating private `0700` discovery parents/links.
+  Exact links (including temporarily dangling links) are idempotent. A foreign
+  link, socket/file, or invalid parent is ACTION/exit 2, never overwritten.
+- Native 0.153.4 owns routing: compatible interactive commands automatically
+  reuse the discovered service; `-c`, `--profile`, strict/feature/hook overrides
+  and an unavailable service can select native embedded execution. Other
+  commands retain native behavior. Explicit `--remote` requires attachment but
+  only supports interactive/resume/fork/agents/archive/delete/unarchive/queue,
+  not exec/review/login/admin. No wrapper-generated private fallback or private
+  backend prohibition. Native daemon stop/restart refuse externally managed
+  services. This deliberately replaces the former always-shared human contract.
+- Auto-reuse retains native local cwd/config loading and resume selection.
+  Explicit remote uses remote config loading; fresh cwd needs `--cd`, and
+  `resume --last` cwd filtering differs without it. The server owns tool
+  environment and long-lived state; arbitrary calling-shell environment,
+  configuration refresh and full resume/config parity are not guaranteed.
 - The coupled activation identity covers pin, helper, generated units and
   launchers. Changed live inputs require `workstation apply --restart-codex`
   before any coupled replacement; ordinary apply reports ACTION and exits 2.
@@ -250,10 +272,22 @@ fixture for first apply, quiescent second apply, failed startup, recovery and
 active-change refusal; real per-host service/socket/initialize checks and a
 second apply with unchanged service PIDs. Missing hosts remain `NOT_RUN`.
 
+Human correction proofs: unchanged argv/account/cwd/environment/native exit
+through the generated wrappers; exact Unix-socket discovery, conflict-before-
+mutation and no-op installation; unchanged closed Jarvis request/argv/policy.
+The optional macOS gate `python3 tests/codex-native.py /absolute/path/to/raw/codex`
+runs the real pinned TUI for all three commands against fixture Unix sockets
+with OS-denied external networking. It proves native probe plus `codex-tui`
+initialize only, not authentication, config/resume parity, model turns, tmux
+or deployed service health. It is not hidden in `./test`; missing capability is
+`NOT_RUN`/exit 2.
+
 Trade-offs: workstation availability follows user login; a shared account
 service is one version/trust/failure boundary; upgrading it interrupts active
 turns only with explicit restart authorization. No TUI readiness or provider
-turn is claimed by a service-start check.
+turn is claimed by a service-start check. Native CLI fidelity takes precedence
+over forcing every human invocation into the shared service; stock reuse
+exceptions are accepted, documented behavior, not a custom dispatcher/fork.
 
 ### 8.4 Devbox provisioning and configuration
 
@@ -509,7 +543,7 @@ Packages B and C may run in parallel after A; D may join once G has published th
 7. Busy Docker, tmux binary, desktop-session, and reboot-required changes are reported, never forced.
 8. Unsupported platform/host, symlinked protected path, invalid secret, or public Serve state fails closed.
 9. Static checks discover all tracked shell, JSON, YAML, and plist files; Ansible syntax and contract tests run in CI.
-10. Production executable/configuration paths contain no doctor or `converge` symbol, legacy command alias, automated/default unsafe agent bypass, private Tailscale LocalAPI, executable `@latest`, pipe-to-shell installer, or automatic Arch removal. The shared Codex helper alone accepts the owner's explicit manual bypass flags; its boundary proof preserves safe Jarvis/default argv. Documentation and negative tests may name forbidden behavior.
+10. Production executable/configuration paths contain no doctor or `converge` symbol, legacy command alias, automated/default unsafe agent bypass, private Tailscale LocalAPI, executable `@latest`, pipe-to-shell installer, or automatic Arch removal. Human wrappers forward native arguments without parsing or imposing policy; Jarvis retains its closed, independently constrained interface. Documentation and negative tests may name forbidden behavior.
 11. README documents only the two apply journeys, prerequisites, actions, and cutover boundary.
 
 ## 13. Implementation rule

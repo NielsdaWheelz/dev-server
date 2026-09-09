@@ -48,22 +48,20 @@ reported as `DEFERRED`.
 On macOS, apply verifies and may start the exact App Store Tailscale app but
 never installs, upgrades, replaces, or signs in to it.
 
-`codex`, `codex-work`, and `codex-work2` attach to three shared local App Servers.
-Each account has one server on each host. Every Codex profile uses the same
+`codex`, `codex-work`, and `codex-work2` select Personal, Work and Work2 by
+setting `CODEX_HOME`, then directly execute the pinned native CLI with your
+arguments, environment, cwd and exit behavior intact. Each account has one
+supervised App Server on each host. Every Codex profile uses the same
 exact npm binary at `~/.local/bin/codex`; every
 Claude profile executes one Anthropic-native binary at `~/.local/bin/claude`.
 Apply reconciles Claude explicitly to the native `latest` channel without
 reading an account profile's update-channel preference.
 Plain `claude` and `claude-work` retain their native behavior.
-Codex launchers support a new interactive session or `resume <full-thread-id>`.
-Manual launches also accept `--yolo` (or its upstream long alias
-`--dangerously-bypass-approvals-and-sandbox`) to explicitly disable sandboxing
-and approval prompts for that thread. This never changes Jarvis's launch policy.
-Use the raw binary for account enrollment and admin commands, selecting the
-existing home explicitly, for example:
+Use normal commands, including flags, positional prompts and subcommands:
 
 ```sh
-CODEX_HOME="$HOME/.codex-work" "$HOME/.local/bin/codex" login
+codex-work login
+codex-work2 resume
 ```
 
 MacBook uses three LaunchAgents; Arch uses three user systemd services. They
@@ -71,6 +69,36 @@ start with the user session, restart on failure, and listen only on private
 Unix sockets at `~/.local/run/codex-shared/<profile>/app-server.sock`.
 Account homes and credentials are preserved. There is no Jarvis account or
 cross-user launcher on either workstation.
+
+Native discovery uses an exact symlink from each account's
+`app-server-control/app-server-control.sock` to its supervised socket. Apply
+refuses a conflicting native path before draining or changing managed runtime
+inputs; it never takes over another daemon or overwrites its socket.
+
+Codex 0.153.4 automatically reuses an available discovered server for compatible
+interactive launches. This is **not an always-shared guarantee**: native startup
+overrides such as `-c`, `--profile`, feature/hook overrides, or an unavailable
+server can select an embedded backend. Noninteractive/admin commands retain
+their native execution paths. Explicit `--remote unix://…` requires attachment
+and fails on connection failure, but supports only native remote-capable
+commands and has different cwd/config/resume semantics. The wrappers neither
+parse arguments nor invent fallback behavior. Native `app-server daemon stop`
+and `app-server daemon restart` cannot manage these externally supervised
+servers; use the owning host apply workflow.
+
+Native automatic reuse keeps the caller's local cwd/config-loading path, but
+tools execute in the server's environment, not the calling shell's. Account
+configuration remains user-owned; long-lived-server reload behavior and full
+resume/config parity are not promised. No notifier `-c` override is injected.
+Jarvis remains separate: its launcher requires the exact shared endpoint,
+permitted cwd, fixed workspace-write/on-request policy and clean environment.
+Human CLI flexibility gives Jarvis no additional launcher fields or authority.
+
+Prepared human-CLI correction: deployment/restarts require fresh approval.
+During that one-time cutover, inspect and remove only the obsolete regular
+Devbox file `/home/niels/.local/share/dev-server/assets/codex/codex-profile`, if
+present. It is no longer installed or read; no runtime migration/fallback is
+retained. Preserve account state and active terminal sessions.
 
 Ordinary apply starts missing services and leaves running services alone. A
 changed pin/helper/unit cannot replace a running account's inputs. After

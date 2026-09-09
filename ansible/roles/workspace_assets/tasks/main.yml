@@ -66,7 +66,6 @@
   loop:
     - profiles.json
     - codex-shared.py
-    - codex-profile
 
 - name: Install exact Skíðblaðnir assets
   ansible.builtin.copy:

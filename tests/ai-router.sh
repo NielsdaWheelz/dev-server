@@ -369,12 +369,10 @@ test_claude_profile_routing() {
   pass
 }
 
-test_installed_codex_profiles_route_to_shared_services() (
+test_installed_codex_profiles_forward_native_arguments() (
   local command profile
+  export HOME="$test_home"
   dev_server_ai_host=arch
-  install -d -m 0700 "$test_home/.config/codex-shared" "$test_home/.local/libexec"
-  install -m 0644 "$test_assets/codex/profiles.json" "$test_home/.config/codex-shared/profiles.json"
-  install -m 0755 "$test_assets/codex/codex-shared.py" "$test_home/.local/libexec/codex-shared"
   ai_install_profiles >/dev/null
   for command in codex codex-work codex-work2; do
     case "$command" in
@@ -382,11 +380,12 @@ test_installed_codex_profiles_route_to_shared_services() (
     codex-work) profile=work ;;
     codex-work2) profile=work2 ;;
     esac
-    invoke "$test_home/bin/$command" "$fixture" resume 11111111-1111-1111-1111-111111111111
-    assert_eq 0 "$status" "$command shared resume status"
+    invoke "$test_home/bin/$command" "$fixture" resume 11111111-1111-1111-1111-111111111111 --model 'model value'
+    assert_eq 0 "$status" "$command native resume status"
     read_record
-    assert_argv "$command" --remote "unix://$test_home/.local/run/codex-shared/$profile/app-server.sock" \
-      --sandbox workspace-write --ask-for-approval on-request resume 11111111-1111-1111-1111-111111111111
+    assert_argv "$command" resume 11111111-1111-1111-1111-111111111111 --model 'model value'
+    assert_eq "$fixture" "${fields[3]}" "$command caller cwd"
+    assert_eq 'preserved value' "${fields[4]}" "$command caller environment"
     if [[ "$profile" == personal ]]; then
       assert_eq "$test_home/.codex" "${fields[1]}" "$command account home"
     else
@@ -397,16 +396,12 @@ test_installed_codex_profiles_route_to_shared_services() (
 
 test_all_hosts_shared_profiles_are_quiescent() (
   local first_inode host command expected_launcher="$fixture/expected-launcher"
+  export HOME="$test_home"
   for host in devbox macbook arch; do
     dev_server_ai_host="$host"
     reset_results
     ai_install_profiles >/dev/null
-    has_change shell.config || fail "$host profile update did not report shell.config"
-    if [[ "$host" == devbox ]]; then
-      cp "$test_assets/codex/codex-profile" "$expected_launcher"
-    else
-      ai_codex_host launcher >"$expected_launcher"
-    fi
+    ai_codex_host launcher >"$expected_launcher"
     for command in codex codex-work codex-work2; do
       [[ -f "$test_home/bin/$command" && ! -L "$test_home/bin/$command" ]] ||
         fail "$host $command is not a managed shared launcher"
@@ -421,6 +416,17 @@ test_all_hosts_shared_profiles_are_quiescent() (
     assert_eq "$first_inode" "$(file_inode "$test_home/bin/codex-work")" \
       "$host second-apply launcher inode"
     assert_eq 0 "$dev_server_result_mutations" "$host second-apply mutations"
+  done
+)
+
+test_existing_account_permissions_are_preserved() (
+  local account
+  for account in .codex .codex-work .codex-work2; do
+    chmod 0750 "$test_home/$account"
+  done
+  ai_install_dirs >/dev/null
+  for account in .codex .codex-work .codex-work2; do
+    assert_eq 750 "$(test_mode "$test_home/$account")" "$account existing mode"
   done
 )
 
@@ -490,9 +496,11 @@ pass
 test_invalid_input_is_read_only
 test_canonical_install_and_update
 test_claude_profile_routing
-test_installed_codex_profiles_route_to_shared_services
+test_installed_codex_profiles_forward_native_arguments
 pass
 test_all_hosts_shared_profiles_are_quiescent
+pass
+test_existing_account_permissions_are_preserved
 pass
 test_all_hosts_verify_package_before_install
 pass
