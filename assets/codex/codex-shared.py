@@ -112,10 +112,13 @@ def profile(config, key):
 
 def environment(config, row):
     account = pwd.getpwnam(config["development_user"])
-    return {"HOME": account.pw_dir, "USER": account.pw_name, "LOGNAME": account.pw_name,
+    home = config.get("home", account.pw_dir)
+    path = f"{home}/bin:{home}/.local/bin:{home}/.local/share/mise/shims:"
+    if config.get("host") == "macbook":
+        path += "/opt/homebrew/bin:"
+    return {"HOME": home, "USER": account.pw_name, "LOGNAME": account.pw_name,
             "CODEX_HOME": row["account_home"], "LANG": "C.UTF-8",
-            "PATH": f"{account.pw_dir}/bin:{account.pw_dir}/.local/bin:/usr/local/bin:/usr/bin:/bin",
-            "TERM": "tmux-256color"}
+            "PATH": path + "/usr/local/bin:/usr/bin:/bin", "TERM": "dumb"}
 
 
 def permitted_cwd(row, value, resolve=False):
@@ -192,6 +195,7 @@ def handle_request(config, request):
         cwd = permitted_cwd(row, request["cwd"])
         argv = tui_argv(config, row, request["thread_handle"])
         env = environment(config, row)
+        env["TERM"] = "tmux-256color"
         verify_binary(config, row)
     except (ValueError, OSError, KeyError, TimeoutError, subprocess.TimeoutExpired):
         return {"kind": "Rejected", "stage": "validate", "reason": "invalid_request"}
@@ -288,10 +292,25 @@ def verify_package(config, stage):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=CONFIG)
-    parser.add_argument("mode", choices=("pin", "validate", "verify-package", "server", "grant-socket", "terminal", "tui"))
+    parser.add_argument("--host", choices=("devbox", "macbook", "arch"), default="devbox")
+    parser.add_argument("mode", choices=("pin", "validate", "verify-package", "launcher",
+                                         "server", "grant-socket", "terminal", "tui"))
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     config = load_config(args.config)
+    if args.host != "devbox" and args.mode in ("terminal", "grant-socket"):
+        invalid()
+    if args.mode == "launcher" and not args.arguments:
+        if args.host == "devbox":
+            print('#!/usr/bin/env bash\nset -euo pipefail\n\n'
+                  'exec /usr/bin/python3 /usr/local/libexec/codex-shared tui "${0##*/}" "$@"')
+        else:
+            interpreter = "/opt/homebrew/bin/python3" if args.host == "macbook" else "/usr/bin/python3"
+            print('#!/usr/bin/env bash\nset -euo pipefail\n\n'
+                  f'exec {interpreter} "$HOME/.local/libexec/codex-shared" '
+                  '--config "$HOME/.config/codex-shared/profiles.json" '
+                  f'--host {args.host} tui "${{0##*/}}" "$@"')
+        return
     if args.mode in ("pin", "validate", "terminal"):
         if args.arguments:
             invalid()
@@ -304,12 +323,27 @@ def main():
     if args.mode == "verify-package" and len(args.arguments) == 1:
         verify_package(config, args.arguments[0])
         return
+    if args.host != "devbox":
+        home = absolute(os.path.expanduser("~"))
+        config = {"version": config["version"], "host": args.host, "home": home,
+                  "development_user": pwd.getpwuid(os.getuid()).pw_name,
+                  "binary": f"{home}/.local/bin/codex",
+                  "cognition_cwd_parent": f"{home}/.local/share/codex-shared/empty",
+                  "profiles": {key: {"account_home": f"{home}/{Path(row['account_home']).name}",
+                                     "endpoint": f"unix://{home}/.local/run/codex-shared/{key}/app-server.sock"}
+                               for key, row in config["profiles"].items()}}
     if args.mode in ("server", "grant-socket") and len(args.arguments) == 1:
         key = args.arguments[0]
         row = profile(config, key)
         if args.mode == "grant-socket":
             grant_socket(config, key)
             return
+        if args.host != "devbox":
+            cwd = Path(config["cognition_cwd_parent"])
+            metadata = cwd.lstat()
+            if (not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.getuid()
+                    or stat.S_IMODE(metadata.st_mode) != 0o700 or any(cwd.iterdir())):
+                invalid()
         verify_binary(config, row)
         os.chdir(config["cognition_cwd_parent"])
         argv = [config["binary"], "-c", 'sandbox_mode="workspace-write"',
@@ -320,9 +354,15 @@ def main():
         if command not in COMMANDS or (rest and (len(rest) != 2 or rest[0] != "resume")):
             invalid()
         row = profile(config, COMMANDS[command])
-        permitted_cwd(row, os.getcwd())
+        if args.host == "devbox":
+            permitted_cwd(row, os.getcwd())
+        argv = tui_argv(config, row, rest[1] if rest else None)
         verify_binary(config, row)
-        os.execve(config["binary"], tui_argv(config, row, rest[1] if rest else None), environment(config, row))
+        env = environment(config, row)
+        for key in ("TERM", "COLORTERM", "TERM_PROGRAM", "TERMINFO", "TERMINFO_DIRS"):
+            if key in os.environ:
+                env[key] = os.environ[key]
+        os.execve(config["binary"], argv, env)
     invalid()
 
 

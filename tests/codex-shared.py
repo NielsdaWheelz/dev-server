@@ -64,7 +64,7 @@ class HostBoundary(unittest.TestCase):
                            launcher_socket=str(self.root / "launch.sock"))
         Path(self.config["cognition_cwd_parent"]).mkdir()
         for key, row in self.config["profiles"].items():
-            directory = self.root / key
+            directory = self.root / Path(row["account_home"]).name
             directory.mkdir(mode=0o700)
             row.update(account_home=str(directory), endpoint=f"unix://{directory}/server.sock",
                        work_roots=[str(self.work)])
@@ -92,8 +92,86 @@ class HostBoundary(unittest.TestCase):
     def run_host(self, *args, cwd=None):
         return subprocess.run([sys.executable, str(HOST), "--config", str(self.config_path), *args],
                               cwd=cwd or self.work, capture_output=True, timeout=15,
-                              env={**os.environ, "TMUX": "untrusted", "TMUX_PANE": "%99",
-                                   "TMUX_TMPDIR": "/not-the-default", "JARVIS_SECRET_FIXTURE": "synthetic"})
+                              env={**os.environ, "HOME": str(self.root), "TERM": "xterm-256color",
+                                   "COLORTERM": "truecolor", "TMUX": "untrusted", "TMUX_PANE": "%99",
+                                   "TMUX_TMPDIR": "/not-the-default", "OPENAI_API_KEY": "synthetic",
+                                   "JARVIS_SECRET_FIXTURE": "synthetic"})
+
+    def prepare_workstation(self):
+        binary = self.root / ".local/bin/codex"
+        binary.parent.mkdir(parents=True)
+        binary.write_text(FAKE)
+        binary.chmod(0o755)
+        (self.root / ".local/share/codex-shared/empty").mkdir(parents=True, mode=0o700)
+
+    def test_workstation_servers_and_clients_share_profiles_without_restricting_manual_cwd(self):
+        self.prepare_workstation()
+        for machine in ("macbook", "arch"):
+            for command, key in host.COMMANDS.items():
+                with self.subTest(host=machine, profile=key):
+                    endpoint = f"unix://{self.root}/.local/run/codex-shared/{key}/app-server.sock"
+                    result = self.run_host("--host", machine, "tui", command, "resume", HANDLE, cwd=self.root)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    call = self.calls(".local/bin/codex")[-1]
+                    self.assertEqual(call["argv"], ["--remote", endpoint, "--sandbox", "workspace-write",
+                                                   "--ask-for-approval", "on-request", "resume", HANDLE])
+                    self.assertEqual(call["cwd"], str(self.root))
+                    self.assertEqual(call["env"]["HOME"], str(self.root))
+                    self.assertEqual(call["env"]["CODEX_HOME"], self.config["profiles"][key]["account_home"])
+                    self.assertEqual(call["env"]["TERM"], "xterm-256color")
+                    self.assertEqual(call["env"]["COLORTERM"], "truecolor")
+                    self.assertIn(str(self.root / ".local/share/mise/shims"), call["env"]["PATH"].split(":"))
+                    if machine == "macbook":
+                        self.assertIn("/opt/homebrew/bin", call["env"]["PATH"].split(":"))
+                    result = self.run_host("--host", machine, "server", key)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    call = self.calls(".local/bin/codex")[-1]
+                    self.assertEqual(call["argv"][-3:], ["app-server", "--listen", endpoint])
+                    self.assertEqual(call["cwd"], str(self.root / ".local/share/codex-shared/empty"))
+                    self.assertEqual(call["env"]["TERM"], "dumb")
+                    self.assertNotIn("COLORTERM", call["env"])
+            for call in self.calls(".local/bin/codex"):
+                for key in ("TMUX", "TMUX_PANE", "TMUX_TMPDIR", "OPENAI_API_KEY", "JARVIS_SECRET_FIXTURE"):
+                    self.assertNotIn(key, call["env"])
+
+    def test_workstation_rejects_privileged_modes_and_open_provider_arguments_before_effects(self):
+        self.prepare_workstation()
+        for machine in ("macbook", "arch"):
+            for arguments in (("terminal",), ("grant-socket", "personal"),
+                              ("tui", "codex", "exec"), ("tui", "codex", "resume", "last")):
+                with self.subTest(host=machine, arguments=arguments):
+                    self.assertNotEqual(self.run_host("--host", machine, *arguments).returncode, 0)
+        self.assertEqual(self.calls(".local/bin/codex"), [])
+        self.assertEqual(self.calls("tmux"), [])
+
+    def test_workstation_launcher_runs_installed_helper_with_exact_host_and_basename(self):
+        self.prepare_workstation()
+        installed = self.root / ".local/libexec/codex-shared"
+        installed.parent.mkdir(parents=True)
+        installed.write_bytes(HOST.read_bytes())
+        configuration = self.root / ".config/codex-shared/profiles.json"
+        configuration.parent.mkdir(parents=True)
+        configuration.write_text(json.dumps(self.config))
+        commands = self.root / "bin"
+        commands.mkdir()
+        for machine, interpreter in (("macbook", "/opt/homebrew/bin/python3"), ("arch", "/usr/bin/python3")):
+            result = self.run_host("--host", machine, "launcher")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(f"exec {interpreter} ".encode(), result.stdout)
+            self.assertIn(f"--host {machine} tui ".encode(), result.stdout)
+            for command, profile in host.COMMANDS.items():
+                launcher = commands / command
+                launcher.write_bytes(result.stdout)
+                # Interpreter selection is asserted above; execution uses this
+                # test host's Python to exercise both real generated wrappers.
+                launcher.write_text(launcher.read_text().replace(interpreter, sys.executable))
+                child = subprocess.run(["bash", str(launcher), "resume", HANDLE], cwd=self.root,
+                                       env={**os.environ, "HOME": str(self.root)},
+                                       capture_output=True, timeout=15)
+                self.assertEqual(child.returncode, 0, child.stderr)
+                call = self.calls(".local/bin/codex")[-1]
+                self.assertEqual(call["argv"][1], f"unix://{self.root}/.local/run/codex-shared/{profile}/app-server.sock")
+                self.assertEqual(call["argv"][-2:], ["resume", HANDLE])
 
     def test_manual_and_backend_select_exact_profile_and_clean_environment(self):
         for command, key in host.COMMANDS.items():
