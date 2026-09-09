@@ -31,7 +31,9 @@ Owned elsewhere:
 
 - Skíðblaðnir invitation, fleet operation, acceptance, lifetime, reboot, and outage workflows;
 - Skíðblaðnir release certification and cross-artifact Android validation;
-- isolation for unattended unsafe agents. Until Skíðblaðnir supplies it, unsafe permission modes are unavailable.
+- isolation for unattended unsafe agents. Automated/default launches cannot
+  select unsafe permission modes. An owner manually invoking a Codex client
+  may explicitly opt into native `--yolo`; the installer adds no isolation.
 
 Trade-off: the upstream handoff adds one cross-repository dependency, and safe agent defaults reduce unattended autonomy; both remove product/security policy from a host installer.
 
@@ -183,7 +185,12 @@ Trade-offs: rolling OS repositories favor freshness over byte-for-byte replay of
 - Plain `claude` is the personal upstream command. On all three hosts, `codex`,
   `codex-work`, and `codex-work2` are closed shared-service clients.
   `claude-work` remains unchanged. Codex clients accept an empty argument list
-  or `resume <full-thread-id>`; explicit raw-binary calls own enrollment/admin.
+  or `resume <full-thread-id>`, optionally with one manual `--yolo` or
+  `--dangerously-bypass-approvals-and-sandbox` flag. That explicit flag selects
+  native unrestricted/no-approval behavior instead of the normal
+  workspace-write/on-request defaults. It never changes Jarvis's fixed launch
+  policy. Invalid manual arguments show supported usage without echoing input;
+  explicit raw-binary calls own enrollment/admin.
 - The wrapper dispatches only by its fixed basename; remove cwd/`-C` inference and `*-personal` aliases. Retain isolation tests.
 - AI installation MUST NOT depend on a Skíðblaðnir Claude plugin.
 - Use native/standard lock formats where they preserve the desired update contract. Pin Git plugin commits and Ansible. `curl | sh`, `curl | bash`, executable `@latest`, and mutable branch execution are forbidden.
@@ -502,7 +509,7 @@ Packages B and C may run in parallel after A; D may join once G has published th
 7. Busy Docker, tmux binary, desktop-session, and reboot-required changes are reported, never forced.
 8. Unsupported platform/host, symlinked protected path, invalid secret, or public Serve state fails closed.
 9. Static checks discover all tracked shell, JSON, YAML, and plist files; Ansible syntax and contract tests run in CI.
-10. Production executable/configuration paths contain no doctor or `converge` symbol, legacy command alias, unsafe agent bypass, private Tailscale LocalAPI, executable `@latest`, pipe-to-shell installer, or automatic Arch removal. Documentation and negative tests may name forbidden behavior.
+10. Production executable/configuration paths contain no doctor or `converge` symbol, legacy command alias, automated/default unsafe agent bypass, private Tailscale LocalAPI, executable `@latest`, pipe-to-shell installer, or automatic Arch removal. The shared Codex helper alone accepts the owner's explicit manual bypass flags; its boundary proof preserves safe Jarvis/default argv. Documentation and negative tests may name forbidden behavior.
 11. README documents only the two apply journeys, prerequisites, actions, and cutover boundary.
 
 ## 13. Implementation rule

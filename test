@@ -206,6 +206,12 @@ for relative in paths:
     text = path.read_text(encoding="utf-8")
     for label, pattern in patterns:
         for match in pattern.finditer(text):
+            # Manual opt-in only; codex-shared.py tests prove safe default and
+            # Jarvis argv separately. Keep every other bypass/path forbidden.
+            if (relative == "assets/codex/codex-shared.py"
+                    and label == "unsafe agent bypass"
+                    and match.group(0) in {"--yolo", "dangerously-bypass-approvals-and-sandbox"}):
+                continue
             line = text.count("\n", 0, match.start()) + 1
             failures.append(f"{relative}:{line}: {label}: {match.group(0)}")
     joined = text.replace("\\\n", " ")

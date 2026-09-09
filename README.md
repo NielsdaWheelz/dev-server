@@ -56,6 +56,9 @@ Apply reconciles Claude explicitly to the native `latest` channel without
 reading an account profile's update-channel preference.
 Plain `claude` and `claude-work` retain their native behavior.
 Codex launchers support a new interactive session or `resume <full-thread-id>`.
+Manual launches also accept `--yolo` (or its upstream long alias
+`--dangerously-bypass-approvals-and-sandbox`) to explicitly disable sandboxing
+and approval prompts for that thread. This never changes Jarvis's launch policy.
 Use the raw binary for account enrollment and admin commands, selecting the
 existing home explicitly, for example:
 
