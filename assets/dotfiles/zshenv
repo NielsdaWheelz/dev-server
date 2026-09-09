@@ -1,18 +1,18 @@
-# Managed by dev-server bootstrap.
+# Managed by dev-server.
 
 # Remote commands, including Mosh's SSH bootstrap, do not read .zprofile or
-# .zshrc. Keep the minimal executable search path available in every zsh.
-for _devbox_path_dir in \
-  /opt/homebrew/bin \
+# .zshrc. Shared Codex launchers must precede the raw npm binary even when an
+# inherited PATH already contains both directories in the opposite order.
+typeset -U path
+for _dev_server_path_dir in \
   /usr/local/bin \
+  /opt/homebrew/bin \
   "$HOME/.local/share/mise/shims" \
-  "$HOME/bin" \
-  "$HOME/.local/bin"; do
-  if [[ -d "$_devbox_path_dir" ]]; then
-    case ":$PATH:" in
-      *":$_devbox_path_dir:"*) ;;
-      *) export PATH="$_devbox_path_dir:$PATH" ;;
-    esac
+  "$HOME/.local/bin" \
+  "$HOME/bin"; do
+  if [[ -d "$_dev_server_path_dir" ]]; then
+    path=("$_dev_server_path_dir" $path)
   fi
 done
-unset _devbox_path_dir
+export PATH
+unset _dev_server_path_dir

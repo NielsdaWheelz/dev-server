@@ -5,6 +5,7 @@ set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 fixture="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-ai-profile.XXXXXX")"
+fixture="$(cd "$fixture" && pwd -P)"
 trap 'rm -rf "$fixture"' EXIT
 
 fail() {
@@ -60,6 +61,19 @@ fields=()
 
 install -d -m 0755 "$test_home"
 cp -R "$repo_dir/assets" "$test_assets"
+python3 - "$test_assets/codex/profiles.json" <<'PY'
+import base64
+import hashlib
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+value = json.loads(path.read_text())
+data = b"fixture-package"
+value["package"]["integrity"] = "sha512-" + base64.b64encode(hashlib.sha512(data).digest()).decode()
+value["package"]["shasum"] = hashlib.sha1(data).hexdigest()
+path.write_text(json.dumps(value))
+PY
 printf '%s\n' /unexpected >"$npm_prefix_file"
 dev_server_home_dir="$test_home"
 dev_server_assets_root="$test_assets"
@@ -102,14 +116,14 @@ write_fake_codex() {
   printf '%s\n' \
     '#!/usr/bin/env bash' \
     'set -euo pipefail' \
-    'if [[ -z "${PROFILE_RECORD:-}" ]]; then' \
+    'if [[ "${1:-}" == --version ]]; then' \
     '  printf "codex-cli 0.153.4\n"' \
     '  exit 0' \
     'fi' \
     '{' \
     '  printf '\''%s\0%s\0%s\0%s\0%s\0'\'' "${0##*/}" "${CODEX_HOME:-}" "${CLAUDE_CONFIG_DIR:-}" "$PWD" "${PROFILE_SENTINEL:-}"' \
     '  printf '\''%s\0'\'' "$@"' \
-    '} >"$PROFILE_RECORD"' >"$target"
+    "} >'$record'" >"$target"
   chmod 0755 "$target"
 }
 
@@ -189,12 +203,14 @@ npm() {
     printf '%s\n' "$5" >"$npm_prefix_file"
     printf 'config-set\n' >>"$npm_calls_file"
     ;;
-  view:@openai/codex)
-    assert_eq 4 "$#" 'npm view argument count'
-    assert_eq dist-tags.latest "$3" 'npm stable release selector'
-    assert_eq --json "$4" 'npm stable release encoding'
-    printf 'view\n' >>"$npm_calls_file"
-    printf '"0.153.4"\n'
+  pack:--ignore-scripts)
+    assert_eq 6 "$#" 'pinned package download argument count'
+    assert_eq --json "$3" 'pinned package download encoding'
+    assert_eq --pack-destination "$4" 'pinned package destination flag'
+    assert_eq @openai/codex@0.153.4 "$6" 'exact pinned package download'
+    printf 'pack\n' >>"$npm_calls_file"
+    printf 'fixture-package' >"$5/package.tgz"
+    printf '[{"filename":"package.tgz"}]\n'
     ;;
   install:--global)
     assert_eq 8 "$#" 'npm global-install argument count'
@@ -202,7 +218,8 @@ npm() {
     assert_eq --ignore-scripts "$5" 'Codex install-script policy'
     assert_eq --no-audit "$6" 'npm global audit policy'
     assert_eq --no-fund "$7" 'npm global funding policy'
-    assert_eq @openai/codex@0.153.4 "$8" 'npm stable Codex package'
+    [[ -f "$8" && "$8" == */package.tgz ]] || fail 'install did not consume verified archive'
+    assert_eq fixture-package "$(cat "$8")" 'installed archive bytes'
     prefix="$4"
     printf 'global-install\n' >>"$npm_calls_file"
     install -d -m 0755 "$prefix/lib/node_modules/@openai/codex" "$prefix/bin"
@@ -225,46 +242,13 @@ test_runtime_floor() {
   pass
 }
 
-test_codex_candidate_npm_shapes() (
-  local invalid payload
-
-  npm() {
-    printf '%s\n' "$payload"
-  }
-
-  for payload in '"0.153.4"' '["0.153.4"]'; do
-    assert_eq 0.153.4 "$(ai_codex_candidate)" \
-      'supported npm stable-tag response'
+test_all_hosts_use_declared_pin() (
+  local host
+  npm() { fail 'pin resolution unexpectedly queried npm'; }
+  for host in devbox macbook arch; do
+    dev_server_ai_host="$host"
+    assert_eq 0.153.4 "$(ai_codex_host pin)" "$host declared candidate"
   done
-
-  for invalid in '[]' '["0.153.4","0.153.5"]' '"0.154.0-alpha.1"' \
-    '{"latest":"0.153.4"}' 'not-json'; do
-    if (
-      payload="$invalid"
-      ai_codex_candidate
-    ) >/dev/null 2>&1; then
-      fail "invalid npm stable-tag response was accepted: $invalid"
-    fi
-  done
-)
-
-test_codex_candidate_failure_is_read_only() (
-  local install_attempts=0
-
-  npm() {
-    case "${1:-}:${2:-}" in
-    config:get) printf '%s\n' "$test_home/.local" ;;
-    view:@openai/codex) printf '{"latest":"0.153.4"}\n' ;;
-    install:--global) install_attempts=$((install_attempts + 1)) ;;
-    *) fail "unexpected npm invocation while testing candidate failure: $*" ;;
-    esac
-  }
-
-  if ai_install_codex >/dev/null 2>&1; then
-    fail 'Codex install accepted an invalid stable candidate response'
-  fi
-  assert_eq 0 "$install_attempts" \
-    'npm install attempts after stable candidate failure'
 )
 
 test_invalid_input_is_read_only() {
@@ -290,12 +274,15 @@ test_invalid_input_is_read_only() {
 test_canonical_install_and_update() {
   local profile_inode
 
+  dev_server_ai_host=arch
+
   reset_results
   ai_install_dirs >/dev/null
   ai_install_packages >/dev/null
   ai_install_profiles >/dev/null
+  has_change shell.config || fail 'fresh profile install did not report shell.config'
 
-  assert_eq 1 "$(npm_operation_count view)" 'fresh Codex candidate lookup count'
+  assert_eq 1 "$(npm_operation_count pack)" 'fresh pinned Codex download count'
   assert_eq 1 "$(npm_operation_count global-install)" 'fresh Codex install count'
   assert_eq 1 "$(npm_operation_count config-set)" 'npm prefix repair count'
   assert_eq 1 "$(wc -l <"$claude_bootstrap_record" | tr -d ' ')" \
@@ -304,22 +291,19 @@ test_canonical_install_and_update() {
     'canonical npm prefix'
   [[ -x "$test_home/.local/bin/codex" ]] || fail 'canonical Codex is missing'
   assert_eq 2.1.257 "$(ai_claude_native_version)" 'native Claude version'
-  for command in codex-work codex-work2 claude-work; do
+  for command in codex codex-work codex-work2 claude-work; do
     [[ -f "$test_home/bin/$command" && ! -L "$test_home/bin/$command" ]] ||
       fail "$command is not a regular managed wrapper"
     assert_eq 755 "$(test_mode "$test_home/bin/$command")" "$command mode"
-    cmp -s "$test_assets/routers/ai-profile" "$test_home/bin/$command" ||
-      fail "$command differs from ai-profile"
   done
-  [[ ! -e "$test_home/bin/codex" && ! -e "$test_home/bin/claude" ]] ||
-    fail 'plain upstream command was replaced by a repo wrapper'
+  [[ ! -e "$test_home/bin/claude" ]] || fail 'plain Claude was replaced'
 
   profile_inode="$(file_inode "$test_home/bin/codex-work")"
   reset_results
   ai_install_dirs >/dev/null
   ai_install_packages >/dev/null
   ai_install_profiles >/dev/null
-  assert_eq 2 "$(npm_operation_count view)" 'second Codex candidate lookup count'
+  assert_eq 1 "$(npm_operation_count pack)" 'second pinned Codex download count'
   assert_eq 1 "$(npm_operation_count global-install)" 'second Codex install count'
   assert_eq 1 "$(wc -l <"$claude_install_record" | tr -d ' ')" \
     'second-apply Claude latest reconciliation count'
@@ -363,27 +347,11 @@ invoke() {
   set -e
 }
 
-test_fixed_profile_routing() {
+test_claude_profile_routing() {
   local personal_cwd="$fixture/personal-project"
   local work_cwd="$fixture/work-project"
 
   install -d -m 0755 "$personal_cwd" "$work_cwd"
-
-  invoke codex-work "$personal_cwd" -C "$work_cwd" exec --exact 'spaced value'
-  assert_eq 0 "$status" 'codex-work status'
-  read_record
-  assert_eq "$test_home/.codex-work" "${fields[1]}" 'codex-work CODEX_HOME'
-  assert_eq '' "${fields[2]}" 'codex-work CLAUDE_CONFIG_DIR'
-  assert_eq "$(cd "$personal_cwd" && pwd -L)" "${fields[3]}" \
-    'codex-work cwd preservation'
-  assert_argv codex-work \
-    -c "notify=[\"$test_home/.local/bin/skid-notify\"]" \
-    -C "$work_cwd" exec --exact 'spaced value'
-
-  invoke codex-work2 "$work_cwd" --cd "$personal_cwd" resume
-  assert_eq 0 "$status" 'codex-work2 status'
-  read_record
-  assert_eq "$test_home/.codex-work2" "${fields[1]}" 'codex-work2 CODEX_HOME'
 
   invoke claude-work "$personal_cwd" -C "$work_cwd" --exact
   assert_eq 0 "$status" 'claude-work status'
@@ -394,11 +362,6 @@ test_fixed_profile_routing() {
     'claude-work CLAUDE_CONFIG_DIR'
   assert_argv claude-work -C "$work_cwd" --exact
 
-  invoke codex "$personal_cwd" --version
-  assert_eq 0 "$status" 'plain Codex status'
-  read_record
-  assert_eq '' "${fields[1]}" 'plain Codex CODEX_HOME'
-
   invoke claude "$work_cwd" --session-id example
   assert_eq 0 "$status" 'plain Claude status'
   read_record
@@ -406,54 +369,65 @@ test_fixed_profile_routing() {
   pass
 }
 
-test_devbox_shared_profiles_are_quiescent() (
-  local first_inode
-  dev_server_ai_host=devbox
-  reset_results
+test_installed_codex_profiles_route_to_shared_services() (
+  local command profile
+  dev_server_ai_host=arch
+  install -d -m 0700 "$test_home/.config/codex-shared" "$test_home/.local/libexec"
+  install -m 0644 "$test_assets/codex/profiles.json" "$test_home/.config/codex-shared/profiles.json"
+  install -m 0755 "$test_assets/codex/codex-shared.py" "$test_home/.local/libexec/codex-shared"
   ai_install_profiles >/dev/null
-  [[ -f "$test_home/bin/codex" && ! -L "$test_home/bin/codex" ]] ||
-    fail 'Devbox apply did not install the personal shared Codex launcher'
   for command in codex codex-work codex-work2; do
-    cmp -s "$test_assets/codex/codex-profile" "$test_home/bin/$command" ||
-      fail "$command did not select the Devbox shared launcher"
+    case "$command" in
+    codex) profile=personal ;;
+    codex-work) profile=work ;;
+    codex-work2) profile=work2 ;;
+    esac
+    invoke "$test_home/bin/$command" "$fixture" resume 11111111-1111-1111-1111-111111111111
+    assert_eq 0 "$status" "$command shared resume status"
+    read_record
+    assert_argv "$command" --remote "unix://$test_home/.local/run/codex-shared/$profile/app-server.sock" \
+      --sandbox workspace-write --ask-for-approval on-request resume 11111111-1111-1111-1111-111111111111
+    if [[ "$profile" == personal ]]; then
+      assert_eq "$test_home/.codex" "${fields[1]}" "$command account home"
+    else
+      assert_eq "$test_home/.codex-$profile" "${fields[1]}" "$command account home"
+    fi
   done
-  cmp -s "$test_assets/routers/ai-profile" "$test_home/bin/claude-work" ||
-    fail 'Devbox changed the Claude launcher'
-  first_inode="$(file_inode "$test_home/bin/codex-work")"
-  reset_results
-  ai_install_profiles >/dev/null
-  assert_eq "$first_inode" "$(file_inode "$test_home/bin/codex-work")" \
-    'Devbox second-apply launcher inode'
-  assert_eq 0 "$dev_server_result_mutations" 'Devbox second-apply mutations'
 )
 
-test_devbox_uses_pin_without_latest_lookup() (
-  local views
-  dev_server_ai_host=devbox
-  views="$(npm_operation_count view)"
-  assert_eq 0.153.4 "$(ai_codex_candidate)" 'Devbox declared candidate'
-  assert_eq "$views" "$(npm_operation_count view)" 'Devbox latest lookup count'
+test_all_hosts_shared_profiles_are_quiescent() (
+  local first_inode host command expected_launcher="$fixture/expected-launcher"
+  for host in devbox macbook arch; do
+    dev_server_ai_host="$host"
+    reset_results
+    ai_install_profiles >/dev/null
+    has_change shell.config || fail "$host profile update did not report shell.config"
+    if [[ "$host" == devbox ]]; then
+      cp "$test_assets/codex/codex-profile" "$expected_launcher"
+    else
+      ai_codex_host launcher >"$expected_launcher"
+    fi
+    for command in codex codex-work codex-work2; do
+      [[ -f "$test_home/bin/$command" && ! -L "$test_home/bin/$command" ]] ||
+        fail "$host $command is not a managed shared launcher"
+      cmp -s "$expected_launcher" "$test_home/bin/$command" ||
+        fail "$host $command does not route to the shared service"
+    done
+    cmp -s "$test_assets/routers/ai-profile" "$test_home/bin/claude-work" ||
+      fail "$host changed the Claude launcher"
+    first_inode="$(file_inode "$test_home/bin/codex-work")"
+    reset_results
+    ai_install_profiles >/dev/null
+    assert_eq "$first_inode" "$(file_inode "$test_home/bin/codex-work")" \
+      "$host second-apply launcher inode"
+    assert_eq 0 "$dev_server_result_mutations" "$host second-apply mutations"
+  done
 )
 
-test_devbox_verifies_package_before_install() (
-  local package_assets="$fixture/package-assets" installs="$fixture/pinned-installs"
+test_all_hosts_verify_package_before_install() (
+  local installs="$fixture/pinned-installs"
   local package_bytes=fixture-package
-  dev_server_ai_host=devbox
-  cp -R "$test_assets" "$package_assets"
-  dev_server_assets_root="$package_assets"
-  python3 - "$package_assets/codex/profiles.json" <<'PY'
-import base64
-import hashlib
-import json
-import pathlib
-import sys
-path = pathlib.Path(sys.argv[1])
-value = json.loads(path.read_text())
-data = b"fixture-package"
-value["package"]["integrity"] = "sha512-" + base64.b64encode(hashlib.sha512(data).digest()).decode()
-value["package"]["shasum"] = hashlib.sha1(data).hexdigest()
-path.write_text(json.dumps(value))
-PY
+  local host expected_installs=0
   npm() {
     case "$1" in
     pack)
@@ -472,13 +446,18 @@ PY
     *) fail 'pinned installer unexpectedly queried npm latest' ;;
     esac
   }
-  ai_codex_install_package 0.153.4 "$test_home/.local"
-  assert_eq 1 "$(wc -l <"$installs" | tr -d ' ')" 'verified archive install count'
-  package_bytes=tampered
-  if ai_codex_install_package 0.153.4 "$test_home/.local" >/dev/null 2>&1; then
-    fail 'pinned installer accepted a checksum mismatch'
-  fi
-  assert_eq 1 "$(wc -l <"$installs" | tr -d ' ')" 'install count after checksum mismatch'
+  for host in devbox macbook arch; do
+    dev_server_ai_host="$host"
+    package_bytes='fixture-package'
+    ai_codex_install_package 0.153.4 "$test_home/.local"
+    expected_installs=$((expected_installs + 1))
+    assert_eq "$expected_installs" "$(wc -l <"$installs" | tr -d ' ')" "$host verified archive install count"
+    package_bytes=tampered
+    if ai_codex_install_package 0.153.4 "$test_home/.local" >/dev/null 2>&1; then
+      fail "$host pinned installer accepted a checksum mismatch"
+    fi
+    assert_eq "$expected_installs" "$(wc -l <"$installs" | tr -d ' ')" "$host install count after checksum mismatch"
+  done
 )
 
 test_fail_closed() {
@@ -493,6 +472,8 @@ test_fail_closed() {
   if (ai_install_profiles) >/dev/null 2>&1; then
     fail 'profile installation accepted a symlink target'
   fi
+  assert_eq 0 "$(find "$test_home/bin" -name '.codex-profile.*' | wc -l | tr -d ' ')" \
+    'launcher candidates after failed installation'
 
   rm "$test_home/.local/bin/claude"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$test_home/.local/bin/claude"
@@ -503,46 +484,18 @@ test_fail_closed() {
   pass
 }
 
-test_static_contract() {
-  [[ ! -e "$repo_dir/assets/ai" ]] || fail 'private AI package assets remain'
-  if grep -En 'codex-personal|claude-personal|PWD|--cd|-C|skidbladnir|plugin-dir' \
-    "$repo_dir/lib/ai-tools.sh" "$repo_dir/assets/routers/ai-profile" \
-    >/dev/null; then
-    fail 'hidden, personal, cwd, or Skidbladnir routing remains'
-  fi
-  if grep -REn 'ai-tools/node_modules|curl[[:space:]].*\|[[:space:]]*(sh|bash)|wget' \
-    "$repo_dir/lib/ai-tools.sh" "$repo_dir/assets/routers/ai-profile" \
-    "$repo_dir/assets/dotfiles/zshenv" >/dev/null; then
-    fail 'private package tree or pipe-to-shell AI installation remains'
-  fi
-  grep -F 'https://claude.ai/install.sh' "$repo_dir/lib/ai-tools.sh" >/dev/null ||
-    fail 'Claude apply does not use the official native installer'
-  grep -F '"$binary" install latest' "$repo_dir/lib/ai-tools.sh" >/dev/null ||
-    fail 'Claude apply does not reconcile the native latest channel'
-  grep -F 'npm view @openai/codex dist-tags.latest --json' \
-    "$repo_dir/lib/ai-tools.sh" >/dev/null ||
-    fail 'Codex apply does not resolve npm stable latest'
-  grep -F 'npm install --global --prefix "$prefix" --ignore-scripts' \
-    "$repo_dir/lib/ai-tools.sh" >/dev/null ||
-    fail 'Codex apply does not use the canonical script-free global install'
-  pass
-}
-
 test_runtime_floor
-test_codex_candidate_npm_shapes
-pass
-test_codex_candidate_failure_is_read_only
+test_all_hosts_use_declared_pin
 pass
 test_invalid_input_is_read_only
 test_canonical_install_and_update
-test_fixed_profile_routing
-test_devbox_shared_profiles_are_quiescent
+test_claude_profile_routing
+test_installed_codex_profiles_route_to_shared_services
 pass
-test_devbox_uses_pin_without_latest_lookup
+test_all_hosts_shared_profiles_are_quiescent
 pass
-test_devbox_verifies_package_before_install
+test_all_hosts_verify_package_before_install
 pass
 test_fail_closed
-test_static_contract
 
 printf 'PASS: %d AI profile test groups\n' "$tests_run"

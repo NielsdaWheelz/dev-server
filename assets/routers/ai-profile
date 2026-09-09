@@ -2,23 +2,10 @@
 set -euo pipefail
 
 case "${0##*/}" in
-codex-work)
-  state_dir="$HOME/.codex-work"
-  export CODEX_HOME="$state_dir"
-  real_binary="$HOME/.local/bin/codex"
-  configure_notify=1
-  ;;
-codex-work2)
-  state_dir="$HOME/.codex-work2"
-  export CODEX_HOME="$state_dir"
-  real_binary="$HOME/.local/bin/codex"
-  configure_notify=1
-  ;;
 claude-work)
   state_dir="$HOME/.claude-work"
   export CLAUDE_CONFIG_DIR="$state_dir"
   real_binary="$HOME/.local/bin/claude"
-  configure_notify=0
   ;;
 *)
   printf 'error: unsupported AI profile command: %s\n' "${0##*/}" >&2
@@ -36,14 +23,4 @@ esac
   printf 'error: AI command is unavailable: %s\n' "$real_binary" >&2
   exit 1
 }
-if ((configure_notify)); then
-  notify="$HOME/.local/bin/skid-notify"
-  case "$notify" in
-  *[\"\\]*)
-    printf 'error: Codex notifier path cannot be encoded safely: %s\n' "$notify" >&2
-    exit 1
-    ;;
-  esac
-  exec "$real_binary" -c "notify=[\"$notify\"]" "$@"
-fi
 exec "$real_binary" "$@"
