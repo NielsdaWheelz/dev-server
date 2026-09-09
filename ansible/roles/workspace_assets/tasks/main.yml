@@ -12,6 +12,7 @@
     - assets
     - assets/dotfiles
     - assets/routers
+    - assets/codex
     - assets/skidbladnir
     - assets/skidbladnir/claude-agent-identity
     - assets/skidbladnir/claude-agent-identity/.claude-plugin
@@ -33,7 +34,7 @@
 
 - name: Install exact dotfile assets
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../assets/dotfiles/{{ item }}"
+    src: "{{ playbook_dir }}/../../assets/{{ 'codex/zshenv.zsh' if item == 'zshenv' else 'dotfiles/' ~ item }}"
     dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/dotfiles/{{ item }}"
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
@@ -54,6 +55,18 @@
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: "0755"
+
+- name: Install exact shared Codex installer inputs
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/codex/{{ item }}"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/codex/{{ item }}"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0644"
+  loop:
+    - profiles.json
+    - codex-shared.py
+    - codex-profile
 
 - name: Install exact Skíðblaðnir assets
   ansible.builtin.copy:

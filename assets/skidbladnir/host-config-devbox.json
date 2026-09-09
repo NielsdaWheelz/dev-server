@@ -6,7 +6,7 @@
       "key": "personal",
       "label": "Codex · Personal",
       "provider": "Codex",
-      "command": "/home/niels/.local/bin/codex",
+      "command": "/home/niels/bin/codex",
       "environment": [{"name": "CODEX_HOME", "value": "/home/niels/.codex"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/home/niels/.local/bin/codex"}],
       "arguments": []

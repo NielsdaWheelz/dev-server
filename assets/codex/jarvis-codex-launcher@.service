@@ -1,0 +1,19 @@
+[Unit]
+Description=One authenticated Jarvis host request
+
+[Service]
+Type=exec
+User={{ codex_shared_config.development_user }}
+Group={{ codex_shared_config.development_user }}
+SupplementaryGroups={{ codex_shared_config.client_group }}
+ExecStart=/usr/bin/python3 /usr/local/libexec/codex-shared terminal
+StandardInput=socket
+StandardOutput=null
+StandardError=null
+UnsetEnvironment=TMUX TMUX_PANE TMUX_TMPDIR
+PrivateTmp=false
+KillMode=process
+NoNewPrivileges=true
+UMask=0077
+RuntimeMaxSec=45
+TimeoutStopSec=2

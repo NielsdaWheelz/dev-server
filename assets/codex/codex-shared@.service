@@ -1,0 +1,27 @@
+[Unit]
+Description=Shared Codex App Server ({{ item.key }})
+After=network.target
+StartLimitIntervalSec=30
+StartLimitBurst=3
+
+[Service]
+Type=exec
+User={{ codex_shared_config.development_user }}
+Group={{ codex_shared_config.client_group }}
+RuntimeDirectory={{ item.value.endpoint[7:] | dirname | basename }}
+RuntimeDirectoryMode=0750
+UnsetEnvironment=TMUX TMUX_PANE TMUX_TMPDIR
+ExecStart=/usr/bin/python3 /usr/local/libexec/codex-shared server {{ item.key }}
+ExecStartPost=/usr/bin/python3 /usr/local/libexec/codex-shared grant-socket {{ item.key }}
+Restart=on-failure
+RestartSec=2
+TimeoutStartSec=20
+TimeoutStopSec=15
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=false
+StandardOutput=null
+StandardError=null
+
+[Install]
+WantedBy=multi-user.target

@@ -406,6 +406,81 @@ test_fixed_profile_routing() {
   pass
 }
 
+test_devbox_shared_profiles_are_quiescent() (
+  local first_inode
+  dev_server_ai_host=devbox
+  reset_results
+  ai_install_profiles >/dev/null
+  [[ -f "$test_home/bin/codex" && ! -L "$test_home/bin/codex" ]] ||
+    fail 'Devbox apply did not install the personal shared Codex launcher'
+  for command in codex codex-work codex-work2; do
+    cmp -s "$test_assets/codex/codex-profile" "$test_home/bin/$command" ||
+      fail "$command did not select the Devbox shared launcher"
+  done
+  cmp -s "$test_assets/routers/ai-profile" "$test_home/bin/claude-work" ||
+    fail 'Devbox changed the Claude launcher'
+  first_inode="$(file_inode "$test_home/bin/codex-work")"
+  reset_results
+  ai_install_profiles >/dev/null
+  assert_eq "$first_inode" "$(file_inode "$test_home/bin/codex-work")" \
+    'Devbox second-apply launcher inode'
+  assert_eq 0 "$dev_server_result_mutations" 'Devbox second-apply mutations'
+)
+
+test_devbox_uses_pin_without_latest_lookup() (
+  local views
+  dev_server_ai_host=devbox
+  views="$(npm_operation_count view)"
+  assert_eq 0.153.4 "$(ai_codex_candidate)" 'Devbox declared candidate'
+  assert_eq "$views" "$(npm_operation_count view)" 'Devbox latest lookup count'
+)
+
+test_devbox_verifies_package_before_install() (
+  local package_assets="$fixture/package-assets" installs="$fixture/pinned-installs"
+  local package_bytes=fixture-package
+  dev_server_ai_host=devbox
+  cp -R "$test_assets" "$package_assets"
+  dev_server_assets_root="$package_assets"
+  python3 - "$package_assets/codex/profiles.json" <<'PY'
+import base64
+import hashlib
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+value = json.loads(path.read_text())
+data = b"fixture-package"
+value["package"]["integrity"] = "sha512-" + base64.b64encode(hashlib.sha512(data).digest()).decode()
+value["package"]["shasum"] = hashlib.sha1(data).hexdigest()
+path.write_text(json.dumps(value))
+PY
+  npm() {
+    case "$1" in
+    pack)
+      assert_eq 6 "$#" 'pinned package download argument count'
+      assert_eq --ignore-scripts "$2" 'pinned package download script policy'
+      assert_eq @openai/codex@0.153.4 "$6" 'exact pinned package download'
+      printf '%s' "$package_bytes" >"$5/package.tgz"
+      printf '[{"filename":"package.tgz"}]\n'
+      ;;
+    install)
+      assert_eq 8 "$#" 'pinned global installation argument count'
+      [[ -f "$8" && "$8" == */package.tgz ]] || fail 'install did not consume verified archive'
+      assert_eq fixture-package "$(cat "$8")" 'installed archive bytes'
+      printf 'installed\n' >>"$installs"
+      ;;
+    *) fail 'pinned installer unexpectedly queried npm latest' ;;
+    esac
+  }
+  ai_codex_install_package 0.153.4 "$test_home/.local"
+  assert_eq 1 "$(wc -l <"$installs" | tr -d ' ')" 'verified archive install count'
+  package_bytes=tampered
+  if ai_codex_install_package 0.153.4 "$test_home/.local" >/dev/null 2>&1; then
+    fail 'pinned installer accepted a checksum mismatch'
+  fi
+  assert_eq 1 "$(wc -l <"$installs" | tr -d ' ')" 'install count after checksum mismatch'
+)
+
 test_fail_closed() {
   local unsupported="$test_home/bin/codex-personal"
 
@@ -461,6 +536,12 @@ pass
 test_invalid_input_is_read_only
 test_canonical_install_and_update
 test_fixed_profile_routing
+test_devbox_shared_profiles_are_quiescent
+pass
+test_devbox_uses_pin_without_latest_lookup
+pass
+test_devbox_verifies_package_before_install
+pass
 test_fail_closed
 test_static_contract
 

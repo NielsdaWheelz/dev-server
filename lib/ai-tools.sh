@@ -26,6 +26,17 @@ ai_validate_inputs() {
   profile="$(dev_server_assets_dir)/routers/ai-profile"
   [[ -f "$profile" && ! -L "$profile" ]] ||
     die "invalid AI profile wrapper: $profile"
+  if [[ "${dev_server_ai_host:-}" == devbox ]]; then
+    profile="$(dev_server_assets_dir)/codex/codex-profile"
+    [[ -f "$profile" && ! -L "$profile" ]] ||
+      die "invalid shared Codex wrapper: $profile"
+    ai_codex_host pin >/dev/null || die 'invalid shared Codex declaration'
+  fi
+}
+
+ai_codex_host() {
+  python3 "$(dev_server_assets_dir)/codex/codex-shared.py" \
+    --config "$(dev_server_assets_dir)/codex/profiles.json" "$@"
 }
 
 ai_install_dirs() {
@@ -70,6 +81,10 @@ ai_codex_manifest() {
 ai_codex_candidate() {
   local value
 
+  if [[ "${dev_server_ai_host:-}" == devbox ]]; then
+    ai_codex_host pin
+    return
+  fi
   value="$(npm view @openai/codex dist-tags.latest --json)" ||
     die "could not resolve the current stable Codex release"
   node -e '
@@ -83,6 +98,21 @@ ai_codex_candidate() {
     process.stdout.write(value);
   ' "$value" || die "npm returned an invalid stable Codex release"
 }
+
+ai_codex_install_package() (
+  set -euo pipefail
+  local candidate="$1" prefix="$2" package_source package_stage
+  package_source="@openai/codex@$candidate"
+  if [[ "${dev_server_ai_host:-}" == devbox ]]; then
+    package_stage="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-codex-package.XXXXXX")" || exit 1
+    trap 'rm -rf -- "$package_stage"' EXIT
+    npm pack --ignore-scripts --json --pack-destination "$package_stage" \
+      "$package_source" >"$package_stage/metadata.json" || exit 1
+    package_source="$(ai_codex_host verify-package "$package_stage")" || exit 1
+  fi
+  npm install --global --prefix "$prefix" --ignore-scripts \
+    --no-audit --no-fund "$package_source"
+)
 
 ai_codex_matches() {
   local expected="$1"
@@ -129,10 +159,9 @@ ai_install_codex() {
   else
     status=INSTALLED
   fi
-  npm install --global --prefix "$prefix" --ignore-scripts \
-    --no-audit --no-fund "@openai/codex@$candidate" || return 1
+  ai_codex_install_package "$candidate" "$prefix" || return 1
   ai_codex_matches "$candidate" ||
-    die "installed Codex does not match npm's stable candidate"
+    die 'installed Codex does not match the declared candidate'
   render_result "$status" "AI tool" "codex@$candidate"
 }
 
@@ -234,15 +263,22 @@ ai_install_packages() {
 ai_install_profiles() {
   local home
   local profile
+  local codex_profile
 
   home="$(dev_server_home)"
   profile="$(dev_server_assets_dir)/routers/ai-profile"
   [[ -f "$profile" && ! -L "$profile" ]] ||
     die "missing AI profile wrapper: $profile"
 
-  install_managed_file "$profile" \
+  codex_profile="$profile"
+  if [[ "${dev_server_ai_host:-}" == devbox ]]; then
+    codex_profile="$(dev_server_assets_dir)/codex/codex-profile"
+    install_managed_file "$codex_profile" \
+      "$home/bin/codex" 0755 shell.config || return 1
+  fi
+  install_managed_file "$codex_profile" \
     "$home/bin/codex-work" 0755 shell.config || return 1
-  install_managed_file "$profile" \
+  install_managed_file "$codex_profile" \
     "$home/bin/codex-work2" 0755 shell.config || return 1
   install_managed_file "$profile" \
     "$home/bin/claude-work" 0755 shell.config || return 1
