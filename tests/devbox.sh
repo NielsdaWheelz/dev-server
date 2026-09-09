@@ -1156,7 +1156,6 @@ inputs = {
     "profiles.json",
     "codex-shared.py",
     "codex-profile",
-    "zshenv.zsh",
     "codex-shared.tmpfiles",
     "codex-shared@.service",
     "jarvis-codex-launcher.socket",
@@ -1168,6 +1167,7 @@ inputs_block = preflight[
 ]
 for name in inputs:
     assert inputs_block.count(f"assets/codex/{name}") == 1, name
+assert inputs_block.count("assets/dotfiles/zshenv") == 1
 assert "/var/lib/dev-server/active/codex.runtime.sha256" in preflight
 assert "DEV_SERVER_CODEX_ACTION_DRAIN_RESTART" in preflight
 assert "devbox_codex_runtime_restart_authorized | bool" in preflight

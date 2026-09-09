@@ -41,22 +41,47 @@ Run:
 ```
 
 The order is native packages, repo-owned files, exact-host personal policy,
-the current stable Codex plus native Claude, and Skíðblaðnir. Package managers
+the pinned shared Codex services plus native Claude, and Skíðblaðnir. Package managers
 may refresh their own metadata. Apply never removes Arch packages, restarts
 tmux, reboots, logs out, or interrupts running containers. Those cases are
 reported as `DEFERRED`.
 On macOS, apply verifies and may start the exact App Store Tailscale app but
 never installs, upgrades, replaces, or signs in to it.
 
-Plain `codex` and `claude` remain upstream personal commands. Every Codex
-profile executes one npm user-global binary at `~/.local/bin/codex`; every
+`codex`, `codex-work`, and `codex-work2` attach to three shared local App Servers.
+Each account has one server on each host. Every Codex profile uses the same
+exact npm binary at `~/.local/bin/codex`; every
 Claude profile executes one Anthropic-native binary at `~/.local/bin/claude`.
 Apply reconciles Claude explicitly to the native `latest` channel without
 reading an account profile's update-channel preference.
-The managed `codex-work`, `codex-work2`, and `claude-work` wrappers isolate only
-account state and notification configuration. Running sessions are never
-restarted for an upgrade; new launches use the reconciled binary. Authenticate
-isolated homes directly when first required.
+Plain `claude` and `claude-work` retain their native behavior.
+Codex launchers support a new interactive session or `resume <full-thread-id>`.
+Use the raw binary for account enrollment and admin commands, selecting the
+existing home explicitly, for example:
+
+```sh
+CODEX_HOME="$HOME/.codex-work" "$HOME/.local/bin/codex" login
+```
+
+MacBook uses three LaunchAgents; Arch uses three user systemd services. They
+start with the user session, restart on failure, and listen only on private
+Unix sockets at `~/.local/run/codex-shared/<profile>/app-server.sock`.
+Account homes and credentials are preserved. There is no Jarvis account or
+cross-user launcher on either workstation.
+
+Ordinary apply starts missing services and leaves running services alone. A
+changed pin/helper/unit cannot replace a running account's inputs. After
+finishing active turns, explicitly authorize the shared-service restart:
+
+```sh
+./workstation apply --restart-codex
+```
+
+This stops only the three managed Codex services, not tmux sessions. All hosts
+use the exact version and package integrity from `assets/codex/profiles.json`.
+Workstation paths are derived from that declaration by the same helper; no
+second account map or pin is authored. Codex CLI/TUI pin bumps are reviewed
+service upgrades, while Claude keeps its native rolling update policy.
 
 ## Devbox
 
@@ -111,6 +136,14 @@ migrations, systemd service, credentials, backup/restore, and operational
 recovery. `./devbox apply` never deploys Jarvis, reads its credentials, or
 touches Nexus application state. Jarvis is host-native and is not part of the
 developer's rootless Docker lifecycle.
+
+Devbox apply also installs and starts Personal, Work and Work2 shared Codex
+system services plus Jarvis's authenticated terminal-launcher socket. Jarvis
+connects to those existing services; it does not install, spawn or supervise
+them. Running services with changed inputs require
+`./devbox apply --restart-codex` after active turns finish. The devbox remains
+the only Jarvis worker host; workstation services do not add remote Jarvis
+control or expose Codex over the network.
 
 ## One-time hard cutover
 
@@ -311,16 +344,16 @@ Skíðblaðnir health/Serve postconditions.
 
 ## Boundaries and trade-offs
 
-- Native OS repositories, Codex stable, and Anthropic-native Claude are rolling
-  rather than byte-replayable. Git plugins, Cursor extensions, and Skíðblaðnir
+- Native OS repositories and Anthropic-native Claude are rolling
+  rather than byte-replayable. Codex, Git plugins, Cursor extensions, and Skíðblaðnir
   are exact reviewable pins and therefore can lag upstream until manually
   bumped.
 - Native package and npm updates can partially complete; rerun their native
   reconcilers. Git plugin candidates are isolated until an atomic link switch.
   Only Skíðblaðnir has repository-owned service rollback.
 - Skíðblaðnir no-op apply re-downloads its small archive to re-prove admission.
-  A host-config-only change needs a new release pin because generation identity
-  is release-keyed.
+  Generation identity includes host configuration, so a routing-only change
+  creates a new immutable generation at the same published release pin.
 - Desktop login, reboot, busy Docker, and tmux-server activation are never
   forced. Public exposure, credentials, checksums, host-key continuity, and the
   last healthy Skíðblaðnir generation are never traded away for convenience.

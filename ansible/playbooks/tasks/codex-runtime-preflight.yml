@@ -33,10 +33,10 @@
         mode: "0755"
         sha256: >-
           {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/codex-profile', rstrip=false) | hash('sha256') }}
-      - path: zshenv.zsh
+      - path: zshenv
         mode: "0644"
         sha256: >-
-          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/zshenv.zsh', rstrip=false) | hash('sha256') }}
+          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/dotfiles/zshenv', rstrip=false) | hash('sha256') }}
       - path: codex-shared.tmpfiles
         mode: "0644"
         sha256: >-

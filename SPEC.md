@@ -62,8 +62,10 @@ Trade-off: deferring Nix, OpenTofu, signing infrastructure, and generic automati
 
 ```text
 ./workstation apply
+./workstation apply --restart-codex
 ./workstation {help|--help|-h}
 ./devbox apply
+./devbox apply --restart-codex
 ./devbox {help|--help|-h}
 ./test
 ```
@@ -178,28 +180,73 @@ Trade-offs: rolling OS repositories favor freshness over byte-for-byte replay of
   path topology, bounded strict JSON with unique keys, and object shape before
   extension or file mutation; rewrite only `remote.SSH.remotePlatform` through
   same-directory atomic promotion.
-- Plain `claude` is the personal upstream command. On Devbox, `codex`,
-  `codex-work`, and `codex-work2` are closed shared-service clients; on MacBook
-  and Arch, plain Codex and the two explicit work wrappers retain their current
-  upstream behavior. `claude-work` remains unchanged.
+- Plain `claude` is the personal upstream command. On all three hosts, `codex`,
+  `codex-work`, and `codex-work2` are closed shared-service clients.
+  `claude-work` remains unchanged. Codex clients accept an empty argument list
+  or `resume <full-thread-id>`; explicit raw-binary calls own enrollment/admin.
 - The wrapper dispatches only by its fixed basename; remove cwd/`-C` inference and `*-personal` aliases. Retain isolation tests.
 - AI installation MUST NOT depend on a Skíðblaðnir Claude plugin.
 - Use native/standard lock formats where they preserve the desired update contract. Pin Git plugin commits and Ansible. `curl | sh`, `curl | bash`, executable `@latest`, and mutable branch execution are forbidden.
 - Install Codex once per host at the npm user-global prefix `$HOME/.local`; plain
   and account-specific commands MUST execute that one raw backend binary. On
-  Devbox, install exactly `@openai/codex@0.153.4` with npm integrity
+  every host, install exactly `@openai/codex@0.153.4` with npm integrity
   `sha512-wbHDmit7S/YvBGVX1DQmk13xtWblZ2cApeJ/pB7xDZ10Cna+DZc5ij7f0F4OxdsXN4FW1oLT48OpogUI1+8Y2w==`
   and shasum `7f0283a793e438733df5dccbe5d79ffd778ab0e8`; do not resolve `latest`.
-  MacBook and Arch retain stable-latest reconciliation. The logical Devbox
-  personal launcher in `~/bin` precedes the raw backend in `~/.local/bin`.
+  The logical personal launcher in `~/bin` precedes the raw backend in
+  `~/.local/bin` on every host, including non-interactive shells.
 - Install Claude once per host with Anthropic's native installer at `$HOME/.local/bin/claude`; plain and account-specific commands MUST execute that one binary. A valid installation is an executable versioned file under `$HOME/.local/share/claude/versions/` published by the canonical symlink. Apply runs the native `install latest` reconciliation under the normal host HOME, independent of profile configuration, validates topology and version before and after it, and MUST fail rather than overwrite a conflicting canonical command. Missing installs may bootstrap only from `https://claude.ai/install.sh`, downloaded over constrained TLS to a bounded temporary regular file and syntax-checked before execution. Running Claude processes MUST NOT be restarted.
 - Delete the private AI npm manifest, lock, package tree, and PATH entry. Retain Node/npm only as the Codex installation mechanism.
 
-Trade-off: Codex on MacBook/Arch and Claude retain immediate upstream
-stable-channel access. Devbox instead pins one qualified experimental Codex
-server/TUI version across all accounts and clients, trading freshness for a
-single protocol boundary. Initial Claude bootstrap trusts Anthropic's mutable
+Trade-off: Claude retains immediate upstream stable-channel access. Codex pins
+one qualified experimental server/TUI version across all hosts, accounts and
+clients, trading freshness for one protocol boundary. Initial Claude bootstrap trusts Anthropic's mutable
 HTTPS installer; subsequent selection and verification remain vendor-owned.
+
+#### Shared Codex on workstations
+
+- `dev-server` owns installation, start and native supervision on all three
+  hosts. Jarvis remains a devbox-local client; this change adds no remote
+  coordinator control, network listeners or machine registry.
+- MacBook uses three user LaunchAgents in `gui/<uid>`; Arch uses three user
+  systemd services. Start on user login/manager activation, restart on failure.
+  A missing user manager is an ACTION; no root daemon or new linger policy.
+- The existing `assets/codex/profiles.json` remains the authoritative pin and
+  account-profile declaration and the exact deployed Devbox/Jarvis contract.
+  The helper's explicit `--host` projects workstation paths from the user's
+  home and declared account basenames. No independently authored account map,
+  duplicate package pin, dummy Jarvis account or workstation terminal helper.
+- Workstation inputs live at `~/.config/codex-shared/profiles.json` and
+  `~/.local/libexec/codex-shared`. Each native server has a private `0700`
+  parent and `0600` socket at
+  `~/.local/run/codex-shared/<profile>/app-server.sock`, and starts in the empty
+  `~/.local/share/codex-shared/empty` directory. Manual clients retain ordinary
+  cwd choice via explicit remote-TUI `--cd`; resume retains the stored thread
+  cwd. Backend environments are explicit and include native tool paths;
+  caller credentials and tmux attachment variables are not inherited.
+- The coupled activation identity covers pin, helper, generated units and
+  launchers. Changed live inputs require `workstation apply --restart-codex`
+  before any coupled replacement; ordinary apply reports ACTION and exits 2.
+  Explicit restart stops only those three managed services. It never enumerates
+  or kills tmux, private Codex sessions, or unrelated processes.
+- Verify native enabled/active state and exact socket ownership/modes before
+  recording the existing `codex.runtime` active SHA. Identical second apply
+  does not rewrite files, reload managers or restart services; an inactive
+  service with unchanged inputs is started independently.
+- A partial first start records no activation proof. If another profile is
+  already running, retry requires explicit restart of the coupled services;
+  there is no per-profile deployment ledger or silent adoption.
+- Workstation work-profile notifier overrides are retired with private
+  launchers; account-owned backend notification configuration stays untouched.
+
+Owning proofs: real helper subprocess/profile fixture; native-manager boundary
+fixture for first apply, quiescent second apply, failed startup, recovery and
+active-change refusal; real per-host service/socket/initialize checks and a
+second apply with unchanged service PIDs. Missing hosts remain `NOT_RUN`.
+
+Trade-offs: workstation availability follows user login; a shared account
+service is one version/trust/failure boundary; upgrading it interrupts active
+turns only with explicit restart authorization. No TUI readiness or provider
+turn is claimed by a service-start check.
 
 ### 8.4 Devbox provisioning and configuration
 
@@ -289,12 +336,12 @@ Keep a small local installer; product packaging is outside this 80/20 cut. Layou
 
 ```text
 ~/.local/share/skidbladnir/
-  releases/<version>-<artifact-sha256>/
+  releases/<version>-<runtime-sha256>/
     skidbladnir
     characters.json
     release.json
     host-config.json
-  current -> releases/<version>-<artifact-sha256>
+  current -> releases/<version>-<runtime-sha256>
   previous -> releases/<prior-generation>       # present only after an upgrade
   units/<unit-sha256>/
     launcher
@@ -319,17 +366,17 @@ Rules:
 - Release and credential directories are user-private. Bearer, machine handle, and the three exact upstream-owned Android signing files are regular, non-symlink, mode `0600` files and are never replaced when present; bearer and machine handle are minted only when absent. Invalid state fails closed.
 - `current`, `previous`, and `~/.local/bin/skidbladnir` are the only intentional Skíðblaðnir symlinks. Create each as a validated relative temporary symlink and atomically rename it; reject every unexpected symlink in protected paths.
 - Under one nonblocking OS lock: download to same-filesystem staging; verify archive SHA, exact three release members, release manifest, executable version/source; add validated host config; rename the complete generation; atomically switch `current`.
-- Gateway runtime identity covers binary, catalogue, release manifest, and host
-  config. Unit/launcher identity is separate and retains the verified unit
+- Generation names use the gateway runtime identity, which covers binary,
+  catalogue, release manifest and host config. A host-config-only change at the
+  same published pin creates a distinct immutable generation; prior generation
+  rollback and identical-second-apply rules remain unchanged.
+  Unit/launcher identity is separate and retains the verified unit
   generation needed for rollback after an interrupted overwrite.
 - Start if inactive. Restart once if desired runtime/unit identity differs from active identity. After authenticated health reports the desired version, record active identity.
 - On failed activation, atomically restore the prior pointer and restart/verify it. On a failed first installation, leave the service inactive and the candidate unreferenced. Keep one prior generation; remove older exact owned generations only after success.
 - Install hooks, notifier, and Claude integration independently with
-  `skid.integration`; they MUST NOT restart the gateway. On MacBook and Arch,
-  the explicit Codex work wrappers inject the notifier through Codex's supported
-  per-invocation configuration override. Devbox shared-service clients do not
-  add a second notifier policy. Personal notification remains user-owned because
-  Codex exposes one notifier command.
+  `skid.integration`; they MUST NOT restart the gateway. Shared Codex clients
+  do not add a second notifier policy; account notification remains user-owned.
 - Configure only private `/v1` Tailscale Serve through the supported CLI. No Funnel, private LocalAPI credentials, ETag/CAS client, or hostname surgery. A stale mapping produces one exact recovery `ACTION` and exit `2`.
 - Default host configs MUST NOT contain `--dangerously-bypass-approvals-and-sandbox`, Claude automatic permission mode, or an equivalent bypass.
 

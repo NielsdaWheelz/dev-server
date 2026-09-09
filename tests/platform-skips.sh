@@ -93,6 +93,11 @@ write_library "$test_repo/lib/skidbladnir.sh" \
 write_library "$test_repo/lib/ai-tools.sh" \
   'ai_validate_inputs() { [[ "${FAIL_LATE_INPUT:-0}" != 1 ]] || die "invalid late AI input"; }' \
   'ai_install() { printf "ai\n" >>"$WORKSTATION_RECORD"; }'
+write_library "$test_repo/lib/codex-services.sh" \
+  'codex_services_preflight() { :; }' \
+  'codex_services_install() { :; }' \
+  'codex_services_activate() { :; }' \
+  'codex_services_cleanup() { :; }'
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'printf "%s\n" "${FAKE_UNAME:?}"' >"$fake_bin/uname"

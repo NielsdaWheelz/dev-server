@@ -217,7 +217,7 @@ class HostBoundary(unittest.TestCase):
             target.chmod(0o755)
         result = subprocess.run(
             ["zsh", "-f", "-c", 'source "$1"; command -v codex; source "$1"; print -r -- "$PATH"',
-             "fixture", str(REPO / "assets/codex/zshenv.zsh")], capture_output=True, timeout=3,
+             "fixture", str(REPO / "assets/dotfiles/zshenv")], capture_output=True, timeout=3,
             env={**os.environ, "HOME": str(self.root), "PATH": f"{raw}:{logical}:{raw}:/usr/bin:/bin"})
         self.assertEqual(result.returncode, 0, result.stderr)
         selected, search_path = result.stdout.decode().splitlines()

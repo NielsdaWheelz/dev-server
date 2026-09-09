@@ -6,7 +6,7 @@
       "key": "personal",
       "label": "Codex · Personal",
       "provider": "Codex",
-      "command": "/home/nnandal/.local/bin/codex",
+      "command": "/home/nnandal/bin/codex",
       "environment": [{"name": "CODEX_HOME", "value": "/home/nnandal/.codex"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/home/nnandal/.local/bin/codex"}],
       "arguments": []

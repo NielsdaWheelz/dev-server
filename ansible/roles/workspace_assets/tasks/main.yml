@@ -34,7 +34,7 @@
 
 - name: Install exact dotfile assets
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../assets/{{ 'codex/zshenv.zsh' if item == 'zshenv' else 'dotfiles/' ~ item }}"
+    src: "{{ playbook_dir }}/../../assets/dotfiles/{{ item }}"
     dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/dotfiles/{{ item }}"
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
