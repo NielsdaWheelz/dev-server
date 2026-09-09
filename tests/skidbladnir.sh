@@ -18,6 +18,7 @@ test_calls=''
 test_service_active=''
 test_service_enabled=''
 test_service_version=''
+test_service_generation=''
 test_fail_marker=''
 test_fail_action=''
 test_reject_version=''
@@ -99,6 +100,7 @@ setup_case() {
   test_service_active="$case_dir/service-active"
   test_service_enabled="$case_dir/service-enabled"
   test_service_version="$case_dir/service-version"
+  test_service_generation="$case_dir/service-generation"
   test_fail_marker="$case_dir/fail-once"
   test_fail_action=''
   test_reject_version=''
@@ -216,6 +218,7 @@ systemctl() {
     [[ "$candidate_version" != "$test_reject_version" ]] || return 74
     : >"$test_service_active"
     printf '%s\n' "$candidate_version" >"$test_service_version"
+    readlink "$test_home/.local/share/skidbladnir/current" >"$test_service_generation"
     ;;
   *' stop '*) rm -f -- "$test_service_active" ;;
   *' show '*) printf '%s\n' "$$" ;;
@@ -237,10 +240,12 @@ curl() {
 
 skidbladnir_running_binary_matches() {
   local runtime_ref="${3:-current}"
-  local expected
+  local expected generation="$runtime_ref"
   [[ -f "$test_service_active" && -f "$test_service_version" ]] || return 1
   expected="$(jq -r '.version' "$test_home/.local/share/skidbladnir/$runtime_ref/release.json")"
-  [[ "$(cat "$test_service_version")" == "$expected" ]]
+  [[ "$runtime_ref" != current ]] || generation="$(readlink "$test_home/.local/share/skidbladnir/current")"
+  [[ "$(cat "$test_service_version")" == "$expected" &&
+  "$(cat "$test_service_generation")" == "$generation" ]]
 }
 
 count_calls() {
@@ -253,7 +258,7 @@ test_pin_and_config_contract() (
   local valid="$fixture/pin-valid.json"
   local duplicate="$fixture/pin-duplicate.json"
   local oversized="$fixture/pin-oversized.json"
-  local line
+  local line home
 
   skidbladnir_release_pin_file="$pin"
   line="$(skidbladnir_release_values arch)" || fail 'current release pin was rejected'
@@ -278,6 +283,14 @@ test_pin_and_config_contract() (
   for line in macos arch devbox; do
     skidbladnir_host_config_valid "$(skidbladnir_host_config_source "$line")" "$line" ||
       fail "$line host config was rejected"
+    case "$line" in
+    macos) home=/Users/nnandal ;;
+    arch) home=/home/nnandal ;;
+    devbox) home=/home/niels ;;
+    esac
+    assert_eq "$home/bin/codex" \
+      "$(jq -r '.profiles[] | select(.key == "personal") | .command' "$(skidbladnir_host_config_source "$line")")" \
+      "$line Personal Forge shared launcher"
   done
   jq -e '
     all(.profiles[] | select(.provider == "Codex"); .arguments == []) and
@@ -454,6 +467,77 @@ test_upgrade_integration_and_credentials() (
   assert_eq 1 "$(count_calls '^systemctl .* daemon-reload')" 'unit repair reload count'
   assert_eq 1 "$(count_calls '^systemctl .* restart ')" 'unit repair restart count'
   assert_contains "$output" 'CHANGED  skid.unit' 'unit repair result'
+)
+
+test_host_config_update_keeps_release_pin_and_prior_generation() (
+  local share old_current new_current old_config_sha pin_sha
+  setup_case host-config-update
+  write_release v1.2.3 1111111111111111111111111111111111111111
+  skidbladnir_apply arch >/dev/null
+  share="$test_home/.local/share/skidbladnir"
+  old_current="$(readlink "$share/current")"
+  old_config_sha="$(dev_server_sha256 "$share/current/host-config.json")"
+  pin_sha="$(dev_server_sha256 "$skidbladnir_release_pin_file")"
+
+  jq '.profiles[0].label = "Personal shared Codex"' \
+    "$case_dir/assets/skidbladnir/host-config-arch.json" >"$case_dir/host-config.next"
+  mv "$case_dir/host-config.next" "$case_dir/assets/skidbladnir/host-config-arch.json"
+  : >"$test_calls"
+  reset_results
+  skidbladnir_apply arch >/dev/null
+  new_current="$(readlink "$share/current")"
+  [[ "$new_current" != "$old_current" ]] || fail 'host-config update reused the immutable generation'
+  assert_eq "$pin_sha" "$(dev_server_sha256 "$skidbladnir_release_pin_file")" 'host-config-only release pin'
+  assert_eq "$old_current" "$(readlink "$share/previous")" 'host-config update previous pointer'
+  assert_eq "$old_config_sha" "$(dev_server_sha256 "$share/$old_current/host-config.json")" \
+    'prior generation remained immutable'
+  cmp -s "$case_dir/assets/skidbladnir/host-config-arch.json" "$share/current/host-config.json" ||
+    fail 'current generation does not contain the desired host configuration'
+  assert_eq 1 "$(count_calls '^systemctl .* restart ')" 'host-config update restart count'
+  assert_eq 0 "$(count_calls '^systemctl .* daemon-reload')" 'host-config update unit reload count'
+
+  : >"$test_calls"
+  reset_results
+  skidbladnir_apply arch >/dev/null
+  assert_eq "$new_current" "$(readlink "$share/current")" 'unchanged configuration current pointer'
+  assert_eq "$old_current" "$(readlink "$share/previous")" 'unchanged configuration previous pointer'
+  assert_eq 0 "$dev_server_result_mutations" 'unchanged configuration durable mutations'
+  assert_eq 0 "$(count_calls '^systemctl .* restart ')" 'unchanged configuration restart count'
+)
+
+test_generation_pointer_change_activates_identical_runtime_bytes() (
+  local share desired retained
+  setup_case generation-pointer
+  write_release v1.2.3 1111111111111111111111111111111111111111
+  skidbladnir_apply arch >/dev/null
+  share="$test_home/.local/share/skidbladnir"
+  desired="$(readlink "$share/current")"
+  retained="releases/v1.2.3-$(jq -r '.artifacts["linux-amd64"].sha256' "$skidbladnir_release_pin_file")"
+  mv "$share/$desired" "$share/$retained"
+  skidbladnir_atomic_symlink "$share/current" "$retained" generation
+  printf '%s\n' "$retained" >"$test_service_generation"
+
+  : >"$test_calls"
+  reset_results
+  skidbladnir_apply arch >/dev/null
+  assert_eq "$desired" "$(readlink "$share/current")" 'desired runtime path'
+  assert_eq "$retained" "$(readlink "$share/previous")" 'retained prior runtime path'
+  assert_eq 1 "$(count_calls '^systemctl .* restart ')" 'changed executable path activation count'
+
+  # Observe the prior process after an interruption between pointer promotion
+  # and activation. The runtime bytes and active identity are still identical.
+  printf '%s\n' "$retained" >"$test_service_generation"
+  : >"$test_calls"
+  reset_results
+  skidbladnir_apply arch >/dev/null
+  assert_eq "$desired" "$(cat "$test_service_generation")" 'interrupted pointer activation recovery'
+  assert_eq 1 "$(count_calls '^systemctl .* restart ')" 'interrupted pointer activation count'
+
+  : >"$test_calls"
+  reset_results
+  skidbladnir_apply arch >/dev/null
+  assert_eq 0 "$dev_server_result_mutations" 'recovered pointer unchanged mutations'
+  assert_eq 0 "$(count_calls '^systemctl .* restart ')" 'recovered pointer unchanged activation count'
 )
 
 test_rollback_interruption_and_retry() (
@@ -897,6 +981,8 @@ run_test test_platform_scoped_declared_inputs
 run_test test_fresh_noop_and_exact_activation
 run_test test_admission_failures_preserve_state
 run_test test_upgrade_integration_and_credentials
+run_test test_host_config_update_keeps_release_pin_and_prior_generation
+run_test test_generation_pointer_change_activates_identical_runtime_bytes
 run_test test_rollback_interruption_and_retry
 run_test test_first_failure_is_inactive_and_unreferenced
 run_test test_interrupted_first_install_remains_unreferenced

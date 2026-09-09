@@ -192,7 +192,7 @@ if (not isinstance(profiles, list) or len(profiles) != 5 or
     raise SystemExit(1)
 codex_backend = home + "/.local/bin/codex"
 commands = {
-    "personal": home + ("/bin/codex" if home == "/home/niels" else "/.local/bin/codex"),
+    "personal": home + "/bin/codex",
     "work": home + "/bin/codex-work",
     "work2": home + "/bin/codex-work2",
     "claude-personal": home + "/.local/bin/claude",
@@ -1659,7 +1659,11 @@ skidbladnir_apply() {
     esac
   fi
 
-  generation_name="$version-$archive_sha"
+  runtime_identity="$(skidbladnir_runtime_identity "$stage/generation")" || {
+    skidbladnir_discard_stage "$share" "$stage"
+    die 'Skidbladnir runtime identity is invalid'
+  }
+  generation_name="$version-$runtime_identity"
   generation="$releases/$generation_name"
   if [[ -e "$generation" || -L "$generation" ]]; then
     if ! skidbladnir_generation_exact "$stage/generation" "$generation"; then
@@ -1711,10 +1715,6 @@ skidbladnir_apply() {
     render_result INSTALLED skidbladnir.credentials 'machine handle and bearer minted'
   fi
 
-  runtime_identity="$(skidbladnir_runtime_identity "$generation")" || {
-    skidbladnir_discard_stage "$share" "$stage"
-    die 'Skidbladnir runtime identity is invalid'
-  }
   unit_identity="$(skidbladnir_unit_identity "$platform")" || {
     skidbladnir_discard_stage "$share" "$stage"
     die 'Skidbladnir unit identity is invalid'
@@ -1848,8 +1848,8 @@ skidbladnir_apply() {
   if ((skidbladnir_unit_changed)) || [[ "$active_unit" != "$unit_identity" ]]; then
     needs_unit_reload=1
   fi
-  if ((was_active == 0 || needs_unit_reload != 0)) ||
-    [[ "$active_runtime" != "$runtime_identity" ]]; then
+  if ((was_active == 0 || pointer_changed != 0 || needs_unit_reload != 0)) ||
+    [[ "$active_runtime" != "$runtime_identity" || "$verified_runtime" == previous ]]; then
     needs_activation=1
   fi
   activation_failed=0
