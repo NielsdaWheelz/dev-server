@@ -284,6 +284,11 @@ fi
 if [[ "$FAKE_SCENARIO" == skid-stale && "$*" != *' --syntax-check '* ]]; then
   printf '%s\n' 'DEV_SERVER_SKID_ACTION_CLEAR_STALE_SERVE'
 fi
+if [[ "$FAKE_SCENARIO" == codex-action && "$*" != *' --syntax-check '* &&
+  "$*" != *'"devbox_codex_runtime_restart_authorized":true'* ]]; then
+  printf '%s\n' 'DEV_SERVER_CODEX_ACTION_DRAIN_RESTART'
+  exit 2
+fi
 printf '%s\n' 'PLAY RECAP'
 printf '%s\n' 'devbox : ok=24 changed=0 unreachable=0 failed=0 skipped=2 rescued=0 ignored=0'
 EOF
@@ -331,7 +336,7 @@ make_case() {
   : >"$case_dir/calls"
   make_fake_commands "$case_dir/bin"
 
-  if [[ "$scenario" == existing ]]; then
+  if [[ "$scenario" == existing || "$scenario" == codex-action ]]; then
     : >"$case_dir/state/server"
     : >"$case_dir/state/firewall"
     : >"$case_dir/state/attached"
@@ -352,7 +357,7 @@ run_apply() {
     FAKE_CALLS="$case_dir/calls" \
     FAKE_SCENARIO="$scenario" \
     FAKE_STATE="$case_dir/state" \
-    "$case_dir/root/devbox" apply >"$output" 2>&1
+    "$case_dir/root/devbox" apply "${@:4}" >"$output" 2>&1
 }
 
 test_cli_contract() {
@@ -463,6 +468,32 @@ test_ansible_failure_has_one_terminal_summary() {
     'Ansible failure terminal summary'
   assert_eq 1 "$(grep -c '^ERROR  devbox:' "$output")" \
     'Ansible failure summary count'
+  tests_run=$((tests_run + 1))
+}
+
+test_codex_restart_requires_an_explicit_cli_action() {
+  local case_dir output rc
+  case_dir="$(make_case codex-action codex-action)"
+  output="$case_dir/output"
+
+  set +e
+  run_apply "$case_dir" codex-action "$output"
+  rc=$?
+  set -e
+  assert_eq 2 "$rc" 'changed active Codex exit'
+  assert_contains "$output" \
+    'ACTION  codex.runtime: rerun ./devbox apply --restart-codex to drain and restart all shared Codex services' \
+    'changed active Codex action'
+  assert_not_contains "$output" 'ERROR  Ubuntu state' \
+    'changed active Codex is not an apply error'
+
+  run_apply "$case_dir" codex-action "$output" --restart-codex || {
+    sed -n '1,240p' "$output" >&2
+    fail 'explicit shared Codex restart action failed'
+  }
+  assert_contains "$case_dir/calls" \
+    '"devbox_codex_runtime_restart_authorized":true' \
+    'explicit shared Codex restart authorization forwarding'
   tests_run=$((tests_run + 1))
 }
 
@@ -998,6 +1029,10 @@ assert "ansible.builtin.import_tasks: tasks/remote-preflight.yml" in playbook[st
 
 required = {
     "/var/lib/dev-server/active/ssh.sha256": "root SSH activation journal",
+    "/var/lib/dev-server/active/codex.runtime.sha256": "shared Codex activation journal",
+    'pathlib.Path("/etc/codex-shared")': "shared Codex root configuration",
+    'pathlib.Path("/run/jarvis-codex-launcher")': "closed launcher runtime boundary",
+    'stat.S_ISSOCK': "shared Codex socket topology",
     'active / "docker.sha256"': "user Docker activation journal",
     'active / "skid.runtime.sha256"': "Skidbladnir runtime activation journal",
     'active / "skid.unit.sha256"': "Skidbladnir unit activation journal",
@@ -1090,9 +1125,86 @@ PY
   tests_run=$((tests_run + 1))
 }
 
+test_codex_runtime_activation_contract() {
+  python3 - \
+    "$repo_dir/lib/common.sh" \
+    "$repo_dir/ansible/group_vars/devbox.yml" \
+    "$repo_dir/ansible/playbooks/apply.yml" \
+    "$repo_dir/ansible/playbooks/tasks/codex-runtime-preflight.yml" \
+    "$repo_dir/ansible/playbooks/tasks/codex-runtime-activate.yml" <<'PY' ||
+import pathlib
+import sys
+
+common_path, group_vars, apply_path, preflight_path, activate_path = map(
+    pathlib.Path, sys.argv[1:]
+)
+common = common_path.read_text()
+group_text = group_vars.read_text()
+playbook = apply_path.read_text()
+preflight = preflight_path.read_text()
+activate = activate_path.read_text()
+
+assert "devbox_codex_runtime_restart_authorized: false" in group_text
+assert "codex.runtime" in common
+preflight_import = "ansible.builtin.import_tasks: tasks/codex-runtime-preflight.yml"
+activate_import = "ansible.builtin.import_tasks: tasks/codex-runtime-activate.yml"
+assert playbook.index(preflight_import) < playbook.index("\n  roles:")
+assert playbook.index("role: ai_tools") < playbook.index("role: codex_shared")
+assert playbook.index("role: codex_shared") < playbook.index(activate_import)
+
+inputs = {
+    "profiles.json",
+    "codex-shared.py",
+    "codex-profile",
+    "zshenv.zsh",
+    "codex-shared.tmpfiles",
+    "codex-shared@.service",
+    "jarvis-codex-launcher.socket",
+    "jarvis-codex-launcher@.service",
+}
+inputs_block = preflight[
+    preflight.index("Resolve the exact shared Codex desired inputs") :
+    preflight.index("Resolve the coupled shared Codex desired identity")
+]
+for name in inputs:
+    assert inputs_block.count(f"assets/codex/{name}") == 1, name
+assert "/var/lib/dev-server/active/codex.runtime.sha256" in preflight
+assert "DEV_SERVER_CODEX_ACTION_DRAIN_RESTART" in preflight
+assert "devbox_codex_runtime_restart_authorized | bool" in preflight
+assert preflight.index("Validate the desired shared Codex declaration") < preflight.index(
+    "Require explicit drain authorization"
+)
+assert preflight.index("Require explicit drain authorization") < preflight.index("state: stopped")
+assert preflight.index("Invalidate the prior shared Codex activation proof") > preflight.index(
+    "state: stopped"
+)
+assert preflight.index("jarvis-codex-launcher.socket") < preflight.index(
+    "codex-shared@personal.service"
+)
+
+for unit in (
+    "codex-shared@personal.service",
+    "codex-shared@work.service",
+    "codex-shared@work2.service",
+    "jarvis-codex-launcher.socket",
+):
+    assert unit in preflight, unit
+    assert unit in activate, unit
+assert "daemon_reload: true" in activate
+assert "when: codex_runtime_needs_activation" in activate
+verify = activate.index("Verify every shared Codex consumer is active")
+record = activate.index("Record the active shared Codex identity")
+assert verify < record
+assert 'mode: "0600"' in activate
+PY
+    fail 'shared Codex activation contract is incomplete'
+  tests_run=$((tests_run + 1))
+}
+
 test_cli_contract
 test_existing_server_never_bootstraps
 test_ansible_failure_has_one_terminal_summary
+test_codex_restart_requires_an_explicit_cli_action
 test_skid_action_is_exact_and_visible
 test_existing_tailscale_ssh_requires_manual_cutover
 test_existing_drift_only_closes_ingress
@@ -1106,5 +1218,6 @@ test_rootless_docker_repair_lifecycle
 test_static_boundary_contract
 test_remote_managed_state_preflight_contract
 test_ufw_ingress_boundary_contract
+test_codex_runtime_activation_contract
 
 printf 'devbox: %d contract groups passed\n' "$tests_run"

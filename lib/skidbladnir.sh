@@ -190,8 +190,9 @@ if (not isinstance(profiles, list) or len(profiles) != 5 or
         [profile.get("key") for profile in profiles if isinstance(profile, dict)] != keys or
         [profile.get("provider") for profile in profiles if isinstance(profile, dict)] != providers):
     raise SystemExit(1)
+codex_backend = home + "/.local/bin/codex"
 commands = {
-    "personal": home + "/.local/bin/codex",
+    "personal": home + ("/bin/codex" if home == "/home/niels" else "/.local/bin/codex"),
     "work": home + "/bin/codex-work",
     "work2": home + "/bin/codex-work2",
     "claude-personal": home + "/.local/bin/claude",
@@ -208,7 +209,7 @@ for profile in profiles:
     expected_arguments = [] if provider == "Codex" else [
         "--plugin-dir", home + "/.local/share/skidbladnir/claude-agent-identity"]
     expected_signatures = ([{"executableBase": "codex"}, {
-        "executableBase": "node", "argument1": commands["personal"]
+        "executableBase": "node", "argument1": codex_backend
     }] if provider == "Codex" else [{"argument0": commands["claude-personal"]}])
     environment = profile["environment"]
     if (profile["arguments"] != expected_arguments or

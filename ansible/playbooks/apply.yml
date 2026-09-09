@@ -17,6 +17,9 @@
 
     - name: Validate all existing remote managed state before mutation
       ansible.builtin.import_tasks: tasks/remote-preflight.yml
+
+    - name: Admit or drain the coupled shared Codex runtime before mutation
+      ansible.builtin.import_tasks: tasks/codex-runtime-preflight.yml
   roles:
     - role: base
     - role: jarvis_host
@@ -24,9 +27,13 @@
     - role: security
     - role: shell
     - role: ai_tools
+    - role: codex_shared
     - role: skidbladnir
     - role: rootless_docker
   post_tasks:
+    - name: Activate and verify the coupled shared Codex runtime
+      ansible.builtin.import_tasks: tasks/codex-runtime-activate.yml
+
     - name: Activate notified consumers before verification
       ansible.builtin.meta: flush_handlers
 

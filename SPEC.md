@@ -132,6 +132,7 @@ Closed registry:
 | `skid.unit` | daemon-reload/bootstrap, then activate gateway |
 | `skid.runtime` | start or restart gateway once |
 | `skid.integration` | none; future agents |
+| `codex.runtime` | activate all three shared services only after exact drain authorization; otherwise defer the coupled change |
 | `tailscale.serve` | reconcile Serve mapping; never restart Tailscale |
 | `system.reboot` | report; never reboot |
 
@@ -177,15 +178,28 @@ Trade-offs: rolling OS repositories favor freshness over byte-for-byte replay of
   path topology, bounded strict JSON with unique keys, and object shape before
   extension or file mutation; rewrite only `remote.SSH.remotePlatform` through
   same-directory atomic promotion.
-- Plain `codex` and `claude` are personal upstream commands. Retain only explicit `codex-work`, `codex-work2`, and `claude-work` wrappers.
+- Plain `claude` is the personal upstream command. On Devbox, `codex`,
+  `codex-work`, and `codex-work2` are closed shared-service clients; on MacBook
+  and Arch, plain Codex and the two explicit work wrappers retain their current
+  upstream behavior. `claude-work` remains unchanged.
 - The wrapper dispatches only by its fixed basename; remove cwd/`-C` inference and `*-personal` aliases. Retain isolation tests.
 - AI installation MUST NOT depend on a Skíðblaðnir Claude plugin.
 - Use native/standard lock formats where they preserve the desired update contract. Pin Git plugin commits and Ansible. `curl | sh`, `curl | bash`, executable `@latest`, and mutable branch execution are forbidden.
-- Install Codex once per host at the npm user-global prefix `$HOME/.local`; plain and account-specific commands MUST execute that one binary. Apply resolves npm's stable `latest` tag, installs its explicit resolved version only when missing or behind, and MUST NOT retain Codex in the private locked package tree.
+- Install Codex once per host at the npm user-global prefix `$HOME/.local`; plain
+  and account-specific commands MUST execute that one raw backend binary. On
+  Devbox, install exactly `@openai/codex@0.153.4` with npm integrity
+  `sha512-wbHDmit7S/YvBGVX1DQmk13xtWblZ2cApeJ/pB7xDZ10Cna+DZc5ij7f0F4OxdsXN4FW1oLT48OpogUI1+8Y2w==`
+  and shasum `7f0283a793e438733df5dccbe5d79ffd778ab0e8`; do not resolve `latest`.
+  MacBook and Arch retain stable-latest reconciliation. The logical Devbox
+  personal launcher in `~/bin` precedes the raw backend in `~/.local/bin`.
 - Install Claude once per host with Anthropic's native installer at `$HOME/.local/bin/claude`; plain and account-specific commands MUST execute that one binary. A valid installation is an executable versioned file under `$HOME/.local/share/claude/versions/` published by the canonical symlink. Apply runs the native `install latest` reconciliation under the normal host HOME, independent of profile configuration, validates topology and version before and after it, and MUST fail rather than overwrite a conflicting canonical command. Missing installs may bootstrap only from `https://claude.ai/install.sh`, downloaded over constrained TLS to a bounded temporary regular file and syntax-checked before execution. Running Claude processes MUST NOT be restarted.
 - Delete the private AI npm manifest, lock, package tree, and PATH entry. Retain Node/npm only as the Codex installation mechanism.
 
-Trade-off: Codex and Claude favor immediate upstream stable-channel access over byte reproducibility, so hosts can briefly differ when they apply on different sides of a release. Initial Claude bootstrap trusts Anthropic's mutable HTTPS installer; subsequent selection and verification remain vendor-owned. This removes a duplicate package tree and prevents profile version drift.
+Trade-off: Codex on MacBook/Arch and Claude retain immediate upstream
+stable-channel access. Devbox instead pins one qualified experimental Codex
+server/TUI version across all accounts and clients, trading freshness for a
+single protocol boundary. Initial Claude bootstrap trusts Anthropic's mutable
+HTTPS installer; subsequent selection and verification remain vendor-owned.
 
 ### 8.4 Devbox provisioning and configuration
 
@@ -224,6 +238,34 @@ Additional rules:
   durable state, and configuration at `/opt/jarvis`, `/var/lib/jarvis`, and
   `/etc/jarvis`. The exact pgvector identity must be observable and must not be
   silently accepted when it differs from Jarvis's qualified release.
+- Provide exactly three supervised Codex App Servers as `niels`, one for each
+  existing Personal, Work, and Work2 account home, bound only to Unix sockets.
+  A dedicated group grants intended local clients socket access; it grants no
+  `niels` group membership or Jarvis application-state access. Codex 0.153.4
+  creates its socket parent/socket as `0700`/`0600`, so a bounded post-bind step
+  verifies ownership and normalizes only the exact parent/socket to `0750`/`0660`.
+- Provide one socket-activated terminal helper as `niels`. Before reading a
+  request it authenticates the exact Jarvis peer UID, then accepts one closed
+  tagged UTF-8 JSON line of at most 65,536 bytes. `ResolveCwd` contains only
+  profile and lexical cwd and returns one existing canonical permitted path.
+  `LaunchTerminal` contains only profile, full native thread handle, that path,
+  and valid tmux name; it revalidates the path. The helper selects the
+  endpoint/binary/account itself, clears ambient tmux variables, creates and
+  immediately observes one ordinary default-server tmux session, and returns a
+  content-free tagged result. It accepts no prompt, environment, executable,
+  socket, account home, or arbitrary argv.
+- The root-owned Codex profile document is the single source for exact account
+  homes, endpoints, permitted work roots, empty cognition parent, users,
+  binaries, tmux path, version, and package digests. Consumer views are derived,
+  not independently authored. It contains no credential and is root-owned mode
+  `0644` beneath a mode-`0755` directory so existing development shells need no
+  supplementary-group refresh. Account homes and runtime sockets remain private
+  or group-restricted.
+- Couple backend binary, profile, launcher, helper, and unit identity under
+  `codex.runtime`. If an active service differs, ordinary apply reports ACTION
+  and exits 2 before replacing any coupled input. Only an explicitly authorized
+  drain/restart activates the new identity; successful activation of all three
+  services records the active digest. Never kill tmux sessions or native history.
 - Install pgvector from PostgreSQL's official Apt repository at the exact
   Jarvis-qualified package version and hold it. A version change is a reviewed
   dev-server lock update followed by Jarvis qualification, never an unattended
@@ -282,7 +324,12 @@ Rules:
   generation needed for rollback after an interrupted overwrite.
 - Start if inactive. Restart once if desired runtime/unit identity differs from active identity. After authenticated health reports the desired version, record active identity.
 - On failed activation, atomically restore the prior pointer and restart/verify it. On a failed first installation, leave the service inactive and the candidate unreferenced. Keep one prior generation; remove older exact owned generations only after success.
-- Install hooks, notifier, and Claude integration independently with `skid.integration`; they MUST NOT restart the gateway. The explicit Codex work wrappers inject the notifier through Codex's supported per-invocation configuration override. Personal Codex notification remains user-owned because Codex exposes one notifier command.
+- Install hooks, notifier, and Claude integration independently with
+  `skid.integration`; they MUST NOT restart the gateway. On MacBook and Arch,
+  the explicit Codex work wrappers inject the notifier through Codex's supported
+  per-invocation configuration override. Devbox shared-service clients do not
+  add a second notifier policy. Personal notification remains user-owned because
+  Codex exposes one notifier command.
 - Configure only private `/v1` Tailscale Serve through the supported CLI. No Funnel, private LocalAPI credentials, ETag/CAS client, or hostname surgery. A stale mapping produces one exact recovery `ACTION` and exit `2`.
 - Default host configs MUST NOT contain `--dangerously-bypass-approvals-and-sandbox`, Claude automatic permission mode, or an equivalent bypass.
 

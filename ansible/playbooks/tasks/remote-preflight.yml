@@ -20,10 +20,14 @@
         if not os.path.lexists(path):
             return None
         value = os.lstat(path)
-        predicates = {"directory": stat.S_ISDIR, "file": stat.S_ISREG, "symlink": stat.S_ISLNK}
+        predicates = {
+            "directory": stat.S_ISDIR, "file": stat.S_ISREG,
+            "socket": stat.S_ISSOCK, "symlink": stat.S_ISLNK,
+        }
         if not predicates[kind](value.st_mode):
             reject(f"protected path is not a {kind}: {path}")
-        if (stat.S_IMODE(value.st_mode) != mode or value.st_uid != uid or
+        modes = mode if isinstance(mode, tuple) else (mode,)
+        if (stat.S_IMODE(value.st_mode) not in modes or value.st_uid != uid or
                 value.st_gid != gid or (single_link and value.st_nlink != 1)):
             reject(f"protected path metadata is invalid: {path}")
         return value
@@ -79,6 +83,8 @@
     root_directories = [
         ("/var/lib/dev-server", 0o700),
         ("/var/lib/dev-server/active", 0o700),
+        ("/etc/codex-shared", 0o755),
+        ("/usr/local/libexec", 0o755),
     ]
     user_directories = [
         (home, 0o750), (home / ".local", 0o755), (home / ".local/bin", 0o755),
@@ -86,6 +92,8 @@
         (plugin_root, 0o755), (share, 0o700), (releases, 0o700), (units, 0o700),
         (home / ".local/state", 0o755), (home / ".local/state/dev-server", 0o700),
         (active, 0o700), (home / ".local/state/skidbladnir", 0o700),
+        (home / ".codex", 0o700), (home / ".codex-work", 0o700),
+        (home / ".codex-work2", 0o700),
         (home / ".config", 0o755), (config, 0o700),
         (home / ".config/docker", 0o755), (home / ".config/systemd", 0o755),
         (systemd_user, 0o755), (systemd_user / "default.target.wants", 0o755),
@@ -101,6 +109,7 @@
         pathlib.Path("/opt/jarvis"), pathlib.Path("/opt/jarvis/releases"),
         pathlib.Path("/var/lib/jarvis"), pathlib.Path("/etc/jarvis"),
     ]
+    jarvis_account = None
     try:
         jarvis_account = pwd.getpwnam("jarvis")
         jarvis_group = grp.getgrgid(jarvis_account.pw_gid)
@@ -127,6 +136,15 @@
     root_files = [
         ("/etc/ssh/sshd_config.d/99-devbox.conf", 0o644),
         ("/var/lib/dev-server/active/ssh.sha256", 0o600),
+        ("/var/lib/dev-server/active/codex.runtime.sha256", 0o600),
+        ("/etc/codex-shared/profiles.json", 0o644),
+        ("/usr/local/libexec/codex-shared", 0o755),
+        ("/etc/systemd/system/codex-shared@personal.service", 0o644),
+        ("/etc/systemd/system/codex-shared@work.service", 0o644),
+        ("/etc/systemd/system/codex-shared@work2.service", 0o644),
+        ("/etc/systemd/system/jarvis-codex-launcher.socket", 0o644),
+        ("/etc/systemd/system/jarvis-codex-launcher@.service", 0o644),
+        ("/etc/tmpfiles.d/dev-server-codex.conf", 0o644),
     ]
     user_files = [
         (active / "docker.sha256", 0o600), (active / "skid.runtime.sha256", 0o600),
@@ -143,6 +161,8 @@
         (home / ".config/devbox-docker-env", 0o644),
         (home / ".ssh/id_ed25519_github", 0o600),
         (home / ".ssh/id_ed25519_github.pub", 0o644), (home / ".ssh/config", 0o600),
+        (home / "bin/codex", 0o755), (home / "bin/codex-work", 0o755),
+        (home / "bin/codex-work2", 0o755),
     ]
     for path, mode in root_files:
         admit(path, "file", mode, 0, 0, single_link=True)
@@ -151,6 +171,10 @@
 
     digest = rb"[0-9a-f]{64}\n"
     exact_content("/var/lib/dev-server/active/ssh.sha256", digest, "SSH journal")
+    exact_content(
+        "/var/lib/dev-server/active/codex.runtime.sha256", digest,
+        "shared Codex journal",
+    )
     exact_content(active / "docker.sha256", digest, "Docker journal")
     runtime_active = exact_content(active / "skid.runtime.sha256", digest, "Skid runtime journal")
     unit_active = exact_content(active / "skid.unit.sha256", digest, "Skid unit journal")
@@ -159,6 +183,47 @@
         config / "bearer", rb"[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]\n",
         "bearer credential",
     )
+
+    codex_paths = [
+        pathlib.Path("/etc/codex-shared"),
+        pathlib.Path("/usr/local/libexec/codex-shared"),
+        pathlib.Path("/var/lib/dev-server/active/codex.runtime.sha256"),
+        pathlib.Path("/run/jarvis-codex-cognition"),
+        pathlib.Path("/run/jarvis-codex-launcher"),
+        pathlib.Path("/run/codex-shared-personal"),
+        pathlib.Path("/run/codex-shared-work"),
+        pathlib.Path("/run/codex-shared-work2"),
+    ]
+    try:
+        codex_group = grp.getgrnam("codex-clients")
+    except KeyError:
+        if any(os.path.lexists(path) for path in codex_paths):
+            reject("shared Codex paths exist without the managed client group")
+    else:
+        effective_members = set(codex_group.gr_mem) | {
+            account.pw_name
+            for account in pwd.getpwall()
+            if account.pw_gid == codex_group.gr_gid
+        }
+        unexpected = effective_members - {"jarvis", user_name}
+        if unexpected:
+            reject("shared Codex client group contains an unauthorized member")
+        admit(
+            "/run/jarvis-codex-cognition", "directory", 0o2750,
+            jarvis_account.pw_uid, codex_group.gr_gid,
+        )
+        admit("/run/jarvis-codex-launcher", "directory", 0o750, 0, codex_group.gr_gid)
+        admit(
+            "/run/jarvis-codex-launcher/socket", "socket", 0o660,
+            user_uid, codex_group.gr_gid,
+        )
+        for profile_name in ("personal", "work", "work2"):
+            runtime = pathlib.Path(f"/run/codex-shared-{profile_name}")
+            admit(runtime, "directory", (0o700, 0o750), user_uid, codex_group.gr_gid)
+            admit(
+                runtime / "app-server.sock", "socket", (0o600, 0o660),
+                user_uid, codex_group.gr_gid,
+            )
 
     generation = re.compile(
         r"v(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})\."

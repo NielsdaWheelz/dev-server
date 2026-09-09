@@ -10,3 +10,4 @@ devbox_postgresql_major: "16"
 devbox_pgvector_package_version: "0.8.6-1.pgdg24.04+1"
 jarvis_service_user: jarvis
 jarvis_service_group: jarvis
+devbox_codex_runtime_restart_authorized: false

@@ -178,7 +178,7 @@ _dev_server_validate_change() {
     die "invalid change identifier: $change_id"
 
   case "$change_id" in
-  tmux.config | shell.config | desktop.session | ssh.config | docker.config | skid.unit | skid.runtime | skid.integration | tailscale.serve | system.reboot) ;;
+  tmux.config | shell.config | desktop.session | ssh.config | docker.config | skid.unit | skid.runtime | skid.integration | codex.runtime | tailscale.serve | system.reboot) ;;
   *) die "unregistered change identifier: $change_id" ;;
   esac
 }

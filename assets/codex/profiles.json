@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "version": "0.153.4",
+  "package": {
+    "name": "@openai/codex",
+    "integrity": "sha512-wbHDmit7S/YvBGVX1DQmk13xtWblZ2cApeJ/pB7xDZ10Cna+DZc5ij7f0F4OxdsXN4FW1oLT48OpogUI1+8Y2w==",
+    "shasum": "7f0283a793e438733df5dccbe5d79ffd778ab0e8"
+  },
+  "development_user": "niels",
+  "jarvis_user": "jarvis",
+  "client_group": "codex-clients",
+  "binary": "/home/niels/.local/bin/codex",
+  "tmux": "/usr/bin/tmux",
+  "cognition_cwd_parent": "/run/jarvis-codex-cognition",
+  "launcher_socket": "/run/jarvis-codex-launcher/socket",
+  "profiles": {
+    "personal": {
+      "account_home": "/home/niels/.codex",
+      "endpoint": "unix:///run/codex-shared-personal/app-server.sock",
+      "work_roots": [
+        "/home/niels/src/personal",
+        "/home/niels/src/work"
+      ]
+    },
+    "work": {
+      "account_home": "/home/niels/.codex-work",
+      "endpoint": "unix:///run/codex-shared-work/app-server.sock",
+      "work_roots": [
+        "/home/niels/src/personal",
+        "/home/niels/src/work"
+      ]
+    },
+    "work2": {
+      "account_home": "/home/niels/.codex-work2",
+      "endpoint": "unix:///run/codex-shared-work2/app-server.sock",
+      "work_roots": [
+        "/home/niels/src/personal",
+        "/home/niels/src/work"
+      ]
+    }
+  }
+}
