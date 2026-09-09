@@ -201,10 +201,33 @@ class HostBoundary(unittest.TestCase):
 
     def test_manual_rejects_non_closed_options_without_invoking_provider(self):
         for args in (("exec",), ("--remote", "unix:///wrong"), ("resume", "short"),
-                     ("resume", HANDLE, "prompt"), ("--config", "elsewhere")):
+                     ("resume", HANDLE, "prompt"), ("--config", "elsewhere"),
+                     ("--yolo", "--yolo"),
+                     ("--yolo", "--dangerously-bypass-approvals-and-sandbox"),
+                     ("--yolo", "--sandbox", "workspace-write"),
+                     ("--yolo", "--ask-for-approval", "never"),
+                     ("resume", HANDLE, "--yolo", "extra")):
             with self.subTest(args=args):
-                self.assertNotEqual(self.run_host("tui", "codex", *args).returncode, 0)
+                result = self.run_host("tui", "codex", *args)
+                self.assertEqual(result.returncode, 64)
+                self.assertIn(b"Usage: {codex|codex-work|codex-work2}", result.stderr)
+                self.assertIn(b"[resume UUID]", result.stderr)
+                self.assertNotIn(HANDLE.encode(), result.stderr)
+                self.assertNotIn(b"elsewhere", result.stderr)
         self.assertEqual(self.calls("codex"), [])
+
+    def test_manual_yolo_selects_native_bypass_without_conflicting_defaults(self):
+        for flag in ("--yolo", "--dangerously-bypass-approvals-and-sandbox"):
+            for command in host.COMMANDS:
+                for rest in ((flag,), (flag, "resume", HANDLE), ("resume", flag, HANDLE),
+                             ("resume", HANDLE, flag)):
+                    with self.subTest(command=command, arguments=rest):
+                        result = self.run_host("tui", command, *rest)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        suffix = ["resume", HANDLE] if "resume" in rest else ["--cd", str(self.work)]
+                        row = self.config["profiles"][host.COMMANDS[command]]
+                        self.assertEqual(self.calls("codex")[-1]["argv"],
+                                         ["--remote", row["endpoint"], "--yolo", *suffix])
 
     def test_devbox_path_selects_logical_launcher_even_with_inherited_duplicates(self):
         logical = self.root / "bin"
@@ -245,7 +268,10 @@ class HostBoundary(unittest.TestCase):
         self.assertEqual(argv[:9], ["new-session", "-d", "-P", "-F", "#{session_id}",
                                    "-s", "review-13", "-c", str(self.work)])
         self.assertEqual(argv[9:11], ["/usr/bin/env", "-i"])
-        self.assertEqual(argv[-2:], ["resume", HANDLE])
+        self.assertEqual(argv[-9:], [self.config["binary"], "--remote",
+                                    self.config["profiles"]["personal"]["endpoint"],
+                                    "--sandbox", "workspace-write", "--ask-for-approval", "on-request",
+                                    "resume", HANDLE])
         self.assertNotIn("-L", argv)
         self.assertNotIn("-S", argv)
         self.assertNotIn("TMUX", create["env"])
@@ -272,7 +298,7 @@ class HostBoundary(unittest.TestCase):
         untagged = self.request()
         del untagged["kind"]
         invalid = [untagged, self.request(kind="ResolveCwd"), self.request(kind="unknown"),
-                   self.request(prompt="forbidden"), self.request(profile="other"),
+                   self.request(prompt="forbidden"), self.request(yolo=True), self.request(profile="other"),
                    self.request(thread_handle="last"), self.request(cwd=str(self.root)),
                    self.request(cwd=str(escape)), self.request(tmux_name="bad:name"),
                    self.request(tmux_name="a" * 65), self.request(cwd="/" + "a" * 4096)]

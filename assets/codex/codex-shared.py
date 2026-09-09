@@ -169,9 +169,10 @@ def verify_binary(config, row):
         invalid()
 
 
-def tui_argv(config, row, handle=None):
-    argv = [config["binary"], "--remote", row["endpoint"],
-            "--sandbox", "workspace-write", "--ask-for-approval", "on-request"]
+def tui_argv(config, row, handle=None, *, yolo=False):
+    argv = [config["binary"], "--remote", row["endpoint"]]
+    argv += (["--yolo"] if yolo else
+             ["--sandbox", "workspace-write", "--ask-for-approval", "on-request"])
     if handle is not None:
         if not isinstance(handle, str) or not THREAD.fullmatch(handle):
             invalid()
@@ -352,14 +353,20 @@ def main():
         argv = [config["binary"], "-c", 'sandbox_mode="workspace-write"',
                 "-c", 'approval_policy="on-request"', "app-server", "--listen", row["endpoint"]]
         os.execve(config["binary"], argv, environment(config, row))
-    if args.mode == "tui" and args.arguments:
-        command, *rest = args.arguments
-        if command not in COMMANDS or (rest and (len(rest) != 2 or rest[0] != "resume")):
-            invalid()
-        row = profile(config, COMMANDS[command])
+    if args.mode == "tui":
+        manual = args.arguments
+        rest = [value for value in manual[1:]
+                if value not in ("--yolo", "--dangerously-bypass-approvals-and-sandbox")]
+        yolo_count = len(manual[1:]) - len(rest)
+        if (not manual or manual[0] not in COMMANDS or yolo_count > 1
+                or (rest and (len(rest) != 2 or rest[0] != "resume" or not THREAD.fullmatch(rest[1])))):
+            parser.exit(64, "ERROR  unsupported shared Codex arguments\n"
+                        "Usage: {codex|codex-work|codex-work2} "
+                        "[--yolo|--dangerously-bypass-approvals-and-sandbox] [resume UUID]\n")
+        row = profile(config, COMMANDS[manual[0]])
         if args.host == "devbox":
             permitted_cwd(row, os.getcwd())
-        argv = tui_argv(config, row, rest[1] if rest else None)
+        argv = tui_argv(config, row, rest[1] if rest else None, yolo=bool(yolo_count))
         verify_binary(config, row)
         env = environment(config, row)
         for key in ("TERM", "COLORTERM", "TERM_PROGRAM", "TERMINFO", "TERMINFO_DIRS"):
