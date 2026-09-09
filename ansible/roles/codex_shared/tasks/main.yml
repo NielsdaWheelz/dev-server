@@ -47,6 +47,21 @@
     group: root
     mode: "0755"
 
+- name: Install native discovery links to the canonical shared endpoints
+  ansible.builtin.command:
+    argv:
+      - /usr/local/libexec/codex-shared
+      - install-discovery
+  become_user: "{{ codex_shared_config.development_user }}"
+  register: codex_discovery_install
+  changed_when: codex_discovery_install.stdout | length > 0
+  failed_when: codex_discovery_install.rc not in [0, 2]
+
+- name: Require native discovery conflicts to be resolved without replacement
+  ansible.builtin.fail:
+    msg: DEV_SERVER_CODEX_ACTION_NATIVE_DISCOVERY
+  when: codex_discovery_install.rc == 2
+
 - name: Install the three exact account service units
   ansible.builtin.template:
     src: "{{ playbook_dir }}/../../assets/codex/codex-shared@.service"

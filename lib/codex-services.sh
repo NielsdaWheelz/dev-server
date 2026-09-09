@@ -87,6 +87,8 @@ codex_services_preflight() {
   codex_services_stage="$(mktemp -d "${TMPDIR:-/tmp}/codex-services.XXXXXX")" || return 1
   cp "$(dev_server_assets_dir)/codex/profiles.json" "$codex_services_stage/profiles.json" || return 1
   cp "$(dev_server_assets_dir)/codex/codex-shared.py" "$codex_services_stage/codex-shared" || return 1
+  python3 "$codex_services_stage/codex-shared" \
+    --config "$codex_services_stage/profiles.json" --host "$host" check-discovery || return "$?"
   ai_codex_host launcher >"$codex_services_stage/codex-profile" || return 1
   python3 - "$host" "$(dev_server_home)" "$codex_services_stage" <<'PY' || return 1
 import pathlib
@@ -183,7 +185,14 @@ codex_services_install() {
 }
 
 codex_services_activate() {
-  local profile state enabled target rc
+  local profile state enabled target rc discovery
+  discovery="$(python3 "$(dev_server_home)/.local/libexec/codex-shared" \
+    --config "$(dev_server_home)/.config/codex-shared/profiles.json" \
+    --host "$codex_services_host" install-discovery)" || return "$?"
+  if [[ -n "$discovery" ]]; then
+    record_change codex.runtime
+    render_result CHANGED codex.runtime 'native discovery links installed'
+  fi
   if [[ "$codex_services_host" == arch ]] && ((codex_services_changed)); then
     systemctl --user daemon-reload || return 1
   fi

@@ -912,6 +912,13 @@ run_ansible_apply() {
   rc=$?
   set -e
   if ((rc != 0)); then
+    if ((rc == 2)) && grep -Fq DEV_SERVER_CODEX_ACTION_NATIVE_DISCOVERY "$ansible_output"; then
+      rm -f -- "$ansible_output"
+      ansible_output=''
+      render_result ACTION codex.runtime \
+        'resolve the conflicting native Codex discovery entry, then rerun ./devbox apply'
+      return 2
+    fi
     if ((rc == 2)) && grep -Fq DEV_SERVER_CODEX_ACTION_DRAIN_RESTART "$ansible_output"; then
       rm -f -- "$ansible_output"
       ansible_output=''

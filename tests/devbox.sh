@@ -289,6 +289,10 @@ if [[ "$FAKE_SCENARIO" == codex-action && "$*" != *' --syntax-check '* &&
   printf '%s\n' 'DEV_SERVER_CODEX_ACTION_DRAIN_RESTART'
   exit 2
 fi
+if [[ "$FAKE_SCENARIO" == codex-discovery && "$*" != *' --syntax-check '* ]]; then
+  printf '%s\n' 'DEV_SERVER_CODEX_ACTION_NATIVE_DISCOVERY'
+  exit 2
+fi
 printf '%s\n' 'PLAY RECAP'
 printf '%s\n' 'devbox : ok=24 changed=0 unreachable=0 failed=0 skipped=2 rescued=0 ignored=0'
 EOF
@@ -336,7 +340,7 @@ make_case() {
   : >"$case_dir/calls"
   make_fake_commands "$case_dir/bin"
 
-  if [[ "$scenario" == existing || "$scenario" == codex-action ]]; then
+  if [[ "$scenario" == existing || "$scenario" == codex-action || "$scenario" == codex-discovery ]]; then
     : >"$case_dir/state/server"
     : >"$case_dir/state/firewall"
     : >"$case_dir/state/attached"
@@ -494,6 +498,23 @@ test_codex_restart_requires_an_explicit_cli_action() {
   assert_contains "$case_dir/calls" \
     '"devbox_codex_runtime_restart_authorized":true' \
     'explicit shared Codex restart authorization forwarding'
+  tests_run=$((tests_run + 1))
+}
+
+test_native_codex_discovery_conflict_requires_its_own_action() {
+  local case_dir output rc
+  case_dir="$(make_case codex-discovery codex-discovery)"
+  output="$case_dir/output"
+  set +e
+  run_apply "$case_dir" codex-discovery "$output" --restart-codex
+  rc=$?
+  set -e
+  assert_eq 2 "$rc" 'native Codex discovery conflict exit'
+  assert_contains "$output" \
+    'ACTION  codex.runtime: resolve the conflicting native Codex discovery entry, then rerun ./devbox apply' \
+    'native Codex discovery conflict action'
+  assert_not_contains "$output" 'ERROR  Ubuntu state' 'discovery conflict is an operator action'
+  assert_not_contains "$output" 'to drain and restart' 'restart authorization does not resolve discovery conflicts'
   tests_run=$((tests_run + 1))
 }
 
@@ -1131,11 +1152,12 @@ test_codex_runtime_activation_contract() {
     "$repo_dir/ansible/group_vars/devbox.yml" \
     "$repo_dir/ansible/playbooks/apply.yml" \
     "$repo_dir/ansible/playbooks/tasks/codex-runtime-preflight.yml" \
-    "$repo_dir/ansible/playbooks/tasks/codex-runtime-activate.yml" <<'PY' ||
+    "$repo_dir/ansible/playbooks/tasks/codex-runtime-activate.yml" \
+    "$repo_dir/ansible/roles/codex_shared/tasks/main.yml" <<'PY' ||
 import pathlib
 import sys
 
-common_path, group_vars, apply_path, preflight_path, activate_path = map(
+common_path, group_vars, apply_path, preflight_path, activate_path, role_path = map(
     pathlib.Path, sys.argv[1:]
 )
 common = common_path.read_text()
@@ -1143,6 +1165,7 @@ group_text = group_vars.read_text()
 playbook = apply_path.read_text()
 preflight = preflight_path.read_text()
 activate = activate_path.read_text()
+role = role_path.read_text()
 
 assert "devbox_codex_runtime_restart_authorized: false" in group_text
 assert "codex.runtime" in common
@@ -1155,7 +1178,6 @@ assert playbook.index("role: codex_shared") < playbook.index(activate_import)
 inputs = {
     "profiles.json",
     "codex-shared.py",
-    "codex-profile",
     "codex-shared.tmpfiles",
     "codex-shared@.service",
     "jarvis-codex-launcher.socket",
@@ -1171,6 +1193,13 @@ assert inputs_block.count("assets/dotfiles/zshenv") == 1
 assert "/var/lib/dev-server/active/codex.runtime.sha256" in preflight
 assert "DEV_SERVER_CODEX_ACTION_DRAIN_RESTART" in preflight
 assert "devbox_codex_runtime_restart_authorized | bool" in preflight
+assert preflight.index("check-discovery") < preflight.index("Require explicit drain authorization")
+assert "codex_discovery_stage.path" in preflight
+assert "DEV_SERVER_CODEX_ACTION_NATIVE_DISCOVERY" in preflight
+assert preflight.index("always:") < preflight.index("Resolve the exact shared Codex desired inputs")
+assert "install-discovery" in role
+assert role.index("Install the closed shared Codex host boundary") < role.index("install-discovery")
+assert "become_user: \"{{ codex_shared_config.development_user }}\"" in role
 assert preflight.index("Validate the desired shared Codex declaration") < preflight.index(
     "Require explicit drain authorization"
 )
@@ -1205,6 +1234,7 @@ test_cli_contract
 test_existing_server_never_bootstraps
 test_ansible_failure_has_one_terminal_summary
 test_codex_restart_requires_an_explicit_cli_action
+test_native_codex_discovery_conflict_requires_its_own_action
 test_skid_action_is_exact_and_visible
 test_existing_tailscale_ssh_requires_manual_cutover
 test_existing_drift_only_closes_ingress

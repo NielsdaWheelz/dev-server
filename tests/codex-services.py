@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -154,6 +155,8 @@ codex_services_activate
                 if (self.manager / profile).exists()}
 
     def test_first_apply_starts_three_and_second_apply_is_quiescent(self):
+        for account in (".codex", ".codex-work", ".codex-work2"):
+            (self.home / account).rmdir()
         for host in ("macbook", "arch"):
             with self.subTest(host=host):
                 first = self.apply(host)
@@ -161,6 +164,14 @@ codex_services_activate
                 before = self.pids()
                 self.assertEqual(set(before), {"personal", "work", "work2"},
                                  "apply must start each account's shared server")
+                links = {}
+                for profile, account in (("personal", ".codex"), ("work", ".codex-work"),
+                                         ("work2", ".codex-work2")):
+                    discovery = self.home / account / "app-server-control/app-server-control.sock"
+                    self.assertTrue(discovery.is_symlink(), "native Codex discovery must use the shared server")
+                    self.assertEqual(os.readlink(discovery),
+                                     str(self.home / ".local/run/codex-shared" / profile / "app-server.sock"))
+                    links[discovery] = discovery.lstat().st_ino
                 calls = (self.manager / "calls").read_bytes()
                 marker = self.home / ".local/state/dev-server/active/codex.runtime.sha256"
                 marker_inode = marker.stat().st_ino
@@ -170,7 +181,48 @@ codex_services_activate
                 self.assertEqual((self.manager / "calls").read_bytes(), calls)
                 self.assertEqual(marker.stat().st_ino, marker_inode)
                 self.assertEqual(second.stdout, "")
+                self.assertEqual({path: path.lstat().st_ino for path in links}, links)
+                work_discovery = self.home / ".codex-work/app-server-control/app-server-control.sock"
+                work_discovery.unlink()
+                repaired = self.apply(host)
+                self.assertEqual(repaired.returncode, 0, repaired.stderr + repaired.stdout)
+                self.assertTrue(work_discovery.is_symlink())
+                self.assertEqual(self.pids(), before, "repairing a missing discovery link must not restart servers")
+                self.assertEqual((self.manager / "calls").read_bytes(), calls)
+                self.assertIn("CHANGED", repaired.stdout)
                 self.stop_children()
+
+    def test_foreign_native_discovery_blocks_before_authorized_drain_or_replacement(self):
+        first = self.apply("arch")
+        self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+        installed = self.home / ".local/libexec/codex-shared"
+        before = installed.read_bytes()
+        pids = self.pids()
+        calls = (self.manager / "calls").read_bytes()
+        marker = self.home / ".local/state/dev-server/active/codex.runtime.sha256"
+        marker_inode = marker.stat().st_ino
+        helper = self.assets / "codex/codex-shared.py"
+        helper.write_bytes(helper.read_bytes() + b"\n# Changed declared helper.\n")
+        discovery = self.home / ".codex-work2/app-server-control/app-server-control.sock"
+        discovery.unlink()
+        for kind in ("socket", "symlink", "file"):
+            with self.subTest(kind=kind), socket.socket(socket.AF_UNIX) as native:
+                if kind == "socket":
+                    native.bind(str(discovery))
+                elif kind == "symlink":
+                    discovery.symlink_to(self.home / "foreign.sock")
+                else:
+                    discovery.write_text("foreign native discovery")
+                inode = discovery.lstat().st_ino
+                refused = self.apply("arch", "1")
+                self.assertEqual(refused.returncode, 2, refused.stderr + refused.stdout)
+                self.assertIn("ACTION", refused.stderr + refused.stdout)
+                self.assertEqual(discovery.lstat().st_ino, inode)
+                self.assertEqual(installed.read_bytes(), before)
+                self.assertEqual(self.pids(), pids)
+                self.assertEqual((self.manager / "calls").read_bytes(), calls)
+                self.assertEqual(marker.stat().st_ino, marker_inode)
+                discovery.unlink()
 
     def test_changed_live_inputs_require_restart_before_any_replacement(self):
         first = self.apply("arch")

@@ -18,6 +18,62 @@
   run_once: true
   changed_when: false
 
+- name: Check desired native discovery before any coupled mutation
+  block:
+    - name: Stage the desired discovery check outside managed state
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: codex-discovery.
+      register: codex_discovery_stage
+      changed_when: false
+
+    - name: Permit the development principal to read the non-secret check inputs
+      ansible.builtin.file:
+        path: "{{ codex_discovery_stage.path }}"
+        owner: root
+        group: root
+        mode: "0755"
+      changed_when: false
+
+    - name: Copy the desired helper and declaration into the transient check
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../assets/codex/{{ item }}"
+        dest: "{{ codex_discovery_stage.path }}/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - codex-shared.py
+        - profiles.json
+      changed_when: false
+
+    - name: Check existing native discovery with the desired host boundary
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - "{{ codex_discovery_stage.path }}/codex-shared.py"
+          - --config
+          - "{{ codex_discovery_stage.path }}/profiles.json"
+          - --host
+          - devbox
+          - check-discovery
+      become_user: "{{ devbox_user }}"
+      register: codex_discovery_preflight
+      changed_when: false
+      failed_when: codex_discovery_preflight.rc not in [0, 2]
+
+    - name: Require native discovery conflicts to be resolved before any drain
+      ansible.builtin.fail:
+        msg: DEV_SERVER_CODEX_ACTION_NATIVE_DISCOVERY
+      when: codex_discovery_preflight.rc == 2
+  always:
+    - name: Remove the transient desired discovery check
+      ansible.builtin.file:
+        path: "{{ codex_discovery_stage.path }}"
+        state: absent
+      when: codex_discovery_stage.path is defined
+      changed_when: false
+
 - name: Resolve the exact shared Codex desired inputs
   ansible.builtin.set_fact:
     codex_runtime_desired_inputs:
@@ -29,10 +85,6 @@
         mode: "0755"
         sha256: >-
           {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/codex-shared.py', rstrip=false) | hash('sha256') }}
-      - path: codex-profile
-        mode: "0755"
-        sha256: >-
-          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/codex-profile', rstrip=false) | hash('sha256') }}
       - path: zshenv
         mode: "0644"
         sha256: >-
