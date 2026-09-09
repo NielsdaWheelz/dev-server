@@ -144,6 +144,15 @@ class HostBoundary(unittest.TestCase):
         self.assertEqual(self.calls(".local/bin/codex"), [])
         self.assertEqual(self.calls("tmux"), [])
 
+    def test_fresh_manual_thread_explicitly_uses_the_callers_working_directory(self):
+        self.prepare_workstation()
+        for machine in ("devbox", "macbook", "arch"):
+            with self.subTest(host=machine):
+                result = self.run_host("--host", machine, "tui", "codex")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                binary = "codex" if machine == "devbox" else ".local/bin/codex"
+                self.assertEqual(self.calls(binary)[-1]["argv"][-2:], ["--cd", str(self.work)])
+
     def test_workstation_launcher_runs_installed_helper_with_exact_host_and_basename(self):
         self.prepare_workstation()
         installed = self.root / ".local/libexec/codex-shared"

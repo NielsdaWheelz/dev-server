@@ -176,6 +176,9 @@ def tui_argv(config, row, handle=None):
         if not isinstance(handle, str) or not THREAD.fullmatch(handle):
             invalid()
         argv += ["resume", handle]
+    else:
+        # Explicit remote endpoints do not inherit the TUI process cwd.
+        argv += ["--cd", os.getcwd()]
     return argv
 
 
