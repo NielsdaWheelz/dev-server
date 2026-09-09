@@ -372,6 +372,7 @@ def main():
             for link, target in links:
                 if not link.parent.exists():
                     link.parent.mkdir(mode=0o700)
+                    link.parent.chmod(0o700)
                     changed = True
                 if not link.is_symlink():
                     link.symlink_to(target)
