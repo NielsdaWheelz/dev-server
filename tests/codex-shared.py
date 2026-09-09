@@ -30,6 +30,12 @@ args = sys.argv[1:]
 if path.name == "codex" and args == ["--version"]:
     print("codex-cli 0.153.4")
     raise SystemExit(0)
+if path.name == "codex" and args == ["--help"]:
+    print("native fixture help")
+    raise SystemExit(0)
+if path.name == "codex" and args == ["--unsupported"]:
+    print("native fixture argument error", file=sys.stderr)
+    raise SystemExit(23)
 with path.with_suffix(".calls").open("a") as stream:
     stream.write(json.dumps({"argv": args, "env": dict(os.environ), "cwd": os.getcwd()}) + "\\n")
 if path.name == "tmux":
@@ -104,130 +110,161 @@ class HostBoundary(unittest.TestCase):
         binary.chmod(0o755)
         (self.root / ".local/share/codex-shared/empty").mkdir(parents=True, mode=0o700)
 
-    def test_workstation_servers_and_clients_share_profiles_without_restricting_manual_cwd(self):
+    def test_servers_use_exact_accounts_without_overriding_account_policy(self):
         self.prepare_workstation()
-        for machine in ("macbook", "arch"):
-            for command, key in host.COMMANDS.items():
+        for machine in ("devbox", "macbook", "arch"):
+            for key, row in self.config["profiles"].items():
                 with self.subTest(host=machine, profile=key):
-                    endpoint = f"unix://{self.root}/.local/run/codex-shared/{key}/app-server.sock"
-                    result = self.run_host("--host", machine, "tui", command, "resume", HANDLE, cwd=self.root)
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    call = self.calls(".local/bin/codex")[-1]
-                    self.assertEqual(call["argv"], ["--remote", endpoint, "--sandbox", "workspace-write",
-                                                   "--ask-for-approval", "on-request", "resume", HANDLE])
-                    self.assertEqual(call["cwd"], str(self.root))
-                    self.assertEqual(call["env"]["HOME"], str(self.root))
-                    self.assertEqual(call["env"]["CODEX_HOME"], self.config["profiles"][key]["account_home"])
-                    self.assertEqual(call["env"]["TERM"], "xterm-256color")
-                    self.assertEqual(call["env"]["COLORTERM"], "truecolor")
-                    self.assertIn(str(self.root / ".local/share/mise/shims"), call["env"]["PATH"].split(":"))
-                    if machine == "macbook":
-                        self.assertIn("/opt/homebrew/bin", call["env"]["PATH"].split(":"))
+                    workstation = machine != "devbox"
+                    endpoint = (f"unix://{self.root}/.local/run/codex-shared/{key}/app-server.sock"
+                                if workstation else row["endpoint"])
                     result = self.run_host("--host", machine, "server", key)
                     self.assertEqual(result.returncode, 0, result.stderr)
-                    call = self.calls(".local/bin/codex")[-1]
-                    self.assertEqual(call["argv"][-3:], ["app-server", "--listen", endpoint])
-                    self.assertEqual(call["cwd"], str(self.root / ".local/share/codex-shared/empty"))
+                    call = self.calls(".local/bin/codex" if workstation else "codex")[-1]
+                    self.assertEqual(call["argv"], ["app-server", "--listen", endpoint])
+                    self.assertEqual(call["cwd"], str(self.root / ".local/share/codex-shared/empty")
+                                     if workstation else self.config["cognition_cwd_parent"])
+                    self.assertEqual(call["env"]["CODEX_HOME"], row["account_home"])
                     self.assertEqual(call["env"]["TERM"], "dumb")
                     self.assertNotIn("COLORTERM", call["env"])
-            for call in self.calls(".local/bin/codex"):
-                for key in ("TMUX", "TMUX_PANE", "TMUX_TMPDIR", "OPENAI_API_KEY", "JARVIS_SECRET_FIXTURE"):
-                    self.assertNotIn(key, call["env"])
+                    if machine == "macbook":
+                        self.assertIn("/opt/homebrew/bin", call["env"]["PATH"].split(":"))
+                    for field in ("TMUX", "TMUX_PANE", "TMUX_TMPDIR", "OPENAI_API_KEY", "JARVIS_SECRET_FIXTURE"):
+                        self.assertNotIn(field, call["env"])
 
-    def test_workstation_rejects_privileged_modes_and_open_provider_arguments_before_effects(self):
+    def test_workstation_rejects_jarvis_privileged_modes_before_effects(self):
         self.prepare_workstation()
         for machine in ("macbook", "arch"):
-            for arguments in (("terminal",), ("grant-socket", "personal"),
-                              ("tui", "codex", "exec"), ("tui", "codex", "resume", "last")):
+            for arguments in (("terminal",), ("grant-socket", "personal")):
                 with self.subTest(host=machine, arguments=arguments):
                     self.assertNotEqual(self.run_host("--host", machine, *arguments).returncode, 0)
         self.assertEqual(self.calls(".local/bin/codex"), [])
         self.assertEqual(self.calls("tmux"), [])
 
-    def test_fresh_manual_thread_explicitly_uses_the_callers_working_directory(self):
+    def test_human_launchers_preserve_native_arguments_environment_cwd_and_exit(self):
         self.prepare_workstation()
-        for machine in ("devbox", "macbook", "arch"):
-            with self.subTest(host=machine):
-                result = self.run_host("--host", machine, "tui", "codex")
-                self.assertEqual(result.returncode, 0, result.stderr)
-                binary = "codex" if machine == "devbox" else ".local/bin/codex"
-                self.assertEqual(self.calls(binary)[-1]["argv"][-2:], ["--cd", str(self.work)])
-
-    def test_workstation_launcher_runs_installed_helper_with_exact_host_and_basename(self):
-        self.prepare_workstation()
-        installed = self.root / ".local/libexec/codex-shared"
-        installed.parent.mkdir(parents=True)
-        installed.write_bytes(HOST.read_bytes())
-        configuration = self.root / ".config/codex-shared/profiles.json"
-        configuration.parent.mkdir(parents=True)
-        configuration.write_text(json.dumps(self.config))
+        quoted_account = self.root / "personal ' $() ;"
+        quoted_account.mkdir()
+        self.config["profiles"]["personal"]["account_home"] = str(quoted_account)
+        self.write_config()
         commands = self.root / "bin"
         commands.mkdir()
-        for machine, interpreter in (("macbook", "/opt/homebrew/bin/python3"), ("arch", "/usr/bin/python3")):
+        env = {"PATH": os.environ["PATH"], "HOME": str(self.root / "different-home"),
+               "CODEX_HOME": "overridden-by-account-selection", "TERM": "xterm-256color",
+               "TMUX": "synthetic-tmux", "TMUX_PANE": "%99", "COLORTERM": "truecolor",
+               "OPENAI_API_KEY": "synthetic", "USER_CONFIG_FIXTURE": "synthetic"}
+        for machine in ("devbox", "macbook", "arch"):
             result = self.run_host("--host", machine, "launcher")
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn(f"exec {interpreter} ".encode(), result.stdout)
-            self.assertIn(f"--host {machine} tui ".encode(), result.stdout)
+            binary = "codex" if machine == "devbox" else ".local/bin/codex"
             for command, profile in host.COMMANDS.items():
                 launcher = commands / command
                 launcher.write_bytes(result.stdout)
-                # Interpreter selection is asserted above; execution uses this
-                # test host's Python to exercise both real generated wrappers.
-                launcher.write_text(launcher.read_text().replace(interpreter, sys.executable))
-                child = subprocess.run(["bash", str(launcher), "resume", HANDLE], cwd=self.root,
-                                       env={**os.environ, "HOME": str(self.root)},
-                                       capture_output=True, timeout=15)
-                self.assertEqual(child.returncode, 0, child.stderr)
-                call = self.calls(".local/bin/codex")[-1]
-                self.assertEqual(call["argv"][1], f"unix://{self.root}/.local/run/codex-shared/{profile}/app-server.sock")
-                self.assertEqual(call["argv"][-2:], ["resume", HANDLE])
+                for arguments in ([], ["--yolo", "synthetic prompt ; $()"],
+                                  ["-c", 'model_reasoning_effort="high"', "resume", "--last"],
+                                  ["exec", "--json", "-"], ["login", "status"],
+                                  ["--remote", "unix:///synthetic", "fork", "--last"]):
+                    with self.subTest(host=machine, command=command, arguments=arguments):
+                        child = subprocess.run(["bash", str(launcher), *arguments], cwd=self.root,
+                                               env=env, capture_output=True, timeout=15)
+                        self.assertEqual(child.returncode, 0, child.stderr)
+                        call = self.calls(binary)[-1]
+                        self.assertEqual(call["argv"], arguments)
+                        self.assertEqual(call["cwd"], str(self.root))
+                        for key, value in env.items():
+                            self.assertEqual(call["env"][key], self.config["profiles"][profile]["account_home"]
+                                             if key == "CODEX_HOME" else value)
+                for arguments, status, stdout, stderr in (
+                        (["--help"], 0, b"native fixture help\n", b""),
+                        (["--unsupported"], 23, b"", b"native fixture argument error\n")):
+                    child = subprocess.run(["bash", str(launcher), *arguments], cwd=self.root,
+                                           env=env, capture_output=True, timeout=15)
+                    self.assertEqual((child.returncode, child.stdout, child.stderr), (status, stdout, stderr))
 
-    def test_manual_and_backend_select_exact_profile_and_clean_environment(self):
-        for command, key in host.COMMANDS.items():
-            result = self.run_host("tui", command, "resume", HANDLE)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            call = self.calls("codex")[-1]
-            row = self.config["profiles"][key]
-            self.assertEqual(call["argv"], ["--remote", row["endpoint"], "--sandbox", "workspace-write",
-                                            "--ask-for-approval", "on-request", "resume", HANDLE])
-            self.assertEqual(call["env"]["CODEX_HOME"], row["account_home"])
-            self.assertNotIn("TMUX", call["env"])
-            self.assertNotIn("JARVIS_SECRET_FIXTURE", call["env"])
-            result = self.run_host("server", key)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            call = self.calls("codex")[-1]
-            self.assertEqual(call["argv"][-3:], ["app-server", "--listen", row["endpoint"]])
-            self.assertEqual(call["cwd"], self.config["cognition_cwd_parent"])
+    def test_native_discovery_connects_to_exact_listener_and_is_quiescent(self):
+        links = []
+        Path(self.config["profiles"]["work"]["account_home"]).chmod(0o750)
+        Path(self.config["profiles"]["work2"]["account_home"]).chmod(0o2700)
+        accounts = {Path(row["account_home"]): Path(row["account_home"]).stat()
+                    for row in self.config["profiles"].values()}
+        result = self.run_host("check-discovery")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for row in self.config["profiles"].values():
+            self.assertFalse((Path(row["account_home"]) / "app-server-control").exists())
+        result = self.run_host("install-discovery")
+        self.assertEqual((result.returncode, result.stdout), (0, b"CHANGED codex.runtime\n"), result.stderr)
+        for row in self.config["profiles"].values():
+            link = Path(row["account_home"]) / "app-server-control/app-server-control.sock"
+            self.assertEqual(link.readlink(), Path(row["endpoint"][7:]))
+            self.assertEqual(stat.S_IMODE(link.parent.stat().st_mode), 0o700)
+            links.append((link, link.lstat().st_ino, link.parent.stat().st_mtime_ns))
+            with socket.socket(socket.AF_UNIX) as listener:
+                listener.bind(row["endpoint"][7:])
+                listener.listen(1)
+                with socket.socket(socket.AF_UNIX) as client:
+                    client.connect(str(link))
+                    connection, _ = listener.accept()
+                    with connection:
+                        client.sendall(b"synthetic")
+                        self.assertEqual(connection.recv(9), b"synthetic")
+        result = self.run_host("install-discovery")
+        self.assertEqual((result.returncode, result.stdout), (0, b""), result.stderr)
+        for link, inode, modified in links:
+            self.assertEqual((link.lstat().st_ino, link.parent.stat().st_mtime_ns), (inode, modified))
+        for account, original in accounts.items():
+            current = account.stat()
+            self.assertEqual((current.st_uid, current.st_gid, current.st_mode),
+                             (original.st_uid, original.st_gid, original.st_mode))
 
-    def test_manual_rejects_non_closed_options_without_invoking_provider(self):
-        for args in (("exec",), ("--remote", "unix:///wrong"), ("resume", "short"),
-                     ("resume", HANDLE, "prompt"), ("--config", "elsewhere"),
-                     ("--yolo", "--yolo"),
-                     ("--yolo", "--dangerously-bypass-approvals-and-sandbox"),
-                     ("--yolo", "--sandbox", "workspace-write"),
-                     ("--yolo", "--ask-for-approval", "never"),
-                     ("resume", HANDLE, "--yolo", "extra")):
-            with self.subTest(args=args):
-                result = self.run_host("tui", "codex", *args)
-                self.assertEqual(result.returncode, 64)
-                self.assertIn(b"Usage: {codex|codex-work|codex-work2}", result.stderr)
-                self.assertIn(b"[resume UUID]", result.stderr)
-                self.assertNotIn(HANDLE.encode(), result.stderr)
-                self.assertNotIn(b"elsewhere", result.stderr)
-        self.assertEqual(self.calls("codex"), [])
+    def test_discovery_checks_every_profile_before_creating_any_path(self):
+        row = self.config["profiles"]["work2"]
+        parent = Path(row["account_home"]) / "app-server-control"
+        parent.mkdir(mode=0o700)
+        conflict = parent / "app-server-control.sock"
+        for kind in ("file", "foreign-link", "socket"):
+            with self.subTest(kind=kind), socket.socket(socket.AF_UNIX) as listener:
+                if kind == "file":
+                    conflict.write_text("synthetic")
+                elif kind == "foreign-link":
+                    conflict.symlink_to(self.root / "absent.sock")
+                else:
+                    listener.bind(str(conflict))
+                try:
+                    identity = conflict.lstat().st_ino
+                    for mode in ("check-discovery", "install-discovery"):
+                        result = self.run_host(mode)
+                        self.assertEqual(result.returncode, 2, result.stderr)
+                        self.assertTrue(result.stderr.startswith(b"ACTION "), result.stderr)
+                        self.assertNotIn(str(self.root).encode(), result.stderr)
+                        self.assertEqual(conflict.lstat().st_ino, identity)
+                        for key in ("personal", "work"):
+                            self.assertFalse((Path(self.config["profiles"][key]["account_home"]) /
+                                              "app-server-control").exists())
+                finally:
+                    conflict.unlink()
 
-    def test_manual_yolo_selects_native_bypass_without_conflicting_defaults(self):
-        for flag in ("--yolo", "--dangerously-bypass-approvals-and-sandbox"):
-            for command in host.COMMANDS:
-                for rest in ((flag,), (flag, "resume", HANDLE), ("resume", flag, HANDLE),
-                             ("resume", HANDLE, flag)):
-                    with self.subTest(command=command, arguments=rest):
-                        result = self.run_host("tui", command, *rest)
-                        self.assertEqual(result.returncode, 0, result.stderr)
-                        suffix = ["resume", HANDLE] if "resume" in rest else ["--cd", str(self.work)]
-                        row = self.config["profiles"][host.COMMANDS[command]]
-                        self.assertEqual(self.calls("codex")[-1]["argv"],
-                                         ["--remote", row["endpoint"], "--yolo", *suffix])
+    def test_discovery_install_requires_existing_owned_accounts_and_private_parents(self):
+        missing = Path(self.config["profiles"]["work2"]["account_home"])
+        missing.rmdir()
+        result = self.run_host("check-discovery")
+        self.assertEqual((result.returncode, result.stdout), (0, b""), result.stderr)
+        self.assertEqual(self.run_host("install-discovery").returncode, 2)
+        missing.mkdir(mode=0o700)
+        parent = missing / "app-server-control"
+        parent.mkdir(mode=0o755)
+        self.assertEqual(self.run_host("check-discovery").returncode, 2)
+        self.assertEqual(self.run_host("install-discovery").returncode, 2)
+        self.assertEqual(stat.S_IMODE(parent.stat().st_mode), 0o755)
+        parent.rmdir()
+        parent.symlink_to(self.root, target_is_directory=True)
+        self.assertEqual(self.run_host("install-discovery").returncode, 2)
+        parent.unlink()
+        self.config["development_user"] = next(account.pw_name for account in pwd.getpwall()
+                                                if account.pw_uid != os.getuid())
+        self.write_config()
+        self.assertEqual(self.run_host("check-discovery").returncode, 2)
+        for row in self.config["profiles"].values():
+            self.assertFalse((Path(row["account_home"]) / "app-server-control").exists())
 
     def test_devbox_path_selects_logical_launcher_even_with_inherited_duplicates(self):
         logical = self.root / "bin"

@@ -11,6 +11,7 @@ from pathlib import Path
 import pwd
 import re
 import selectors
+import shlex
 import socket
 import stat
 import struct
@@ -169,20 +170,6 @@ def verify_binary(config, row):
         invalid()
 
 
-def tui_argv(config, row, handle=None, *, yolo=False):
-    argv = [config["binary"], "--remote", row["endpoint"]]
-    argv += (["--yolo"] if yolo else
-             ["--sandbox", "workspace-write", "--ask-for-approval", "on-request"])
-    if handle is not None:
-        if not isinstance(handle, str) or not THREAD.fullmatch(handle):
-            invalid()
-        argv += ["resume", handle]
-    else:
-        # Explicit remote endpoints do not inherit the TUI process cwd.
-        argv += ["--cd", os.getcwd()]
-    return argv
-
-
 def handle_request(config, request):
     try:
         if isinstance(request, dict) and request.get("kind") == "ResolveCwd":
@@ -197,7 +184,11 @@ def handle_request(config, request):
         if not isinstance(name, str) or not NAME.fullmatch(name):
             invalid()
         cwd = permitted_cwd(row, request["cwd"])
-        argv = tui_argv(config, row, request["thread_handle"])
+        handle = request["thread_handle"]
+        if not isinstance(handle, str) or not THREAD.fullmatch(handle):
+            invalid()
+        argv = [config["binary"], "--remote", row["endpoint"], "--sandbox", "workspace-write",
+                "--ask-for-approval", "on-request", "resume", handle]
         env = environment(config, row)
         env["TERM"] = "tmux-256color"
         verify_binary(config, row)
@@ -293,28 +284,59 @@ def verify_package(config, stage):
     print(target)
 
 
+def discovery_links(config, *, allow_missing_accounts):
+    links = []
+    try:
+        uid = pwd.getpwnam(config["development_user"]).pw_uid
+        if not allow_missing_accounts and os.geteuid() != uid:
+            invalid()
+        for key in ("personal", "work", "work2"):
+            row = profile(config, key)
+            account = Path(row["account_home"])
+            try:
+                metadata = account.lstat()
+            except FileNotFoundError:
+                if allow_missing_accounts:
+                    continue
+                raise
+            if not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != uid:
+                invalid()
+            parent = account / "app-server-control"
+            try:
+                metadata = parent.lstat()
+            except FileNotFoundError:
+                pass
+            else:
+                if (not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != uid
+                        or stat.S_IMODE(metadata.st_mode) != 0o700):
+                    invalid()
+            link = parent / "app-server-control.sock"
+            target = row["endpoint"][7:]
+            if link.is_symlink():
+                if os.readlink(link) != target:
+                    invalid()
+            elif link.exists():
+                invalid()
+            links.append((link, target))
+    except (OSError, ValueError, KeyError):
+        print("ACTION shared Codex discovery requires owned account directories and conflict-free private paths",
+              file=sys.stderr)
+        raise SystemExit(2) from None
+    return links
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=CONFIG)
     parser.add_argument("--host", choices=("devbox", "macbook", "arch"), default="devbox")
     parser.add_argument("mode", choices=("pin", "validate", "verify-package", "launcher",
-                                         "server", "grant-socket", "terminal", "tui"))
+                                         "server", "grant-socket", "terminal",
+                                         "check-discovery", "install-discovery"))
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     config = load_config(args.config)
     if args.host != "devbox" and args.mode in ("terminal", "grant-socket"):
         invalid()
-    if args.mode == "launcher" and not args.arguments:
-        if args.host == "devbox":
-            print('#!/usr/bin/env bash\nset -euo pipefail\n\n'
-                  'exec /usr/bin/python3 /usr/local/libexec/codex-shared tui "${0##*/}" "$@"')
-        else:
-            interpreter = "/opt/homebrew/bin/python3" if args.host == "macbook" else "/usr/bin/python3"
-            print('#!/usr/bin/env bash\nset -euo pipefail\n\n'
-                  f'exec {interpreter} "$HOME/.local/libexec/codex-shared" '
-                  '--config "$HOME/.config/codex-shared/profiles.json" '
-                  f'--host {args.host} tui "${{0##*/}}" "$@"')
-        return
     if args.mode in ("pin", "validate", "terminal"):
         if args.arguments:
             invalid()
@@ -336,6 +358,27 @@ def main():
                   "profiles": {key: {"account_home": f"{home}/{Path(row['account_home']).name}",
                                      "endpoint": f"unix://{home}/.local/run/codex-shared/{key}/app-server.sock"}
                                for key, row in config["profiles"].items()}}
+    if args.mode == "launcher" and not args.arguments:
+        print('#!/usr/bin/env bash\ncase "${0##*/}" in')
+        for command, key in COMMANDS.items():
+            print(f'  {command}) export CODEX_HOME={shlex.quote(profile(config, key)["account_home"])} ;;')
+        print('  *) exit 64 ;;\nesac')
+        print(f'exec {shlex.quote(config["binary"])} "$@"')
+        return
+    if args.mode in ("check-discovery", "install-discovery") and not args.arguments:
+        links = discovery_links(config, allow_missing_accounts=args.mode == "check-discovery")
+        if args.mode == "install-discovery":
+            changed = False
+            for link, target in links:
+                if not link.parent.exists():
+                    link.parent.mkdir(mode=0o700)
+                    changed = True
+                if not link.is_symlink():
+                    link.symlink_to(target)
+                    changed = True
+            if changed:
+                print("CHANGED codex.runtime")
+        return
     if args.mode in ("server", "grant-socket") and len(args.arguments) == 1:
         key = args.arguments[0]
         row = profile(config, key)
@@ -350,29 +393,8 @@ def main():
                 invalid()
         verify_binary(config, row)
         os.chdir(config["cognition_cwd_parent"])
-        argv = [config["binary"], "-c", 'sandbox_mode="workspace-write"',
-                "-c", 'approval_policy="on-request"', "app-server", "--listen", row["endpoint"]]
+        argv = [config["binary"], "app-server", "--listen", row["endpoint"]]
         os.execve(config["binary"], argv, environment(config, row))
-    if args.mode == "tui":
-        manual = args.arguments
-        rest = [value for value in manual[1:]
-                if value not in ("--yolo", "--dangerously-bypass-approvals-and-sandbox")]
-        yolo_count = len(manual[1:]) - len(rest)
-        if (not manual or manual[0] not in COMMANDS or yolo_count > 1
-                or (rest and (len(rest) != 2 or rest[0] != "resume" or not THREAD.fullmatch(rest[1])))):
-            parser.exit(64, "ERROR  unsupported shared Codex arguments\n"
-                        "Usage: {codex|codex-work|codex-work2} "
-                        "[--yolo|--dangerously-bypass-approvals-and-sandbox] [resume UUID]\n")
-        row = profile(config, COMMANDS[manual[0]])
-        if args.host == "devbox":
-            permitted_cwd(row, os.getcwd())
-        argv = tui_argv(config, row, rest[1] if rest else None, yolo=bool(yolo_count))
-        verify_binary(config, row)
-        env = environment(config, row)
-        for key in ("TERM", "COLORTERM", "TERM_PROGRAM", "TERMINFO", "TERMINFO_DIRS"):
-            if key in os.environ:
-                env[key] = os.environ[key]
-        os.execve(config["binary"], argv, env)
     invalid()
 
 
