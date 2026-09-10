@@ -94,11 +94,18 @@ Jarvis remains separate: its launcher requires the exact shared endpoint,
 permitted cwd, fixed workspace-write/on-request policy and clean environment.
 Human CLI flexibility gives Jarvis no additional launcher fields or authority.
 
-Prepared human-CLI correction: deployment/restarts require fresh approval.
-During that one-time cutover, inspect and remove only the obsolete regular
-Devbox file `/home/niels/.local/share/dev-server/assets/codex/codex-profile`, if
-present. It is no longer installed or read; no runtime migration/fallback is
-retained. Preserve account state and active terminal sessions.
+Human-CLI correction deployed 2026-09-09 from `08254bb` to MacBook, Devbox and
+Arch. All nine native default-socket probes and installed command checks passed;
+second applies changed nothing and preserved server PIDs. Linux boundary tests
+passed 18/18, including peer authentication and inherited-setgid handling;
+the routine suite and isolated pinned-TUI discovery gate passed. Jarvis's
+canonical socket access and closed launcher rejection were verified without
+restarting Jarvis or creating a thread/terminal. No model-turn, tmux or device
+acceptance is claimed. On Arch, open a new shell to pick up the corrected PATH.
+The obsolete installed Devbox `assets/codex/codex-profile` was removed from
+runtime inputs and preserved at
+`/var/backups/codex-human-cutover.t3r534rg/codex-profile`; no runtime migration or
+fallback remains.
 
 Ordinary apply starts missing services and leaves running services alone. A
 changed pin/helper/unit cannot replace a running account's inputs. After
