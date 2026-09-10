@@ -139,7 +139,7 @@ PY
     state="$(codex_services_state "$profile")" || die 'could not inspect shared Codex service state'
     [[ "$state" == absent ]] || any_active=1
   done
-  if ((codex_services_changed && any_active && ! restart)); then
+  if ((codex_services_changed && any_active && restart == 0)); then
     render_result ACTION codex.runtime \
       'finish active turns, then run ./workstation apply --restart-codex to replace shared server inputs'
     return 2
@@ -243,16 +243,20 @@ while True:
         if (not stat.S_ISDIR(parent.st_mode) or not stat.S_ISSOCK(item.st_mode)
                 or parent.st_uid != os.getuid() or item.st_uid != os.getuid()
                 or stat.S_IMODE(parent.st_mode) != 0o700
-                or stat.S_IMODE(item.st_mode) != 0o600):
+                or stat.S_IMODE(item.st_mode) not in (0o600, 0o700)):
             raise SystemExit("ERROR  shared Codex socket ownership or permissions differ")
-        with socket.socket(socket.AF_UNIX) as client:
-            client.settimeout(1)
-            client.connect(str(path))
-        break
+        # Native bind publishes owner-only 0700 before its asynchronous chmod.
+        # It is a startup prefix, not readiness or permission to activate.
+        if stat.S_IMODE(item.st_mode) == 0o600:
+            with socket.socket(socket.AF_UNIX) as client:
+                client.settimeout(1)
+                client.connect(str(path))
+            break
     except (FileNotFoundError, ConnectionRefusedError, TimeoutError):
-        if time.monotonic() >= deadline:
-            raise SystemExit("ERROR  shared Codex socket did not become available")
-        time.sleep(0.1)
+        pass
+    if time.monotonic() >= deadline:
+        raise SystemExit("ERROR  shared Codex socket did not become available")
+    time.sleep(0.1)
 PY
     [[ "$(codex_services_state "$profile")" == active ]] || return 1
     if [[ "$state" != active ]]; then

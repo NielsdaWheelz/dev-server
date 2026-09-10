@@ -52,15 +52,18 @@ elif operation in ("bootstrap", "kickstart", "start"):
     if (store / (profile + ".disabled")).exists(): raise SystemExit(5)
     if is_mac:
         unit = home / "Library/LaunchAgents" / ("dev.niels.codex-shared." + profile + ".plist")
-        command = plistlib.loads(unit.read_bytes())["ProgramArguments"]
+        declared = plistlib.loads(unit.read_bytes())
+        command = declared["ProgramArguments"]
+        mask = declared["Umask"]
     else:
         unit = home / ".config/systemd/user" / ("codex-shared@" + profile + ".service")
         command = next(line[10:].split() for line in unit.read_text().splitlines() if line.startswith("ExecStart="))
         command = [arg.replace("%h", str(home)) for arg in command]
+        mask = int(next(line[6:] for line in unit.read_text().splitlines() if line.startswith("UMask=")), 8)
     # The native interpreter path is an external platform dependency.
     command[0] = sys.executable
     child = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, start_new_session=True)
+                             stderr=subprocess.DEVNULL, start_new_session=True, umask=mask)
     state.write_text(str(child.pid))
 elif operation in ("stop", "bootout"):
     if state.exists():
@@ -72,7 +75,7 @@ else:
 '''
 
 CODEX = r'''#!/usr/bin/env python3
-import os, pathlib, signal, socket, sys
+import os, pathlib, signal, socket, sys, time
 if sys.argv[1:] == ["--version"]:
     print("codex-cli 0.153.4")
     raise SystemExit(0)
@@ -281,6 +284,34 @@ codex_services_activate
         self.assertEqual(self.pids()["personal"], before["personal"])
         self.assertEqual(self.pids()["work2"], before["work2"])
         self.assertNotEqual(self.pids()["work"], before["work"])
+
+    def test_socket_publication_requires_final_private_mode_before_activation(self):
+        raw = self.home / ".local/bin/codex"
+        marker = self.home / ".local/state/dev-server/active/codex.runtime.sha256"
+        for mode, error in (("700", "socket did not become available"),
+                            ("640", "socket ownership or permissions differ")):
+            with self.subTest(mode=mode):
+                raw.write_text(CODEX.replace("path.chmod(0o600)", f"path.chmod(0o{mode})"))
+                try:
+                    failed = self.apply("arch")
+                    self.assertNotEqual(failed.returncode, 0)
+                    self.assertIn(error, failed.stderr)
+                    self.assertFalse(marker.exists(), "unready sockets must not publish activation")
+                    self.assertNotIn("STARTED", failed.stdout)
+                finally:
+                    self.stop_children()
+                    endpoint = self.home / ".local/run/codex-shared/personal/app-server.sock"
+                    endpoint.unlink(missing_ok=True)
+        # Native bind precedes its asynchronous chmod. Delaying that external
+        # publication never supplies readiness evidence: the real probe must
+        # still observe exact 0600 and connect before publishing activation.
+        raw.write_text(CODEX.replace("path.chmod(0o600)", "time.sleep(0.3)\n    path.chmod(0o600)"))
+        ready = self.apply("arch")
+        self.assertEqual(ready.returncode, 0, ready.stderr + ready.stdout)
+        self.assertTrue(marker.exists())
+        for profile in ("personal", "work", "work2"):
+            endpoint = self.home / ".local/run/codex-shared" / profile / "app-server.sock"
+            self.assertEqual(endpoint.stat().st_mode & 0o7777, 0o600)
 
 
 if __name__ == "__main__":
