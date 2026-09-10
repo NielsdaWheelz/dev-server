@@ -1146,6 +1146,47 @@ PY
   tests_run=$((tests_run + 1))
 }
 
+test_codex_explicit_restart_is_independent_of_configuration_change() {
+  python3 - "$repo_dir/ansible/playbooks/tasks/codex-runtime-preflight.yml" \
+    "$fixture/codex-decision.yml" <<'PY'
+import base64
+import pathlib
+import sys
+import yaml
+
+tasks = yaml.safe_load(pathlib.Path(sys.argv[1]).read_text())
+decision = next(task for task in tasks if task["name"] == "Resolve the shared Codex activation decision")
+plays = []
+for changed, restart in ((False, False), (False, True), (True, False), (True, True)):
+    plays.append({
+        "name": f"configuration changed={changed}, explicit restart={restart}",
+        "hosts": "localhost", "gather_facts": False,
+        "vars": {
+            "devbox_codex_runtime_restart_authorized": restart,
+            "codex_runtime_active_identity": {"stat": {"exists": True}},
+            "codex_runtime_active_identity_content": {
+                "content": base64.b64encode(("a" * 64 + "\n").encode()).decode()},
+            "codex_runtime_desired_identity": ("b" if changed else "a") * 64,
+            "codex_runtime_consumer_states": {"results": [{"stdout": "active"}]},
+            "codex_runtime_live_launcher_requests": {"stdout": ""},
+            "expected_activation": changed or restart,
+        },
+        "tasks": [decision, {"ansible.builtin.assert": {"that": [
+            "codex_runtime_needs_activation == expected_activation",
+            "codex_runtime_any_active",
+        ]}}],
+    })
+pathlib.Path(sys.argv[2]).write_text(yaml.safe_dump(plays))
+PY
+  ANSIBLE_LOCAL_TEMP="$fixture/ansible-local" \
+    ansible-playbook --inventory localhost, --connection local \
+    "$fixture/codex-decision.yml" >"$fixture/codex-decision.out" 2>&1 || {
+    cat "$fixture/codex-decision.out" >&2
+    fail 'explicit Codex restart must not depend on configuration change'
+  }
+  tests_run=$((tests_run + 1))
+}
+
 test_codex_runtime_activation_contract() {
   python3 - \
     "$repo_dir/lib/common.sh" \
@@ -1249,5 +1290,6 @@ test_static_boundary_contract
 test_remote_managed_state_preflight_contract
 test_ufw_ingress_boundary_contract
 test_codex_runtime_activation_contract
+test_codex_explicit_restart_is_independent_of_configuration_change
 
 printf 'devbox: %d contract groups passed\n' "$tests_run"

@@ -52,6 +52,8 @@ stdout_file="$fixture/stdout"
 stderr_file="$fixture/stderr"
 npm_calls_file="$fixture/npm-calls"
 npm_prefix_file="$fixture/npm-prefix"
+npm_candidate=0.154.0
+npm_install_status=0
 claude_bootstrap_record="$fixture/claude-bootstrap"
 claude_install_record="$fixture/claude-install"
 claude_next_version_file="$fixture/claude-next-version"
@@ -61,19 +63,6 @@ fields=()
 
 install -d -m 0755 "$test_home"
 cp -R "$repo_dir/assets" "$test_assets"
-python3 - "$test_assets/codex/profiles.json" <<'PY'
-import base64
-import hashlib
-import json
-import pathlib
-import sys
-path = pathlib.Path(sys.argv[1])
-value = json.loads(path.read_text())
-data = b"fixture-package"
-value["package"]["integrity"] = "sha512-" + base64.b64encode(hashlib.sha512(data).digest()).decode()
-value["package"]["shasum"] = hashlib.sha1(data).hexdigest()
-path.write_text(json.dumps(value))
-PY
 printf '%s\n' /unexpected >"$npm_prefix_file"
 dev_server_home_dir="$test_home"
 dev_server_assets_root="$test_assets"
@@ -117,7 +106,7 @@ write_fake_codex() {
     '#!/usr/bin/env bash' \
     'set -euo pipefail' \
     'if [[ "${1:-}" == --version ]]; then' \
-    '  printf "codex-cli 0.153.4\n"' \
+    "  printf 'codex-cli $npm_candidate\\n'" \
     '  exit 0' \
     'fi' \
     '{' \
@@ -203,14 +192,11 @@ npm() {
     printf '%s\n' "$5" >"$npm_prefix_file"
     printf 'config-set\n' >>"$npm_calls_file"
     ;;
-  pack:--ignore-scripts)
-    assert_eq 6 "$#" 'pinned package download argument count'
-    assert_eq --json "$3" 'pinned package download encoding'
-    assert_eq --pack-destination "$4" 'pinned package destination flag'
-    assert_eq @openai/codex@0.153.4 "$6" 'exact pinned package download'
-    printf 'pack\n' >>"$npm_calls_file"
-    printf 'fixture-package' >"$5/package.tgz"
-    printf '[{"filename":"package.tgz"}]\n'
+  view:@openai/codex)
+    assert_eq 3 "$#" 'npm candidate argument count'
+    assert_eq dist-tags.latest "$3" 'upstream stable channel'
+    printf 'view\n' >>"$npm_calls_file"
+    printf '%s\n' "$npm_candidate"
     ;;
   install:--global)
     assert_eq 8 "$#" 'npm global-install argument count'
@@ -218,12 +204,12 @@ npm() {
     assert_eq --ignore-scripts "$5" 'Codex install-script policy'
     assert_eq --no-audit "$6" 'npm global audit policy'
     assert_eq --no-fund "$7" 'npm global funding policy'
-    [[ -f "$8" && "$8" == */package.tgz ]] || fail 'install did not consume verified archive'
-    assert_eq fixture-package "$(cat "$8")" 'installed archive bytes'
+    assert_eq "@openai/codex@$npm_candidate" "$8" 'resolved stable package'
+    ((npm_install_status == 0)) || return "$npm_install_status"
     prefix="$4"
     printf 'global-install\n' >>"$npm_calls_file"
     install -d -m 0755 "$prefix/lib/node_modules/@openai/codex" "$prefix/bin"
-    printf '{"name":"@openai/codex","version":"0.153.4"}\n' \
+    printf '{"name":"@openai/codex","version":"%s"}\n' "$npm_candidate" \
       >"$prefix/lib/node_modules/@openai/codex/package.json"
     write_fake_codex "$prefix/bin/codex"
     ;;
@@ -241,15 +227,6 @@ test_runtime_floor() {
   fi
   pass
 }
-
-test_all_hosts_use_declared_pin() (
-  local host
-  npm() { fail 'pin resolution unexpectedly queried npm'; }
-  for host in devbox macbook arch; do
-    dev_server_ai_host="$host"
-    assert_eq 0.153.4 "$(ai_codex_host pin)" "$host declared candidate"
-  done
-)
 
 test_invalid_input_is_read_only() {
   local invalid_assets="$fixture/invalid-assets"
@@ -282,7 +259,7 @@ test_canonical_install_and_update() {
   ai_install_profiles >/dev/null
   has_change shell.config || fail 'fresh profile install did not report shell.config'
 
-  assert_eq 1 "$(npm_operation_count pack)" 'fresh pinned Codex download count'
+  assert_eq 1 "$(npm_operation_count view)" 'fresh Codex candidate resolution count'
   assert_eq 1 "$(npm_operation_count global-install)" 'fresh Codex install count'
   assert_eq 1 "$(npm_operation_count config-set)" 'npm prefix repair count'
   assert_eq 1 "$(wc -l <"$claude_bootstrap_record" | tr -d ' ')" \
@@ -303,7 +280,7 @@ test_canonical_install_and_update() {
   ai_install_dirs >/dev/null
   ai_install_packages >/dev/null
   ai_install_profiles >/dev/null
-  assert_eq 1 "$(npm_operation_count pack)" 'second pinned Codex download count'
+  assert_eq 2 "$(npm_operation_count view)" 'second Codex candidate resolution count'
   assert_eq 1 "$(npm_operation_count global-install)" 'second Codex install count'
   assert_eq 1 "$(wc -l <"$claude_install_record" | tr -d ' ')" \
     'second-apply Claude latest reconciliation count'
@@ -312,11 +289,12 @@ test_canonical_install_and_update() {
   ((dev_server_result_mutations == 0)) ||
     fail 'second AI apply reported a durable mutation'
 
-  printf '{"name":"@openai/codex","version":"0.0.0"}\n' \
-    >"$test_home/.local/lib/node_modules/@openai/codex/package.json"
+  npm_candidate=0.155.0
   ai_install_packages >/dev/null
   assert_eq 2 "$(npm_operation_count global-install)" \
-    'outdated Codex repair install count'
+    'new stable Codex update count'
+  assert_eq "$npm_candidate" "$(ai_package_version "$(ai_codex_manifest)" @openai/codex)" \
+    'installed latest stable version'
 
   write_fake_claude_version 2.1.258
   printf '2.1.258\n' >"$claude_next_version_file"
@@ -430,39 +408,24 @@ test_existing_account_permissions_are_preserved() (
   done
 )
 
-test_all_hosts_verify_package_before_install() (
-  local installs="$fixture/pinned-installs"
-  local package_bytes=fixture-package
-  local host expected_installs=0
-  npm() {
-    case "$1" in
-    pack)
-      assert_eq 6 "$#" 'pinned package download argument count'
-      assert_eq --ignore-scripts "$2" 'pinned package download script policy'
-      assert_eq @openai/codex@0.153.4 "$6" 'exact pinned package download'
-      printf '%s' "$package_bytes" >"$5/package.tgz"
-      printf '[{"filename":"package.tgz"}]\n'
-      ;;
-    install)
-      assert_eq 8 "$#" 'pinned global installation argument count'
-      [[ -f "$8" && "$8" == */package.tgz ]] || fail 'install did not consume verified archive'
-      assert_eq fixture-package "$(cat "$8")" 'installed archive bytes'
-      printf 'installed\n' >>"$installs"
-      ;;
-    *) fail 'pinned installer unexpectedly queried npm latest' ;;
-    esac
-  }
+test_all_hosts_preserve_native_install_failure_and_reject_unstable_candidate() (
+  local host candidate before
+  before="$(ai_package_version "$(ai_codex_manifest)" @openai/codex)"
   for host in devbox macbook arch; do
     dev_server_ai_host="$host"
-    package_bytes='fixture-package'
-    ai_codex_install_package 0.153.4 "$test_home/.local"
-    expected_installs=$((expected_installs + 1))
-    assert_eq "$expected_installs" "$(wc -l <"$installs" | tr -d ' ')" "$host verified archive install count"
-    package_bytes=tampered
-    if ai_codex_install_package 0.153.4 "$test_home/.local" >/dev/null 2>&1; then
-      fail "$host pinned installer accepted a checksum mismatch"
-    fi
-    assert_eq "$expected_installs" "$(wc -l <"$installs" | tr -d ' ')" "$host install count after checksum mismatch"
+    npm_install_status=1
+    for candidate in 0.156.0 0.156.0-beta.1; do
+      npm_candidate="$candidate"
+      if [[ "$candidate" == *-* ]]; then
+        npm_install_status=0
+      fi
+      if (ai_install_codex) >"$stdout_file" 2>"$stderr_file"; then
+        fail "$host accepted failed native installation or an unstable candidate"
+      fi
+      assert_eq "$before" "$(ai_package_version "$(ai_codex_manifest)" @openai/codex)" \
+        "$host existing package after failure"
+      [[ ! -s "$stdout_file" ]] || fail "$host reported installation after failure"
+    done
   done
 )
 
@@ -491,8 +454,6 @@ test_fail_closed() {
 }
 
 test_runtime_floor
-test_all_hosts_use_declared_pin
-pass
 test_invalid_input_is_read_only
 test_canonical_install_and_update
 test_claude_profile_routing
@@ -502,7 +463,7 @@ test_all_hosts_shared_profiles_are_quiescent
 pass
 test_existing_account_permissions_are_preserved
 pass
-test_all_hosts_verify_package_before_install
+test_all_hosts_preserve_native_install_failure_and_reject_unstable_candidate
 pass
 test_fail_closed
 

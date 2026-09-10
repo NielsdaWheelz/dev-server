@@ -131,8 +131,7 @@ PY
   codex_services_identity="$(dev_server_declared_snapshot "$codex_services_stage" \
     profiles.json codex-shared codex-profile unit-personal unit-work unit-work2)" || return 1
   codex_services_changed=0
-  if ! dev_server_active_sha_matches codex.runtime "$codex_services_identity" ||
-    ! ai_codex_matches "$(ai_codex_host pin)"; then
+  if ((restart)) || ! dev_server_active_sha_matches codex.runtime "$codex_services_identity"; then
     codex_services_changed=1
   fi
   for profile in personal work work2; do

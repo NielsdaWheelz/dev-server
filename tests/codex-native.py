@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Optional macOS boundary proof: real pinned TUI, fixture-only UDS, no provider.
+"""Optional macOS boundary proof: real native TUI, fixture-only UDS, no provider.
 
 Run explicitly: python3 tests/codex-native.py /absolute/path/to/raw/codex
-Not part of ./test: needs the pinned native binary and macOS network isolation.
+Not part of ./test: needs the native binary and macOS network isolation.
 Terminal bytes are discarded; no prompt or model turn is submitted.
 """
 
@@ -79,13 +79,12 @@ def main():
         print("usage: python3 tests/codex-native.py /absolute/path/to/raw/codex", file=sys.stderr)
         return 64
     if not os.access(sys.argv[1], os.X_OK):
-        print("NOT_RUN native Codex attachment requires the pinned executable")
+        print("NOT_RUN native Codex attachment requires an executable")
         return 2
     binary = Path(sys.argv[1]).resolve(strict=True)
     repo = Path(__file__).resolve().parents[1]
     helper = repo / "assets/codex/codex-shared.py"
     declaration = repo / "assets/codex/profiles.json"
-    version = json.loads(declaration.read_text())["version"]
     with tempfile.TemporaryDirectory(prefix="cdx-native-", dir="/tmp") as directory:
         home = Path(directory).resolve()
         env = {"HOME": str(home), "PATH": os.defpath + ":/opt/homebrew/bin:/usr/local/bin",
@@ -97,9 +96,6 @@ def main():
                           '(allow network-outbound (remote unix-socket '
                           '(subpath (param "FIXTURE"))))\n')
         sandbox = ["/usr/bin/sandbox-exec", "-D", f"FIXTURE={home}", "-f", str(policy)]
-        result = subprocess.run(sandbox + [str(binary), "--version"], env=env,
-                                capture_output=True, timeout=10, check=True)
-        assert result.stdout.strip() == f"codex-cli {version}".encode(), "wrong native pin"
         command = [sys.executable, str(helper), "--config", str(declaration), "--host", "macbook"]
         launcher = subprocess.run(command + ["launcher"], env=env, capture_output=True,
                                   timeout=10, check=True).stdout

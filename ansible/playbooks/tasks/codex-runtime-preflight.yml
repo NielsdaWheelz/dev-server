@@ -193,7 +193,8 @@
          list | length > 0 or
          codex_runtime_live_launcher_requests.stdout | trim | length > 0 }}
     codex_runtime_needs_activation: >-
-      {{ ((codex_runtime_active_identity_content.content | b64decode | trim)
+      {{ (devbox_codex_runtime_restart_authorized | bool) or
+         ((codex_runtime_active_identity_content.content | b64decode | trim)
           if codex_runtime_active_identity.stat.exists else '') !=
          codex_runtime_desired_identity }}
 

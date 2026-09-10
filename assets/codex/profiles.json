@@ -1,11 +1,5 @@
 {
-  "schema_version": 1,
-  "version": "0.153.4",
-  "package": {
-    "name": "@openai/codex",
-    "integrity": "sha512-wbHDmit7S/YvBGVX1DQmk13xtWblZ2cApeJ/pB7xDZ10Cna+DZc5ij7f0F4OxdsXN4FW1oLT48OpogUI1+8Y2w==",
-    "shasum": "7f0283a793e438733df5dccbe5d79ffd778ab0e8"
-  },
+  "schema_version": 2,
   "development_user": "niels",
   "jarvis_user": "jarvis",
   "client_group": "codex-clients",
