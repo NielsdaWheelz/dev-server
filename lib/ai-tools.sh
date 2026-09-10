@@ -21,11 +21,15 @@ NODE
 }
 
 ai_validate_inputs() {
+  local instructions
   local profile
 
   profile="$(dev_server_assets_dir)/routers/ai-profile"
   [[ -f "$profile" && ! -L "$profile" ]] ||
     die "invalid AI profile wrapper: $profile"
+  instructions="$(dev_server_assets_dir)/agent-instructions.md"
+  [[ -f "$instructions" && ! -L "$instructions" && -s "$instructions" ]] ||
+    die "invalid shared AI instructions: $instructions"
   ai_codex_host validate || die 'invalid shared Codex declaration'
 }
 
@@ -43,7 +47,7 @@ ai_install_dirs() {
   ensure_directory "$home/.local" 0755 || return 1
   ensure_directory "$home/.local/bin" 0755 || return 1
   ensure_directory "$home/.local/share" 0755 || return 1
-  for account in .codex .codex-work .codex-work2; do
+  for account in .codex .codex-work .codex-work2 .claude; do
     if [[ -d "$home/$account" && ! -L "$home/$account" ]]; then
       continue
     fi
@@ -254,10 +258,26 @@ ai_install_profiles() {
     "$home/bin/claude-work" 0755 shell.config || return 1
 }
 
+ai_install_instructions() {
+  local instructions
+  local instruction_home
+  local relative
+
+  instruction_home="$(dev_server_home)"
+  instructions="$(dev_server_assets_dir)/agent-instructions.md"
+  for relative in \
+    .codex/AGENTS.md .codex-work/AGENTS.md .codex-work2/AGENTS.md \
+    .claude/CLAUDE.md .claude-work/CLAUDE.md; do
+    install_managed_file "$instructions" \
+      "$instruction_home/$relative" 0600 ai.instructions || return 1
+  done
+}
+
 ai_install() {
   ai_require_codex_runtime
   ai_validate_inputs
   ai_install_dirs || return 1
   ai_install_packages || return 1
   ai_install_profiles || return 1
+  ai_install_instructions || return 1
 }

@@ -231,20 +231,35 @@ test_runtime_floor() {
 test_invalid_input_is_read_only() {
   local invalid_assets="$fixture/invalid-assets"
   local invalid_home="$fixture/invalid-home"
+  local declaration
 
-  cp -R "$repo_dir/assets" "$invalid_assets"
-  rm "$invalid_assets/routers/ai-profile"
-  ln -s "$fixture/untrusted" "$invalid_assets/routers/ai-profile"
   install -d -m 0755 "$invalid_home"
+  for declaration in routers/ai-profile agent-instructions.md; do
+    rm -rf "$invalid_assets"
+    cp -R "$repo_dir/assets" "$invalid_assets"
+    rm "$invalid_assets/$declaration"
+    ln -s "$fixture/untrusted" "$invalid_assets/$declaration"
+    if (
+      dev_server_home_dir="$invalid_home"
+      dev_server_assets_root="$invalid_assets"
+      ai_install
+    ) >/dev/null 2>&1; then
+      fail "AI apply accepted a symlinked declaration: $declaration"
+    fi
+    assert_eq 0 "$(find "$invalid_home" -mindepth 1 | wc -l | tr -d ' ')" \
+      'invalid AI input mutation count'
+  done
+  rm "$invalid_assets/agent-instructions.md"
+  : >"$invalid_assets/agent-instructions.md"
   if (
     dev_server_home_dir="$invalid_home"
     dev_server_assets_root="$invalid_assets"
     ai_install
   ) >/dev/null 2>&1; then
-    fail 'AI apply accepted a symlinked profile declaration'
+    fail 'AI apply accepted empty shared instructions'
   fi
   assert_eq 0 "$(find "$invalid_home" -mindepth 1 | wc -l | tr -d ' ')" \
-    'invalid AI input mutation count'
+    'empty AI instructions mutation count'
   pass
 }
 
@@ -254,9 +269,7 @@ test_canonical_install_and_update() {
   dev_server_ai_host=arch
 
   reset_results
-  ai_install_dirs >/dev/null
-  ai_install_packages >/dev/null
-  ai_install_profiles >/dev/null
+  ai_install >/dev/null
   has_change shell.config || fail 'fresh profile install did not report shell.config'
 
   assert_eq 1 "$(npm_operation_count view)" 'fresh Codex candidate resolution count'
@@ -277,9 +290,7 @@ test_canonical_install_and_update() {
 
   profile_inode="$(file_inode "$test_home/bin/codex-work")"
   reset_results
-  ai_install_dirs >/dev/null
-  ai_install_packages >/dev/null
-  ai_install_profiles >/dev/null
+  ai_install >/dev/null
   assert_eq 2 "$(npm_operation_count view)" 'second Codex candidate resolution count'
   assert_eq 1 "$(npm_operation_count global-install)" 'second Codex install count'
   assert_eq 1 "$(wc -l <"$claude_install_record" | tr -d ' ')" \
@@ -302,6 +313,62 @@ test_canonical_install_and_update() {
   ai_install_claude >/dev/null
   assert_eq 2.1.258 "$(ai_claude_native_version)" 'updated native Claude version'
   assert_eq 1 "$dev_server_result_mutations" 'Claude update mutation count'
+  pass
+}
+
+test_shared_instruction_lifecycle() {
+  local relative target index
+  local -a paths=(
+    .codex/AGENTS.md .codex-work/AGENTS.md .codex-work2/AGENTS.md
+    .claude/CLAUDE.md .claude-work/CLAUDE.md
+  )
+  local -a inodes=()
+
+  for relative in "${paths[@]}"; do
+    target="$test_home/$relative"
+    [[ -f "$target" && ! -L "$target" ]] ||
+      fail "missing regular instruction file: $relative"
+    assert_eq 600 "$(test_mode "$target")" "$relative mode"
+    cmp -s "$repo_dir/assets/agent-instructions.md" "$target" ||
+      fail "initial instructions differ from the source: $relative"
+    inodes+=("$(file_inode "$target")")
+    printf 'preserve this profile state\n' >"${target%/*}/auth.json"
+    printf 'preserve this session history\n' >"${target%/*}/history.jsonl"
+  done
+
+  reset_results
+  ai_install_instructions >"$stdout_file"
+  assert_eq 0 "$dev_server_result_mutations" 'unchanged instruction mutation count'
+  [[ ! -s "$stdout_file" ]] || fail 'unchanged instructions produced output'
+  for index in "${!paths[@]}"; do
+    assert_eq "${inodes[$index]}" "$(file_inode "$test_home/${paths[$index]}")" \
+      'unchanged instruction inode'
+  done
+
+  printf '\n- a revised preference\n' >>"$test_assets/agent-instructions.md"
+  reset_results
+  ai_install_instructions >/dev/null
+  assert_eq 5 "$dev_server_result_mutations" 'updated instruction mutation count'
+  assert_eq 1 "$dev_server_change_count" 'deduplicated instruction change count'
+  has_change ai.instructions || fail 'instruction change was not recorded'
+  assert_eq 0 "$dev_server_result_activations" 'instruction activation count'
+  for relative in "${paths[@]}"; do
+    target="$test_home/$relative"
+    cmp -s "$test_assets/agent-instructions.md" "$target" ||
+      fail "updated instructions differ from the source: $relative"
+    assert_eq 600 "$(test_mode "$target")" "$relative updated mode"
+    assert_eq 'preserve this profile state' "$(cat "${target%/*}/auth.json")" \
+      'profile state preservation'
+    assert_eq 'preserve this session history' "$(cat "${target%/*}/history.jsonl")" \
+      'session history preservation'
+  done
+
+  printf 'local edit\n' >"$test_home/.claude-work/CLAUDE.md"
+  reset_results
+  ai_install_instructions >/dev/null
+  assert_eq 1 "$dev_server_result_mutations" 'instruction drift repair count'
+  cmp -s "$test_assets/agent-instructions.md" "$test_home/.claude-work/CLAUDE.md" ||
+    fail 'local instruction drift was not repaired'
   pass
 }
 
@@ -444,6 +511,15 @@ test_fail_closed() {
   assert_eq 0 "$(find "$test_home/bin" -name '.codex-profile.*' | wc -l | tr -d ' ')" \
     'launcher candidates after failed installation'
 
+  printf 'unmanaged instructions\n' >"$fixture/unmanaged-instructions"
+  rm "$test_home/.codex/AGENTS.md"
+  ln -s "$fixture/unmanaged-instructions" "$test_home/.codex/AGENTS.md"
+  if (ai_install_instructions) >/dev/null 2>&1; then
+    fail 'instruction installation accepted a symlink target'
+  fi
+  assert_eq 'unmanaged instructions' "$(cat "$fixture/unmanaged-instructions")" \
+    'unmanaged instruction preservation'
+
   rm "$test_home/.local/bin/claude"
   printf '#!/usr/bin/env bash\nexit 0\n' >"$test_home/.local/bin/claude"
   chmod 0755 "$test_home/.local/bin/claude"
@@ -456,6 +532,7 @@ test_fail_closed() {
 test_runtime_floor
 test_invalid_input_is_read_only
 test_canonical_install_and_update
+test_shared_instruction_lifecycle
 test_claude_profile_routing
 test_installed_codex_profiles_forward_native_arguments
 pass
