@@ -1,0 +1,84 @@
+---
+- name: Reload systemd after installing shared Codex units
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: codex_runtime_needs_activation
+
+- name: Enable and start the three shared Codex services
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - codex-shared@personal.service
+    - codex-shared@work.service
+    - codex-shared@work2.service
+
+- name: Enable and start the closed terminal launcher socket
+  ansible.builtin.systemd_service:
+    name: jarvis-codex-launcher.socket
+    enabled: true
+    state: started
+
+- name: Validate the installed shared Codex declaration and helper
+  ansible.builtin.command:
+    argv:
+      - /usr/local/libexec/codex-shared
+      - validate
+  changed_when: false
+
+- name: Verify every shared Codex consumer is active
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - --quiet
+      - "{{ item }}"
+  loop:
+    - codex-shared@personal.service
+    - codex-shared@work.service
+    - codex-shared@work2.service
+    - jarvis-codex-launcher.socket
+  changed_when: false
+
+- name: Inspect the three shared Codex sockets
+  ansible.builtin.stat:
+    path: "{{ item.value.endpoint[7:] }}"
+    follow: false
+  loop: "{{ codex_shared_config.profiles | dict2items }}"
+  register: codex_runtime_endpoint_states
+
+- name: Verify the three shared Codex socket boundaries
+  ansible.builtin.assert:
+    that:
+      - codex_runtime_endpoint_state.stat.issock
+      - codex_runtime_endpoint_state.stat.pw_name == codex_shared_config.development_user
+      - codex_runtime_endpoint_state.stat.gr_name == codex_shared_config.client_group
+      - codex_runtime_endpoint_state.stat.mode == "0660"
+    fail_msg: Shared Codex socket boundary is not active and exact
+  loop: "{{ codex_runtime_endpoint_states.results }}"
+  loop_control:
+    loop_var: codex_runtime_endpoint_state
+
+- name: Inspect the closed terminal launcher socket
+  ansible.builtin.stat:
+    path: "{{ codex_shared_config.launcher_socket }}"
+    follow: false
+  register: codex_runtime_launcher_state
+
+- name: Verify the closed terminal launcher socket boundary
+  ansible.builtin.assert:
+    that:
+      - codex_runtime_launcher_state.stat.issock
+      - codex_runtime_launcher_state.stat.pw_name == codex_shared_config.development_user
+      - codex_runtime_launcher_state.stat.gr_name == codex_shared_config.client_group
+      - codex_runtime_launcher_state.stat.mode == "0660"
+    fail_msg: Closed terminal launcher socket boundary is not active and exact
+
+- name: Record the active shared Codex identity
+  ansible.builtin.copy:
+    dest: /var/lib/dev-server/active/codex.runtime.sha256
+    owner: root
+    group: root
+    mode: "0600"
+    content: "{{ codex_runtime_desired_identity }}\n"

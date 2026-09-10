@@ -26,18 +26,29 @@ ai_validate_inputs() {
   profile="$(dev_server_assets_dir)/routers/ai-profile"
   [[ -f "$profile" && ! -L "$profile" ]] ||
     die "invalid AI profile wrapper: $profile"
+  ai_codex_host pin >/dev/null || die 'invalid shared Codex declaration'
+}
+
+ai_codex_host() {
+  python3 "$(dev_server_assets_dir)/codex/codex-shared.py" \
+    --config "$(dev_server_assets_dir)/codex/profiles.json" \
+    --host "${dev_server_ai_host:-devbox}" "$@"
 }
 
 ai_install_dirs() {
-  local home
+  local home account
 
   home="$(dev_server_home)"
   ensure_directory "$home/bin" 0755 || return 1
   ensure_directory "$home/.local" 0755 || return 1
   ensure_directory "$home/.local/bin" 0755 || return 1
   ensure_directory "$home/.local/share" 0755 || return 1
-  ensure_directory "$home/.codex-work" 0700 || return 1
-  ensure_directory "$home/.codex-work2" 0700 || return 1
+  for account in .codex .codex-work .codex-work2; do
+    if [[ -d "$home/$account" && ! -L "$home/$account" ]]; then
+      continue
+    fi
+    ensure_directory "$home/$account" 0700 || return 1
+  done
   ensure_directory "$home/.claude-work" 0700 || return 1
 }
 
@@ -67,22 +78,18 @@ ai_codex_manifest() {
     "$(dev_server_home)"
 }
 
-ai_codex_candidate() {
-  local value
-
-  value="$(npm view @openai/codex dist-tags.latest --json)" ||
-    die "could not resolve the current stable Codex release"
-  node -e '
-    const decoded = JSON.parse(process.argv[1]);
-    const values = Array.isArray(decoded) ? decoded : [decoded];
-    if (values.length !== 1) process.exit(1);
-    const value = values[0];
-    if (typeof value !== "string" || !/^\d+\.\d+\.\d+$/.test(value)) {
-      process.exit(1);
-    }
-    process.stdout.write(value);
-  ' "$value" || die "npm returned an invalid stable Codex release"
-}
+ai_codex_install_package() (
+  set -euo pipefail
+  local candidate="$1" prefix="$2" package_source package_stage
+  package_source="@openai/codex@$candidate"
+  package_stage="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-codex-package.XXXXXX")" || exit 1
+  trap 'rm -rf -- "$package_stage"' EXIT
+  npm pack --ignore-scripts --json --pack-destination "$package_stage" \
+    "$package_source" >"$package_stage/metadata.json" || exit 1
+  package_source="$(ai_codex_host verify-package "$package_stage")" || exit 1
+  npm install --global --prefix "$prefix" --ignore-scripts \
+    --no-audit --no-fund "$package_source"
+)
 
 ai_codex_matches() {
   local expected="$1"
@@ -119,7 +126,7 @@ ai_install_codex() {
     render_result CHANGED "npm global prefix" "$prefix"
   fi
 
-  candidate="$(ai_codex_candidate)" || return 1
+  candidate="$(ai_codex_host pin)" || return 1
   if ai_codex_matches "$candidate"; then
     return 0
   fi
@@ -129,10 +136,9 @@ ai_install_codex() {
   else
     status=INSTALLED
   fi
-  npm install --global --prefix "$prefix" --ignore-scripts \
-    --no-audit --no-fund "@openai/codex@$candidate" || return 1
+  ai_codex_install_package "$candidate" "$prefix" || return 1
   ai_codex_matches "$candidate" ||
-    die "installed Codex does not match npm's stable candidate"
+    die 'installed Codex does not match the declared candidate'
   render_result "$status" "AI tool" "codex@$candidate"
 }
 
@@ -234,16 +240,27 @@ ai_install_packages() {
 ai_install_profiles() {
   local home
   local profile
+  local codex_profile
+  local command status=0
 
   home="$(dev_server_home)"
   profile="$(dev_server_assets_dir)/routers/ai-profile"
   [[ -f "$profile" && ! -L "$profile" ]] ||
     die "missing AI profile wrapper: $profile"
 
-  install_managed_file "$profile" \
-    "$home/bin/codex-work" 0755 shell.config || return 1
-  install_managed_file "$profile" \
-    "$home/bin/codex-work2" 0755 shell.config || return 1
+  codex_profile="$(mktemp "$home/bin/.codex-profile.XXXXXX")" || return 1
+  if ! ai_codex_host launcher >"$codex_profile"; then
+    rm -f -- "$codex_profile"
+    return 1
+  fi
+  for command in codex codex-work codex-work2; do
+    if ! install_managed_file "$codex_profile" "$home/bin/$command" 0755 shell.config; then
+      status=1
+      break
+    fi
+  done
+  rm -f -- "$codex_profile" || return 1
+  ((status == 0)) || return 1
   install_managed_file "$profile" \
     "$home/bin/claude-work" 0755 shell.config || return 1
 }

@@ -1,0 +1,15 @@
+[Unit]
+Description=Closed Jarvis terminal launcher
+
+[Socket]
+ListenStream={{ codex_shared_config.launcher_socket }}
+SocketUser={{ codex_shared_config.development_user }}
+SocketGroup={{ codex_shared_config.client_group }}
+SocketMode=0660
+DirectoryMode=0750
+Accept=yes
+MaxConnections=8
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

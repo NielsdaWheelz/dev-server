@@ -31,7 +31,9 @@ Owned elsewhere:
 
 - Skíðblaðnir invitation, fleet operation, acceptance, lifetime, reboot, and outage workflows;
 - Skíðblaðnir release certification and cross-artifact Android validation;
-- isolation for unattended unsafe agents. Until Skíðblaðnir supplies it, unsafe permission modes are unavailable.
+- isolation for unattended unsafe agents. Automated/default launches cannot
+  select unsafe permission modes. An owner manually invoking a Codex client
+  may explicitly opt into native `--yolo`; the installer adds no isolation.
 
 Trade-off: the upstream handoff adds one cross-repository dependency, and safe agent defaults reduce unattended autonomy; both remove product/security policy from a host installer.
 
@@ -62,8 +64,10 @@ Trade-off: deferring Nix, OpenTofu, signing infrastructure, and generic automati
 
 ```text
 ./workstation apply
+./workstation apply --restart-codex
 ./workstation {help|--help|-h}
 ./devbox apply
+./devbox apply --restart-codex
 ./devbox {help|--help|-h}
 ./test
 ```
@@ -132,6 +136,7 @@ Closed registry:
 | `skid.unit` | daemon-reload/bootstrap, then activate gateway |
 | `skid.runtime` | start or restart gateway once |
 | `skid.integration` | none; future agents |
+| `codex.runtime` | activate all three shared services only after exact drain authorization; otherwise defer the coupled change |
 | `tailscale.serve` | reconcile Serve mapping; never restart Tailscale |
 | `system.reboot` | report; never reboot |
 
@@ -177,15 +182,112 @@ Trade-offs: rolling OS repositories favor freshness over byte-for-byte replay of
   path topology, bounded strict JSON with unique keys, and object shape before
   extension or file mutation; rewrite only `remote.SSH.remotePlatform` through
   same-directory atomic promotion.
-- Plain `codex` and `claude` are personal upstream commands. Retain only explicit `codex-work`, `codex-work2`, and `claude-work` wrappers.
+- Plain `claude` is the personal upstream command; `claude-work` is unchanged.
+  On all three hosts, `codex`, `codex-work`, and `codex-work2` are generated
+  thin Bash account selectors: set the declared `CODEX_HOME`, then `exec` the
+  pinned raw binary with unchanged argv, environment, cwd and exit behavior.
+  Generate once from the existing profile declaration and install identical
+  bytes under all three basenames. No runtime Python/config dependency, argv
+  parser/allowlist, injected notifier/config flags, work-root check or fixed
+  human sandbox/approval policy. Native CLI owns all flags and subcommands.
 - The wrapper dispatches only by its fixed basename; remove cwd/`-C` inference and `*-personal` aliases. Retain isolation tests.
 - AI installation MUST NOT depend on a Skíðblaðnir Claude plugin.
 - Use native/standard lock formats where they preserve the desired update contract. Pin Git plugin commits and Ansible. `curl | sh`, `curl | bash`, executable `@latest`, and mutable branch execution are forbidden.
-- Install Codex once per host at the npm user-global prefix `$HOME/.local`; plain and account-specific commands MUST execute that one binary. Apply resolves npm's stable `latest` tag, installs its explicit resolved version only when missing or behind, and MUST NOT retain Codex in the private locked package tree.
+- Install Codex once per host at the npm user-global prefix `$HOME/.local`; plain
+  and account-specific commands MUST execute that one raw backend binary. On
+  every host, install exactly `@openai/codex@0.153.4` with npm integrity
+  `sha512-wbHDmit7S/YvBGVX1DQmk13xtWblZ2cApeJ/pB7xDZ10Cna+DZc5ij7f0F4OxdsXN4FW1oLT48OpogUI1+8Y2w==`
+  and shasum `7f0283a793e438733df5dccbe5d79ffd778ab0e8`; do not resolve `latest`.
+  The logical personal launcher in `~/bin` precedes the raw backend in
+  `~/.local/bin` on every host, including non-interactive shells.
 - Install Claude once per host with Anthropic's native installer at `$HOME/.local/bin/claude`; plain and account-specific commands MUST execute that one binary. A valid installation is an executable versioned file under `$HOME/.local/share/claude/versions/` published by the canonical symlink. Apply runs the native `install latest` reconciliation under the normal host HOME, independent of profile configuration, validates topology and version before and after it, and MUST fail rather than overwrite a conflicting canonical command. Missing installs may bootstrap only from `https://claude.ai/install.sh`, downloaded over constrained TLS to a bounded temporary regular file and syntax-checked before execution. Running Claude processes MUST NOT be restarted.
 - Delete the private AI npm manifest, lock, package tree, and PATH entry. Retain Node/npm only as the Codex installation mechanism.
 
-Trade-off: Codex and Claude favor immediate upstream stable-channel access over byte reproducibility, so hosts can briefly differ when they apply on different sides of a release. Initial Claude bootstrap trusts Anthropic's mutable HTTPS installer; subsequent selection and verification remain vendor-owned. This removes a duplicate package tree and prevents profile version drift.
+Trade-off: Claude retains immediate upstream stable-channel access. Codex pins
+one qualified experimental server/TUI version across all hosts, accounts and
+clients, trading freshness for one protocol boundary. Initial Claude bootstrap trusts Anthropic's mutable
+HTTPS installer; subsequent selection and verification remain vendor-owned.
+
+#### Shared Codex on workstations
+
+- `dev-server` owns installation, start and native supervision on all three
+  hosts. Jarvis remains a devbox-local client; this change adds no remote
+  coordinator control, network listeners or machine registry.
+- MacBook uses three user LaunchAgents in `gui/<uid>`; Arch uses three user
+  systemd services. Start on user login/manager activation, restart on failure.
+  A missing user manager is an ACTION; no root daemon or new linger policy.
+- The existing `assets/codex/profiles.json` remains the authoritative pin and
+  account-profile declaration and the exact deployed Devbox/Jarvis contract.
+  The helper's explicit `--host` projects workstation paths from the user's
+  home and declared account basenames. No independently authored account map,
+  duplicate package pin, dummy Jarvis account or workstation terminal helper.
+- Workstation inputs live at `~/.config/codex-shared/profiles.json` and
+  `~/.local/libexec/codex-shared`. Each native server has a private `0700`
+  parent and `0600` socket at
+  `~/.local/run/codex-shared/<profile>/app-server.sock`, and starts in the empty
+  `~/.local/share/codex-shared/empty` directory. Backend environments are
+  explicit and include native tool paths; calling-shell credentials and tmux
+  variables do not become server environment. Servers use account-owned
+  configuration without installer-forced sandbox/approval defaults. Jarvis
+  supplies its own explicit policy through its existing interfaces.
+- On every host, install each account's native discovery symlink
+  `app-server-control/app-server-control.sock` to its canonical service socket.
+  Keep canonical endpoints and account privacy unchanged; no proxy, second
+  service, new discovery ledger or Jarvis traversal grant. Read-only preflight
+  checks all three paths before drain/coupled replacement; absent account homes
+  are allowed until provisioning. Installation requires all homes exist and
+  validates all three before creating private `0700` discovery parents/links.
+  Exact links (including temporarily dangling links) are idempotent. A foreign
+  link, socket/file, or invalid parent is ACTION/exit 2, never overwritten.
+- Native 0.153.4 owns routing: compatible interactive commands automatically
+  reuse the discovered service; `-c`, `--profile`, strict/feature/hook overrides
+  and an unavailable service can select native embedded execution. Other
+  commands retain native behavior. Explicit `--remote` requires attachment but
+  only supports interactive/resume/fork/agents/archive/delete/unarchive/queue,
+  not exec/review/login/admin. No wrapper-generated private fallback or private
+  backend prohibition. Native daemon stop/restart refuse externally managed
+  services. This deliberately replaces the former always-shared human contract.
+- Auto-reuse retains native local cwd/config loading and resume selection.
+  Explicit remote uses remote config loading; fresh cwd needs `--cd`, and
+  `resume --last` cwd filtering differs without it. The server owns tool
+  environment and long-lived state; arbitrary calling-shell environment,
+  configuration refresh and full resume/config parity are not guaranteed.
+- The coupled activation identity covers pin, helper, generated units and
+  launchers. Changed live inputs require `workstation apply --restart-codex`
+  before any coupled replacement; ordinary apply reports ACTION and exits 2.
+  Explicit restart stops only those three managed services. It never enumerates
+  or kills tmux, private Codex sessions, or unrelated processes.
+- Verify native enabled/active state and exact socket ownership/modes before
+  recording the existing `codex.runtime` active SHA. Identical second apply
+  does not rewrite files, reload managers or restart services; an inactive
+  service with unchanged inputs is started independently.
+- A partial first start records no activation proof. If another profile is
+  already running, retry requires explicit restart of the coupled services;
+  there is no per-profile deployment ledger or silent adoption.
+- Workstation work-profile notifier overrides are retired with private
+  launchers; account-owned backend notification configuration stays untouched.
+
+Owning proofs: real helper subprocess/profile fixture; native-manager boundary
+fixture for first apply, quiescent second apply, failed startup, recovery and
+active-change refusal; real per-host service/socket/initialize checks and a
+second apply with unchanged service PIDs. Missing hosts remain `NOT_RUN`.
+
+Human correction proofs: unchanged argv/account/cwd/environment/native exit
+through the generated wrappers; exact Unix-socket discovery, conflict-before-
+mutation and no-op installation; unchanged closed Jarvis request/argv/policy.
+The optional macOS gate `python3 tests/codex-native.py /absolute/path/to/raw/codex`
+runs the real pinned TUI for all three commands against fixture Unix sockets
+with OS-denied external networking. It proves native probe plus `codex-tui`
+initialize only, not authentication, config/resume parity, model turns, tmux
+or deployed service health. It is not hidden in `./test`; missing capability is
+`NOT_RUN`/exit 2.
+
+Trade-offs: workstation availability follows user login; a shared account
+service is one version/trust/failure boundary; upgrading it interrupts active
+turns only with explicit restart authorization. No TUI readiness or provider
+turn is claimed by a service-start check. Native CLI fidelity takes precedence
+over forcing every human invocation into the shared service; stock reuse
+exceptions are accepted, documented behavior, not a custom dispatcher/fork.
 
 ### 8.4 Devbox provisioning and configuration
 
@@ -215,8 +317,59 @@ Additional rules:
   and API-verified only after an immediate zero-running-container check;
   otherwise it remains unjournaled and `DEFERRED`.
 - Remove blanket passwordless sudo from the agent/user account. The operator-only `dev-server-deploy` principal owns Ansible's passwordless elevation and separate SSH key; it owns no workspace, AI, Tailscale, or user credentials and never runs agents.
+- Converge the host timezone to UTC. Applications that need owner-local time
+  carry their own explicit IANA timezone; the shared host clock is not product
+  configuration.
+- Provide the shared host boundary required by Jarvis v1: PostgreSQL 16 and an
+  explicitly qualified pgvector installation, a locked non-login `jarvis`
+  service account, and root-owned base directories for immutable releases,
+  durable state, and configuration at `/opt/jarvis`, `/var/lib/jarvis`, and
+  `/etc/jarvis`. The exact pgvector identity must be observable and must not be
+  silently accepted when it differs from Jarvis's qualified release.
+- Provide exactly three supervised Codex App Servers as `niels`, one for each
+  existing Personal, Work, and Work2 account home, bound only to Unix sockets.
+  A dedicated group grants intended local clients socket access; it grants no
+  `niels` group membership or Jarvis application-state access. Codex 0.153.4
+  creates its socket parent/socket as `0700`/`0600`, so a bounded post-bind step
+  verifies ownership and normalizes only the exact parent/socket to `0750`/`0660`.
+- Provide one socket-activated terminal helper as `niels`. Before reading a
+  request it authenticates the exact Jarvis peer UID, then accepts one closed
+  tagged UTF-8 JSON line of at most 65,536 bytes. `ResolveCwd` contains only
+  profile and lexical cwd and returns one existing canonical permitted path.
+  `LaunchTerminal` contains only profile, full native thread handle, that path,
+  and valid tmux name; it revalidates the path. The helper selects the
+  endpoint/binary/account itself, clears ambient tmux variables, creates and
+  immediately observes one ordinary default-server tmux session, and returns a
+  content-free tagged result. It accepts no prompt, environment, executable,
+  socket, account home, or arbitrary argv.
+- The root-owned Codex profile document is the single source for exact account
+  homes, endpoints, permitted work roots, empty cognition parent, users,
+  binaries, tmux path, version, and package digests. Consumer views are derived,
+  not independently authored. It contains no credential and is root-owned mode
+  `0644` beneath a mode-`0755` directory so existing development shells need no
+  supplementary-group refresh. Account homes and runtime sockets remain private
+  or group-restricted.
+- Couple backend binary, profile, launcher, helper, and unit identity under
+  `codex.runtime`. If an active service differs, ordinary apply reports ACTION
+  and exits 2 before replacing any coupled input. Only an explicitly authorized
+  drain/restart activates the new identity; successful activation of all three
+  services records the active digest. Never kill tmux sessions or native history.
+- Install pgvector from PostgreSQL's official Apt repository at the exact
+  Jarvis-qualified package version and hold it. A version change is a reviewed
+  dev-server lock update followed by Jarvis qualification, never an unattended
+  package transition.
+- Do not deploy, migrate, start, stop, back up, or restore Jarvis. Its
+  repository owns release contents, virtual environments, database/roles,
+  migrations, unit definitions, credentials, backup/restore, and recovery.
+  Devbox apply must preserve those contents and report incompatible active
+  state rather than taking application ownership.
+- Jarvis is host-native and independent of rootless Docker. Docker rebuild,
+  pruning, or user-service activation cannot become a Jarvis lifecycle action.
+- Co-location with development and CI grants no access to Nexus or Jarvis
+  application files, roles, databases, or credentials. Neither application is
+  a prerequisite or postcondition of devbox convergence.
 
-Trade-off: a separate deployment principal/key adds one credential; it prevents remote agents from inheriting deployment privilege.
+Trade-off: a separate deployment principal/key adds one credential; it prevents remote agents from inheriting deployment privilege. Hosting Jarvis on the existing devbox avoids another recurring server and fleet surface, but shares a host failure and resource-contention domain with development and CI. Separate Unix/database identities, immutable releases, resource controls owned by Jarvis, disk-headroom checks, and off-host restore are the accepted v1 controls.
 
 ### 8.5 Skíðblaðnir installation
 
@@ -224,12 +377,12 @@ Keep a small local installer; product packaging is outside this 80/20 cut. Layou
 
 ```text
 ~/.local/share/skidbladnir/
-  releases/<version>-<artifact-sha256>/
+  releases/<version>-<runtime-sha256>/
     skidbladnir
     characters.json
     release.json
     host-config.json
-  current -> releases/<version>-<artifact-sha256>
+  current -> releases/<version>-<runtime-sha256>
   previous -> releases/<prior-generation>       # present only after an upgrade
   units/<unit-sha256>/
     launcher
@@ -254,12 +407,17 @@ Rules:
 - Release and credential directories are user-private. Bearer, machine handle, and the three exact upstream-owned Android signing files are regular, non-symlink, mode `0600` files and are never replaced when present; bearer and machine handle are minted only when absent. Invalid state fails closed.
 - `current`, `previous`, and `~/.local/bin/skidbladnir` are the only intentional Skíðblaðnir symlinks. Create each as a validated relative temporary symlink and atomically rename it; reject every unexpected symlink in protected paths.
 - Under one nonblocking OS lock: download to same-filesystem staging; verify archive SHA, exact three release members, release manifest, executable version/source; add validated host config; rename the complete generation; atomically switch `current`.
-- Gateway runtime identity covers binary, catalogue, release manifest, and host
-  config. Unit/launcher identity is separate and retains the verified unit
+- Generation names use the gateway runtime identity, which covers binary,
+  catalogue, release manifest and host config. A host-config-only change at the
+  same published pin creates a distinct immutable generation; prior generation
+  rollback and identical-second-apply rules remain unchanged.
+  Unit/launcher identity is separate and retains the verified unit
   generation needed for rollback after an interrupted overwrite.
 - Start if inactive. Restart once if desired runtime/unit identity differs from active identity. After authenticated health reports the desired version, record active identity.
 - On failed activation, atomically restore the prior pointer and restart/verify it. On a failed first installation, leave the service inactive and the candidate unreferenced. Keep one prior generation; remove older exact owned generations only after success.
-- Install hooks, notifier, and Claude integration independently with `skid.integration`; they MUST NOT restart the gateway. The explicit Codex work wrappers inject the notifier through Codex's supported per-invocation configuration override. Personal Codex notification remains user-owned because Codex exposes one notifier command.
+- Install hooks, notifier, and Claude integration independently with
+  `skid.integration`; they MUST NOT restart the gateway. Shared Codex clients
+  do not add a second notifier policy; account notification remains user-owned.
 - Configure only private `/v1` Tailscale Serve through the supported CLI. No Funnel, private LocalAPI credentials, ETag/CAS client, or hostname surgery. A stale mapping produces one exact recovery `ACTION` and exit `2`.
 - Default host configs MUST NOT contain `--dangerously-bypass-approvals-and-sandbox`, Claude automatic permission mode, or an equivalent bypass.
 
@@ -290,6 +448,8 @@ Package-manager success proves package state; do not enumerate packages again. A
 - bearer/machine-handle modes and preservation;
 - Tailscale Serve owns only the desired private `/v1` mapping;
 - devbox public bootstrap ingress is absent;
+- the host timezone is UTC and the Jarvis service-account/base-directory
+  boundary is present without dev-server owning application contents;
 - pending reboot/login/container/tmux activation is reported.
 
 No separate code path may reimplement these checks as a doctor.
@@ -383,7 +543,7 @@ Packages B and C may run in parallel after A; D may join once G has published th
 7. Busy Docker, tmux binary, desktop-session, and reboot-required changes are reported, never forced.
 8. Unsupported platform/host, symlinked protected path, invalid secret, or public Serve state fails closed.
 9. Static checks discover all tracked shell, JSON, YAML, and plist files; Ansible syntax and contract tests run in CI.
-10. Production executable/configuration paths contain no doctor or `converge` symbol, legacy command alias, unsafe agent bypass, private Tailscale LocalAPI, executable `@latest`, pipe-to-shell installer, or automatic Arch removal. Documentation and negative tests may name forbidden behavior.
+10. Production executable/configuration paths contain no doctor or `converge` symbol, legacy command alias, automated/default unsafe agent bypass, private Tailscale LocalAPI, executable `@latest`, pipe-to-shell installer, or automatic Arch removal. Human wrappers forward native arguments without parsing or imposing policy; Jarvis retains its closed, independently constrained interface. Documentation and negative tests may name forbidden behavior.
 11. README documents only the two apply journeys, prerequisites, actions, and cutover boundary.
 
 ## 13. Implementation rule

@@ -1,0 +1,2 @@
+d {{ codex_shared_config.cognition_cwd_parent }} 2750 {{ codex_shared_config.jarvis_user }} {{ codex_shared_config.client_group }} -
+d {{ codex_shared_config.launcher_socket | dirname }} 0750 root {{ codex_shared_config.client_group }} -

@@ -17,15 +17,23 @@
 
     - name: Validate all existing remote managed state before mutation
       ansible.builtin.import_tasks: tasks/remote-preflight.yml
+
+    - name: Admit or drain the coupled shared Codex runtime before mutation
+      ansible.builtin.import_tasks: tasks/codex-runtime-preflight.yml
   roles:
     - role: base
+    - role: jarvis_host
     - role: workspace_assets
     - role: security
     - role: shell
     - role: ai_tools
+    - role: codex_shared
     - role: skidbladnir
     - role: rootless_docker
   post_tasks:
+    - name: Activate and verify the coupled shared Codex runtime
+      ansible.builtin.import_tasks: tasks/codex-runtime-activate.yml
+
     - name: Activate notified consumers before verification
       ansible.builtin.meta: flush_handlers
 
@@ -46,6 +54,43 @@
           printf 'non-tailnet inbound allow remains in UFW: %s\n' "$rule" >&2
           exit 1
         done <<<"$status"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Read the applied host timezone
+      ansible.builtin.command: timedatectl show -p Timezone --value
+      register: devbox_timezone_after
+      changed_when: false
+      failed_when: devbox_timezone_after.stdout != 'UTC'
+
+    - name: Read the applied PostgreSQL boundary
+      ansible.builtin.command:
+        argv:
+          - psql
+          - -Atd
+          - postgres
+          - -c
+          - "SELECT current_setting('TimeZone') || '|' || current_setting('listen_addresses')"
+      become: true
+      become_user: postgres
+      register: devbox_postgresql_boundary
+      changed_when: false
+      failed_when: devbox_postgresql_boundary.stdout != 'UTC|localhost'
+
+    - name: Validate the Jarvis host directory boundary
+      ansible.builtin.shell: |
+        set -euo pipefail
+        account="$(getent passwd jarvis)"
+        IFS=: read -r name _ uid gid _ home shell <<<"$account"
+        [[ "$name" == jarvis ]]
+        [[ "$uid" != 0 && "$gid" != 0 ]]
+        [[ "$home" == /var/lib/jarvis ]]
+        [[ "$shell" == /usr/sbin/nologin ]]
+        [[ "$(stat -c '%U|%G|%a' /opt/jarvis)" == 'root|root|755' ]]
+        [[ "$(stat -c '%U|%G|%a' /opt/jarvis/releases)" == 'root|root|755' ]]
+        [[ "$(stat -c '%U|%G|%a' /var/lib/jarvis)" == 'jarvis|jarvis|700' ]]
+        [[ "$(stat -c '%U|%G|%a' /etc/jarvis)" == 'root|jarvis|750' ]]
       args:
         executable: /bin/bash
       changed_when: false

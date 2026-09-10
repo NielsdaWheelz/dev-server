@@ -1,8 +1,13 @@
 ---
 devbox_user: niels
 devbox_deploy_user: dev-server-deploy
-devbox_timezone: America/Los_Angeles
+devbox_timezone: UTC
 devbox_locale: en_US.UTF-8
 devbox_node_major: "24"
 devbox_docker_log_max_size: "50m"
 devbox_docker_log_max_file: "3"
+devbox_postgresql_major: "16"
+devbox_pgvector_package_version: "0.8.6-1.pgdg24.04+1"
+jarvis_service_user: jarvis
+jarvis_service_group: jarvis
+devbox_codex_runtime_restart_authorized: false

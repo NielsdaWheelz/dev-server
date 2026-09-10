@@ -46,6 +46,7 @@ ssh_include_candidate=''
 ssh_known_hosts_candidate=''
 ssh_known_hosts_candidate_old=''
 ansible_output=''
+codex_restart_authorized=0
 steady_rules=''
 bootstrap_rules=''
 bootstrap_cidr=''
@@ -58,6 +59,7 @@ devbox_declared_stage=''
 usage() {
   cat <<'EOF'
 Usage: ./devbox apply
+       ./devbox apply --restart-codex
        ./devbox help
 
 Create the devbox when absent, or apply its declared state over tailnet SSH.
@@ -892,7 +894,11 @@ apply_new_server() {
 }
 
 run_ansible_apply() {
-  local rc skid_action_code
+  local codex_restart_value=false rc skid_action_code
+
+  if ((codex_restart_authorized)); then
+    codex_restart_value=true
+  fi
 
   ansible_output="$(mktemp "${TMPDIR:-/tmp}/devbox-ansible.XXXXXX")"
   set +e
@@ -900,11 +906,26 @@ run_ansible_apply() {
     ANSIBLE_NOCOLOR=1 \
     run_ansible_playbook \
     --ssh-common-args "-F $ssh_include" \
+    --extra-vars "{\"devbox_codex_runtime_restart_authorized\":$codex_restart_value}" \
     -i "$ansible_inventory" "$ansible_apply_playbook" \
     >"$ansible_output" 2>&1
   rc=$?
   set -e
   if ((rc != 0)); then
+    if ((rc == 2)) && grep -Fq DEV_SERVER_CODEX_ACTION_NATIVE_DISCOVERY "$ansible_output"; then
+      rm -f -- "$ansible_output"
+      ansible_output=''
+      render_result ACTION codex.runtime \
+        'resolve the conflicting native Codex discovery entry, then rerun ./devbox apply'
+      return 2
+    fi
+    if ((rc == 2)) && grep -Fq DEV_SERVER_CODEX_ACTION_DRAIN_RESTART "$ansible_output"; then
+      rm -f -- "$ansible_output"
+      ansible_output=''
+      render_result ACTION codex.runtime \
+        'rerun ./devbox apply --restart-codex to drain and restart all shared Codex services'
+      return 2
+    fi
     tail -c 65536 "$ansible_output" >&2 || true
     rm -f -- "$ansible_output"
     ansible_output=''
@@ -988,6 +1009,10 @@ check_github_enrollment() {
 }
 
 cmd_apply() {
+  if (($# == 1)) && [[ "$1" == --restart-codex ]]; then
+    codex_restart_authorized=1
+    shift
+  fi
   (($# == 0)) || {
     usage >&2
     return 64

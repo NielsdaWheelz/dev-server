@@ -316,8 +316,27 @@ test_invalid_input_is_read_only() {
   pass
 }
 
+test_every_zsh_prefers_shared_codex_launcher() {
+  local inherited output expected
+  install -d -m 0755 "$test_home/bin" "$test_home/.local/bin" "$test_home/.local/share/mise/shims"
+  printf '#!/bin/sh\nprintf "shared\\n"\n' >"$test_home/bin/codex"
+  printf '#!/bin/sh\nprintf "raw\\n"\n' >"$test_home/.local/bin/codex"
+  chmod 0755 "$test_home/bin/codex" "$test_home/.local/bin/codex"
+  expected="$test_home/bin"
+  for inherited in '/usr/bin:/bin' \
+    "$test_home/.local/bin:$test_home/bin:$test_home/.local/bin:/usr/bin:/bin"; do
+    output="$(HOME="$test_home" PATH="$inherited" /bin/zsh -c 'print -r -- "$path[1]"; codex; print -l -- $path')"
+    assert_eq "$expected" "$(printf '%s\n' "$output" | head -1)" 'noninteractive zsh first PATH directory'
+    assert_eq shared "$(printf '%s\n' "$output" | sed -n '2p')" 'noninteractive Codex command selection'
+    assert_eq 1 "$(printf '%s\n' "$output" | tail -n +3 | grep -Fxc "$test_home/.local/bin")" 'raw binary PATH duplicate count'
+    assert_eq 1 "$(printf '%s\n' "$output" | tail -n +3 | grep -Fxc "$test_home/.local/share/mise/shims")" 'mise shims preservation'
+  done
+  pass
+}
+
 tests_run=0
 test_atomic_files_and_tmux_activation
+test_every_zsh_prefers_shared_codex_launcher
 test_protected_target_rejected
 test_pinned_git_repositories
 test_interrupted_git_checkout_retries_cleanly

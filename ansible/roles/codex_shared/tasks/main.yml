@@ -1,0 +1,106 @@
+---
+# Root composition proves the coupled activation identity before this role.
+# This role installs desired inputs only; it never restarts an active backend.
+- name: Read the single shared Codex declaration
+  ansible.builtin.set_fact:
+    codex_shared_config: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/profiles.json') | from_json }}"
+
+- name: Create the dedicated shared Codex client group
+  ansible.builtin.group:
+    name: "{{ codex_shared_config.client_group }}"
+    system: true
+    state: present
+
+- name: Grant only intended principals shared socket access
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: "{{ codex_shared_config.client_group }}"
+    append: true
+  loop:
+    - "{{ codex_shared_config.development_user }}"
+    - "{{ codex_shared_config.jarvis_user }}"
+
+- name: Ensure root-owned shared Codex installation directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /usr/local/libexec, group: root, mode: "0755"}
+    - {path: /etc/codex-shared, group: root, mode: "0755"}
+
+- name: Install root-owned shared Codex declaration
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/codex/profiles.json"
+    dest: /etc/codex-shared/profiles.json
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the closed shared Codex host boundary
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/codex/codex-shared.py"
+    dest: /usr/local/libexec/codex-shared
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install native discovery links to the canonical shared endpoints
+  ansible.builtin.command:
+    argv:
+      - /usr/local/libexec/codex-shared
+      - install-discovery
+  become_user: "{{ codex_shared_config.development_user }}"
+  register: codex_discovery_install
+  changed_when: codex_discovery_install.stdout | length > 0
+  failed_when: codex_discovery_install.rc not in [0, 2]
+
+- name: Require native discovery conflicts to be resolved without replacement
+  ansible.builtin.fail:
+    msg: DEV_SERVER_CODEX_ACTION_NATIVE_DISCOVERY
+  when: codex_discovery_install.rc == 2
+
+- name: Install the three exact account service units
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../../assets/codex/codex-shared@.service"
+    dest: "/etc/systemd/system/codex-shared@{{ item.key }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ codex_shared_config.profiles | dict2items }}"
+
+- name: Install the socket-activated terminal boundary units
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../../assets/codex/{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - jarvis-codex-launcher.socket
+    - jarvis-codex-launcher@.service
+
+- name: Install reboot-persistent non-secret runtime directory declarations
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../../assets/codex/codex-shared.tmpfiles"
+    dest: /etc/tmpfiles.d/dev-server-codex.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create only the declared non-secret runtime parents
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ codex_shared_config.client_group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ codex_shared_config.cognition_cwd_parent }}"
+      owner: "{{ codex_shared_config.jarvis_user }}"
+      mode: "02750"
+    - path: "{{ codex_shared_config.launcher_socket | dirname }}"
+      owner: root
+      mode: "0750"

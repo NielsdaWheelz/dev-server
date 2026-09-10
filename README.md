@@ -42,22 +42,85 @@ Run:
 ```
 
 The order is native packages, repo-owned files, exact-host personal policy,
-the current stable Codex plus native Claude, and Skíðblaðnir. Package managers
+the pinned shared Codex services plus native Claude, and Skíðblaðnir. Package managers
 may refresh their own metadata. Apply never removes Arch packages, restarts
 tmux, reboots, logs out, or interrupts running containers. Those cases are
 reported as `DEFERRED`.
 On macOS, apply verifies and may start the exact App Store Tailscale app but
 never installs, upgrades, replaces, or signs in to it.
 
-Plain `codex` and `claude` remain upstream personal commands. Every Codex
-profile executes one npm user-global binary at `~/.local/bin/codex`; every
+`codex`, `codex-work`, and `codex-work2` select Personal, Work and Work2 by
+setting `CODEX_HOME`, then directly execute the pinned native CLI with your
+arguments, environment, cwd and exit behavior intact. Each account has one
+supervised App Server on each host. Every Codex profile uses the same
+exact npm binary at `~/.local/bin/codex`; every
 Claude profile executes one Anthropic-native binary at `~/.local/bin/claude`.
 Apply reconciles Claude explicitly to the native `latest` channel without
 reading an account profile's update-channel preference.
-The managed `codex-work`, `codex-work2`, and `claude-work` wrappers isolate only
-account state and notification configuration. Running sessions are never
-restarted for an upgrade; new launches use the reconciled binary. Authenticate
-isolated homes directly when first required.
+Plain `claude` and `claude-work` retain their native behavior.
+Use normal commands, including flags, positional prompts and subcommands:
+
+```sh
+codex-work login
+codex-work2 resume
+```
+
+MacBook uses three LaunchAgents; Arch uses three user systemd services. They
+start with the user session, restart on failure, and listen only on private
+Unix sockets at `~/.local/run/codex-shared/<profile>/app-server.sock`.
+Account homes and credentials are preserved. There is no Jarvis account or
+cross-user launcher on either workstation.
+
+Native discovery uses an exact symlink from each account's
+`app-server-control/app-server-control.sock` to its supervised socket. Apply
+refuses a conflicting native path before draining or changing managed runtime
+inputs; it never takes over another daemon or overwrites its socket.
+
+Codex 0.153.4 automatically reuses an available discovered server for compatible
+interactive launches. This is **not an always-shared guarantee**: native startup
+overrides such as `-c`, `--profile`, feature/hook overrides, or an unavailable
+server can select an embedded backend. Noninteractive/admin commands retain
+their native execution paths. Explicit `--remote unix://…` requires attachment
+and fails on connection failure, but supports only native remote-capable
+commands and has different cwd/config/resume semantics. The wrappers neither
+parse arguments nor invent fallback behavior. Native `app-server daemon stop`
+and `app-server daemon restart` cannot manage these externally supervised
+servers; use the owning host apply workflow.
+
+Native automatic reuse keeps the caller's local cwd/config-loading path, but
+tools execute in the server's environment, not the calling shell's. Account
+configuration remains user-owned; long-lived-server reload behavior and full
+resume/config parity are not promised. No notifier `-c` override is injected.
+Jarvis remains separate: its launcher requires the exact shared endpoint,
+permitted cwd, fixed workspace-write/on-request policy and clean environment.
+Human CLI flexibility gives Jarvis no additional launcher fields or authority.
+
+Human-CLI correction deployed 2026-09-09 from `08254bb` to MacBook, Devbox and
+Arch. All nine native default-socket probes and installed command checks passed;
+second applies changed nothing and preserved server PIDs. Linux boundary tests
+passed 18/18, including peer authentication and inherited-setgid handling;
+the routine suite and isolated pinned-TUI discovery gate passed. Jarvis's
+canonical socket access and closed launcher rejection were verified without
+restarting Jarvis or creating a thread/terminal. No model-turn, tmux or device
+acceptance is claimed. On Arch, open a new shell to pick up the corrected PATH.
+The obsolete installed Devbox `assets/codex/codex-profile` was removed from
+runtime inputs and preserved at
+`/var/backups/codex-human-cutover.t3r534rg/codex-profile`; no runtime migration or
+fallback remains.
+
+Ordinary apply starts missing services and leaves running services alone. A
+changed pin/helper/unit cannot replace a running account's inputs. After
+finishing active turns, explicitly authorize the shared-service restart:
+
+```sh
+./workstation apply --restart-codex
+```
+
+This stops only the three managed Codex services, not tmux sessions. All hosts
+use the exact version and package integrity from `assets/codex/profiles.json`.
+Workstation paths are derived from that declaration by the same helper; no
+second account map or pin is authored. Codex CLI/TUI pin bumps are reviewed
+service upgrades, while Claude keeps its native rolling update policy.
 
 ## Devbox
 
@@ -101,6 +164,25 @@ their modes to one immutable per-run stage, and consumed only from that stage.
 Rootless Docker's supported unit/context setup is rebuilt only when its
 package, generated unit, or daemon config identity changed and no container is
 running; otherwise activation is deferred.
+
+The existing Hetzner devbox is also the approved host for Jarvis v1. This
+repository converges only its shared prerequisites: UTC host time, PostgreSQL
+16/pgvector availability, a dedicated `jarvis` service account, and the base
+`/opt/jarvis`, `/var/lib/jarvis`, and `/etc/jarvis` ownership boundary. The
+[Jarvis repository](https://github.com/NielsdaWheelz/jarvis) owns the
+application release, locked Python environment, database and roles,
+migrations, systemd service, credentials, backup/restore, and operational
+recovery. `./devbox apply` never deploys Jarvis, reads its credentials, or
+touches Nexus application state. Jarvis is host-native and is not part of the
+developer's rootless Docker lifecycle.
+
+Devbox apply also installs and starts Personal, Work and Work2 shared Codex
+system services plus Jarvis's authenticated terminal-launcher socket. Jarvis
+connects to those existing services; it does not install, spawn or supervise
+them. Running services with changed inputs require
+`./devbox apply --restart-codex` after active turns finish. The devbox remains
+the only Jarvis worker host; workstation services do not add remote Jarvis
+control or expose Codex over the network.
 
 ## One-time hard cutover
 
@@ -301,16 +383,16 @@ Skíðblaðnir health/Serve postconditions.
 
 ## Boundaries and trade-offs
 
-- Native OS repositories, Codex stable, and Anthropic-native Claude are rolling
-  rather than byte-replayable. Git plugins, Cursor extensions, and Skíðblaðnir
+- Native OS repositories and Anthropic-native Claude are rolling
+  rather than byte-replayable. Codex, Git plugins, Cursor extensions, and Skíðblaðnir
   are exact reviewable pins and therefore can lag upstream until manually
   bumped.
 - Native package and npm updates can partially complete; rerun their native
   reconcilers. Git plugin candidates are isolated until an atomic link switch.
   Only Skíðblaðnir has repository-owned service rollback.
 - Skíðblaðnir no-op apply re-downloads its small archive to re-prove admission.
-  A host-config-only change needs a new release pin because generation identity
-  is release-keyed.
+  Generation identity includes host configuration, so a routing-only change
+  creates a new immutable generation at the same published release pin.
 - Desktop login, reboot, busy Docker, and tmux-server activation are never
   forced. Public exposure, credentials, checksums, host-key continuity, and the
   last healthy Skíðblaðnir generation are never traded away for convenience.

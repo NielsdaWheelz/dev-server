@@ -1,0 +1,264 @@
+---
+- name: Validate the explicit shared Codex restart authorization
+  ansible.builtin.assert:
+    that:
+      - devbox_codex_runtime_restart_authorized is boolean
+    fail_msg: Shared Codex restart authorization must be boolean
+
+- name: Validate the desired shared Codex declaration before any drain
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ playbook_dir }}/../../assets/codex/codex-shared.py"
+      - --config
+      - "{{ playbook_dir }}/../../assets/codex/profiles.json"
+      - validate
+  delegate_to: localhost
+  become: false
+  run_once: true
+  changed_when: false
+
+- name: Check desired native discovery before any coupled mutation
+  block:
+    - name: Stage the desired discovery check outside managed state
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: codex-discovery.
+      register: codex_discovery_stage
+      changed_when: false
+
+    - name: Permit the development principal to read the non-secret check inputs
+      ansible.builtin.file:
+        path: "{{ codex_discovery_stage.path }}"
+        owner: root
+        group: root
+        mode: "0755"
+      changed_when: false
+
+    - name: Copy the desired helper and declaration into the transient check
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../assets/codex/{{ item }}"
+        dest: "{{ codex_discovery_stage.path }}/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - codex-shared.py
+        - profiles.json
+      changed_when: false
+
+    - name: Check existing native discovery with the desired host boundary
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - "{{ codex_discovery_stage.path }}/codex-shared.py"
+          - --config
+          - "{{ codex_discovery_stage.path }}/profiles.json"
+          - --host
+          - devbox
+          - check-discovery
+      become_user: "{{ devbox_user }}"
+      register: codex_discovery_preflight
+      changed_when: false
+      failed_when: codex_discovery_preflight.rc not in [0, 2]
+
+    - name: Require native discovery conflicts to be resolved before any drain
+      ansible.builtin.fail:
+        msg: DEV_SERVER_CODEX_ACTION_NATIVE_DISCOVERY
+      when: codex_discovery_preflight.rc == 2
+  always:
+    - name: Remove the transient desired discovery check
+      ansible.builtin.file:
+        path: "{{ codex_discovery_stage.path }}"
+        state: absent
+      when: codex_discovery_stage.path is defined
+      changed_when: false
+
+- name: Resolve the exact shared Codex desired inputs
+  ansible.builtin.set_fact:
+    codex_runtime_desired_inputs:
+      - path: profiles.json
+        mode: "0644"
+        sha256: >-
+          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/profiles.json', rstrip=false) | hash('sha256') }}
+      - path: codex-shared.py
+        mode: "0755"
+        sha256: >-
+          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/codex-shared.py', rstrip=false) | hash('sha256') }}
+      - path: zshenv
+        mode: "0644"
+        sha256: >-
+          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/dotfiles/zshenv', rstrip=false) | hash('sha256') }}
+      - path: codex-shared.tmpfiles
+        mode: "0644"
+        sha256: >-
+          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/codex-shared.tmpfiles', rstrip=false) | hash('sha256') }}
+      - path: codex-shared@.service
+        mode: "0644"
+        sha256: >-
+          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/codex-shared@.service', rstrip=false) | hash('sha256') }}
+      - path: jarvis-codex-launcher.socket
+        mode: "0644"
+        sha256: >-
+          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/jarvis-codex-launcher.socket', rstrip=false) | hash('sha256') }}
+      - path: jarvis-codex-launcher@.service
+        mode: "0644"
+        sha256: >-
+          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/jarvis-codex-launcher@.service', rstrip=false) | hash('sha256') }}
+
+- name: Resolve the coupled shared Codex desired identity
+  ansible.builtin.set_fact:
+    codex_runtime_desired_identity: >-
+      {{ {'schema_version': 1, 'inputs': codex_runtime_desired_inputs} | to_json | hash('sha256') }}
+    codex_runtime_consumers:
+      - jarvis-codex-launcher.socket
+      - codex-shared@personal.service
+      - codex-shared@work.service
+      - codex-shared@work2.service
+
+- name: Inspect the recorded active shared Codex identity
+  ansible.builtin.stat:
+    path: /var/lib/dev-server/active/codex.runtime.sha256
+    follow: false
+  register: codex_runtime_active_identity
+
+- name: Validate the recorded active shared Codex identity path
+  ansible.builtin.assert:
+    that:
+      - not (codex_runtime_active_identity.stat.islnk | default(false))
+      - >-
+        not codex_runtime_active_identity.stat.exists or
+        codex_runtime_active_identity.stat.isreg
+      - >-
+        not codex_runtime_active_identity.stat.exists or
+        codex_runtime_active_identity.stat.mode == "0600"
+      - >-
+        not codex_runtime_active_identity.stat.exists or
+        codex_runtime_active_identity.stat.pw_name == "root"
+      - >-
+        not codex_runtime_active_identity.stat.exists or
+        codex_runtime_active_identity.stat.gr_name == "root"
+    fail_msg: Invalid recorded active shared Codex identity
+
+- name: Read the recorded active shared Codex identity
+  ansible.builtin.slurp:
+    path: /var/lib/dev-server/active/codex.runtime.sha256
+  register: codex_runtime_active_identity_content
+  when: codex_runtime_active_identity.stat.exists
+
+- name: Validate the recorded active shared Codex identity value
+  ansible.builtin.assert:
+    that:
+      - (codex_runtime_active_identity_content.content | b64decode | length) == 65
+      - >-
+        (codex_runtime_active_identity_content.content | b64decode)
+        is match('^[0-9a-f]{64}\n\Z')
+    fail_msg: Invalid recorded active shared Codex identity
+  when: codex_runtime_active_identity.stat.exists
+
+- name: Observe every shared Codex consumer before mutation
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - "{{ codex_runtime_consumer_state }}"
+  loop: "{{ codex_runtime_consumers }}"
+  register: codex_runtime_consumer_states
+  changed_when: false
+  failed_when: >-
+    codex_runtime_consumer_states.stdout not in
+    ['active', 'reloading', 'inactive', 'failed', 'activating',
+     'deactivating', 'maintenance', 'unknown']
+  loop_control:
+    loop_var: codex_runtime_consumer_state
+
+- name: Observe accepted terminal-helper requests before mutation
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - list-units
+      - --type=service
+      - --state=activating,reloading,active,deactivating,maintenance
+      - --no-legend
+      - --plain
+      - "jarvis-codex-launcher@*.service"
+  register: codex_runtime_live_launcher_requests
+  changed_when: false
+
+- name: Resolve the shared Codex activation decision
+  ansible.builtin.set_fact:
+    codex_runtime_any_active: >-
+      {{ codex_runtime_consumer_states.results |
+         rejectattr('stdout', 'in', ['inactive', 'failed', 'unknown']) |
+         list | length > 0 or
+         codex_runtime_live_launcher_requests.stdout | trim | length > 0 }}
+    codex_runtime_needs_activation: >-
+      {{ ((codex_runtime_active_identity_content.content | b64decode | trim)
+          if codex_runtime_active_identity.stat.exists else '') !=
+         codex_runtime_desired_identity }}
+
+- name: Require explicit drain authorization for changed active Codex inputs
+  ansible.builtin.fail:
+    msg: >-
+      DEV_SERVER_CODEX_ACTION_DRAIN_RESTART changed active inputs require
+      explicit drain/restart authorization
+  when:
+    - codex_runtime_any_active
+    - codex_runtime_needs_activation
+    - not (devbox_codex_runtime_restart_authorized | bool)
+
+- name: Stop terminal admission before replacing shared Codex inputs
+  ansible.builtin.systemd_service:
+    name: jarvis-codex-launcher.socket
+    state: stopped
+  when:
+    - codex_runtime_any_active
+    - codex_runtime_needs_activation
+    - devbox_codex_runtime_restart_authorized | bool
+
+- name: Reobserve accepted terminal-helper requests after closing admission
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - list-units
+      - --type=service
+      - --state=activating,reloading,active,deactivating,maintenance
+      - --no-legend
+      - --plain
+      - "jarvis-codex-launcher@*.service"
+  register: codex_runtime_remaining_launcher_requests
+  changed_when: false
+  when:
+    - codex_runtime_any_active
+    - codex_runtime_needs_activation
+    - devbox_codex_runtime_restart_authorized | bool
+
+- name: Require accepted terminal-helper requests to quiesce without being killed
+  ansible.builtin.fail:
+    msg: >-
+      DEV_SERVER_CODEX_ACTION_DRAIN_RESTART an accepted terminal request is
+      still active; rerun after its bounded request lifetime
+  when:
+    - codex_runtime_any_active
+    - codex_runtime_needs_activation
+    - devbox_codex_runtime_restart_authorized | bool
+    - codex_runtime_remaining_launcher_requests.stdout | trim | length > 0
+
+- name: Drain only live shared Codex backends before replacing inputs
+  ansible.builtin.systemd_service:
+    name: "{{ codex_runtime_consumer_state.codex_runtime_consumer_state }}"
+    state: stopped
+  loop: "{{ codex_runtime_consumer_states.results[1:] }}"
+  loop_control:
+    loop_var: codex_runtime_consumer_state
+  when:
+    - codex_runtime_any_active
+    - codex_runtime_needs_activation
+    - devbox_codex_runtime_restart_authorized | bool
+    - codex_runtime_consumer_state.stdout not in ['inactive', 'failed', 'unknown']
+
+- name: Invalidate the prior shared Codex activation proof before mutation
+  ansible.builtin.file:
+    path: /var/lib/dev-server/active/codex.runtime.sha256
+    state: absent
+  when: codex_runtime_needs_activation

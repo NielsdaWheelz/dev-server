@@ -63,6 +63,7 @@
     set -euo pipefail
     dev_server_home_dir="/home/{{ devbox_user }}"
     dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
+    dev_server_ai_host=devbox
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/ai-tools.sh"
     ai_install

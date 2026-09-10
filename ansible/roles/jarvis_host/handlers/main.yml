@@ -1,0 +1,5 @@
+---
+- name: Restart PostgreSQL for Jarvis host boundary
+  ansible.builtin.systemd_service:
+    name: postgresql.service
+    state: restarted

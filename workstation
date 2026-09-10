@@ -13,15 +13,19 @@ source "$base_dir/lib/personal-arch.sh"
 source "$base_dir/lib/skidbladnir.sh"
 # shellcheck source=lib/ai-tools.sh
 source "$base_dir/lib/ai-tools.sh"
+# shellcheck source=lib/codex-services.sh
+source "$base_dir/lib/codex-services.sh"
 
 workstation_platform=''
 workstation_target=''
 workstation_desired_snapshot=''
 workstation_declared_stage=''
+workstation_restart_codex=0
 
 usage() {
   printf '%s\n' \
     'Usage: ./workstation apply' \
+    '       ./workstation apply --restart-codex' \
     '       ./workstation help'
 }
 
@@ -76,6 +80,7 @@ workstation_cleanup_on_exit() {
   local rc=$?
 
   trap - EXIT HUP INT TERM
+  codex_services_cleanup || rc=1
   if [[ -n "$workstation_declared_stage" ]]; then
     case "$workstation_declared_stage" in
     "${TMPDIR:-/tmp}"/workstation-declared.??????)
@@ -126,6 +131,8 @@ workstation_stage_declared_inputs() {
   [[ "$staged_snapshot" == "$workstation_desired_snapshot" ]] ||
     die 'staged workstation desired inputs differ from their validated source'
 
+  # Read by the platform package library selected at runtime.
+  # shellcheck disable=SC2034
   dev_server_root="$workstation_declared_stage"
   dev_server_assets_root="$workstation_declared_stage/assets"
   # Read dynamically by the already-sourced Skidbladnir library.
@@ -137,6 +144,9 @@ workstation_preflight() {
   local serve_status
 
   workstation_select_target
+  # Consumed by the profile installer and shared helper.
+  # shellcheck disable=SC2034
+  dev_server_ai_host="$workstation_target"
   packages_validate_inputs
   dotfiles_validate_declared_inputs
   dotfiles_validate_local_state
@@ -160,6 +170,7 @@ workstation_preflight() {
   workstation_desired_snapshot="$(workstation_snapshot "$base_dir")" ||
     die 'could not resolve workstation desired inputs'
   workstation_stage_declared_inputs
+  codex_services_preflight "$workstation_target" "$workstation_restart_codex"
 }
 
 workstation_verify_desired_inputs() {
@@ -182,7 +193,9 @@ workstation_apply() {
   if [[ "$workstation_platform" == arch ]]; then
     personal_arch_apply
   fi
+  codex_services_install
   ai_install
+  codex_services_activate
   skidbladnir_apply "$workstation_platform"
   workstation_verify_desired_inputs
   workstation_report_deferrals
@@ -201,6 +214,10 @@ main() {
 
   case "$operation" in
   apply)
+    if (($# == 1)) && [[ "$1" == --restart-codex ]]; then
+      workstation_restart_codex=1
+      shift
+    fi
     (($# == 0)) || {
       usage >&2
       return 64
