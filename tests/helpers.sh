@@ -264,13 +264,13 @@ test_change_contract() (
   local change_id
   for change_id in \
     tmux.config shell.config ai.instructions desktop.session ssh.config docker.config \
-    skid.unit skid.runtime skid.integration tailscale.serve system.reboot; do
+    skid.unit skid.runtime skid.integration codex.runtime tailscale.serve system.reboot; do
     record_change "$change_id"
     has_change "$change_id" || fail "recorded change is absent: $change_id"
   done
-  assert_eq 11 "$dev_server_change_count" 'closed registry size'
+  assert_eq 12 "$dev_server_change_count" 'closed registry size'
   record_change tmux.config
-  assert_eq 11 "$dev_server_change_count" 'change deduplication'
+  assert_eq 12 "$dev_server_change_count" 'change deduplication'
 
   if (record_change package.config) >"$fixture/change-unknown" 2>&1; then
     fail 'change registry accepted an unknown identifier'
