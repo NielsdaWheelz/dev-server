@@ -26,7 +26,7 @@ ai_validate_inputs() {
   profile="$(dev_server_assets_dir)/routers/ai-profile"
   [[ -f "$profile" && ! -L "$profile" ]] ||
     die "invalid AI profile wrapper: $profile"
-  ai_codex_host pin >/dev/null || die 'invalid shared Codex declaration'
+  ai_codex_host validate || die 'invalid shared Codex declaration'
 }
 
 ai_codex_host() {
@@ -59,10 +59,8 @@ ai_package_version() {
   node -e '
     const manifest = require(process.argv[1]);
     const packageName = process.argv[2];
-    const version = manifest.name === packageName
-      ? manifest.version
-      : manifest.dependencies?.[packageName];
-    if (typeof version !== "string" || !/^\d+\.\d+\.\d+$/.test(version)) {
+    const version = manifest.version;
+    if (manifest.name !== packageName || typeof version !== "string" || !/^\d+\.\d+\.\d+$/.test(version)) {
       process.exit(1);
     }
     process.stdout.write(version);
@@ -77,19 +75,6 @@ ai_codex_manifest() {
   printf '%s/.local/lib/node_modules/@openai/codex/package.json\n' \
     "$(dev_server_home)"
 }
-
-ai_codex_install_package() (
-  set -euo pipefail
-  local candidate="$1" prefix="$2" package_source package_stage
-  package_source="@openai/codex@$candidate"
-  package_stage="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-codex-package.XXXXXX")" || exit 1
-  trap 'rm -rf -- "$package_stage"' EXIT
-  npm pack --ignore-scripts --json --pack-destination "$package_stage" \
-    "$package_source" >"$package_stage/metadata.json" || exit 1
-  package_source="$(ai_codex_host verify-package "$package_stage")" || exit 1
-  npm install --global --prefix "$prefix" --ignore-scripts \
-    --no-audit --no-fund "$package_source"
-)
 
 ai_codex_matches() {
   local expected="$1"
@@ -117,6 +102,10 @@ ai_install_codex() {
   home="$(dev_server_home)"
   prefix="$home/.local"
   binary="$(ai_codex_binary)"
+  candidate="$(npm view @openai/codex dist-tags.latest)" ||
+    die 'could not resolve the latest stable Codex release'
+  [[ "$candidate" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    die 'npm latest must identify a stable Codex release'
   npm_prefix="$(npm config get prefix)" || die "could not read the npm global prefix"
   if [[ "$npm_prefix" != "$prefix" ]]; then
     npm config set --location=user prefix "$prefix" ||
@@ -126,7 +115,6 @@ ai_install_codex() {
     render_result CHANGED "npm global prefix" "$prefix"
   fi
 
-  candidate="$(ai_codex_host pin)" || return 1
   if ai_codex_matches "$candidate"; then
     return 0
   fi
@@ -136,9 +124,10 @@ ai_install_codex() {
   else
     status=INSTALLED
   fi
-  ai_codex_install_package "$candidate" "$prefix" || return 1
+  npm install --global --prefix "$prefix" --ignore-scripts \
+    --no-audit --no-fund "@openai/codex@$candidate" || return 1
   ai_codex_matches "$candidate" ||
-    die 'installed Codex does not match the declared candidate'
+    die 'installed Codex does not match the resolved npm candidate'
   render_result "$status" "AI tool" "codex@$candidate"
 }
 

@@ -195,6 +195,30 @@ codex_services_activate
                 self.assertIn("CHANGED", repaired.stdout)
                 self.stop_children()
 
+    def test_cli_update_preserves_running_servers_until_explicit_restart(self):
+        for host in ("macbook", "arch"):
+            with self.subTest(host=host):
+                self.stop_children()
+                raw = self.home / ".local/bin/codex"
+                manifest = self.home / ".local/lib/node_modules/@openai/codex/package.json"
+                raw.write_text(CODEX)
+                manifest.write_text('{"name":"@openai/codex","version":"0.153.4"}')
+                first = self.apply(host)
+                self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
+                before = self.pids()
+                calls = (self.manager / "calls").read_bytes()
+                raw.write_text(CODEX.replace("0.153.4", "9.8.7"))
+                manifest.write_text('{"name":"@openai/codex","version":"9.8.7"}')
+                updated = self.apply(host)
+                self.assertEqual(updated.returncode, 0, updated.stderr + updated.stdout)
+                self.assertEqual(self.pids(), before, "CLI updates must leave running servers alone")
+                self.assertEqual((self.manager / "calls").read_bytes(), calls)
+                restarted = self.apply(host, "1")
+                self.assertEqual(restarted.returncode, 0, restarted.stderr + restarted.stdout)
+                self.assertTrue(all(self.pids()[key] != pid for key, pid in before.items()),
+                                "explicit restart must work with unchanged operational identity")
+                self.stop_children()
+
     def test_foreign_native_discovery_blocks_before_authorized_drain_or_replacement(self):
         first = self.apply("arch")
         self.assertEqual(first.returncode, 0, first.stderr + first.stdout)

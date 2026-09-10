@@ -1,8 +1,6 @@
 """Host boundary fixtures, not Linux/systemd/tmux/provider qualification."""
 
-import base64
 import grp
-import hashlib
 import importlib.util
 import json
 import os
@@ -28,8 +26,7 @@ import json, os, pathlib, sys
 path = pathlib.Path(__file__)
 args = sys.argv[1:]
 if path.name == "codex" and args == ["--version"]:
-    print("codex-cli 0.153.4")
-    raise SystemExit(0)
+    raise SystemExit("server and terminal admission must not probe a version")
 if path.name == "codex" and args == ["--help"]:
     print("native fixture help")
     raise SystemExit(0)
@@ -355,7 +352,7 @@ class HostBoundary(unittest.TestCase):
                              ["new-session"] if stage == "create" else ["new-session", "display-message"])
 
     def test_closed_config_rejects_duplicate_fields_and_non_unix_endpoints(self):
-        self.assertEqual(host.load_config(str(self.config_path))["version"], "0.153.4")
+        self.assertEqual(host.load_config(str(self.config_path))["schema_version"], 2)
         self.config_path.write_text('{"schema_version":1,"schema_version":1}')
         with self.assertRaises(ValueError):
             host.load_config(str(self.config_path))
@@ -363,20 +360,6 @@ class HostBoundary(unittest.TestCase):
         self.write_config()
         with self.assertRaises(ValueError):
             host.load_config(str(self.config_path))
-
-    def test_package_is_verified_from_downloaded_bytes_not_npm_claim(self):
-        package = self.root / "package.tgz"
-        data = b"synthetic package fixture"
-        package.write_bytes(data)
-        (self.root / "metadata.json").write_text(json.dumps([{"filename": package.name}]))
-        self.config["package"]["integrity"] = "sha512-" + base64.b64encode(hashlib.sha512(data).digest()).decode()
-        self.config["package"]["shasum"] = hashlib.sha1(data).hexdigest()
-        self.write_config()
-        result = self.run_host("verify-package", str(self.root))
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.decode().strip(), str(package))
-        package.write_bytes(data + b"tampered")
-        self.assertNotEqual(self.run_host("verify-package", str(self.root)).returncode, 0)
 
     def test_post_bind_grants_only_exact_owned_socket_and_parent(self):
         path = Path(self.config["profiles"]["personal"]["endpoint"][7:])

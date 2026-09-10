@@ -2,9 +2,7 @@
 """Closed host boundary. Codex owns threads; this helper stores no lifecycle state."""
 
 import argparse
-import base64
 import grp
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -68,20 +66,10 @@ def load_config(path):
                 or (path == CONFIG and metadata.st_uid != 0)):
             invalid()
         config = decode(stream.read(LIMIT + 1))
-    fields(config, {"schema_version", "version", "package", "development_user",
+    fields(config, {"schema_version", "development_user",
                     "jarvis_user", "client_group", "binary", "tmux",
                     "cognition_cwd_parent", "launcher_socket", "profiles"})
-    if type(config["schema_version"]) is not int or config["schema_version"] != 1:
-        invalid()
-    if config["version"] != "0.153.4":
-        invalid()
-    fields(config["package"], {"name", "integrity", "shasum"})
-    package = config["package"]
-    if (package["name"] != "@openai/codex"
-            or not isinstance(package["integrity"], str)
-            or not re.fullmatch(r"sha512-[A-Za-z0-9+/]{86}==", package["integrity"])
-            or not isinstance(package["shasum"], str)
-            or not re.fullmatch(r"[0-9a-f]{40}", package["shasum"])):
+    if type(config["schema_version"]) is not int or config["schema_version"] != 2:
         invalid()
     for key in ("development_user", "jarvis_user", "client_group"):
         if not isinstance(config[key], str) or not re.fullmatch(r"[a-z_][a-z0-9_-]*", config[key]):
@@ -164,12 +152,6 @@ def bounded_command(argv, env, timeout=10):
             raise
 
 
-def verify_binary(config, row):
-    status, output = bounded_command([config["binary"], "--version"], environment(config, row))
-    if status != 0 or output.strip() != f"codex-cli {config['version']}".encode():
-        invalid()
-
-
 def handle_request(config, request):
     try:
         if isinstance(request, dict) and request.get("kind") == "ResolveCwd":
@@ -191,7 +173,6 @@ def handle_request(config, request):
                 "--ask-for-approval", "on-request", "resume", handle]
         env = environment(config, row)
         env["TERM"] = "tmux-256color"
-        verify_binary(config, row)
     except (ValueError, OSError, KeyError, TimeoutError, subprocess.TimeoutExpired):
         return {"kind": "Rejected", "stage": "validate", "reason": "invalid_request"}
     # A pre-existing default tmux server has its own environment. env -i clears
@@ -261,29 +242,6 @@ def grant_socket(config, key):
     raise TimeoutError
 
 
-def verify_package(config, stage):
-    directory = Path(stage).resolve(strict=True)
-    with (directory / "metadata.json").open("rb") as stream:
-        metadata = decode(stream.read(LIMIT + 1))
-    if not isinstance(metadata, list) or len(metadata) != 1 or not isinstance(metadata[0], dict):
-        invalid()
-    filename = metadata[0].get("filename")
-    if not isinstance(filename, str) or Path(filename).name != filename or filename in ("", ".", ".."):
-        invalid()
-    target = directory / filename
-    sha512, sha1 = hashlib.sha512(), hashlib.sha1()
-    with open(os.open(target, os.O_RDONLY | os.O_NOFOLLOW), "rb") as stream:
-        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-            invalid()
-        for chunk in iter(lambda: stream.read(65536), b""):
-            sha512.update(chunk)
-            sha1.update(chunk)
-    if ("sha512-" + base64.b64encode(sha512.digest()).decode() != config["package"]["integrity"]
-            or sha1.hexdigest() != config["package"]["shasum"]):
-        invalid()
-    print(target)
-
-
 def discovery_links(config, *, allow_missing_accounts):
     links = []
     try:
@@ -329,7 +287,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=CONFIG)
     parser.add_argument("--host", choices=("devbox", "macbook", "arch"), default="devbox")
-    parser.add_argument("mode", choices=("pin", "validate", "verify-package", "launcher",
+    parser.add_argument("mode", choices=("validate", "launcher",
                                          "server", "grant-socket", "terminal",
                                          "check-discovery", "install-discovery"))
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
@@ -337,21 +295,16 @@ def main():
     config = load_config(args.config)
     if args.host != "devbox" and args.mode in ("terminal", "grant-socket"):
         invalid()
-    if args.mode in ("pin", "validate", "terminal"):
+    if args.mode in ("validate", "terminal"):
         if args.arguments:
             invalid()
-        if args.mode == "pin":
-            print(config["version"])
-        elif args.mode == "terminal":
+        if args.mode == "terminal":
             with socket.socket(fileno=os.dup(0)) as connection:
                 serve_request(config, connection)
         return
-    if args.mode == "verify-package" and len(args.arguments) == 1:
-        verify_package(config, args.arguments[0])
-        return
     if args.host != "devbox":
         home = absolute(os.path.expanduser("~"))
-        config = {"version": config["version"], "host": args.host, "home": home,
+        config = {"host": args.host, "home": home,
                   "development_user": pwd.getpwuid(os.getuid()).pw_name,
                   "binary": f"{home}/.local/bin/codex",
                   "cognition_cwd_parent": f"{home}/.local/share/codex-shared/empty",
@@ -392,7 +345,6 @@ def main():
             if (not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.getuid()
                     or stat.S_IMODE(metadata.st_mode) != 0o700 or any(cwd.iterdir())):
                 invalid()
-        verify_binary(config, row)
         os.chdir(config["cognition_cwd_parent"])
         argv = [config["binary"], "app-server", "--listen", row["endpoint"]]
         os.execve(config["binary"], argv, environment(config, row))

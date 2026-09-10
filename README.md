@@ -42,7 +42,7 @@ Run:
 ```
 
 The order is native packages, repo-owned files, exact-host personal policy,
-the pinned shared Codex services plus native Claude, and Skíðblaðnir. Package managers
+the shared Codex services plus native Claude, and Skíðblaðnir. Package managers
 may refresh their own metadata. Apply never removes Arch packages, restarts
 tmux, reboots, logs out, or interrupts running containers. Those cases are
 reported as `DEFERRED`.
@@ -50,11 +50,15 @@ On macOS, apply verifies and may start the exact App Store Tailscale app but
 never installs, upgrades, replaces, or signs in to it.
 
 `codex`, `codex-work`, and `codex-work2` select Personal, Work and Work2 by
-setting `CODEX_HOME`, then directly execute the pinned native CLI with your
+setting `CODEX_HOME`, then directly execute the installed native CLI with your
 arguments, environment, cwd and exit behavior intact. Each account has one
 supervised App Server on each host. Every Codex profile uses the same
 exact npm binary at `~/.local/bin/codex`; every
 Claude profile executes one Anthropic-native binary at `~/.local/bin/claude`.
+Apply resolves Codex's npm `latest` channel once, requires a stable release,
+and installs that candidate using normal npm integrity with scripts disabled.
+An already-matching installation is unchanged. The account wrappers and host
+helper add no startup update check; upstream Codex retains its own behavior.
 Apply reconciles Claude explicitly to the native `latest` channel without
 reading an account profile's update-channel preference.
 Plain `claude` and `claude-work` retain their native behavior.
@@ -76,7 +80,7 @@ Native discovery uses an exact symlink from each account's
 refuses a conflicting native path before draining or changing managed runtime
 inputs; it never takes over another daemon or overwrites its socket.
 
-Codex 0.153.4 automatically reuses an available discovered server for compatible
+Native Codex automatically reuses an available discovered server for compatible
 interactive launches. This is **not an always-shared guarantee**: native startup
 overrides such as `-c`, `--profile`, feature/hook overrides, or an unavailable
 server can select an embedded backend. Noninteractive/admin commands retain
@@ -108,19 +112,23 @@ runtime inputs and preserved at
 `/var/backups/codex-human-cutover.t3r534rg/codex-profile`; no runtime migration or
 fallback remains.
 
-Ordinary apply starts missing services and leaves running services alone. A
-changed pin/helper/unit cannot replace a running account's inputs. After
+Ordinary apply may update the CLI, starts missing services, and leaves healthy
+running services alone. Changed operational config/helper/unit inputs cannot
+replace a running account's inputs. After
 finishing active turns, explicitly authorize the shared-service restart:
 
 ```sh
 ./workstation apply --restart-codex
 ```
 
-This stops only the three managed Codex services, not tmux sessions. All hosts
-use the exact version and package integrity from `assets/codex/profiles.json`.
-Workstation paths are derived from that declaration by the same helper; no
-second account map or pin is authored. Codex CLI/TUI pin bumps are reviewed
-service upgrades, while Claude keeps its native rolling update policy.
+This restarts the three managed Codex services even when configuration has not
+changed; it never stops tmux sessions. Running servers may use an older release
+than the updated CLI until restarted. Native crash/reboot recovery still starts
+the installed release. A newer version is not proof of protocol compatibility:
+actual capability, response and authority validation stays strict.
+`assets/codex/profiles.json` declares only schema-v2 operational paths, principals
+and profiles, with no package/version fields. All hosts and Jarvis use that one
+closed declaration; no old-schema fallback or second account map exists.
 
 ## Devbox
 
@@ -179,8 +187,10 @@ developer's rootless Docker lifecycle.
 Devbox apply also installs and starts Personal, Work and Work2 shared Codex
 system services plus Jarvis's authenticated terminal-launcher socket. Jarvis
 connects to those existing services; it does not install, spawn or supervise
-them. Running services with changed inputs require
-`./devbox apply --restart-codex` after active turns finish. The devbox remains
+them. Running services with changed operational inputs require
+`./devbox apply --restart-codex` after active turns finish. That explicit flag
+also restarts unchanged services to pick up an updated CLI; a CLI-only update
+never triggers the restart itself. The devbox remains
 the only Jarvis worker host; workstation services do not add remote Jarvis
 control or expose Codex over the network.
 
@@ -383,8 +393,8 @@ Skíðblaðnir health/Serve postconditions.
 
 ## Boundaries and trade-offs
 
-- Native OS repositories and Anthropic-native Claude are rolling
-  rather than byte-replayable. Codex, Git plugins, Cursor extensions, and Skíðblaðnir
+- Native OS repositories, Codex and Anthropic-native Claude are rolling
+  rather than byte-replayable. Git plugins, Cursor extensions, and Skíðblaðnir
   are exact reviewable pins and therefore can lag upstream until manually
   bumped.
 - Native package and npm updates can partially complete; rerun their native
