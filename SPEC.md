@@ -357,6 +357,12 @@ Additional rules:
   immediately observes one ordinary default-server tmux session, and returns a
   content-free tagged result. It accepts no prompt, environment, executable,
   socket, account home, or arbitrary argv.
+- Jarvis's native thread-creation boundary sets workspace-write, on-request
+  approval, user review and disabled network access. The terminal helper passes
+  only the selected remote endpoint and exact resume handle to Codex; remote
+  resume restores the saved thread permissions. It MUST NOT supply permission
+  overrides, which Codex 0.154 rejects on remote resume. This changes neither
+  the closed launcher request nor human command forwarding.
 - The root-owned Codex profile document is the single source for exact account
   homes, endpoints, permitted work roots, empty cognition parent, users,
   binaries and tmux path. Consumer views are derived,

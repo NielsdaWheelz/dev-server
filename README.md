@@ -95,8 +95,11 @@ Native automatic reuse keeps the caller's local cwd/config-loading path, but
 tools execute in the server's environment, not the calling shell's. Account
 configuration remains user-owned; long-lived-server reload behavior and full
 resume/config parity are not promised. No notifier `-c` override is injected.
-Jarvis remains separate: its launcher requires the exact shared endpoint,
-permitted cwd, fixed workspace-write/on-request policy and clean environment.
+Jarvis remains separate: native thread creation sets workspace-write/on-request
+policy, user approval review and disabled network access. Its launcher requires
+the exact shared endpoint, permitted cwd and clean environment, then resumes the
+saved thread permissions without overrides. Codex 0.154 rejects permission
+overrides on remote resume; attachment must not replace the thread's policy.
 Human CLI flexibility gives Jarvis no additional launcher fields or authority.
 
 Human-CLI correction deployed 2026-09-09 from `08254bb` to MacBook, Devbox and

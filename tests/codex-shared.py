@@ -302,10 +302,10 @@ class HostBoundary(unittest.TestCase):
         self.assertEqual(argv[:9], ["new-session", "-d", "-P", "-F", "#{session_id}",
                                    "-s", "review-13", "-c", str(self.work)])
         self.assertEqual(argv[9:11], ["/usr/bin/env", "-i"])
-        self.assertEqual(argv[-9:], [self.config["binary"], "--remote",
-                                    self.config["profiles"]["personal"]["endpoint"],
-                                    "--sandbox", "workspace-write", "--ask-for-approval", "on-request",
-                                    "resume", HANDLE])
+        # Remote resume restores the permissions established by thread/start.
+        self.assertEqual(argv[argv.index(self.config["binary"]):],
+                         [self.config["binary"], "--remote",
+                          self.config["profiles"]["personal"]["endpoint"], "resume", HANDLE])
         self.assertNotIn("-L", argv)
         self.assertNotIn("-S", argv)
         self.assertNotIn("TMUX", create["env"])

@@ -169,8 +169,7 @@ def handle_request(config, request):
         handle = request["thread_handle"]
         if not isinstance(handle, str) or not THREAD.fullmatch(handle):
             invalid()
-        argv = [config["binary"], "--remote", row["endpoint"], "--sandbox", "workspace-write",
-                "--ask-for-approval", "on-request", "resume", handle]
+        argv = [config["binary"], "--remote", row["endpoint"], "resume", handle]
         env = environment(config, row)
         env["TERM"] = "tmux-256color"
     except (ValueError, OSError, KeyError, TimeoutError, subprocess.TimeoutExpired):
