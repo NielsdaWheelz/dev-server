@@ -133,7 +133,7 @@ class Services(unittest.TestCase):
                     pass
                 state.unlink()
 
-    def apply(self, host, restart="0"):
+    def apply(self, host, restart="0", umask=-1):
         script = '''set -euo pipefail
 source "$1/lib/common.sh"
 source "$1/lib/ai-tools.sh"
@@ -150,12 +150,31 @@ codex_services_activate
 '''
         return subprocess.run(["bash", "-c", script, "fixture", str(REPO),
                                str(self.assets), host, restart], env=self.env,
-                              capture_output=True, text=True, timeout=40)
+                              capture_output=True, text=True, timeout=40, umask=umask)
 
     def pids(self):
         return {profile: (self.manager / profile).read_text()
                 for profile in ("personal", "work", "work2")
                 if (self.manager / profile).exists()}
+
+    def test_group_umask_source_is_staged_with_runtime_permissions(self):
+        source = self.assets / "codex/profiles.json"
+        before = source.read_bytes()
+        source.unlink()
+        previous = os.umask(0o002)
+        try:
+            source.write_bytes(before)
+        finally:
+            os.umask(previous)
+        self.assertEqual(source.stat().st_mode & 0o777, 0o664)
+        result = self.apply("arch", umask=0o002)
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertEqual(set(self.pids()), {"personal", "work", "work2"})
+        self.assertEqual(source.read_bytes(), before)
+        self.assertEqual(source.stat().st_mode & 0o777, 0o664)
+        installed = self.home / ".config/codex-shared/profiles.json"
+        self.assertEqual(installed.read_bytes(), before)
+        self.assertEqual(installed.stat().st_mode & 0o777, 0o644)
 
     def test_first_apply_starts_three_and_second_apply_is_quiescent(self):
         for account in (".codex", ".codex-work", ".codex-work2"):

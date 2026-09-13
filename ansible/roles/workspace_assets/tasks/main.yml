@@ -84,6 +84,8 @@
     group: "{{ devbox_user }}"
     mode: "{{ item.mode }}"
   loop:
+    - path: native-control.json
+      mode: "0644"
     - path: release-pin.json
       mode: "0644"
     - path: host-config-devbox.json

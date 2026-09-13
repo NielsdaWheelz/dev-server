@@ -70,6 +70,7 @@ test_arch_native_reconciliation() (
   : >"$calls"
   : >"$results"
   mkdir -p "$home/.local/state/dev-server/active"
+  chmod 0755 "$home/.local" "$home/.local/state"
   chmod 0700 "$home/.local/state/dev-server" "$home/.local/state/dev-server/active"
   dev_server_home_dir="$home"
 
@@ -134,6 +135,7 @@ test_arch_busy_process_deferrals() (
   : >"$calls"
   : >"$results"
   mkdir -p "$home/.local/state/dev-server/active"
+  chmod 0755 "$home/.local" "$home/.local/state"
   chmod 0700 "$home/.local/state/dev-server" "$home/.local/state/dev-server/active"
   dev_server_home_dir="$home"
 
@@ -193,6 +195,7 @@ test_arch_idle_docker_restart() (
   local restart_count=0
   : >"$results"
   mkdir -p "$home/.local/state/dev-server/active"
+  chmod 0755 "$home/.local" "$home/.local/state"
   chmod 0700 "$home/.local/state/dev-server" "$home/.local/state/dev-server/active"
   dev_server_home_dir="$home"
 
@@ -249,6 +252,7 @@ test_arch_inactive_docker_activation_is_verified() (
 
   : >"$results"
   mkdir -p "$home/.local/state/dev-server/active"
+  chmod 0755 "$home/.local" "$home/.local/state"
   chmod 0700 "$home/.local/state/dev-server" "$home/.local/state/dev-server/active"
   dev_server_home_dir="$home"
   # shellcheck source=lib/common.sh
@@ -683,6 +687,7 @@ test_boot_consumed_zram_seals_without_reload() (
   local desired_sha home="$fixture/zram-retry-home"
 
   mkdir -p "$asset_root/assets/systemd" "$home/.local/state/dev-server/active"
+  chmod 0755 "$home/.local" "$home/.local/state"
   chmod 0700 "$home/.local/state/dev-server" "$home/.local/state/dev-server/active"
   printf '%s\n' '[zram0]' 'zram-size = ram / 2' \
     >"$asset_root/assets/systemd/zram-generator.conf"

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 REPO = Path(__file__).resolve().parents[1]
@@ -19,7 +20,6 @@ HOST = REPO / "assets/codex/codex-shared.py"
 spec = importlib.util.spec_from_file_location("codex_host", HOST)
 host = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(host)
-HANDLE = "01987654-1234-7000-8000-123456789abc"
 
 FAKE = '''#!/usr/bin/env python3
 import json, os, pathlib, sys
@@ -35,20 +35,7 @@ if path.name == "codex" and args == ["--unsupported"]:
     raise SystemExit(23)
 with path.with_suffix(".calls").open("a") as stream:
     stream.write(json.dumps({"argv": args, "env": dict(os.environ), "cwd": os.getcwd()}) + "\\n")
-if path.name == "tmux":
-    mode_path = path.with_suffix(".mode")
-    mode = mode_path.read_text() if mode_path.exists() else "ok"
-    if args[0] == "new-session":
-        if mode == "create-failed": raise SystemExit(1)
-        path.with_suffix(".name").write_text(args[args.index("-s") + 1])
-        print("$17")
-    elif args[0] == "display-message":
-        name = path.with_suffix(".name").read_text()
-        print("$18\\twrong" if mode == "observe-failed" else "$17\\t" + name)
-    else:
-        raise SystemExit(65)
 '''
-
 
 class HostBoundary(unittest.TestCase):
     def setUp(self):
@@ -62,16 +49,14 @@ class HostBoundary(unittest.TestCase):
         account = pwd.getpwuid(os.getuid())
         self.config.update(development_user=account.pw_name, jarvis_user=account.pw_name,
                            client_group=grp.getgrgid(os.getgid()).gr_name,
-                           binary=str(self.root / "codex"), tmux=str(self.root / "tmux"),
-                           cognition_cwd_parent=str(self.root / "empty"),
-                           launcher_socket=str(self.root / "launch.sock"))
+                           binary=str(self.root / "codex"),
+                           cognition_cwd_parent=str(self.root / "empty"))
         Path(self.config["cognition_cwd_parent"]).mkdir()
         for key, row in self.config["profiles"].items():
             directory = self.root / Path(row["account_home"]).name
             directory.mkdir(mode=0o700)
-            row.update(account_home=str(directory), endpoint=f"unix://{directory}/server.sock",
-                       work_roots=[str(self.work)])
-        for command in ("codex", "tmux"):
+            row.update(account_home=str(directory), endpoint=f"unix://{directory}/server.sock")
+        for command in ("codex",):
             target = self.root / command
             target.write_text(FAKE)
             target.chmod(0o755)
@@ -81,12 +66,6 @@ class HostBoundary(unittest.TestCase):
     def write_config(self):
         self.config_path.write_text(json.dumps(self.config))
         self.config_path.chmod(0o600)
-
-    def request(self, **updates):
-        value = {"kind": "LaunchTerminal", "profile": "personal", "thread_handle": HANDLE,
-                 "cwd": str(self.work), "tmux_name": "review-13"}
-        value.update(updates)
-        return value
 
     def calls(self, command):
         path = self.root / f"{command}.calls"
@@ -249,6 +228,7 @@ class HostBoundary(unittest.TestCase):
         missing.mkdir(mode=0o700)
         parent = missing / "app-server-control"
         parent.mkdir(mode=0o755)
+        parent.chmod(0o755)
         self.assertEqual(self.run_host("check-discovery").returncode, 2)
         self.assertEqual(self.run_host("install-discovery").returncode, 2)
         self.assertEqual(stat.S_IMODE(parent.stat().st_mode), 0o755)
@@ -287,75 +267,70 @@ class HostBoundary(unittest.TestCase):
             with self.assertRaises(ValueError):
                 host.decode(value)
 
-    def test_declared_root_cannot_redirect_through_a_symlink(self):
-        alias = self.root / "alias"
-        alias.symlink_to(self.root, target_is_directory=True)
-        self.config["profiles"]["personal"]["work_roots"] = [str(alias)]
-        self.assertEqual(host.handle_request(self.config, self.request())["kind"], "Rejected")
-        self.assertEqual(self.calls("tmux"), [])
 
-    def test_launch_observes_exact_terminal_and_passes_argv_without_a_shell(self):
-        result = host.handle_request(self.config, self.request())
-        self.assertEqual(result, {"kind": "Started", "terminal": {"tmux_session_id": "$17", "tmux_name": "review-13"}})
-        create, observe = self.calls("tmux")
-        argv = create["argv"]
-        self.assertEqual(argv[:9], ["new-session", "-d", "-P", "-F", "#{session_id}",
-                                   "-s", "review-13", "-c", str(self.work)])
-        self.assertEqual(argv[9:11], ["/usr/bin/env", "-i"])
-        # Remote resume restores the permissions established by thread/start.
-        self.assertEqual(argv[argv.index(self.config["binary"]):],
-                         [self.config["binary"], "--remote",
-                          self.config["profiles"]["personal"]["endpoint"], "resume", HANDLE])
-        self.assertNotIn("-L", argv)
-        self.assertNotIn("-S", argv)
-        self.assertNotIn("TMUX", create["env"])
-        self.assertEqual(observe["argv"], ["display-message", "-p", "-t", "$17", "#{session_id}\t#{session_name}"])
 
-    def test_resolve_cwd_returns_permitted_canonical_path_without_launching(self):
-        alias = self.work / "alias"
-        target = self.work / "repository"
-        target.mkdir()
-        alias.symlink_to(target, target_is_directory=True)
-        request = {"kind": "ResolveCwd", "profile": "work", "cwd": str(alias)}
-        self.assertEqual(host.handle_request(self.config, request), {"kind": "Resolved", "cwd": str(target)})
-        self.assertEqual(self.calls("tmux"), [])
-        self.assertEqual(self.calls("codex"), [])
-        target.rmdir()
-        target.symlink_to(self.root, target_is_directory=True)
-        result = host.handle_request(self.config, self.request(cwd=str(target)))
-        self.assertEqual(result["kind"], "Rejected")
-        self.assertEqual(self.calls("tmux"), [])
-
-    def test_invalid_requests_have_no_terminal_effect(self):
-        escape = self.work / "escape"
-        escape.symlink_to(self.root, target_is_directory=True)
-        untagged = self.request()
-        del untagged["kind"]
-        invalid = [untagged, self.request(kind="ResolveCwd"), self.request(kind="unknown"),
-                   self.request(prompt="forbidden"), self.request(yolo=True), self.request(profile="other"),
-                   self.request(thread_handle="last"), self.request(cwd=str(self.root)),
-                   self.request(cwd=str(escape)), self.request(tmux_name="bad:name"),
-                   self.request(tmux_name="a" * 65), self.request(cwd="/" + "a" * 4096)]
-        for request in invalid:
-            with self.subTest(request=request.keys()):
-                self.assertEqual(host.handle_request(self.config, request)["kind"], "Rejected")
-        self.assertEqual(self.calls("tmux"), [])
-
-    def test_ambiguous_create_and_observation_are_not_replayed_or_cleaned_up(self):
-        for mode, stage in (("create-failed", "create"), ("observe-failed", "observe")):
-            (self.root / "tmux.mode").write_text(mode)
-            before = len(self.calls("tmux"))
-            result = host.handle_request(self.config, self.request())
-            self.assertEqual(result, {"kind": "Unknown", "stage": stage})
-            calls = self.calls("tmux")[before:]
-            self.assertEqual([call["argv"][0] for call in calls],
-                             ["new-session"] if stage == "create" else ["new-session", "display-message"])
 
     def test_closed_config_rejects_duplicate_fields_and_non_unix_endpoints(self):
-        self.assertEqual(host.load_config(str(self.config_path))["schema_version"], 2)
+        self.assertEqual(host.load_config(str(self.config_path))["schema_version"], 3)
         self.config_path.write_text('{"schema_version":1,"schema_version":1}')
         with self.assertRaises(ValueError):
             host.load_config(str(self.config_path))
+
+    def test_source_declaration_modes_accept_group_umask_without_changing_input(self):
+        source = self.root / "source.json"
+        previous = os.umask(0o002)
+        try:
+            source.write_text(json.dumps(self.config))
+        finally:
+            os.umask(previous)
+        self.assertEqual(stat.S_IMODE(source.stat().st_mode), 0o664)
+        before = source.read_bytes()
+        for mode in ("validate", "endpoints", "launcher"):
+            with self.subTest(mode=mode):
+                result = self.run_host("--config", str(source), mode)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                if mode == "endpoints":
+                    self.assertEqual(json.loads(result.stdout),
+                                     {key: row["endpoint"] for key, row in self.config["profiles"].items()})
+                self.assertEqual(source.read_bytes(), before)
+                self.assertEqual(stat.S_IMODE(source.stat().st_mode), 0o664)
+
+    def test_runtime_modes_reject_group_writable_config_before_effects(self):
+        self.config_path.chmod(0o664)
+        path = Path(self.config["profiles"]["personal"]["endpoint"][7:])
+        with socket.socket(socket.AF_UNIX) as listener:
+            listener.bind(str(path))
+            path.chmod(0o600)
+            for arguments in (("server", "personal"), ("grant-socket", "personal"),
+                              ("check-discovery",), ("install-discovery",)):
+                with self.subTest(mode=arguments[0]):
+                    self.assertEqual(self.run_host(*arguments).returncode, 1)
+                    self.assertFalse((self.root / "codex.calls").exists())
+                    self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+                    self.assertFalse((path.parent / "app-server-control").exists())
+
+    def test_installed_config_remains_protected_in_declaration_modes(self):
+        for permissions, uid in ((0o664, 0), (0o644, 1001)):
+            metadata = list(self.config_path.stat())
+            metadata[0] = stat.S_IFREG | permissions
+            metadata[4] = uid
+            with patch.object(host, "CONFIG", str(self.config_path)), \
+                    patch.object(host.os, "fstat", return_value=os.stat_result(metadata)):
+                for mode in ("validate", "endpoints", "launcher"):
+                    with self.subTest(mode=mode, permissions=permissions, uid=uid), \
+                            patch.object(sys, "argv", [str(HOST), mode]):
+                        with self.assertRaises(ValueError):
+                            host.main()
+
+    def test_schema_three_has_no_terminal_worker_contract(self):
+        self.assertEqual(self.config["schema_version"], 3)
+        self.assertNotIn("tmux", self.config)
+        self.assertNotIn("launcher_socket", self.config)
+        for row in self.config["profiles"].values():
+            self.assertNotIn("work_roots", row)
+        result = self.run_host("validate")
+        self.assertEqual(result.returncode, 0, "shared provider configuration still requires retired worker-launch fields")
+        self.assertNotEqual(self.run_host("terminal").returncode, 0)
         self.config["profiles"]["personal"]["endpoint"] = "ws://127.0.0.1:1234"
         self.write_config()
         with self.assertRaises(ValueError):
@@ -375,33 +350,6 @@ class HostBoundary(unittest.TestCase):
             host.grant_socket(self.config, "work")
         self.assertEqual(other.read_text(), "not a socket")
 
-    @unittest.skipUnless(hasattr(socket, "SO_PEERCRED"), "NOT_RUN: Linux peer-credential boundary")
-    def test_socket_request_uses_real_peer_credentials(self):
-        client, server = socket.socketpair()
-        with client, server:
-            with subprocess.Popen([sys.executable, str(HOST), "--config", str(self.config_path), "terminal"],
-                                  stdin=server, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) as child:
-                client.settimeout(3)
-                client.sendall(json.dumps(self.request()).encode() + b"\n")
-                response = client.makefile("rb").readline(host.LIMIT + 1)
-                self.assertEqual(json.loads(response)["kind"], "Started")
-                child.communicate(timeout=3)
-                self.assertEqual(child.returncode, 0)
-
-    @unittest.skipUnless(hasattr(socket, "SO_PEERCRED"), "NOT_RUN: Linux peer-credential boundary")
-    def test_unauthorized_peer_is_rejected_before_reading_request(self):
-        self.config["jarvis_user"] = next(account.pw_name for account in pwd.getpwall() if account.pw_uid != os.getuid())
-        self.write_config()
-        client, server = socket.socketpair()
-        with client, server:
-            with subprocess.Popen([sys.executable, str(HOST), "--config", str(self.config_path), "terminal"],
-                                  stdin=server, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) as child:
-                client.settimeout(3)
-                response = client.makefile("rb").readline(host.LIMIT + 1)
-                self.assertEqual(json.loads(response), {"kind": "Rejected", "stage": "validate", "reason": "unauthorized"})
-                child.communicate(timeout=3)
-                self.assertEqual(child.returncode, 0)
-        self.assertEqual(self.calls("tmux"), [])
 
 
 if __name__ == "__main__":

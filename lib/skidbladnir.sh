@@ -32,6 +32,87 @@ skidbladnir_host_config_source() {
   esac
 }
 
+# Host templates declare profiles; shared Codex owns each native endpoint.
+skidbladnir_render_host_config() {
+  local platform="$1" source="$2" target="$3" host endpoints
+  host="$platform"
+  [[ "$host" != macos ]] || host=macbook
+  endpoints="$(HOME="$(dev_server_home)" python3 "$(dev_server_assets_dir)/codex/codex-shared.py" \
+    --config "$(dev_server_assets_dir)/codex/profiles.json" --host "$host" endpoints)" || return 1
+  python3 - "$source" "$target" "$endpoints" <<'PYCONFIG'
+import json, os, sys
+with open(sys.argv[1]) as stream:
+    value = json.load(stream)
+endpoints = json.loads(sys.argv[3])
+for profile in value["profiles"]:
+    if profile["provider"] == "Codex":
+        profile["nativeEndpoint"] = endpoints[profile["key"]]
+with open(os.open(sys.argv[2], os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as stream:
+    json.dump(value, stream, indent=2)
+    stream.write("\n")
+PYCONFIG
+}
+
+skidbladnir_install_native_control() {
+  local home base pin pin_fields repository revision release uv marker wanted wrapper changed=0 status=0
+  home="$(dev_server_home)"
+  base="$home/.local/share/skidbladnir-native-control"
+  pin="$(dev_server_assets_dir)/skidbladnir/native-control.json"
+  skidbladnir_strict_json_file "$pin" 4096 || die 'native control pin is invalid'
+  pin_fields="$(
+    python3 - "$pin" <<'PYPIN'
+import json, re, sys
+with open(sys.argv[1]) as stream:
+    value = json.load(stream)
+if (set(value) != {"repository", "revision"} or
+    value["repository"] != "https://github.com/NielsdaWheelz/llm-calling.git" or
+    not re.fullmatch("[0-9a-f]{40}", value["revision"])):
+    raise SystemExit(1)
+print(value["repository"], value["revision"], sep="\t")
+PYPIN
+  )" || die 'native control pin is invalid'
+  IFS=$'\t' read -r repository revision <<<"$pin_fields"
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || die 'native control revision is invalid'
+  release="$base/releases/$revision"
+  uv="$base/bootstrap/bin/uv"
+  marker="$release/.installed"
+  wanted="$revision uv=0.11.28 python=3.12.13 claude-sdk frozen"
+  mkdir -p "$base/releases" "$home/.local/bin" || return 1
+  chmod 0700 "$base" "$base/releases" || return 1
+  if [[ ! -x "$uv" ]] || [[ "$("$uv" --version | awk '{print $2}')" != 0.11.28 ]]; then
+    python3 -m venv "$base/bootstrap" || return 1
+    "$base/bootstrap/bin/python" -m pip --disable-pip-version-check install --quiet --upgrade 'uv==0.11.28' || return 1
+  fi
+  if [[ ! -f "$marker" ]] || [[ "$(cat "$marker")" != "$wanted" ]] || [[ ! -x "$release/.venv/bin/provider-runtime-control" ]]; then
+    require_cmd git
+    if [[ ! -d "$release/.git" ]]; then
+      git clone --quiet --no-checkout "$repository" "$release" || return 1
+    fi
+    git -C "$release" fetch --quiet --depth=1 origin "$revision" || return 1
+    git -C "$release" checkout --quiet --detach "$revision" || return 1
+    [[ "$(git -C "$release" rev-parse HEAD)" == "$revision" ]] || die 'native checkout differs from pin'
+    "$uv" sync --project "$release" --python 3.12.13 --frozen --extra claude-sdk --no-dev || return 1
+    printf '%s\n' "$wanted" >"$marker" || return 1
+    chmod 0600 "$marker" || return 1
+    changed=1
+  fi
+  wrapper="$(mktemp "$base/.wrapper.XXXXXX")" || return 1
+  python3 - "$release/.venv/bin/provider-runtime-control" >"$wrapper" <<'PYWRAPPER' || {
+import shlex, sys
+print('#!/bin/sh\nexec ' + shlex.quote(sys.argv[1]) + ' "$@"')
+PYWRAPPER
+    rm -f -- "$wrapper"
+    return 1
+  }
+  atomic_install_file "$wrapper" "$home/.local/bin/provider-runtime-control" 0755 || status=$?
+  rm -f -- "$wrapper"
+  ((status == 0)) || return "$status"
+  if ((changed)) || [[ "$dev_server_install_status" != 'UP TO DATE' ]]; then
+    record_change skid.native
+    render_result INSTALLED skid.native 'pinned provider helper and frozen SDK environment'
+  fi
+}
+
 skidbladnir_agent_hooks_source() {
   case "$1" in
   macos) printf '%s/skidbladnir/agent-hooks-macbook.json\n' "$(dev_server_assets_dir)" ;;
@@ -176,7 +257,9 @@ def absolute(value):
     return (plain(value, 4096) and value.startswith("/") and "//" not in value and
             "/../" not in value and "/./" not in value)
 
-if not exact(value, ["platform", "profiles", "tmux"]) or value["platform"] != runtime:
+if not exact(value, ["platform", "profiles", "tmux", "nativeControlPath"]) or value["platform"] != runtime:
+    raise SystemExit(1)
+if value["nativeControlPath"] != home + "/.local/bin/provider-runtime-control":
     raise SystemExit(1)
 tmux = value["tmux"]
 if (not exact(tmux, ["path", "testedVersion"]) or not absolute(tmux["path"]) or
@@ -591,7 +674,7 @@ skidbladnir_prepare_candidate() {
   framed="$("$payload/skidbladnir" version && printf .)" || return 5
   identity="${framed%$'\n.'}"
   [[ "$framed" == "$identity"$'\n.' && "$identity" == "$version $source_sha" ]] || return 5
-  install -m 0600 "$host_config" "$payload/host-config.json" || return 1
+  skidbladnir_render_host_config "$platform" "$host_config" "$payload/host-config.json" || return 1
   [[ -f "$payload/host-config.json" && ! -L "$payload/host-config.json" ]] || return 1
 }
 
@@ -1658,6 +1741,11 @@ skidbladnir_apply() {
     *) die 'could not prepare the Skidbladnir release' ;;
     esac
   fi
+
+  skidbladnir_install_native_control || {
+    skidbladnir_discard_stage "$share" "$stage"
+    die 'could not install native agent control'
+  }
 
   runtime_identity="$(skidbladnir_runtime_identity "$stage/generation")" || {
     skidbladnir_discard_stage "$share" "$stage"
