@@ -2,16 +2,21 @@
 set -euo pipefail
 
 case "${0##*/}" in
+claude-personal)
+  state_dir="$HOME/.claude"
+  unset CLAUDE_CONFIG_DIR
+  ;;
 claude-work)
   state_dir="$HOME/.claude-work"
   export CLAUDE_CONFIG_DIR="$state_dir"
-  real_binary="$HOME/.local/bin/claude"
   ;;
 *)
   printf 'error: unsupported AI profile command: %s\n' "${0##*/}" >&2
   exit 64
   ;;
 esac
+
+real_binary="$HOME/.local/bin/claude"
 
 [[ -d "$state_dir" && ! -L "$state_dir" ]] || {
   printf 'error: AI profile state directory is unavailable: %s\n' \

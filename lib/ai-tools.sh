@@ -254,8 +254,9 @@ ai_install_profiles() {
   done
   rm -f -- "$codex_profile" || return 1
   ((status == 0)) || return 1
-  install_managed_file "$profile" \
-    "$home/bin/claude-work" 0755 shell.config || return 1
+  for command in claude-personal claude-work; do
+    install_managed_file "$profile" "$home/bin/$command" 0755 shell.config || return 1
+  done
 }
 
 ai_install_instructions() {

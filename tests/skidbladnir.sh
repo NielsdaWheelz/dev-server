@@ -285,6 +285,16 @@ test_pin_and_config_contract() (
   fi
 
   dev_server_assets_root="$repo_dir/assets"
+  jq '.profiles |= map(if .key == "claude-personal" then
+      .command = "/Users/nnandal/bin/claude-personal" | .environment = [] else . end)' \
+    "$repo_dir/assets/skidbladnir/host-config-macbook.json" >"$fixture/default-claude.json"
+  skidbladnir_host_config_valid "$fixture/default-claude.json" macos ||
+    fail 'native default Claude profile was rejected'
+  jq '.profiles[3].environment = [{"name":"CLAUDE_CONFIG_DIR","value":"/Users/nnandal/.claude"}]' \
+    "$fixture/default-claude.json" >"$fixture/explicit-default-claude.json"
+  if skidbladnir_host_config_valid "$fixture/explicit-default-claude.json" macos; then
+    fail 'personal Claude profile relocated native state'
+  fi
   for line in macos arch devbox; do
     skidbladnir_host_config_valid "$(skidbladnir_host_config_source "$line")" "$line" ||
       fail "$line host config was rejected"
@@ -302,9 +312,7 @@ test_pin_and_config_contract() (
     all(.profiles[] | select(.provider == "Claude");
       .command as $command |
       ($command |
-        if endswith("/.local/bin/claude")
-        then sub("/\\.local/bin/claude$"; "")
-        else sub("/bin/claude-work$"; "") end) as $home |
+        sub("/bin/claude-(personal|work)$"; "")) as $home |
       .arguments == ["--plugin-dir", ($home + "/.local/share/skidbladnir/claude-agent-identity")])
   ' \
     "$repo_dir"/assets/skidbladnir/host-config-*.json >/dev/null ||
