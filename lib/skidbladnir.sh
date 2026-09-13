@@ -589,7 +589,7 @@ skidbladnir_validate_owned_roots() {
   while IFS= read -r entry; do
     name="$(basename "$entry")"
     case "$name" in
-    bearer | machine-handle | android-signing.p12 | android-signing.properties | android-signing.password) ;;
+    bearer | machine-handle | client.json | android-signing.p12 | android-signing.properties | android-signing.password) ;;
     *) return 1 ;;
     esac
   done < <(find "$config" -mindepth 1 -maxdepth 1 -print)
