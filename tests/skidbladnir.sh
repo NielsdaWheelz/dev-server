@@ -4,6 +4,7 @@ set -euo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 fixture="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-skidbladnir.XXXXXX")"
+fixture="$(cd "$fixture" && pwd -P)"
 trap 'rm -rf -- "$fixture"' EXIT
 
 # shellcheck source=lib/common.sh
