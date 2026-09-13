@@ -172,12 +172,12 @@ def main():
     parser.add_argument("--config", default=CONFIG)
     parser.add_argument("--host", choices=("devbox", "macbook", "arch"), default="devbox")
     parser.add_argument("mode", choices=("validate", "launcher",
-                                         "server", "grant-socket", "endpoints",
+                                         "server", "grant-socket",
                                          "check-discovery", "install-discovery"))
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     # Pure declaration transforms consume source checkouts; runtime inputs stay protected.
-    config = load_config(args.config, declaration=args.mode in ("validate", "launcher", "endpoints"))
+    config = load_config(args.config, declaration=args.mode in ("validate", "launcher"))
     if args.host != "devbox" and args.mode == "grant-socket":
         invalid()
     if args.mode == "validate":
@@ -193,9 +193,6 @@ def main():
                   "profiles": {key: {"account_home": f"{home}/{Path(row['account_home']).name}",
                                      "endpoint": f"unix://{home}/.local/run/codex-shared/{key}/app-server.sock"}
                                for key, row in config["profiles"].items()}}
-    if args.mode == "endpoints" and not args.arguments:
-        print(json.dumps({key: row["endpoint"] for key, row in config["profiles"].items()}))
-        return
     if args.mode == "launcher" and not args.arguments:
         print('#!/usr/bin/env bash\ncase "${0##*/}" in')
         for command, key in COMMANDS.items():
