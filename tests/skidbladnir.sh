@@ -258,27 +258,50 @@ count_calls() {
   grep -Ec "$pattern" "$test_calls" 2>/dev/null || true
 }
 
+test_four_profiles_use_the_upstream_claude_signature() (
+  local platform path
+  for platform in macos arch devbox; do
+    path="$fixture/four-profiles-$platform.json"
+    jq '.profiles |= map(select(.key != "claude-personal"))' \
+      "$(skidbladnir_host_config_source "$platform")" >"$path"
+    skidbladnir_host_config_valid "$path" "$platform" ||
+      fail "$platform four-profile config was rejected"
+    jq '(.profiles[] | select(.key == "claude-work") | .foregroundSignatures) =
+      [{argument0:(.profiles[] | select(.key == "claude-work") | .command)}]' \
+      "$path" >"$path.wrapper-signature"
+    if skidbladnir_host_config_valid "$path.wrapper-signature" "$platform"; then
+      fail "$platform accepted the Claude wrapper as the upstream foreground signature"
+    fi
+  done
+)
+
 test_pin_and_config_contract() (
   local pin="$repo_dir/assets/skidbladnir/release-pin.json"
   local valid="$fixture/pin-valid.json"
   local duplicate="$fixture/pin-duplicate.json"
   local oversized="$fixture/pin-oversized.json"
-  local line home
+  local version=v1.2.3 source_sha=1111111111111111111111111111111111111111
+  local line home expected
 
   skidbladnir_release_pin_file="$pin"
-  line="$(skidbladnir_release_values arch)" || fail 'current release pin was rejected'
-  assert_eq v0.3.0 "${line%%$'\t'*}" 'current release version'
-  [[ "$line" == *$'\thttps://github.com/NielsdaWheelz/skidbladnir/releases/download/v0.3.0/skidbladnir-linux-amd64.tar.gz\t6c99b1a1392596a7141c9557a8323274e8d1f3cf5d0671ccdedac4052f4c8191\tlinux-amd64' ]] ||
-    fail 'current Linux URL or digest differs'
-  cp "$pin" "$valid"
-  sed 's/"version": "v0.3.0"/"version": "v0.3.0", "version": "v0.3.0"/' \
+  skidbladnir_release_values arch >/dev/null || fail 'current release pin was rejected'
+
+  setup_case pin-contract
+  write_release "$version" "$source_sha"
+  line="$(skidbladnir_release_values arch)" || fail 'synthetic release pin was rejected'
+  printf -v expected '%s\t%s\t%s\t%s\t%s' "$version" "$source_sha" \
+    "https://github.com/NielsdaWheelz/skidbladnir/releases/download/$version/skidbladnir-linux-amd64.tar.gz" \
+    "$(dev_server_sha256 "$case_dir/release.tar.gz")" linux-amd64
+  assert_eq "$expected" "$line" 'synthetic release fields'
+  cp "$skidbladnir_release_pin_file" "$valid"
+  sed 's/"version":/"version": null, "version":/' \
     "$valid" >"$duplicate"
   skidbladnir_release_pin_file="$duplicate"
   if skidbladnir_release_values arch >/dev/null 2>&1; then
     fail 'duplicate release-pin key was accepted'
   fi
   cp "$valid" "$oversized"
-  printf '%04100d' 0 >>"$oversized"
+  printf '%4100s' '' >>"$oversized"
   skidbladnir_release_pin_file="$oversized"
   if skidbladnir_release_values arch >/dev/null 2>&1; then
     fail 'oversized release pin was accepted'
@@ -496,7 +519,7 @@ test_host_config_update_keeps_release_pin_and_prior_generation() (
   assert_eq "$old_current" "$(readlink "$share/previous")" 'host-config update previous pointer'
   assert_eq "$old_config_sha" "$(dev_server_sha256 "$share/$old_current/host-config.json")" \
     'prior generation remained immutable'
-  skidbladnir_render_host_config arch "$case_dir/assets/skidbladnir/host-config-arch.json" "$case_dir/expected-config.json"
+  cp "$case_dir/assets/skidbladnir/host-config-arch.json" "$case_dir/expected-config.json"
   cmp -s "$case_dir/expected-config.json" "$share/current/host-config.json" ||
     fail 'current generation does not contain the desired host configuration'
   assert_eq 1 "$(count_calls '^systemctl .* restart ')" 'host-config update restart count'
@@ -982,6 +1005,7 @@ run_test() {
   tests_run=$((tests_run + 1))
 }
 
+run_test test_four_profiles_use_the_upstream_claude_signature
 run_test test_pin_and_config_contract
 run_test test_platform_scoped_declared_inputs
 run_test test_fresh_noop_and_exact_activation

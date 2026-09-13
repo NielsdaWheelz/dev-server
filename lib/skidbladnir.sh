@@ -32,27 +32,6 @@ skidbladnir_host_config_source() {
   esac
 }
 
-# Host templates declare profiles; shared Codex owns each native endpoint.
-skidbladnir_render_host_config() {
-  local platform="$1" source="$2" target="$3" host endpoints
-  host="$platform"
-  [[ "$host" != macos ]] || host=macbook
-  endpoints="$(HOME="$(dev_server_home)" python3 "$(dev_server_assets_dir)/codex/codex-shared.py" \
-    --config "$(dev_server_assets_dir)/codex/profiles.json" --host "$host" endpoints)" || return 1
-  python3 - "$source" "$target" "$endpoints" <<'PYCONFIG'
-import json, os, sys
-with open(sys.argv[1]) as stream:
-    value = json.load(stream)
-endpoints = json.loads(sys.argv[3])
-for profile in value["profiles"]:
-    if profile["provider"] == "Codex":
-        profile["nativeEndpoint"] = endpoints[profile["key"]]
-with open(os.open(sys.argv[2], os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as stream:
-    json.dump(value, stream, indent=2)
-    stream.write("\n")
-PYCONFIG
-}
-
 skidbladnir_install_native_control() {
   local home base pin pin_fields repository revision release uv marker wanted wrapper changed=0 status=0
   home="$(dev_server_home)"
@@ -267,18 +246,18 @@ if (not exact(tmux, ["path", "testedVersion"]) or not absolute(tmux["path"]) or
         not re.fullmatch(r"tmux [!-~]{1,59}", tmux["testedVersion"])):
     raise SystemExit(1)
 profiles = value["profiles"]
-keys = ["personal", "work", "work2", "claude-personal", "claude-work"]
-providers = ["Codex", "Codex", "Codex", "Claude", "Claude"]
-if (not isinstance(profiles, list) or len(profiles) != 5 or
+keys = ["personal", "work", "work2", "claude-work"]
+providers = ["Codex", "Codex", "Codex", "Claude"]
+if (not isinstance(profiles, list) or len(profiles) != 4 or
         [profile.get("key") for profile in profiles if isinstance(profile, dict)] != keys or
         [profile.get("provider") for profile in profiles if isinstance(profile, dict)] != providers):
     raise SystemExit(1)
 codex_backend = home + "/.local/bin/codex"
+claude_backend = home + "/.local/bin/claude"
 commands = {
     "personal": home + "/bin/codex",
     "work": home + "/bin/codex-work",
     "work2": home + "/bin/codex-work2",
-    "claude-personal": home + "/.local/bin/claude",
     "claude-work": home + "/bin/claude-work",
 }
 for profile in profiles:
@@ -293,7 +272,7 @@ for profile in profiles:
         "--plugin-dir", home + "/.local/share/skidbladnir/claude-agent-identity"]
     expected_signatures = ([{"executableBase": "codex"}, {
         "executableBase": "node", "argument1": codex_backend
-    }] if provider == "Codex" else [{"argument0": commands["claude-personal"]}])
+    }] if provider == "Codex" else [{"argument0": claude_backend}])
     environment = profile["environment"]
     if (profile["arguments"] != expected_arguments or
             profile["foregroundSignatures"] != expected_signatures or
@@ -674,7 +653,7 @@ skidbladnir_prepare_candidate() {
   framed="$("$payload/skidbladnir" version && printf .)" || return 5
   identity="${framed%$'\n.'}"
   [[ "$framed" == "$identity"$'\n.' && "$identity" == "$version $source_sha" ]] || return 5
-  skidbladnir_render_host_config "$platform" "$host_config" "$payload/host-config.json" || return 1
+  install -m 0600 "$host_config" "$payload/host-config.json" || return 1
   [[ -f "$payload/host-config.json" && ! -L "$payload/host-config.json" ]] || return 1
 }
 

@@ -285,13 +285,10 @@ class HostBoundary(unittest.TestCase):
             os.umask(previous)
         self.assertEqual(stat.S_IMODE(source.stat().st_mode), 0o664)
         before = source.read_bytes()
-        for mode in ("validate", "endpoints", "launcher"):
+        for mode in ("validate", "launcher"):
             with self.subTest(mode=mode):
                 result = self.run_host("--config", str(source), mode)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                if mode == "endpoints":
-                    self.assertEqual(json.loads(result.stdout),
-                                     {key: row["endpoint"] for key, row in self.config["profiles"].items()})
                 self.assertEqual(source.read_bytes(), before)
                 self.assertEqual(stat.S_IMODE(source.stat().st_mode), 0o664)
 
@@ -316,7 +313,7 @@ class HostBoundary(unittest.TestCase):
             metadata[4] = uid
             with patch.object(host, "CONFIG", str(self.config_path)), \
                     patch.object(host.os, "fstat", return_value=os.stat_result(metadata)):
-                for mode in ("validate", "endpoints", "launcher"):
+                for mode in ("validate", "launcher"):
                     with self.subTest(mode=mode, permissions=permissions, uid=uid), \
                             patch.object(sys, "argv", [str(HOST), mode]):
                         with self.assertRaises(ValueError):
