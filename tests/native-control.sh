@@ -38,7 +38,7 @@ set -euo pipefail
 if [[ "$*" == --version ]]; then printf 'uv 0.11.28\n'; exit; fi
 printf '%s\n' "$*" >>"$NATIVE_TEST_CALLS"
 [[ "$*" == "sync --project "*" --python 3.12.13 --frozen --extra claude-sdk --no-dev" ]]
-[[ "$NATIVE_TEST_FAIL" != 1 ]]
+[[ "$NATIVE_TEST_FAIL" != 1 ]] || exit 1
 mkdir -p "$3/.venv/bin"
 printf '#!/bin/sh\nexit 0\n' >"$3/.venv/bin/provider-runtime-control"
 chmod 0755 "$3/.venv/bin/provider-runtime-control"

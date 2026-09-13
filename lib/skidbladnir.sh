@@ -54,12 +54,12 @@ PYCONFIG
 }
 
 skidbladnir_install_native_control() {
-  local home base pin repository revision release uv marker wanted wrapper changed=0 status=0
+  local home base pin pin_fields repository revision release uv marker wanted wrapper changed=0 status=0
   home="$(dev_server_home)"
   base="$home/.local/share/skidbladnir-native-control"
   pin="$(dev_server_assets_dir)/skidbladnir/native-control.json"
   skidbladnir_strict_json_file "$pin" 4096 || die 'native control pin is invalid'
-  IFS=$'\t' read -r repository revision < <(
+  pin_fields="$(
     python3 - "$pin" <<'PYPIN'
 import json, re, sys
 with open(sys.argv[1]) as stream:
@@ -70,7 +70,8 @@ if (set(value) != {"repository", "revision"} or
     raise SystemExit(1)
 print(value["repository"], value["revision"], sep="\t")
 PYPIN
-  )
+  )" || die 'native control pin is invalid'
+  IFS=$'\t' read -r repository revision <<<"$pin_fields"
   [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || die 'native control revision is invalid'
   release="$base/releases/$revision"
   uv="$base/bootstrap/bin/uv"
