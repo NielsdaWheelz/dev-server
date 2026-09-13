@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.dont_write_bytecode = True
 REPO = Path(__file__).resolve().parents[1]
@@ -274,6 +275,52 @@ class HostBoundary(unittest.TestCase):
         self.config_path.write_text('{"schema_version":1,"schema_version":1}')
         with self.assertRaises(ValueError):
             host.load_config(str(self.config_path))
+
+    def test_source_declaration_modes_accept_group_umask_without_changing_input(self):
+        source = self.root / "source.json"
+        previous = os.umask(0o002)
+        try:
+            source.write_text(json.dumps(self.config))
+        finally:
+            os.umask(previous)
+        self.assertEqual(stat.S_IMODE(source.stat().st_mode), 0o664)
+        before = source.read_bytes()
+        for mode in ("validate", "endpoints", "launcher"):
+            with self.subTest(mode=mode):
+                result = self.run_host("--config", str(source), mode)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                if mode == "endpoints":
+                    self.assertEqual(json.loads(result.stdout),
+                                     {key: row["endpoint"] for key, row in self.config["profiles"].items()})
+                self.assertEqual(source.read_bytes(), before)
+                self.assertEqual(stat.S_IMODE(source.stat().st_mode), 0o664)
+
+    def test_runtime_modes_reject_group_writable_config_before_effects(self):
+        self.config_path.chmod(0o664)
+        path = Path(self.config["profiles"]["personal"]["endpoint"][7:])
+        with socket.socket(socket.AF_UNIX) as listener:
+            listener.bind(str(path))
+            path.chmod(0o600)
+            for arguments in (("server", "personal"), ("grant-socket", "personal"),
+                              ("check-discovery",), ("install-discovery",)):
+                with self.subTest(mode=arguments[0]):
+                    self.assertEqual(self.run_host(*arguments).returncode, 1)
+                    self.assertFalse((self.root / "codex.calls").exists())
+                    self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+                    self.assertFalse((path.parent / "app-server-control").exists())
+
+    def test_installed_config_remains_protected_in_declaration_modes(self):
+        for permissions, uid in ((0o664, 0), (0o644, 1001)):
+            metadata = list(self.config_path.stat())
+            metadata[0] = stat.S_IFREG | permissions
+            metadata[4] = uid
+            with patch.object(host, "CONFIG", str(self.config_path)), \
+                    patch.object(host.os, "fstat", return_value=os.stat_result(metadata)):
+                for mode in ("validate", "endpoints", "launcher"):
+                    with self.subTest(mode=mode, permissions=permissions, uid=uid), \
+                            patch.object(sys, "argv", [str(HOST), mode]):
+                        with self.assertRaises(ValueError):
+                            host.main()
 
     def test_schema_three_has_no_terminal_worker_contract(self):
         self.assertEqual(self.config["schema_version"], 3)

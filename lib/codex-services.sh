@@ -86,6 +86,7 @@ codex_services_preflight() {
   dev_server_validate_active_sha codex.runtime
   codex_services_stage="$(mktemp -d "${TMPDIR:-/tmp}/codex-services.XXXXXX")" || return 1
   cp "$(dev_server_assets_dir)/codex/profiles.json" "$codex_services_stage/profiles.json" || return 1
+  chmod 0644 "$codex_services_stage/profiles.json" || return 1
   cp "$(dev_server_assets_dir)/codex/codex-shared.py" "$codex_services_stage/codex-shared" || return 1
   python3 "$codex_services_stage/codex-shared" \
     --config "$codex_services_stage/profiles.json" --host "$host" check-discovery || return "$?"
@@ -126,7 +127,7 @@ for profile in ("personal", "work", "work2"):
             "[Install]\nWantedBy=default.target\n"
         )
 PY
-  chmod 0644 "$codex_services_stage/profiles.json" "$codex_services_stage"/unit-* || return 1
+  chmod 0644 "$codex_services_stage"/unit-* || return 1
   chmod 0755 "$codex_services_stage/codex-shared" "$codex_services_stage/codex-profile" || return 1
   codex_services_identity="$(dev_server_declared_snapshot "$codex_services_stage" \
     profiles.json codex-shared codex-profile unit-personal unit-work unit-work2)" || return 1

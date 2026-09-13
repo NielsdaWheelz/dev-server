@@ -53,10 +53,11 @@ def absolute(value, canonical=True):
     return value
 
 
-def load_config(path):
+def load_config(path, *, declaration=False):
     with open(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb") as stream:
         metadata = os.fstat(stream.fileno())
-        if (not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o022
+        if (not stat.S_ISREG(metadata.st_mode)
+                or ((not declaration or path == CONFIG) and metadata.st_mode & 0o022)
                 or (path == CONFIG and metadata.st_uid != 0)):
             invalid()
         config = decode(stream.read(LIMIT + 1))
@@ -175,7 +176,8 @@ def main():
                                          "check-discovery", "install-discovery"))
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    config = load_config(args.config)
+    # Pure declaration transforms consume source checkouts; runtime inputs stay protected.
+    config = load_config(args.config, declaration=args.mode in ("validate", "launcher", "endpoints"))
     if args.host != "devbox" and args.mode == "grant-socket":
         invalid()
     if args.mode == "validate":
