@@ -34,8 +34,8 @@
       "key": "claude-personal",
       "label": "Claude · Personal",
       "provider": "Claude",
-      "command": "/home/niels/bin/claude-personal",
-      "environment": [],
+      "command": "/home/niels/.local/bin/claude",
+      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/home/niels/.claude"}],
       "foregroundSignatures": [{"argument0": "/home/niels/.local/bin/claude"}],
       "arguments": ["--plugin-dir", "/home/niels/.local/share/skidbladnir/claude-agent-identity"]
     },
