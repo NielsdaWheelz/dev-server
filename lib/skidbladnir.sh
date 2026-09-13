@@ -278,7 +278,7 @@ commands = {
     "personal": home + "/bin/codex",
     "work": home + "/bin/codex-work",
     "work2": home + "/bin/codex-work2",
-    "claude-personal": home + "/bin/claude-personal",
+    "claude-personal": home + "/.local/bin/claude",
     "claude-work": home + "/bin/claude-work",
 }
 for profile in profiles:
@@ -293,11 +293,10 @@ for profile in profiles:
         "--plugin-dir", home + "/.local/share/skidbladnir/claude-agent-identity"]
     expected_signatures = ([{"executableBase": "codex"}, {
         "executableBase": "node", "argument1": codex_backend
-    }] if provider == "Codex" else [{"argument0": home + "/.local/bin/claude"}])
+    }] if provider == "Codex" else [{"argument0": commands["claude-personal"]}])
     environment = profile["environment"]
     if (profile["arguments"] != expected_arguments or
             profile["foregroundSignatures"] != expected_signatures or
-            (key == "claude-personal" and environment != []) or
             not isinstance(environment, list) or len(environment) > 2):
         raise SystemExit(1)
     for item in environment:

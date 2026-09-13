@@ -142,7 +142,7 @@ write_fake_claude_version() {
     'esac' \
     '[[ -n "${PROFILE_RECORD:-}" ]] || exit 1' \
     '{' \
-    '  printf '\''%s\0%s\0%s\0%s\0%s\0'\'' "${0##*/}" "${CODEX_HOME:-}" "${CLAUDE_CONFIG_DIR-<unset>}" "$PWD" "${PROFILE_SENTINEL:-}"' \
+    '  printf '\''%s\0%s\0%s\0%s\0%s\0'\'' "${0##*/}" "${CODEX_HOME:-}" "${CLAUDE_CONFIG_DIR:-}" "$PWD" "${PROFILE_SENTINEL:-}"' \
     '  printf '\''%s\0'\'' "$@"' \
     '} >"$PROFILE_RECORD"' >"$target"
   chmod 0755 "$target"
@@ -281,7 +281,7 @@ test_canonical_install_and_update() {
     'canonical npm prefix'
   [[ -x "$test_home/.local/bin/codex" ]] || fail 'canonical Codex is missing'
   assert_eq 2.1.257 "$(ai_claude_native_version)" 'native Claude version'
-  for command in codex codex-work codex-work2 claude-personal claude-work; do
+  for command in codex codex-work codex-work2 claude-work; do
     [[ -f "$test_home/bin/$command" && ! -L "$test_home/bin/$command" ]] ||
       fail "$command is not a regular managed wrapper"
     assert_eq 755 "$(test_mode "$test_home/bin/$command")" "$command mode"
@@ -410,20 +410,7 @@ test_claude_profile_routing() {
   invoke claude "$work_cwd" --session-id example
   assert_eq 0 "$status" 'plain Claude status'
   read_record
-  assert_eq '<unset>' "${fields[2]}" 'plain Claude CLAUDE_CONFIG_DIR'
-
-  invoke env "$work_cwd" CLAUDE_CONFIG_DIR="$test_home/.claude-work" claude-personal --session-id example
-  assert_eq 0 "$status" 'managed personal Claude status'
-  read_record
-  assert_eq '<unset>' "${fields[2]}" 'managed personal Claude clears inherited root'
-  assert_eq "$work_cwd" "${fields[3]}" 'managed personal Claude preserves cwd'
-  assert_eq 'preserved value' "${fields[4]}" 'managed personal Claude preserves other environment'
-  assert_argv claude-personal --session-id example
-
-  invoke env "$work_cwd" CLAUDE_CONFIG_DIR="$test_home/.claude-work" claude --session-id example
-  assert_eq 0 "$status" 'plain Claude inherited-root status'
-  read_record
-  assert_eq "$test_home/.claude-work" "${fields[2]}" 'plain Claude preserves explicit root'
+  assert_eq '' "${fields[2]}" 'plain Claude CLAUDE_CONFIG_DIR'
   pass
 }
 
