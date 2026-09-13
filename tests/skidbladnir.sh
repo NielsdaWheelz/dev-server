@@ -360,7 +360,7 @@ test_platform_scoped_declared_inputs() (
 
 test_fresh_noop_and_exact_activation() (
   local source_sha=1111111111111111111111111111111111111111
-  local current inode_before output="$fixture/happy-output" signing_sha stale_stage
+  local current inode_before output="$fixture/happy-output" signing_sha stale_stage client_sha
   setup_case happy
   write_release v1.2.3 "$source_sha"
   mkdir -p "$test_home/.config/skidbladnir"
@@ -393,6 +393,9 @@ test_fresh_noop_and_exact_activation() (
   assert_contains "$output" 'STARTED  skid.runtime: v1.2.3' 'fresh activation result'
   inode_before="$(stat -c '%i' "$test_home/.local/share/skidbladnir/current" 2>/dev/null || stat -f '%i' "$test_home/.local/share/skidbladnir/current")"
 
+  printf '{"schemaVersion":1,"peers":[]}\n' >"$test_home/.config/skidbladnir/client.json"
+  chmod 0600 "$test_home/.config/skidbladnir/client.json"
+  client_sha="$(dev_server_sha256 "$test_home/.config/skidbladnir/client.json")"
   stale_stage="$test_home/.local/share/skidbladnir/.apply.stage.Abc123"
   mkdir "$stale_stage"
   printf 'interrupted staging\n' >"$stale_stage/archive.tar.gz"
@@ -407,6 +410,9 @@ test_fresh_noop_and_exact_activation() (
   [[ ! -s "$output" ]] || fail 'second apply emitted a mutation or action'
   assert_eq 0 "$dev_server_result_mutations" 'second apply mutation results'
   assert_eq 0 "$dev_server_result_activations" 'second apply activation results'
+  assert_eq "$client_sha" "$(dev_server_sha256 "$test_home/.config/skidbladnir/client.json")" \
+    'second apply operator client preservation'
+  assert_mode 0600 "$test_home/.config/skidbladnir/client.json" 'second apply operator client mode'
   [[ ! -e "$stale_stage" ]] || fail 'interrupted staging was not cleaned on retry'
   assert_eq "$inode_before" \
     "$(stat -c '%i' "$test_home/.local/share/skidbladnir/current" 2>/dev/null || stat -f '%i' "$test_home/.local/share/skidbladnir/current")" \
@@ -451,13 +457,16 @@ test_admission_failures_preserve_state() (
 )
 
 test_upgrade_integration_and_credentials() (
-  local old_current bearer_sha machine_sha output="$fixture/upgrade-output" deployed_unit
+  local old_current bearer_sha machine_sha output="$fixture/upgrade-output" deployed_unit client_sha
   setup_case upgrade
   write_release v1.2.3 1111111111111111111111111111111111111111
   skidbladnir_apply arch >/dev/null
   old_current="$(readlink "$test_home/.local/share/skidbladnir/current")"
   bearer_sha="$(dev_server_sha256 "$test_home/.config/skidbladnir/bearer")"
   machine_sha="$(dev_server_sha256 "$test_home/.config/skidbladnir/machine-handle")"
+  printf '{"schemaVersion":1,"peers":[]}\n' >"$test_home/.config/skidbladnir/client.json"
+  chmod 0600 "$test_home/.config/skidbladnir/client.json"
+  client_sha="$(dev_server_sha256 "$test_home/.config/skidbladnir/client.json")"
 
   write_release v1.2.4 2222222222222222222222222222222222222222
   : >"$test_calls"
@@ -474,6 +483,9 @@ test_upgrade_integration_and_credentials() (
     'upgrade bearer preservation'
   assert_eq "$machine_sha" "$(dev_server_sha256 "$test_home/.config/skidbladnir/machine-handle")" \
     'upgrade machine preservation'
+  assert_eq "$client_sha" "$(dev_server_sha256 "$test_home/.config/skidbladnir/client.json")" \
+    'upgrade operator client preservation'
+  assert_mode 0600 "$test_home/.config/skidbladnir/client.json" 'upgrade operator client mode'
   assert_contains "$output" 'RESTARTED  skid.runtime: v1.2.4' 'upgrade activation result'
 
   printf '\n# integration-only fixture change\n' >>"$case_dir/assets/skidbladnir/skid-notify-linux"
@@ -796,6 +808,17 @@ test_credentials_and_protected_symlinks_fail_closed() (
   assert_eq "$current" "$(readlink "$test_home/.local/share/skidbladnir/current")" \
     'legacy-state current preservation'
   rm "$test_home/.local/share/skidbladnir/release.json"
+
+  printf 'unowned\n' >"$test_home/.config/skidbladnir/unexpected.json"
+  set +e
+  (skidbladnir_apply arch) >"$case_dir/unowned-config-output" 2>&1
+  status=$?
+  set -e
+  ((status != 0)) || fail 'unowned config filename was accepted'
+  assert_eq "$current" "$(readlink "$test_home/.local/share/skidbladnir/current")" \
+    'unowned config current preservation'
+  [[ -f "$test_home/.config/skidbladnir/unexpected.json" ]] || fail 'unowned config was removed'
+  rm "$test_home/.config/skidbladnir/unexpected.json"
 
   unexpected="$test_home/.local/share/skidbladnir/releases/v9.9.9-$(printf '%064d' 0)"
   ln -s "$case_dir" "$unexpected"
