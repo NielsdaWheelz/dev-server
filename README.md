@@ -213,8 +213,10 @@ existing authenticated skid https gateway.
 
 all three hosts install `~/.local/bin/provider-runtime-control` from
 `assets/skidbladnir/native-control.json`, using private uv 0.11.28, python
-3.12.13, and the pinned source's frozen `claude-sdk` environment. codex native
-endpoints are generated from the existing shared-service mapping. helper
+3.12.13, and the pinned source's frozen `claude-sdk` environment. skid exposes
+codex personal/work/work2 and claude-work. codex uses terminal control/history;
+claude-work retains native state/history. host configuration contains no codex
+native endpoints. helper
 revisions retain separate environments; this costs disk and an initial download.
 
 skid's `scripts/fleet provision-clients` copies the existing fleet bearers into

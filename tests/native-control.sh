@@ -13,20 +13,14 @@ dev_server_home_dir="$fixture/home"
 mkdir -p "$dev_server_home_dir"
 for platform in macos arch devbox; do
   output="$fixture/$platform.json"
-  skidbladnir_render_host_config "$platform" "$(skidbladnir_host_config_source "$platform")" "$output"
+  install -m 0600 "$(skidbladnir_host_config_source "$platform")" "$output"
   python3 - "$output" "$platform" "$dev_server_home_dir" <<'PY'
 import json, sys
 value=json.load(open(sys.argv[1]))
-for profile in value['profiles']:
-    if profile['provider'] == 'Codex':
-        endpoint=profile.get('nativeEndpoint')
-        expected=(f"unix:///run/codex-shared-{profile['key']}/app-server.sock" if sys.argv[2]=='devbox' else f"unix://{sys.argv[3]}/.local/run/codex-shared/{profile['key']}/app-server.sock")
-        assert endpoint == expected, 'generated host config did not inherit the authoritative shared endpoint'
-    else:
-        assert 'nativeEndpoint' not in profile
+assert all('nativeEndpoint' not in profile for profile in value['profiles']), 'terminal Codex must not receive native endpoints'
 PY
 done
-printf 'PASS native control endpoint projection\n'
+printf 'PASS terminal Codex configuration\n'
 # Fake only dependency tools; execute the actual installer and wrapper publishing.
 mkdir -p "$fixture/assets/skidbladnir"
 dev_server_assets_root="$fixture/assets"

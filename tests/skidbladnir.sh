@@ -258,6 +258,23 @@ count_calls() {
   grep -Ec "$pattern" "$test_calls" 2>/dev/null || true
 }
 
+test_four_profiles_use_the_upstream_claude_signature() (
+  local platform path
+  for platform in macos arch devbox; do
+    path="$fixture/four-profiles-$platform.json"
+    jq '.profiles |= map(select(.key != "claude-personal"))' \
+      "$(skidbladnir_host_config_source "$platform")" >"$path"
+    skidbladnir_host_config_valid "$path" "$platform" ||
+      fail "$platform four-profile config was rejected"
+    jq '(.profiles[] | select(.key == "claude-work") | .foregroundSignatures) =
+      [{argument0:(.profiles[] | select(.key == "claude-work") | .command)}]' \
+      "$path" >"$path.wrapper-signature"
+    if skidbladnir_host_config_valid "$path.wrapper-signature" "$platform"; then
+      fail "$platform accepted the Claude wrapper as the upstream foreground signature"
+    fi
+  done
+)
+
 test_pin_and_config_contract() (
   local pin="$repo_dir/assets/skidbladnir/release-pin.json"
   local valid="$fixture/pin-valid.json"
@@ -496,7 +513,7 @@ test_host_config_update_keeps_release_pin_and_prior_generation() (
   assert_eq "$old_current" "$(readlink "$share/previous")" 'host-config update previous pointer'
   assert_eq "$old_config_sha" "$(dev_server_sha256 "$share/$old_current/host-config.json")" \
     'prior generation remained immutable'
-  skidbladnir_render_host_config arch "$case_dir/assets/skidbladnir/host-config-arch.json" "$case_dir/expected-config.json"
+  cp "$case_dir/assets/skidbladnir/host-config-arch.json" "$case_dir/expected-config.json"
   cmp -s "$case_dir/expected-config.json" "$share/current/host-config.json" ||
     fail 'current generation does not contain the desired host configuration'
   assert_eq 1 "$(count_calls '^systemctl .* restart ')" 'host-config update restart count'
@@ -982,6 +999,7 @@ run_test() {
   tests_run=$((tests_run + 1))
 }
 
+run_test test_four_profiles_use_the_upstream_claude_signature
 run_test test_pin_and_config_contract
 run_test test_platform_scoped_declared_inputs
 run_test test_fresh_noop_and_exact_activation
