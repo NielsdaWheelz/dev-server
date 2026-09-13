@@ -8,12 +8,8 @@ import os
 from pathlib import Path
 import pwd
 import re
-import selectors
 import shlex
-import socket
 import stat
-import struct
-import subprocess
 import sys
 import time
 
@@ -21,8 +17,6 @@ CONFIG = "/etc/codex-shared/profiles.json"
 LIMIT = 65536
 PROFILES = {"personal", "work", "work2"}
 COMMANDS = {"codex": "personal", "codex-work": "work", "codex-work2": "work2"}
-NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z")
-THREAD = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z")
 
 
 def strict_object(pairs):
@@ -67,27 +61,23 @@ def load_config(path):
             invalid()
         config = decode(stream.read(LIMIT + 1))
     fields(config, {"schema_version", "development_user",
-                    "jarvis_user", "client_group", "binary", "tmux",
-                    "cognition_cwd_parent", "launcher_socket", "profiles"})
-    if type(config["schema_version"]) is not int or config["schema_version"] != 2:
+                    "jarvis_user", "client_group", "binary",
+                    "cognition_cwd_parent", "profiles"})
+    if type(config["schema_version"]) is not int or config["schema_version"] != 3:
         invalid()
     for key in ("development_user", "jarvis_user", "client_group"):
         if not isinstance(config[key], str) or not re.fullmatch(r"[a-z_][a-z0-9_-]*", config[key]):
             invalid()
-    for key in ("binary", "tmux", "cognition_cwd_parent", "launcher_socket"):
+    for key in ("binary", "cognition_cwd_parent"):
         absolute(config[key])
     fields(config["profiles"], PROFILES)
     endpoints, homes = set(), set()
     for row in config["profiles"].values():
-        fields(row, {"account_home", "endpoint", "work_roots"})
+        fields(row, {"account_home", "endpoint"})
         homes.add(absolute(row["account_home"]))
         if not isinstance(row["endpoint"], str) or not row["endpoint"].startswith("unix:///"):
             invalid()
         endpoints.add(absolute(row["endpoint"][7:]))
-        if not isinstance(row["work_roots"], list) or not row["work_roots"]:
-            invalid()
-        for root in row["work_roots"]:
-            absolute(root)
     if len(endpoints) != 3 or len(homes) != 3:
         invalid()
     return config
@@ -108,112 +98,6 @@ def environment(config, row):
     return {"HOME": home, "USER": account.pw_name, "LOGNAME": account.pw_name,
             "CODEX_HOME": row["account_home"], "LANG": "C.UTF-8",
             "PATH": path + "/usr/local/bin:/usr/bin:/bin", "TERM": "dumb"}
-
-
-def permitted_cwd(row, value, resolve=False):
-    absolute(value, canonical=not resolve)
-    actual = Path(value).resolve(strict=True)
-    if (not resolve and str(actual) != value) or not actual.is_dir():
-        invalid()
-    roots = []
-    for root in row["work_roots"]:
-        canonical = Path(root).resolve(strict=True)
-        if str(canonical) != root or not canonical.is_dir():
-            invalid()
-        roots.append(canonical)
-    if not any(actual.is_relative_to(root) for root in roots):
-        invalid()
-    return str(actual)
-
-
-def bounded_command(argv, env, timeout=10):
-    """Bound process I/O; timeout stops only our client, never a backend or tmux."""
-    with subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                          stderr=subprocess.DEVNULL, env=env, close_fds=True) as child:
-        try:
-            result = bytearray()
-            deadline = time.monotonic() + timeout
-            with selectors.DefaultSelector() as selector:
-                selector.register(child.stdout, selectors.EVENT_READ)
-                while True:
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0 or not selector.select(remaining):
-                        raise TimeoutError
-                    chunk = os.read(child.stdout.fileno(), min(4096, LIMIT + 1 - len(result)))
-                    if not chunk:
-                        break
-                    result.extend(chunk)
-                    if len(result) > LIMIT:
-                        raise ValueError("oversized command response")
-            return child.wait(timeout=max(0.01, deadline - time.monotonic())), bytes(result)
-        except BaseException:
-            child.kill()
-            child.wait()
-            raise
-
-
-def handle_request(config, request):
-    try:
-        if isinstance(request, dict) and request.get("kind") == "ResolveCwd":
-            fields(request, {"kind", "profile", "cwd"})
-            row = profile(config, request["profile"])
-            return {"kind": "Resolved", "cwd": permitted_cwd(row, request["cwd"], resolve=True)}
-        fields(request, {"kind", "profile", "thread_handle", "cwd", "tmux_name"})
-        if request["kind"] != "LaunchTerminal":
-            invalid()
-        row = profile(config, request["profile"])
-        name = request["tmux_name"]
-        if not isinstance(name, str) or not NAME.fullmatch(name):
-            invalid()
-        cwd = permitted_cwd(row, request["cwd"])
-        handle = request["thread_handle"]
-        if not isinstance(handle, str) or not THREAD.fullmatch(handle):
-            invalid()
-        argv = [config["binary"], "--remote", row["endpoint"], "resume", handle]
-        env = environment(config, row)
-        env["TERM"] = "tmux-256color"
-    except (ValueError, OSError, KeyError, TimeoutError, subprocess.TimeoutExpired):
-        return {"kind": "Rejected", "stage": "validate", "reason": "invalid_request"}
-    # A pre-existing default tmux server has its own environment. env -i clears
-    # that environment in the pane too; clearing only the client is insufficient.
-    command = [config["tmux"], "new-session", "-d", "-P", "-F", "#{session_id}",
-               "-s", name, "-c", cwd, "/usr/bin/env", "-i"]
-    command += [f"{key}={value}" for key, value in env.items()] + argv
-    try:
-        status, output = bounded_command(command, env)
-        if status != 0 or not re.fullmatch(rb"\$[0-9]+\n", output):
-            raise ValueError("unconfirmed create")
-        session_id = output.decode("ascii").strip()
-    except (ValueError, OSError, TimeoutError, subprocess.TimeoutExpired):
-        return {"kind": "Unknown", "stage": "create"}
-    try:
-        status, output = bounded_command(
-            [config["tmux"], "display-message", "-p", "-t", session_id,
-             "#{session_id}\t#{session_name}"], env)
-        if status != 0 or output != f"{session_id}\t{name}\n".encode():
-            raise ValueError("unconfirmed terminal")
-    except (ValueError, OSError, TimeoutError, subprocess.TimeoutExpired):
-        return {"kind": "Unknown", "stage": "observe"}
-    return {"kind": "Started", "terminal": {"tmux_session_id": session_id, "tmux_name": name}}
-
-
-def serve_request(config, connection):
-    connection.settimeout(10)
-    try:
-        # Production is Linux. Authenticate before consuming even one byte.
-        _, uid, _ = struct.unpack("3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
-        if uid != pwd.getpwnam(config["jarvis_user"]).pw_uid:
-            result = {"kind": "Rejected", "stage": "validate", "reason": "unauthorized"}
-        else:
-            with connection.makefile("rb") as stream:
-                data = stream.readline(LIMIT + 1)
-            if len(data) > LIMIT or not data.endswith(b"\n") or b"\n" in data[:-1]:
-                invalid()
-            result = handle_request(config, decode(data))
-    except (ValueError, OSError, KeyError, AttributeError):
-        result = {"kind": "Rejected", "stage": "validate", "reason": "invalid_request"}
-    response = json.dumps(result, separators=(",", ":")).encode() + b"\n"
-    connection.sendall(response)
 
 
 def grant_socket(config, key):
@@ -287,19 +171,16 @@ def main():
     parser.add_argument("--config", default=CONFIG)
     parser.add_argument("--host", choices=("devbox", "macbook", "arch"), default="devbox")
     parser.add_argument("mode", choices=("validate", "launcher",
-                                         "server", "grant-socket", "terminal",
+                                         "server", "grant-socket", "endpoints",
                                          "check-discovery", "install-discovery"))
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     config = load_config(args.config)
-    if args.host != "devbox" and args.mode in ("terminal", "grant-socket"):
+    if args.host != "devbox" and args.mode == "grant-socket":
         invalid()
-    if args.mode in ("validate", "terminal"):
+    if args.mode == "validate":
         if args.arguments:
             invalid()
-        if args.mode == "terminal":
-            with socket.socket(fileno=os.dup(0)) as connection:
-                serve_request(config, connection)
         return
     if args.host != "devbox":
         home = absolute(os.path.expanduser("~"))
@@ -310,6 +191,9 @@ def main():
                   "profiles": {key: {"account_home": f"{home}/{Path(row['account_home']).name}",
                                      "endpoint": f"unix://{home}/.local/run/codex-shared/{key}/app-server.sock"}
                                for key, row in config["profiles"].items()}}
+    if args.mode == "endpoints" and not args.arguments:
+        print(json.dumps({key: row["endpoint"] for key, row in config["profiles"].items()}))
+        return
     if args.mode == "launcher" and not args.arguments:
         print('#!/usr/bin/env bash\ncase "${0##*/}" in')
         for command, key in COMMANDS.items():
@@ -353,6 +237,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (ValueError, OSError, KeyError, TimeoutError, subprocess.TimeoutExpired):
+    except (ValueError, OSError, KeyError, TimeoutError):
         print("ERROR  shared Codex boundary: invalid input or unavailable dependency", file=sys.stderr)
         sys.exit(1)

@@ -95,12 +95,10 @@ Native automatic reuse keeps the caller's local cwd/config-loading path, but
 tools execute in the server's environment, not the calling shell's. Account
 configuration remains user-owned; long-lived-server reload behavior and full
 resume/config parity are not promised. No notifier `-c` override is injected.
-Jarvis remains separate: native thread creation sets workspace-write/on-request
-policy, user approval review and disabled network access. Its launcher requires
-the exact shared endpoint, permitted cwd and clean environment, then resumes the
-saved thread permissions without overrides. Codex 0.154 rejects permission
-overrides on remote resume; attachment must not replace the thread's policy.
-Human CLI flexibility gives Jarvis no additional launcher fields or authority.
+jarvis cognition retains its isolated native runtime. worker control now uses
+skid's common peer cli and the target host user's existing authority. native
+thread permission policy still belongs to the provider; terminal attachment
+does not replace it. the dedicated jarvis worker launcher is retired.
 
 Human-CLI correction deployed 2026-09-09 from `08254bb` to MacBook, Devbox and
 Arch. All nine native default-socket probes and installed command checks passed;
@@ -129,7 +127,7 @@ changed; it never stops tmux sessions. Running servers may use an older release
 than the updated CLI until restarted. Native crash/reboot recovery still starts
 the installed release. A newer version is not proof of protocol compatibility:
 actual capability, response and authority validation stays strict.
-`assets/codex/profiles.json` declares only schema-v2 operational paths, principals
+`assets/codex/profiles.json` declares only schema-v3 operational paths, principals
 and profiles, with no package/version fields. All hosts and Jarvis use that one
 closed declaration; no old-schema fallback or second account map exists.
 
@@ -204,15 +202,33 @@ recovery. `./devbox apply` never deploys Jarvis, reads its credentials, or
 touches Nexus application state. Jarvis is host-native and is not part of the
 developer's rootless Docker lifecycle.
 
-Devbox apply also installs and starts Personal, Work and Work2 shared Codex
-system services plus Jarvis's authenticated terminal-launcher socket. Jarvis
-connects to those existing services; it does not install, spawn or supervise
-them. Running services with changed operational inputs require
+devbox apply installs and starts personal, work and work2 shared codex
+system services. jarvis cognition connects to those existing services; worker
+tools invoke `/usr/local/libexec/skidbladnir`. running services with changed operational inputs require
 `./devbox apply --restart-codex` after active turns finish. That explicit flag
 also restarts unchanged services to pick up an updated CLI; a CLI-only update
-never triggers the restart itself. The devbox remains
-the only Jarvis worker host; workstation services do not add remote Jarvis
-control or expose Codex over the network.
+never triggers the restart itself. every configured skid peer can host codex
+and claude terminal agents. provider sockets remain local; control crosses the
+existing authenticated skid https gateway.
+
+all three hosts install `~/.local/bin/provider-runtime-control` from
+`assets/skidbladnir/native-control.json`, using private uv 0.11.28, python
+3.12.13, and the pinned source's frozen `claude-sdk` environment. codex native
+endpoints are generated from the existing shared-service mapping. helper
+revisions retain separate environments; this costs disk and an initial download.
+
+skid's `scripts/fleet provision-clients` copies the existing fleet bearers into
+mode-0600 user configs and `/etc/jarvis/agent-client.json`, using the established
+deployment principal for the latter. clients then address peers directly.
+copying is sequential; rerun after a failed copy or bearer rotation.
+
+the agent-control cutover briefly stops jarvis: drain old worker actions, apply
+the coupled host release, provision client configs, activate new jarvis, then
+disable/remove the old installed `jarvis-codex-launcher.socket` and template
+service. source deletion does not retire installed units. follow skid's
+`docs/agent-control.md`; preserve shared servers, accounts, pairings, and tmux
+lifetimes. the branch's v0.3.0 pins name a built candidate; publication and live
+acceptance remain pending.
 
 ## One-time hard cutover
 

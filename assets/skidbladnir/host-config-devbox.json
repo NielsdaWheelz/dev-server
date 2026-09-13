@@ -1,6 +1,7 @@
 {
   "platform": "Linux",
   "tmux": {"path": "/usr/bin/tmux", "testedVersion": "tmux 3.4"},
+  "nativeControlPath": "/home/niels/.local/bin/provider-runtime-control",
   "profiles": [
     {
       "key": "personal",

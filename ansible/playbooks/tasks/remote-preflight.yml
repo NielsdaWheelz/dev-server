@@ -142,8 +142,6 @@
         ("/etc/systemd/system/codex-shared@personal.service", 0o644),
         ("/etc/systemd/system/codex-shared@work.service", 0o644),
         ("/etc/systemd/system/codex-shared@work2.service", 0o644),
-        ("/etc/systemd/system/jarvis-codex-launcher.socket", 0o644),
-        ("/etc/systemd/system/jarvis-codex-launcher@.service", 0o644),
         ("/etc/tmpfiles.d/dev-server-codex.conf", 0o644),
     ]
     user_files = [
@@ -189,7 +187,6 @@
         pathlib.Path("/usr/local/libexec/codex-shared"),
         pathlib.Path("/var/lib/dev-server/active/codex.runtime.sha256"),
         pathlib.Path("/run/jarvis-codex-cognition"),
-        pathlib.Path("/run/jarvis-codex-launcher"),
         pathlib.Path("/run/codex-shared-personal"),
         pathlib.Path("/run/codex-shared-work"),
         pathlib.Path("/run/codex-shared-work2"),
@@ -211,11 +208,6 @@
         admit(
             "/run/jarvis-codex-cognition", "directory", 0o2750,
             jarvis_account.pw_uid, codex_group.gr_gid,
-        )
-        admit("/run/jarvis-codex-launcher", "directory", 0o750, 0, codex_group.gr_gid)
-        admit(
-            "/run/jarvis-codex-launcher/socket", "socket", 0o660,
-            user_uid, codex_group.gr_gid,
         )
         for profile_name in ("personal", "work", "work2"):
             runtime = pathlib.Path(f"/run/codex-shared-{profile_name}")

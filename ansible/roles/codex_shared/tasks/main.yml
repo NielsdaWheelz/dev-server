@@ -71,16 +71,6 @@
     mode: "0644"
   loop: "{{ codex_shared_config.profiles | dict2items }}"
 
-- name: Install the socket-activated terminal boundary units
-  ansible.builtin.template:
-    src: "{{ playbook_dir }}/../../assets/codex/{{ item }}"
-    dest: "/etc/systemd/system/{{ item }}"
-    owner: root
-    group: root
-    mode: "0644"
-  loop:
-    - jarvis-codex-launcher.socket
-    - jarvis-codex-launcher@.service
 
 - name: Install reboot-persistent non-secret runtime directory declarations
   ansible.builtin.template:
@@ -101,6 +91,3 @@
     - path: "{{ codex_shared_config.cognition_cwd_parent }}"
       owner: "{{ codex_shared_config.jarvis_user }}"
       mode: "02750"
-    - path: "{{ codex_shared_config.launcher_socket | dirname }}"
-      owner: root
-      mode: "0750"

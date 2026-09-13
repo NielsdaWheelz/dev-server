@@ -113,6 +113,7 @@ set -euo pipefail
 SH
   chmod 0755 "$test_home/.local/bin/codex"
   cp -R "$repo_dir/assets/skidbladnir" "$case_dir/assets/skidbladnir"
+  cp -R "$repo_dir/assets/codex" "$case_dir/assets/codex"
   : >"$test_calls"
   printf '%s\n' '{"BackendState":"Running","Self":{"DNSName":"test.example.ts.net."}}' \
     >"$case_dir/tailscale-status.json"
@@ -185,6 +186,9 @@ write_release() {
   ' >"$skidbladnir_release_pin_file"
   export SKID_TEST_ARCHIVE="$case_dir/release.tar.gz"
 }
+
+# Native dependency installation is proven separately with fake git/uv commands.
+skidbladnir_install_native_control() { :; }
 
 skidbladnir_download() {
   printf 'download %s\n' "$1" >>"$test_calls"
@@ -262,11 +266,11 @@ test_pin_and_config_contract() (
 
   skidbladnir_release_pin_file="$pin"
   line="$(skidbladnir_release_values arch)" || fail 'current release pin was rejected'
-  assert_eq v0.2.30 "${line%%$'\t'*}" 'current release version'
-  [[ "$line" == *$'\thttps://github.com/NielsdaWheelz/skidbladnir/releases/download/v0.2.30/skidbladnir-linux-amd64.tar.gz\t258a3ab35e89d345c3239f2fa2b457aa725217790c6e09eab29f73d0f724243e\tlinux-amd64' ]] ||
+  assert_eq v0.3.0 "${line%%$'\t'*}" 'current release version'
+  [[ "$line" == *$'\thttps://github.com/NielsdaWheelz/skidbladnir/releases/download/v0.3.0/skidbladnir-linux-amd64.tar.gz\t01f61112b2ff3fc213c4b8d7b13e5cf2b2498c1d04fd04526751858321e260c4\tlinux-amd64' ]] ||
     fail 'current Linux URL or digest differs'
   cp "$pin" "$valid"
-  sed 's/"version": "v0.2.30"/"version": "v0.2.30", "version": "v0.2.30"/' \
+  sed 's/"version": "v0.3.0"/"version": "v0.3.0", "version": "v0.3.0"/' \
     "$valid" >"$duplicate"
   skidbladnir_release_pin_file="$duplicate"
   if skidbladnir_release_values arch >/dev/null 2>&1; then
@@ -491,7 +495,8 @@ test_host_config_update_keeps_release_pin_and_prior_generation() (
   assert_eq "$old_current" "$(readlink "$share/previous")" 'host-config update previous pointer'
   assert_eq "$old_config_sha" "$(dev_server_sha256 "$share/$old_current/host-config.json")" \
     'prior generation remained immutable'
-  cmp -s "$case_dir/assets/skidbladnir/host-config-arch.json" "$share/current/host-config.json" ||
+  skidbladnir_render_host_config arch "$case_dir/assets/skidbladnir/host-config-arch.json" "$case_dir/expected-config.json"
+  cmp -s "$case_dir/expected-config.json" "$share/current/host-config.json" ||
     fail 'current generation does not contain the desired host configuration'
   assert_eq 1 "$(count_calls '^systemctl .* restart ')" 'host-config update restart count'
   assert_eq 0 "$(count_calls '^systemctl .* daemon-reload')" 'host-config update unit reload count'

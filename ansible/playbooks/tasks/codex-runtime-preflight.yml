@@ -97,21 +97,12 @@
         mode: "0644"
         sha256: >-
           {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/codex-shared@.service', rstrip=false) | hash('sha256') }}
-      - path: jarvis-codex-launcher.socket
-        mode: "0644"
-        sha256: >-
-          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/jarvis-codex-launcher.socket', rstrip=false) | hash('sha256') }}
-      - path: jarvis-codex-launcher@.service
-        mode: "0644"
-        sha256: >-
-          {{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/jarvis-codex-launcher@.service', rstrip=false) | hash('sha256') }}
 
 - name: Resolve the coupled shared Codex desired identity
   ansible.builtin.set_fact:
     codex_runtime_desired_identity: >-
       {{ {'schema_version': 1, 'inputs': codex_runtime_desired_inputs} | to_json | hash('sha256') }}
     codex_runtime_consumers:
-      - jarvis-codex-launcher.socket
       - codex-shared@personal.service
       - codex-shared@work.service
       - codex-shared@work2.service
@@ -172,26 +163,13 @@
   loop_control:
     loop_var: codex_runtime_consumer_state
 
-- name: Observe accepted terminal-helper requests before mutation
-  ansible.builtin.command:
-    argv:
-      - systemctl
-      - list-units
-      - --type=service
-      - --state=activating,reloading,active,deactivating,maintenance
-      - --no-legend
-      - --plain
-      - "jarvis-codex-launcher@*.service"
-  register: codex_runtime_live_launcher_requests
-  changed_when: false
 
 - name: Resolve the shared Codex activation decision
   ansible.builtin.set_fact:
     codex_runtime_any_active: >-
       {{ codex_runtime_consumer_states.results |
          rejectattr('stdout', 'in', ['inactive', 'failed', 'unknown']) |
-         list | length > 0 or
-         codex_runtime_live_launcher_requests.stdout | trim | length > 0 }}
+         list | length > 0 }}
     codex_runtime_needs_activation: >-
       {{ (devbox_codex_runtime_restart_authorized | bool) or
          ((codex_runtime_active_identity_content.content | b64decode | trim)
@@ -208,48 +186,14 @@
     - codex_runtime_needs_activation
     - not (devbox_codex_runtime_restart_authorized | bool)
 
-- name: Stop terminal admission before replacing shared Codex inputs
-  ansible.builtin.systemd_service:
-    name: jarvis-codex-launcher.socket
-    state: stopped
-  when:
-    - codex_runtime_any_active
-    - codex_runtime_needs_activation
-    - devbox_codex_runtime_restart_authorized | bool
 
-- name: Reobserve accepted terminal-helper requests after closing admission
-  ansible.builtin.command:
-    argv:
-      - systemctl
-      - list-units
-      - --type=service
-      - --state=activating,reloading,active,deactivating,maintenance
-      - --no-legend
-      - --plain
-      - "jarvis-codex-launcher@*.service"
-  register: codex_runtime_remaining_launcher_requests
-  changed_when: false
-  when:
-    - codex_runtime_any_active
-    - codex_runtime_needs_activation
-    - devbox_codex_runtime_restart_authorized | bool
 
-- name: Require accepted terminal-helper requests to quiesce without being killed
-  ansible.builtin.fail:
-    msg: >-
-      DEV_SERVER_CODEX_ACTION_DRAIN_RESTART an accepted terminal request is
-      still active; rerun after its bounded request lifetime
-  when:
-    - codex_runtime_any_active
-    - codex_runtime_needs_activation
-    - devbox_codex_runtime_restart_authorized | bool
-    - codex_runtime_remaining_launcher_requests.stdout | trim | length > 0
 
 - name: Drain only live shared Codex backends before replacing inputs
   ansible.builtin.systemd_service:
     name: "{{ codex_runtime_consumer_state.codex_runtime_consumer_state }}"
     state: stopped
-  loop: "{{ codex_runtime_consumer_states.results[1:] }}"
+  loop: "{{ codex_runtime_consumer_states.results }}"
   loop_control:
     loop_var: codex_runtime_consumer_state
   when:

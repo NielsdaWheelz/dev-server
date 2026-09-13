@@ -14,11 +14,6 @@
     - codex-shared@work.service
     - codex-shared@work2.service
 
-- name: Enable and start the closed terminal launcher socket
-  ansible.builtin.systemd_service:
-    name: jarvis-codex-launcher.socket
-    enabled: true
-    state: started
 
 - name: Validate the installed shared Codex declaration and helper
   ansible.builtin.command:
@@ -38,7 +33,6 @@
     - codex-shared@personal.service
     - codex-shared@work.service
     - codex-shared@work2.service
-    - jarvis-codex-launcher.socket
   changed_when: false
 
 - name: Inspect the three shared Codex sockets
@@ -60,20 +54,7 @@
   loop_control:
     loop_var: codex_runtime_endpoint_state
 
-- name: Inspect the closed terminal launcher socket
-  ansible.builtin.stat:
-    path: "{{ codex_shared_config.launcher_socket }}"
-    follow: false
-  register: codex_runtime_launcher_state
 
-- name: Verify the closed terminal launcher socket boundary
-  ansible.builtin.assert:
-    that:
-      - codex_runtime_launcher_state.stat.issock
-      - codex_runtime_launcher_state.stat.pw_name == codex_shared_config.development_user
-      - codex_runtime_launcher_state.stat.gr_name == codex_shared_config.client_group
-      - codex_runtime_launcher_state.stat.mode == "0660"
-    fail_msg: Closed terminal launcher socket boundary is not active and exact
 
 - name: Record the active shared Codex identity
   ansible.builtin.copy:

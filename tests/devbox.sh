@@ -1019,6 +1019,7 @@ test_static_boundary_contract() {
       sed -n 's/^    - path: //p'
   )"
   expected_skid="$(printf '%s\n' \
+    native-control.json \
     release-pin.json \
     host-config-devbox.json \
     agent-hooks-devbox.json \
@@ -1052,7 +1053,6 @@ required = {
     "/var/lib/dev-server/active/ssh.sha256": "root SSH activation journal",
     "/var/lib/dev-server/active/codex.runtime.sha256": "shared Codex activation journal",
     'pathlib.Path("/etc/codex-shared")': "shared Codex root configuration",
-    'pathlib.Path("/run/jarvis-codex-launcher")': "closed launcher runtime boundary",
     'stat.S_ISSOCK': "shared Codex socket topology",
     'active / "docker.sha256"': "user Docker activation journal",
     'active / "skid.runtime.sha256"': "Skidbladnir runtime activation journal",
@@ -1168,7 +1168,6 @@ for changed, restart in ((False, False), (False, True), (True, False), (True, Tr
                 "content": base64.b64encode(("a" * 64 + "\n").encode()).decode()},
             "codex_runtime_desired_identity": ("b" if changed else "a") * 64,
             "codex_runtime_consumer_states": {"results": [{"stdout": "active"}]},
-            "codex_runtime_live_launcher_requests": {"stdout": ""},
             "expected_activation": changed or restart,
         },
         "tasks": [decision, {"ansible.builtin.assert": {"that": [
@@ -1221,8 +1220,6 @@ inputs = {
     "codex-shared.py",
     "codex-shared.tmpfiles",
     "codex-shared@.service",
-    "jarvis-codex-launcher.socket",
-    "jarvis-codex-launcher@.service",
 }
 inputs_block = preflight[
     preflight.index("Resolve the exact shared Codex desired inputs") :
@@ -1248,15 +1245,12 @@ assert preflight.index("Require explicit drain authorization") < preflight.index
 assert preflight.index("Invalidate the prior shared Codex activation proof") > preflight.index(
     "state: stopped"
 )
-assert preflight.index("jarvis-codex-launcher.socket") < preflight.index(
-    "codex-shared@personal.service"
-)
+assert "jarvis-codex-launcher" not in preflight + activate + role
 
 for unit in (
     "codex-shared@personal.service",
     "codex-shared@work.service",
     "codex-shared@work2.service",
-    "jarvis-codex-launcher.socket",
 ):
     assert unit in preflight, unit
     assert unit in activate, unit
