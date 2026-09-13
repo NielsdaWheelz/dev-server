@@ -34,8 +34,8 @@
       "key": "claude-personal",
       "label": "Claude · Personal",
       "provider": "Claude",
-      "command": "/home/nnandal/.local/bin/claude",
-      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/home/nnandal/.claude"}],
+      "command": "/home/nnandal/bin/claude-personal",
+      "environment": [],
       "foregroundSignatures": [{"argument0": "/home/nnandal/.local/bin/claude"}],
       "arguments": ["--plugin-dir", "/home/nnandal/.local/share/skidbladnir/claude-agent-identity"]
     },
