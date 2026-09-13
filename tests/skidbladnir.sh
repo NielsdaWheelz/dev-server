@@ -280,22 +280,28 @@ test_pin_and_config_contract() (
   local valid="$fixture/pin-valid.json"
   local duplicate="$fixture/pin-duplicate.json"
   local oversized="$fixture/pin-oversized.json"
-  local line home
+  local version=v1.2.3 source_sha=1111111111111111111111111111111111111111
+  local line home expected
 
   skidbladnir_release_pin_file="$pin"
-  line="$(skidbladnir_release_values arch)" || fail 'current release pin was rejected'
-  assert_eq v0.3.0 "${line%%$'\t'*}" 'current release version'
-  [[ "$line" == *$'\thttps://github.com/NielsdaWheelz/skidbladnir/releases/download/v0.3.0/skidbladnir-linux-amd64.tar.gz\t6c99b1a1392596a7141c9557a8323274e8d1f3cf5d0671ccdedac4052f4c8191\tlinux-amd64' ]] ||
-    fail 'current Linux URL or digest differs'
-  cp "$pin" "$valid"
-  sed 's/"version": "v0.3.0"/"version": "v0.3.0", "version": "v0.3.0"/' \
+  skidbladnir_release_values arch >/dev/null || fail 'current release pin was rejected'
+
+  setup_case pin-contract
+  write_release "$version" "$source_sha"
+  line="$(skidbladnir_release_values arch)" || fail 'synthetic release pin was rejected'
+  printf -v expected '%s\t%s\t%s\t%s\t%s' "$version" "$source_sha" \
+    "https://github.com/NielsdaWheelz/skidbladnir/releases/download/$version/skidbladnir-linux-amd64.tar.gz" \
+    "$(dev_server_sha256 "$case_dir/release.tar.gz")" linux-amd64
+  assert_eq "$expected" "$line" 'synthetic release fields'
+  cp "$skidbladnir_release_pin_file" "$valid"
+  sed 's/"version":/"version": null, "version":/' \
     "$valid" >"$duplicate"
   skidbladnir_release_pin_file="$duplicate"
   if skidbladnir_release_values arch >/dev/null 2>&1; then
     fail 'duplicate release-pin key was accepted'
   fi
   cp "$valid" "$oversized"
-  printf '%04100d' 0 >>"$oversized"
+  printf '%4100s' '' >>"$oversized"
   skidbladnir_release_pin_file="$oversized"
   if skidbladnir_release_values arch >/dev/null 2>&1; then
     fail 'oversized release pin was accepted'
