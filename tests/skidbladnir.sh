@@ -1028,6 +1028,76 @@ run_test() {
   tests_run=$((tests_run + 1))
 }
 
+test_human_cli_link_is_owned_and_idempotent() (
+  setup_case human-cli
+  write_release v1.2.3 1111111111111111111111111111111111111111
+  skidbladnir_apply arch >/dev/null
+  [[ -L "$test_home/.local/bin/skid" ]] || fail 'skid command was not installed'
+  assert_eq '../share/skidbladnir/current/skidbladnir' \
+    "$(readlink "$test_home/.local/bin/skid")" 'skid command target'
+  assert_eq 'v1.2.3 1111111111111111111111111111111111111111' \
+    "$("$test_home/.local/bin/skid" version)" 'skid executable release'
+  reset_results
+  : >"$test_calls"
+  skidbladnir_apply arch >/dev/null
+  assert_eq 0 "$dev_server_result_mutations" 'second-apply mutations'
+  assert_eq 0 "$dev_server_result_activations" 'second-apply activations'
+  rm "$test_home/.local/bin/skid"
+  printf 'owned elsewhere\n' >"$test_home/.local/bin/skid"
+  if (skidbladnir_apply arch) >/dev/null 2>&1; then
+    fail 'skid overwrote an unmanaged command'
+  fi
+  assert_eq 'owned elsewhere' "$(cat "$test_home/.local/bin/skid")" \
+    'unmanaged skid preservation'
+)
+
+test_failed_baseline_upgrade_preserves_absent_skid_link() (
+  local old_current
+  setup_case baseline-cli-upgrade
+  write_release v1.2.3 1111111111111111111111111111111111111111
+  skidbladnir_apply arch >/dev/null
+  old_current="$(readlink "$test_home/.local/share/skidbladnir/current")"
+  rm "$test_home/.local/bin/skid"
+  write_release v1.2.4 2222222222222222222222222222222222222222
+  test_fail_action=restart
+  if (skidbladnir_apply arch) >"$case_dir/failure-output" 2>&1; then
+    fail 'failed baseline upgrade returned success'
+  fi
+  assert_eq "$old_current" "$(readlink "$test_home/.local/share/skidbladnir/current")" \
+    'baseline upgrade restored current'
+  [[ ! -e "$test_home/.local/bin/skid" && ! -L "$test_home/.local/bin/skid" ]] ||
+    fail 'failed baseline upgrade left the new skid command installed'
+  assert_eq 'v1.2.3 1111111111111111111111111111111111111111' \
+    "$("$test_home/.local/bin/skidbladnir" version)" 'baseline command preserved'
+)
+
+test_skid_link_failure_restores_verified_runtime() (
+  local old_current
+  setup_case failed-skid-link
+  write_release v1.2.3 1111111111111111111111111111111111111111
+  skidbladnir_apply arch >/dev/null
+  old_current="$(readlink "$test_home/.local/share/skidbladnir/current")"
+  rm "$test_home/.local/bin/skid"
+  write_release v1.2.4 2222222222222222222222222222222222222222
+  ln() {
+    case "${3:-}" in
+    "$test_home/.local/bin/.skid.dev-server."*) return 73 ;;
+    *) command ln "$@" ;;
+    esac
+  }
+  if (skidbladnir_apply arch) >"$case_dir/failure-output" 2>&1; then
+    fail 'skid link failure returned success'
+  fi
+  assert_eq "$old_current" "$(readlink "$test_home/.local/share/skidbladnir/current")" \
+    'link failure restored current'
+  assert_eq v1.2.3 "$(cat "$test_service_version")" 'link failure restored service'
+  [[ ! -e "$test_home/.local/bin/skid" && ! -L "$test_home/.local/bin/skid" ]] ||
+    fail 'link failure left the new skid command installed'
+)
+
+run_test test_skid_link_failure_restores_verified_runtime
+run_test test_failed_baseline_upgrade_preserves_absent_skid_link
+run_test test_human_cli_link_is_owned_and_idempotent
 run_test test_four_profiles_use_the_upstream_claude_signature
 run_test test_pin_and_config_contract
 run_test test_platform_scoped_declared_inputs

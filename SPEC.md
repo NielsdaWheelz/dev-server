@@ -173,6 +173,9 @@ Trade-offs: rolling OS repositories favor freshness over byte-for-byte replay of
 
 - All managed files use the shared atomic compare/install primitive.
 - A file is either fully repo-owned or unchanged. The sole exception is an explicitly named, parser-backed configuration key rewritten atomically; partial `sed`/append/block ownership is forbidden.
+- Direct skid clients share window/pane navigation. The managed tmux template
+  declares `window-size latest`, `destroy-unattached off`, and
+  `detach-on-destroy on`; skid creates no grouped attachment session.
 - Reload tmux only when its live config SHA differs; never restart the tmux
   server for a binary upgrade.
 - Git plugins live in exact commit generations under
@@ -197,7 +200,8 @@ Trade-offs: rolling OS repositories favor freshness over byte-for-byte replay of
   `~/.codex-work2/AGENTS.md`, `~/.claude/CLAUDE.md`, and
   `~/.claude-work/CLAUDE.md`. New sessions load updates; do not restart agents.
   Authentication, settings, history, project instructions, and skills remain
-  outside this file's ownership.
+  outside this file's ownership. Include the common skid CLI guide here; no second
+  instruction installer or provider-specific skill is introduced.
 - The wrapper dispatches only by its fixed basename; remove cwd/`-C` inference and `*-personal` aliases. Retain isolation tests.
 - AI installation MUST NOT depend on a Skíðblaðnir Claude plugin.
 - Use native/standard lock formats where they preserve the desired update contract. Pin Git plugin commits and Ansible. `curl | sh`, `curl | bash`, executable `@latest`, and mutable branch execution are forbidden.
@@ -421,6 +425,7 @@ Keep a small local installer; product packaging is outside this 80/20 cut. Layou
     unit
   .apply.lock
 ~/.local/bin/
+  skid -> ../share/skidbladnir/current/skidbladnir
   skidbladnir -> ../share/skidbladnir/current/skidbladnir
   skidbladnir-launch
 ~/.config/skidbladnir/
@@ -437,7 +442,7 @@ Keep a small local installer; product packaging is outside this 80/20 cut. Layou
 Rules:
 
 - Release and credential directories are user-private. Bearer, machine handle, and the three exact upstream-owned Android signing files are regular, non-symlink, mode `0600` files and are never replaced when present; bearer and machine handle are minted only when absent. Invalid state fails closed.
-- `current`, `previous`, and `~/.local/bin/skidbladnir` are the only intentional Skíðblaðnir symlinks. Create each as a validated relative temporary symlink and atomically rename it; reject every unexpected symlink in protected paths.
+- `current`, `previous`, `~/.local/bin/skidbladnir`, and `~/.local/bin/skid` are the intentional Skíðblaðnir symlinks. Both command links target the same current binary; `skid` is the human/agent interface, while `skidbladnir` retains service/admin commands. Create each as a validated relative temporary symlink and atomically rename it; reject every unexpected symlink in protected paths.
 - Under one nonblocking OS lock: download to same-filesystem staging; verify archive SHA, exact three release members, release manifest, executable version/source; add validated host config; rename the complete generation; atomically switch `current`.
 - Generation names use the gateway runtime identity, which covers binary,
   catalogue, release manifest and host config. A host-config-only change at the

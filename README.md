@@ -148,6 +148,25 @@ copies, including edits through an app's custom-instructions settings. Start
 new agent sessions after applying. Project instructions and skills still
 provide their own guidance.
 
+## Agent fleet
+
+Run `skid` for the session list, or `skid list`, `skid info reviewer`, and
+`skid enter reviewer` for ordinary commands. Configuration defaults to
+`~/.config/skidbladnir/client.json`; `--machine arch` disambiguates a name.
+Automation uses `--json` and returned `--ref` values; literal prompts can use
+`skid send --ref REF --stdin --json`. The shared profile instructions include
+this vocabulary, startup-dialog handling, and unknown-outcome rules.
+
+`interrupt` retains the session. `stop` attempts provider halt and then closes it;
+`kill` only closes that exact terminal. Shared work can survive another linked
+session. Phone and desktop navigation are shared; skid no longer creates grouped
+sessions. The managed tmux template declares the three required attachment options.
+
+The installer publishes `skid` and `skidbladnir` as links to one current binary.
+Release pins remain authoritative. Coordinate the CLI/Jarvis/phone cutover, stage
+instructions for new agents, and preserve busy providers. Gateway-only and
+instruction-only rollout avoids unrelated workstation activation.
+
 ## Devbox
 
 Prerequisites:
