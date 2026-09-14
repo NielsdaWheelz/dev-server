@@ -335,6 +335,10 @@ test_every_zsh_prefers_shared_codex_launcher() {
 }
 
 tests_run=0
+for setting in 'window-size latest' 'destroy-unattached off' 'detach-on-destroy on'; do
+  grep -Fxq "set -g $setting" "$test_assets/dotfiles/tmux.conf" ||
+    fail "direct terminal attachment requires $setting"
+done
 test_atomic_files_and_tmux_activation
 test_every_zsh_prefers_shared_codex_launcher
 test_protected_target_rejected

@@ -487,11 +487,12 @@ skidbladnir_validate_protected_paths() {
         die "protected Skidbladnir link is invalid: $link"
     fi
   done
-  link="$home/.local/bin/skidbladnir"
-  if [[ -e "$link" || -L "$link" ]]; then
-    skidbladnir_validate_link "$link" binary >/dev/null ||
-      die "protected Skidbladnir link is invalid: $link"
-  fi
+  for link in "$home/.local/bin/skidbladnir" "$home/.local/bin/skid"; do
+    if [[ -e "$link" || -L "$link" ]]; then
+      skidbladnir_validate_link "$link" binary >/dev/null ||
+        die "protected Skidbladnir link is invalid: $link"
+    fi
+  done
   for path in \
     "$config/bearer" \
     "$config/machine-handle" \
@@ -1268,6 +1269,7 @@ skidbladnir_restore_runtime() {
   fi
   if [[ -z "$prior_current" ]]; then
     skidbladnir_remove_link "$home/.local/bin/skidbladnir" || return 1
+    skidbladnir_remove_link "$home/.local/bin/skid" || return 1
   fi
 
   if [[ -z "$prior_current" ]]; then
@@ -1934,6 +1936,13 @@ skidbladnir_apply() {
     fi
     activation_failed=1
   fi
+  # Publish the human command only after activation succeeds. A failed upgrade
+  # from a release without this command must not leave it pointing at old grammar.
+  if ((activation_failed == 0)); then
+    [[ -L "$home/.local/bin/skid" ]] || skidbladnir_command_installed=1
+    skidbladnir_atomic_symlink "$home/.local/bin/skid" \
+      '../share/skidbladnir/current/skidbladnir' binary || activation_failed=1
+  fi
   if ((activation_failed)); then
     if ! skidbladnir_restore_runtime "$platform" "$home" "$stage" "$rollback_current" \
       "$rollback_previous" "$rollback_version" "$unit_target" \
@@ -1951,7 +1960,7 @@ skidbladnir_apply() {
   ((skidbladnir_unit_changed == 0)) ||
     render_result CHANGED skid.unit 'launcher and service definition installed'
   ((skidbladnir_command_installed == 0)) ||
-    render_result INSTALLED skidbladnir.command "$home/.local/bin/skidbladnir"
+    render_result INSTALLED skidbladnir.command "$home/.local/bin/skid and skidbladnir"
   ((skidbladnir_enablement_changed == 0)) ||
     render_result CHANGED skidbladnir.enablement 'enabled at login'
   [[ -z "$skidbladnir_activation_status" ]] ||
