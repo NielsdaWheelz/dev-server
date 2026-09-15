@@ -131,7 +131,7 @@ Closed registry:
 | `tmux.config` | source a running server once |
 | `shell.config` | none; future shells |
 | `ai.instructions` | none; new agent sessions |
-| `desktop.session` | defer to next login |
+| `desktop.session` | Arch: defer to next login; macOS: manually reload/reopen Ghostty |
 | `ssh.config` | validate, then reload SSH |
 | `docker.config` | restart only with no running containers; otherwise defer |
 | `skid.unit` | daemon-reload/bootstrap, then activate gateway |
@@ -172,6 +172,10 @@ Trade-offs: rolling OS repositories favor freshness over byte-for-byte replay of
 ### 8.3 Files, personal policy, and AI tools
 
 - All managed files use the shared atomic compare/install primitive.
+- macOS personal policy installs the exact `assets/dotfiles/ghostty-macos.config`
+  at `~/Library/Application Support/com.mitchellh.ghostty/config.ghostty`.
+  Homebrew owns Ghostty and its Meslo font. Changed configuration reports a
+  manual reload/reopen; apply never restarts the terminal or its sessions.
 - A file is either fully repo-owned or unchanged. The sole exception is an explicitly named, parser-backed configuration key rewritten atomically; partial `sed`/append/block ownership is forbidden.
 - Direct skid clients share window/pane navigation. The managed tmux template
   declares `window-size latest`, `destroy-unattached off`, and

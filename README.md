@@ -49,6 +49,14 @@ reported as `DEFERRED`.
 On macOS, apply verifies and may start the exact App Store Tailscale app but
 never installs, upgrades, replaces, or signs in to it.
 
+macos apply installs ghostty and its meslo font through homebrew. the exact
+configuration lives in [`assets/dotfiles/ghostty-macos.config`](assets/dotfiles/ghostty-macos.config)
+and is installed at `~/Library/Application Support/com.mitchellh.ghostty/config.ghostty`.
+edit the repo copy: apply replaces the installed file. it uses meslo at 13pt,
+default keybindings, and notifications for commands running at least 30 seconds
+that finish while unfocused. after a config change, press `cmd+shift+,` in ghostty
+or reopen it. apply leaves running terminals alone.
+
 `codex`, `codex-work`, and `codex-work2` select Personal, Work and Work2 by
 setting `CODEX_HOME`, then directly execute the installed native CLI with your
 arguments, environment, cwd and exit behavior intact. Each account has one

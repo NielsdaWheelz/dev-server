@@ -9,6 +9,8 @@ source "$base_dir/lib/common.sh"
 source "$base_dir/lib/dotfiles.sh"
 # shellcheck source=lib/personal-arch.sh
 source "$base_dir/lib/personal-arch.sh"
+# shellcheck source=lib/personal-macos.sh
+source "$base_dir/lib/personal-macos.sh"
 # shellcheck source=lib/skidbladnir.sh
 source "$base_dir/lib/skidbladnir.sh"
 # shellcheck source=lib/ai-tools.sh
@@ -51,8 +53,13 @@ workstation_select_target() {
 
 workstation_report_deferrals() {
   if has_change desktop.session; then
-    render_result DEFERRED "desktop session" \
-      "log out and back in to activate session changes"
+    if [[ "$workstation_platform" == macos ]]; then
+      render_result DEFERRED Ghostty \
+        "reload config with cmd+shift+, or reopen Ghostty"
+    else
+      render_result DEFERRED "desktop session" \
+        "log out and back in to activate session changes"
+    fi
   fi
   if has_change system.reboot; then
     render_result DEFERRED reboot \
@@ -153,6 +160,8 @@ workstation_preflight() {
   ai_validate_inputs
   if [[ "$workstation_platform" == arch ]]; then
     personal_arch_validate_declared_inputs
+  else
+    personal_macos_validate_declared_inputs
   fi
   skidbladnir_validate_declared_inputs "$workstation_platform"
   skidbladnir_validate_local_state "$(dev_server_home)"
@@ -192,6 +201,8 @@ workstation_apply() {
   dotfiles_install
   if [[ "$workstation_platform" == arch ]]; then
     personal_arch_apply
+  else
+    personal_macos_apply
   fi
   codex_services_install
   ai_install
