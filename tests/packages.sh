@@ -468,6 +468,42 @@ test_macos_tailscale_cli_resolution() (
   fi
 )
 
+test_macos_ghostty_idempotence() (
+  local home="$fixture/ghostty-home"
+  local assets="$fixture/ghostty-assets"
+  local config="$home/Library/Application Support/com.mitchellh.ghostty/config.ghostty"
+  local output="$fixture/ghostty-output"
+  local inode
+  mkdir -p "$home/Library/Application Support" "$assets/dotfiles"
+  cp "$repo_dir/assets/dotfiles/ghostty-macos.config" "$assets/dotfiles/"
+  dev_server_home_dir="$home"
+  dev_server_assets_root="$assets"
+  # shellcheck source=lib/common.sh
+  source "$repo_dir/lib/common.sh"
+  # shellcheck source=lib/personal-macos.sh
+  source "$repo_dir/lib/personal-macos.sh"
+
+  dev_server_result_activations=0
+  personal_macos_apply >"$output"
+  cmp -s "$assets/dotfiles/ghostty-macos.config" "$config" ||
+    fail 'macOS Ghostty configuration bytes differ'
+  has_change desktop.session || fail 'Ghostty install did not require a config reload'
+
+  inode="$(file_inode "$config")"
+  dev_server_changes='|'
+  personal_macos_apply >"$output"
+  assert_empty "$output"
+  assert_eq "$inode" "$(file_inode "$config")" 'unchanged Ghostty config inode'
+  ! has_change desktop.session || fail 'unchanged Ghostty config required a reload'
+
+  printf '\nfont-size = 14\n' >>"$assets/dotfiles/ghostty-macos.config"
+  personal_macos_apply >"$output"
+  cmp -s "$assets/dotfiles/ghostty-macos.config" "$config" ||
+    fail 'macOS Ghostty configuration update was not installed'
+  has_change desktop.session || fail 'Ghostty update did not require a config reload'
+  assert_eq 0 "$dev_server_result_activations" 'Ghostty automatic activation count'
+)
+
 test_xfce_idempotence() (
   local gsettings_state="$fixture/gsettings-state"
   local first_output="$fixture/xfce-first-output"
@@ -843,6 +879,8 @@ pass
 test_macos_start_requires_postcondition
 pass
 test_macos_tailscale_cli_resolution
+pass
+test_macos_ghostty_idempotence
 pass
 test_xfce_idempotence
 pass

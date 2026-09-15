@@ -85,6 +85,9 @@ write_library "$test_repo/lib/personal-arch.sh" \
   'personal_arch_owned_host() { return 1; }' \
   'personal_arch_validate_declared_inputs() { :; }' \
   'personal_arch_apply() { printf "personal-arch\n" >>"$WORKSTATION_RECORD"; }'
+write_library "$test_repo/lib/personal-macos.sh" \
+  'personal_macos_validate_declared_inputs() { :; }' \
+  'personal_macos_apply() { printf "personal-macos\n" >>"$WORKSTATION_RECORD"; }'
 write_library "$test_repo/lib/skidbladnir.sh" \
   'skidbladnir_validate_declared_inputs() { :; }' \
   'skidbladnir_validate_local_state() { :; }' \
@@ -151,9 +154,9 @@ test_explicit_api() {
 test_macos_order_and_deferrals() {
   FAKE_UNAME=Darwin invoke apply
   assert_eq 0 "$status" 'macOS apply status'
-  assert_eq $'packages\ndotfiles\nai\nskidbladnir macos' \
+  assert_eq $'packages\ndotfiles\npersonal-macos\nai\nskidbladnir macos' \
     "$(<"$record")" 'macOS subsystem order'
-  assert_eq 1 "$(grep -c '^DEFERRED  desktop session:' "$stdout_file")" \
+  assert_eq 1 "$(grep -c '^DEFERRED  Ghostty: reload config with cmd+shift+,' "$stdout_file")" \
     'desktop-session deferral count'
   assert_eq 1 "$(grep -c '^DEFERRED  reboot:' "$stdout_file")" \
     'reboot deferral count'

@@ -22,3 +22,6 @@ brew "yazi"
 brew "zoxide"
 brew "zsh-autosuggestions"
 brew "zsh-syntax-highlighting"
+
+cask "font-meslo-for-powerlevel10k"
+cask "ghostty"
