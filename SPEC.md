@@ -200,8 +200,10 @@ Trade-offs: rolling OS repositories favor freshness over byte-for-byte replay of
   `~/.codex-work2/AGENTS.md`, `~/.claude/CLAUDE.md`, and
   `~/.claude-work/CLAUDE.md`. New sessions load updates; do not restart agents.
   Authentication, settings, history, project instructions, and skills remain
-  outside this file's ownership. Include the common skid CLI guide here; no second
-  instruction installer or provider-specific skill is introduced.
+  outside this file's ownership. Include only a brief hint on when to use skid,
+  preserving native subagent/workflow choice and pointing to `skid --help` for
+  commands and automation guidance. The full guide ships with the skid binary;
+  no second instruction installer or provider-specific skill is introduced.
 - The wrapper dispatches only by its fixed basename; remove cwd/`-C` inference and `*-personal` aliases. Retain isolation tests.
 - AI installation MUST NOT depend on a Skíðblaðnir Claude plugin.
 - Use native/standard lock formats where they preserve the desired update contract. Pin Git plugin commits and Ansible. `curl | sh`, `curl | bash`, executable `@latest`, and mutable branch execution are forbidden.
