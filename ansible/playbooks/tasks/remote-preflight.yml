@@ -147,7 +147,7 @@
     user_files = [
         (active / "docker.sha256", 0o600), (active / "skid.runtime.sha256", 0o600),
         (active / "skid.unit.sha256", 0o600), (config / "bearer", 0o600),
-        (config / "machine-handle", 0o600),
+        (config / "machine-handle", 0o600), (config / "client.json", 0o600),
         (config / "android-signing.p12", 0o600),
         (config / "android-signing.properties", 0o600),
         (config / "android-signing.password", 0o600),
@@ -272,7 +272,7 @@
             else:
                 reject(f"unowned Skid state remains: {share / name}")
     credential_names = {
-        "bearer", "machine-handle", "android-signing.p12",
+        "bearer", "machine-handle", "client.json", "android-signing.p12",
         "android-signing.properties", "android-signing.password",
     }
     if os.path.lexists(config) and set(entries(config)) - credential_names:
