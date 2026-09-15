@@ -1038,8 +1038,13 @@ test_remote_managed_state_preflight_contract() {
   python3 - \
     "$repo_dir/ansible/playbooks/apply.yml" \
     "$repo_dir/ansible/playbooks/tasks/remote-preflight.yml" <<'PY' ||
+import contextlib
+import io
 import pathlib
+import stat
 import sys
+from types import SimpleNamespace
+from unittest.mock import patch
 
 playbook = pathlib.Path(sys.argv[1]).read_text()
 gate = pathlib.Path(sys.argv[2]).read_text()
@@ -1111,7 +1116,63 @@ program = "\n".join(
     line[4:] if line.startswith("    ") else line
     for line in program.splitlines()
 )
-compile(program, "remote-managed-state-preflight", "exec")
+program = compile(program, "remote-managed-state-preflight", "exec")
+
+# Run the whole preflight with only the optional client state present.
+# Its contents belong to the fleet client and must never be opened here.
+config = "/home/managed/.config/skidbladnir"
+client = config + "/client.json"
+account = SimpleNamespace(pw_uid=1000, pw_gid=1001, pw_dir="/home/managed")
+
+def get_account(name):
+    if name != "managed":
+        raise KeyError(name)
+    return account
+
+for label, changes, error in (
+        ("absent", {}, ""),
+        ("valid", {}, ""),
+        ("mode", {"st_mode": stat.S_IFREG | 0o644}, "metadata is invalid"),
+        ("owner", {"st_uid": 1002}, "metadata is invalid"),
+        ("group", {"st_gid": 1002}, "metadata is invalid"),
+        ("hardlink", {"st_nlink": 2}, "metadata is invalid"),
+        ("symlink", {"st_mode": stat.S_IFLNK | 0o777}, "not a file"),
+        ("unknown", {}, "unowned Skid credential state remains")):
+    metadata = {
+        config: SimpleNamespace(st_mode=stat.S_IFDIR | 0o700, st_uid=1000,
+                                st_gid=1001, st_nlink=1),
+    }
+    if label != "absent":
+        metadata[client] = SimpleNamespace(**{
+            "st_mode": stat.S_IFREG | 0o600, "st_uid": 1000,
+            "st_gid": 1001, "st_nlink": 1, **changes,
+        })
+    if label == "unknown":
+        metadata[config + "/unexpected"] = metadata[client]
+    stderr = io.StringIO()
+    status = 0
+    with (
+        patch.dict("os.environ", {"DEV_SERVER_PREFLIGHT_USER": "managed"}),
+        patch("pwd.getpwnam", side_effect=get_account),
+        patch("grp.getgrgid", return_value=SimpleNamespace(gr_name="managed")),
+        patch("grp.getgrnam", side_effect=KeyError),
+        patch("os.path.lexists", side_effect=lambda path: str(path) in metadata),
+        patch("os.lstat", side_effect=lambda path: metadata[str(path)]),
+        patch("os.scandir", side_effect=lambda path: [
+            SimpleNamespace(name=name[len(config) + 1:])
+            for name in metadata if name.startswith(str(path) + "/")
+        ]),
+        patch("os.open", side_effect=AssertionError("opened client contents")),
+        patch("builtins.open", side_effect=AssertionError("opened client contents")),
+        patch("pathlib.Path.open", side_effect=AssertionError("opened client contents")),
+        contextlib.redirect_stderr(stderr),
+    ):
+        try:
+            exec(program, {})
+        except SystemExit as result:
+            status = result.code
+    assert status == (1 if error else 0), (label, status, stderr.getvalue())
+    assert error in stderr.getvalue(), (label, stderr.getvalue())
 PY
     fail 'remote managed-state preflight contract is incomplete'
   tests_run=$((tests_run + 1))
