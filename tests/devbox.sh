@@ -1247,6 +1247,76 @@ PY
   tests_run=$((tests_run + 1))
 }
 
+test_supplementary_groups_have_one_owner() {
+  local playbook="$fixture/groups/ansible/playbooks/contract.yml"
+  python3 - "$repo_dir" "$playbook" <<'PY'
+import pathlib
+import shutil
+import sys
+import yaml
+
+root, playbook = map(pathlib.Path, sys.argv[1:])
+playbook.parent.mkdir(parents=True)
+config = playbook.parent / "../../assets/codex/profiles.json"
+config.parent.mkdir(parents=True)
+shutil.copyfile(root / "assets/codex/profiles.json", config)
+tasks = []
+composition = yaml.safe_load((root / "ansible/playbooks/apply.yml").read_text())[0]
+for entry in composition["roles"]:
+    role = entry["role"]
+    if role not in ("security", "codex_shared"):
+        continue
+    for task in yaml.safe_load((root / f"ansible/roles/{role}/tasks/main.yml").read_text()):
+        if "codex_shared_config" in task.get("ansible.builtin.set_fact", {}):
+            tasks.append(task)
+        for module in ("ansible.builtin.group", "ansible.builtin.user"):
+            if module not in task or (module.endswith(".user") and "groups" not in task[module]):
+                continue
+            # Render real declarations and loops; observe instead of changing accounts.
+            observed = {key: value for key, value in task.items() if key != module}
+            observed["vars"] = {"observed_arguments": task[module], "observed_owner": role,
+                                "observed_module": module}
+            observed["ansible.builtin.set_fact"] = {
+                "group_operations": "{{ group_operations + [{'owner': observed_owner, "
+                                    "'module': observed_module, 'arguments': observed_arguments}] }}",
+            }
+            tasks.append(observed)
+tasks.append({"ansible.builtin.set_fact": {
+    "operator_writers": "{{ group_operations | selectattr('module', 'equalto', 'ansible.builtin.user') "
+                        "| selectattr('arguments.name', 'equalto', devbox_user) | list }}",
+    "jarvis_writers": "{{ group_operations | selectattr('module', 'equalto', 'ansible.builtin.user') "
+                      "| selectattr('arguments.name', 'equalto', codex_shared_config.jarvis_user) | list }}",
+    "client_groups": "{{ group_operations | selectattr('module', 'equalto', 'ansible.builtin.group') "
+                     "| selectattr('arguments.name', 'equalto', codex_shared_config.client_group) | list }}",
+}})
+tasks.append({"ansible.builtin.assert": {"that": [
+    "operator_writers | length == 1",
+    "operator_writers[0].owner == 'security'",
+    "operator_writers[0].arguments.groups == codex_shared_config.client_group",
+    "not operator_writers[0].arguments.append",
+    "client_groups | length == 1",
+    "group_operations.index(client_groups[0]) < group_operations.index(operator_writers[0])",
+    "jarvis_writers | length == 1",
+    "jarvis_writers[0].arguments.groups == codex_shared_config.client_group",
+    "jarvis_writers[0].arguments.append",
+]}})
+playbook.write_text(yaml.safe_dump([{
+    "name": "Closed supplementary-group ownership", "hosts": "localhost",
+    "gather_facts": False,
+    "vars": {"devbox_user": "niels", "devbox_deploy_user": "dev-server-deploy",
+             "group_operations": []},
+    "tasks": tasks,
+}]))
+PY
+  ANSIBLE_LOCAL_TEMP="$fixture/ansible-local" \
+    ansible-playbook --inventory localhost, --connection local \
+    "$playbook" >"$fixture/groups.out" 2>&1 || {
+    cat "$fixture/groups.out" >&2
+    fail 'supplementary groups must have one exact owner'
+  }
+  tests_run=$((tests_run + 1))
+}
+
 test_codex_runtime_activation_contract() {
   python3 - \
     "$repo_dir/lib/common.sh" \
@@ -1346,5 +1416,6 @@ test_remote_managed_state_preflight_contract
 test_ufw_ingress_boundary_contract
 test_codex_runtime_activation_contract
 test_codex_explicit_restart_is_independent_of_configuration_change
+test_supplementary_groups_have_one_owner
 
 printf 'devbox: %d contract groups passed\n' "$tests_run"
