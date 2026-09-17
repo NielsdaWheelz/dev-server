@@ -3,6 +3,7 @@
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
+    follow: false
     owner: root
     group: root
     mode: "0700"
@@ -26,6 +27,9 @@
       - >-
         not security_ssh_active_identity.stat.exists or
         security_ssh_active_identity.stat.mode == "0600"
+      - >-
+        not security_ssh_active_identity.stat.exists or
+        security_ssh_active_identity.stat.uid == 0
     fail_msg: Invalid recorded active SSH input identity
 
 - name: Read recorded active SSH input identity
@@ -44,6 +48,35 @@
     fail_msg: Invalid recorded active SSH input identity
   when: security_ssh_active_identity.stat.exists
 
+- name: Read the declared shared socket principals
+  ansible.builtin.set_fact:
+    security_codex_config: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/profiles.json') | from_json }}"
+
+- name: Create the dedicated shared Codex client group
+  ansible.builtin.group:
+    name: "{{ security_codex_config.client_group }}"
+    system: true
+    state: present
+
+- name: Validate the existing shared socket access boundary
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import grp, pwd, sys
+        group = grp.getgrnam(sys.argv[1])
+        members = set(group.gr_mem) | {
+            user.pw_name for user in pwd.getpwall() if user.pw_gid == group.gr_gid
+        }
+        unexpected = members - set(sys.argv[2:])
+        if unexpected:
+            raise SystemExit('unexpected shared socket principals: ' + ', '.join(sorted(unexpected)))
+      - "{{ security_codex_config.client_group }}"
+      - "{{ security_codex_config.development_user }}"
+      - "{{ security_codex_config.jarvis_user }}"
+  changed_when: false
+
 - name: Ensure the deployment principal exists
   ansible.builtin.user:
     name: "{{ devbox_deploy_user }}"
@@ -52,21 +85,17 @@
     append: false
     create_home: true
 
-- name: Read the single shared Codex declaration
-  ansible.builtin.set_fact:
-    codex_shared_config: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/profiles.json') | from_json }}"
-
-- name: Create the dedicated shared Codex client group
-  ansible.builtin.group:
-    name: "{{ codex_shared_config.client_group }}"
-    system: true
-    state: present
-
-- name: Restrict operator supplementary groups to declared client access
+- name: Keep only the declared operator socket-access group
   ansible.builtin.user:
     name: "{{ devbox_user }}"
-    groups: "{{ codex_shared_config.client_group }}"
+    groups: "{{ security_codex_config.client_group }}"
     append: false
+
+- name: Grant Jarvis shared socket access without changing application groups
+  ansible.builtin.user:
+    name: "{{ security_codex_config.jarvis_user }}"
+    groups: "{{ security_codex_config.client_group }}"
+    append: true
 
 - name: Install deployment-only elevation policy
   ansible.builtin.copy:

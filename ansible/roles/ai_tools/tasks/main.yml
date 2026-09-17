@@ -66,7 +66,7 @@
     dev_server_ai_host=devbox
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/ai-tools.sh"
-    ai_install
+    ai_install {{ devbox_upgrade_packages | bool | ternary('1', '0') }}
   args:
     executable: /bin/bash
   become: true

@@ -4,6 +4,7 @@ devbox_deploy_user: dev-server-deploy
 devbox_timezone: UTC
 devbox_locale: en_US.UTF-8
 devbox_node_major: "24"
+devbox_upgrade_packages: false
 devbox_docker_log_max_size: "50m"
 devbox_docker_log_max_file: "3"
 devbox_postgresql_major: "16"

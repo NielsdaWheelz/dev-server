@@ -19,20 +19,59 @@
       signed-by=/etc/apt/keyrings/postgresql.asc]
       https://apt.postgresql.org/pub/repos/apt
       {{ ansible_facts['distribution_release'] }}-pgdg main
+  register: jarvis_host_apt_repository
 
-- name: Install PostgreSQL and the qualified pgvector package
+- name: Install PostgreSQL and the qualified pgvector package # noqa package-latest
+  vars:
+    jarvis_host_packages:
+      - "postgresql-{{ devbox_postgresql_major }}"
+      - "postgresql-client-{{ devbox_postgresql_major }}"
+      - "postgresql-{{ devbox_postgresql_major }}-pgvector"
   ansible.builtin.apt:
     name:
       - "postgresql-{{ devbox_postgresql_major }}"
       - "postgresql-client-{{ devbox_postgresql_major }}"
       - "postgresql-{{ devbox_postgresql_major }}-pgvector={{ devbox_pgvector_package_version }}"
-    state: present
-    update_cache: true
+    state: "{{ devbox_upgrade_packages | bool | ternary('latest', 'present') }}"
+    update_cache: >-
+      {{ devbox_upgrade_packages | bool or jarvis_host_apt_repository.changed or
+         (jarvis_host_packages | map('regex_replace', '^', 'installed ')
+          | difference(base_package_state.stdout_lines) | length > 0) }}
 
 - name: Hold the qualified pgvector package until explicit requalification
   ansible.builtin.dpkg_selections:
     name: "postgresql-{{ devbox_postgresql_major }}-pgvector"
     selection: hold
+
+- name: Validate any existing Jarvis service identity
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import grp, os, pwd, sys
+        user, group = sys.argv[1:]
+        try:
+            account = pwd.getpwnam(user)
+        except KeyError:
+            account = None
+        if account is None and any(os.path.lexists(path) for path in (
+                "/opt/jarvis", "/var/lib/jarvis", "/etc/jarvis")):
+            raise SystemExit('existing Jarvis state requires its original service account; restore that identity before applying')
+        if account is not None and (
+                account.pw_uid == 0 or account.pw_gid == 0 or
+                account.pw_dir != "/var/lib/jarvis" or
+                account.pw_shell != "/usr/sbin/nologin" or
+                grp.getgrgid(account.pw_gid).gr_name != group):
+            raise SystemExit(f"invalid Jarvis service account: {user}")
+        try:
+            if grp.getgrnam(group).gr_gid == 0:
+                raise SystemExit(f"invalid Jarvis service group: {group}")
+        except KeyError:
+            pass
+      - "{{ jarvis_service_user }}"
+      - "{{ jarvis_service_group }}"
+  changed_when: false
 
 - name: Create the Jarvis service group
   ansible.builtin.group:
@@ -55,6 +94,7 @@
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
+    follow: false
     owner: root
     group: root
     mode: "0755"
@@ -66,6 +106,7 @@
   ansible.builtin.file:
     path: /var/lib/jarvis
     state: directory
+    follow: false
     owner: "{{ jarvis_service_user }}"
     group: "{{ jarvis_service_group }}"
     mode: "0700"
@@ -74,6 +115,7 @@
   ansible.builtin.file:
     path: /etc/jarvis
     state: directory
+    follow: false
     owner: root
     group: "{{ jarvis_service_group }}"
     mode: "0750"

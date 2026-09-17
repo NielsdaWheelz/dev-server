@@ -54,7 +54,7 @@ dotfiles_validate_git_state() {
 
   [[ -e "$dest" || -L "$dest" ]] || return 0
   [[ -L "$dest" ]] ||
-    die "legacy in-place Git plugin remains; complete the hard-cut runbook: $dest"
+    die "unmanaged Git plugin at $dest; move it aside after preserving local changes, then rerun apply"
   target="$(readlink "$dest")"
   case "$target" in
   "$plugin_root"/[0-9a-f][0-9a-f]*) ;;
@@ -265,7 +265,7 @@ dotfiles_install_git_repo() {
     fi
     status=UPDATED
   elif [[ -e "$dest" ]]; then
-    die "legacy in-place Git plugin remains; complete the hard-cut runbook: $dest"
+    die "unmanaged Git plugin at $dest; move it aside after preserving local changes, then rerun apply"
   else
     status=INSTALLED
   fi

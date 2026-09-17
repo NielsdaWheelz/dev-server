@@ -3,6 +3,7 @@
   ansible.builtin.file:
     path: /etc/needrestart/conf.d
     state: directory
+    follow: false
     owner: root
     group: root
     mode: "0755"
@@ -16,10 +17,27 @@
     content: |
       $nrconf{override_rc}->{qr(^codex-shared@(personal|work|work2)\.service$)} = 0;
 
+- name: Validate the existing development account
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import grp, pwd, sys
+        user = sys.argv[1]
+        account = pwd.getpwnam(user)
+        if (account.pw_uid == 0 or account.pw_gid == 0 or
+                account.pw_dir != f"/home/{user}" or
+                grp.getgrgid(account.pw_gid).gr_name != user):
+            raise SystemExit(f"invalid development account: {user}")
+      - "{{ devbox_user }}"
+  changed_when: false
+
 - name: Install apt keyring directories
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
+    follow: false
     owner: root
     group: root
     mode: "0755"
@@ -77,10 +95,17 @@
       content: >-
         deb [signed-by=/etc/apt/keyrings/nodesource.asc]
         https://deb.nodesource.com/node_{{ devbox_node_major }}.x nodistro main
+  register: base_apt_repositories
 
-- name: Install current declared package candidates # noqa package-latest
-  ansible.builtin.apt:
-    name:
+- name: Read installed apt package state
+  ansible.builtin.command:
+    argv: [dpkg-query, -W, "-f=${db:Status-Status} ${Package}\n"]
+  register: base_package_state
+  changed_when: false
+
+- name: Install declared packages # noqa package-latest
+  vars:
+    base_packages:
       - bat
       - build-essential
       - ca-certificates
@@ -123,8 +148,13 @@
       - zsh
       - zsh-autosuggestions
       - zsh-syntax-highlighting
-    state: latest
-    update_cache: true
+  ansible.builtin.apt:
+    name: "{{ base_packages }}"
+    state: "{{ devbox_upgrade_packages | bool | ternary('latest', 'present') }}"
+    update_cache: >-
+      {{ devbox_upgrade_packages | bool or base_apt_repositories.changed or
+         (base_packages | map('regex_replace', '^', 'installed ')
+          | difference(base_package_state.stdout_lines) | length > 0) }}
 
 - name: Read installed Docker package version after apply
   ansible.builtin.command:
@@ -260,12 +290,15 @@
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: directory
+    follow: false
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: "{{ item.mode }}"
   loop:
     - path: "/home/{{ devbox_user }}"
       mode: "0750"
+    - path: "/home/{{ devbox_user }}/src"
+      mode: "0755"
     - path: "/home/{{ devbox_user }}/src/work"
       mode: "0755"
     - path: "/home/{{ devbox_user }}/src/personal"
