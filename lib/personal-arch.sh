@@ -632,8 +632,6 @@ personal_arch_configure_zram() {
       dev_server_record_active_sha zram "$desired_sha"
       return 0
     fi
-    sudo systemctl daemon-reload
-    render_result RELOADED systemd "zram activation inputs changed"
     record_change system.reboot
     return 0
   fi
