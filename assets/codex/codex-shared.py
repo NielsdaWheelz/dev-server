@@ -45,11 +45,11 @@ def fields(value, expected):
         invalid()
 
 
-def absolute(value, canonical=True):
+def absolute(value):
     if (not isinstance(value, str) or not value.startswith("/") or value.startswith("//")
             or len(value.encode("utf-8")) > 4096
             or any(ord(character) < 32 or ord(character) == 127 for character in value)
-            or (canonical and os.path.normpath(value) != value) or value == "/"):
+            or os.path.normpath(value) != value or value == "/"):
         invalid()
     return value
 

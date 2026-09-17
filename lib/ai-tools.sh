@@ -236,11 +236,6 @@ ai_install_claude() {
   render_result "$status" "AI tool" "claude@$version"
 }
 
-ai_install_packages() {
-  ai_install_codex "${1:-0}" || return 1
-  ai_install_claude "${1:-0}" || return 1
-}
-
 ai_install_profiles() {
   local home
   local profile
@@ -288,7 +283,8 @@ ai_install() {
   ai_require_codex_runtime
   ai_validate_inputs
   ai_install_dirs || return 1
-  ai_install_packages "${1:-0}" || return 1
+  ai_install_codex "${1:-0}" || return 1
+  ai_install_claude "${1:-0}" || return 1
   ai_install_profiles || return 1
   ai_install_instructions || return 1
 }
