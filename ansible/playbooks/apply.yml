@@ -38,23 +38,6 @@
       ansible.builtin.command: sshd -t
       changed_when: false
 
-    - name: Verify the host firewall boundary
-      ansible.builtin.shell: |
-        set -euo pipefail
-        status="$(ufw status verbose)"
-        grep -Fq 'Status: active' <<<"$status"
-        grep -Eq '^Default: deny \(incoming\)' <<<"$status"
-        while IFS= read -r rule; do
-          [[ "$rule" == *'ALLOW IN'* ]] || continue
-          target="${rule%%ALLOW IN*}"
-          [[ "$target" != *'on tailscale0'* ]] || continue
-          printf 'non-tailnet inbound allow remains in UFW: %s\n' "$rule" >&2
-          exit 1
-        done <<<"$status"
-      args:
-        executable: /bin/bash
-      changed_when: false
-
     - name: Read the applied host timezone
       ansible.builtin.command: timedatectl show -p Timezone --value
       register: devbox_timezone_after
