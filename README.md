@@ -195,6 +195,9 @@ operator alias. missing github enrollment produces one exact manual action.
 
 ansible owns ubuntu configuration. apply retains installed package versions;
 upgrade selects current candidates. pgvector remains exactly pinned and held.
+a reviewed change to the qualified pgvector pin authorizes its upgrade or rollback
+on either command. package metadata refreshes when the installed version differs;
+application and database compatibility qualification belongs to jarvis.
 rootless docker setup is rebuilt only when its package, unit, or daemon config
 changes and no container is running; otherwise activation is deferred.
 
