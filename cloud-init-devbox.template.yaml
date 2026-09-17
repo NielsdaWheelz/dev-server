@@ -1,6 +1,6 @@
 #cloud-config
 hostname: __SERVER_NAME__
-timezone: America/Los_Angeles
+timezone: UTC
 package_update: false
 package_upgrade: false
 ssh_pwauth: false
