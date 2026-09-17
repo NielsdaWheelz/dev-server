@@ -82,7 +82,7 @@ write_library "$test_repo/lib/dotfiles.sh" \
   '  record_change desktop.session' \
   '}'
 write_library "$test_repo/lib/personal-arch.sh" \
-  'personal_arch_owned_host() { return 1; }' \
+  'personal_arch_owned_host() { [[ "${WORKSTATION_OWNED_ARCH:-0}" == 1 ]]; }' \
   'personal_arch_validate_declared_inputs() { :; }' \
   'personal_arch_apply() { printf "personal-arch\n" >>"$WORKSTATION_RECORD"; }'
 write_library "$test_repo/lib/personal-macos.sh" \
@@ -188,6 +188,47 @@ test_late_input_preflight_is_read_only() {
   pass
 }
 
+test_arch_credentials() {
+  local ARCH_PASS='' FAKE_UNAME=Linux WORKSTATION_OWNED_ARCH=1
+  local EXPECTED_PASSWORD='literal $dollar `backticks`; spaces' value
+  export ARCH_PASS FAKE_UNAME WORKSTATION_OWNED_ARCH EXPECTED_PASSWORD
+
+  mkdir -p "$test_repo/assets/routers"
+  install -m 0755 "$repo_dir/assets/routers/arch-sudo-askpass" \
+    "$test_repo/assets/routers/arch-sudo-askpass"
+  touch "$test_repo/packages/arch.pacman.txt" "$test_repo/packages/arch.aur.txt"
+  cat >"$fake_bin/sudo" <<'SH'
+#!/usr/bin/env bash
+[[ "$1" == --askpass ]] || exit 2
+# a cached login succeeds unless the caller requests fresh authentication.
+[[ "${2:-}" == --reset-timestamp ]] || exit 0
+[[ "$("$SUDO_ASKPASS")" == "$EXPECTED_PASSWORD" ]]
+SH
+  chmod 0755 "$fake_bin/sudo"
+
+  for value in "$EXPECTED_PASSWORD" "\"$EXPECTED_PASSWORD\"" "'$EXPECTED_PASSWORD'"; do
+    printf 'ARCH_PASS=%s\n' "$value" >"$test_repo/.env"
+    invoke apply
+    assert_eq 0 "$status" 'literal or quoted arch credential status'
+    assert_contains "$record" 'packages-arch'
+    if grep -Fq "$EXPECTED_PASSWORD" "$stdout_file" "$stderr_file"; then
+      fail 'arch apply printed its credential'
+    fi
+  done
+  printf 'ARCH_PASS=incorrect\n' >"$test_repo/.env"
+  ARCH_PASS="$EXPECTED_PASSWORD" invoke apply
+  assert_eq 0 "$status" 'environment credential precedence'
+  invoke apply
+  assert_eq 1 "$status" 'incorrect credential with cached sudo login'
+  assert_contains "$stderr_file" 'arch sudo authentication failed'
+  [[ ! -s "$record" ]] || fail 'incorrect credential reached package mutation'
+  rm "$test_repo/.env"
+  invoke apply
+  assert_eq 1 "$status" 'missing arch credential status'
+  [[ ! -s "$record" ]] || fail 'missing credential reached package mutation'
+  pass
+}
+
 test_immutable_declared_stage() {
   printf 'source-v1\n' >"$test_repo/assets/staged-input"
   chmod 0755 "$test_repo/assets/staged-input"
@@ -242,6 +283,7 @@ test_explicit_api
 test_macos_order_and_deferrals
 test_platform_gate_is_read_only
 test_late_input_preflight_is_read_only
+test_arch_credentials
 test_immutable_declared_stage
 test_restrictive_umask_preserves_stage_modes
 test_static_hard_cut

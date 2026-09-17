@@ -5,6 +5,7 @@ cloud-init-devbox.yaml
 
 # Local private keys and other machine-specific secrets.
 secrets/
+.env
 
 # Local editor/tool state.
 .cursor/

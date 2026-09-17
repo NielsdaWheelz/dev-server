@@ -207,6 +207,7 @@ for relative in paths:
     for label, pattern in patterns:
         for match in pattern.finditer(text):
             if (label == "unsafe agent bypass" and relative in {
+                "assets/dotfiles/zsh_helpers",
                 "assets/skidbladnir/host-config-arch.json",
                 "assets/skidbladnir/host-config-devbox.json",
                 "assets/skidbladnir/host-config-macbook.json",

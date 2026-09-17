@@ -116,9 +116,9 @@ test_arch_native_reconciliation() (
 
   assert_eq 2 "$(grep -c '^-Syu' <(sed 's/^pacman //' "$calls"))" \
     'full pacman transaction count'
-  assert_eq 2 "$(grep -c '^yay -S --needed cursor-bin qogir-icon-theme$' "$calls")" \
+  assert_eq 2 "$(grep -c '^yay -S --needed --noconfirm --sudoflags=--askpass --answerclean None --answerdiff None --answeredit None cursor-bin qogir-icon-theme$' "$calls")" \
     'declared AUR transaction count'
-  assert_contains "$calls" 'pacman -Syu --needed arc-gtk-theme-eos atuin base-devel'
+  assert_contains "$calls" 'pacman -Syu --needed --noconfirm arc-gtk-theme-eos atuin base-devel'
   assert_contains "$calls" 'dracut eos-bash-shared eza'
   assert_contains "$calls" 'xorg-xinput yay yazi zoxide zram-generator'
   if grep -Eq -- '(^|[[:space:]])-R|paccache|tldr|reflector\.service|pkgfile-update\.service' "$calls"; then
