@@ -156,12 +156,6 @@
          (base_packages | map('regex_replace', '^', 'installed ')
           | difference(base_package_state.stdout_lines) | length > 0) }}
 
-- name: Read installed Docker package version after apply
-  ansible.builtin.command:
-    argv: [dpkg-query, -W, "-f=${Version}", docker-ce]
-  register: base_docker_version_after
-  changed_when: false
-
 - name: Read current timezone
   ansible.builtin.command: timedatectl show -p Timezone --value
   register: base_current_timezone
