@@ -186,7 +186,8 @@ unless `--restart-codex` authorizes drain/restart. changed coupled inputs requir
 `ACTION`/exit `2` before replacement. the flag also restarts unchanged services
 to pick up a newer binary. cli-only upgrades do not change the operational
 identity or trigger a restart. record active identity only after all three
-services pass verification. never kill tmux or native history.
+services pass activity, socket permission, and connection checks. a connection
+proves transport readiness, not a provider turn. never kill tmux or native history.
 
 jarvis cognition remains a local client with its own permission policy.
 worker control belongs to skid's common peer cli and target user authority;

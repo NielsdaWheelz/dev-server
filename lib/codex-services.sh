@@ -225,38 +225,9 @@ codex_services_activate() {
       fi
       ;;
     esac
-    python3 - "$(dev_server_home)/.local/run/codex-shared/$profile/app-server.sock" <<'PY' || return 1
-import os
-import pathlib
-import socket
-import stat
-import sys
-import time
-
-path = pathlib.Path(sys.argv[1])
-deadline = time.monotonic() + 10
-while True:
-    try:
-        parent = path.parent.lstat()
-        item = path.lstat()
-        if (not stat.S_ISDIR(parent.st_mode) or not stat.S_ISSOCK(item.st_mode)
-                or parent.st_uid != os.getuid() or item.st_uid != os.getuid()
-                or stat.S_IMODE(parent.st_mode) != 0o700
-                or stat.S_IMODE(item.st_mode) not in (0o600, 0o700)):
-            raise SystemExit("ERROR  shared Codex socket ownership or permissions differ")
-        # Native bind publishes owner-only 0700 before its asynchronous chmod.
-        # It is a startup prefix, not readiness or permission to activate.
-        if stat.S_IMODE(item.st_mode) == 0o600:
-            with socket.socket(socket.AF_UNIX) as client:
-                client.settimeout(1)
-                client.connect(str(path))
-            break
-    except (FileNotFoundError, ConnectionRefusedError, TimeoutError):
-        pass
-    if time.monotonic() >= deadline:
-        raise SystemExit("ERROR  shared Codex socket did not become available")
-    time.sleep(0.1)
-PY
+    python3 "$(dev_server_home)/.local/libexec/codex-shared" \
+      --config "$(dev_server_home)/.config/codex-shared/profiles.json" \
+      --host "$codex_services_host" verify-socket "$profile" || return 1
     [[ "$(codex_services_state "$profile")" == active ]] || return 1
     if [[ "$state" != active ]]; then
       render_result STARTED codex.runtime "$profile"
