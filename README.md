@@ -22,8 +22,8 @@ manual action is required; `1` means failure; `64` means invalid invocation.
 rerun after fixing the reported problem. `--help` lists the public commands.
 
 [the specification](SPEC.md) defines ownership, activation, and failure behavior.
-there are currently no automated tests, runner, or ci checks. direct verification
-is required until [the test-system rebuild](docs/issues/test-system-rebuild.md).
+there is no retained test suite or repository ci workflow. changes use temporary
+integration tests and direct verification; evidence belongs in the pull request.
 
 ## workstation
 
@@ -196,6 +196,19 @@ common skid cli and the target user's authority. the dedicated jarvis worker
 launcher is retired.
 
 ## development
+
+| slice | owner |
+|---|---|
+| command orchestration | `workstation`, `devbox` |
+| file installation and result reporting | `lib/common.sh` |
+| workstation packages, personal policy, dotfiles, tmux activation | `lib/packages-*.sh`, `lib/personal-*.sh`, `lib/dotfiles.sh`, `lib/tmux.sh` |
+| ai binaries, accounts, shared services | `lib/ai-tools.sh`, `lib/codex-services.sh`, `assets/codex/`, `assets/routers/ai-profile` |
+| skid deployment and host integration | `lib/skidbladnir.sh`, `assets/skidbladnir/` |
+| devbox host configuration | `ansible/roles/`, `cloud-init-devbox.template.yaml` |
+
+work one bounded slice per pr, following the
+[verification workflow](SPEC.md#verification-and-development). keep validation
+and activation with the subsystem that owns the state.
 
 edit declarations, then apply on the intended host. use upgrade for rolling
 software updates; review exact git, extension, native-control, and skid pin
