@@ -124,16 +124,8 @@
 - name: Validate rootless Docker CLI context
   ansible.builtin.shell: |
     set -euo pipefail
-    docker --context=default context inspect rootless |
-      python3 -c '
-    import json, sys
-    value = json.load(sys.stdin)
-    expected = sys.argv[1]
-    valid = (isinstance(value, list) and len(value) == 1 and
-             isinstance(value[0], dict) and
-             ((value[0].get("Endpoints") or {}).get("docker") or {}).get("Host") == expected)
-    raise SystemExit(0 if valid else 1)
-    ' "unix:///run/user/{{ base_user_uid.stdout }}/docker.sock"
+    endpoint="$(docker --context=default context inspect rootless --format '{% raw %}{{.Endpoints.docker.Host}}{% endraw %}')"
+    [[ "$endpoint" == "unix:///run/user/{{ base_user_uid.stdout }}/docker.sock" ]]
   args:
     executable: /bin/bash
   become: true
@@ -151,11 +143,17 @@
     checksum_algorithm: sha256
   register: rootless_docker_config_identity
 
+- name: Read installed Docker package version
+  ansible.builtin.command:
+    argv: [dpkg-query, -W, "-f=${Version}", docker-ce]
+  register: rootless_docker_package_version
+  changed_when: false
+
 - name: Resolve observed rootless Docker setup identity
   ansible.builtin.set_fact:
     rootless_docker_observed_identity: >-
       {{ ((rootless_docker_config_identity.stat.checksum ~ '\n' ~
-           base_docker_version_after.stdout ~ '\n' ~
+           rootless_docker_package_version.stdout ~ '\n' ~
            rootless_docker_unit.stat.checksum ~ '\n') | hash('sha256'))
          if (rootless_docker_unit.stat.exists and
              rootless_docker_context.rc == 0) else '' }}
@@ -243,16 +241,8 @@
 - name: Revalidate rootless Docker CLI context
   ansible.builtin.shell: |
     set -euo pipefail
-    docker --context=default context inspect rootless |
-      python3 -c '
-    import json, sys
-    value = json.load(sys.stdin)
-    expected = sys.argv[1]
-    valid = (isinstance(value, list) and len(value) == 1 and
-             isinstance(value[0], dict) and
-             ((value[0].get("Endpoints") or {}).get("docker") or {}).get("Host") == expected)
-    raise SystemExit(0 if valid else 1)
-    ' "unix:///run/user/{{ base_user_uid.stdout }}/docker.sock"
+    endpoint="$(docker --context=default context inspect rootless --format '{% raw %}{{.Endpoints.docker.Host}}{% endraw %}')"
+    [[ "$endpoint" == "unix:///run/user/{{ base_user_uid.stdout }}/docker.sock" ]]
   args:
     executable: /bin/bash
   become: true
@@ -304,7 +294,7 @@
   ansible.builtin.set_fact:
     rootless_docker_desired_identity: >-
       {{ (rootless_docker_config_identity.stat.checksum ~ '\n' ~
-          base_docker_version_after.stdout ~ '\n' ~
+          rootless_docker_package_version.stdout ~ '\n' ~
           rootless_docker_final_unit.stat.checksum ~ '\n') | hash('sha256') }}
 
 - name: Record verified active rootless Docker identity
