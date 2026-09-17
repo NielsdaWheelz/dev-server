@@ -2,6 +2,9 @@
 
 : "${dev_server_root:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
+personal_arch_desktop_deferred=0
+personal_arch_reboot_deferred=0
+
 personal_arch_asset() {
   printf '%s/assets/%s\n' "$dev_server_root" "$1"
 }
@@ -140,7 +143,6 @@ personal_arch_install_root_file() {
   local source="$1"
   local target="$2"
   local mode="$3"
-  local change_id="${4:-}"
 
   atomic_install_file_as_root "$source" "$target" "$mode"
   # Assigned by atomic_install_file_as_root.
@@ -148,7 +150,6 @@ personal_arch_install_root_file() {
   case "$dev_server_install_status" in
   INSTALLED | UPDATED)
     render_result "$dev_server_install_status" "$target"
-    [[ -z "$change_id" ]] || record_change "$change_id"
     ;;
   UP\ TO\ DATE) ;;
   *) die "invalid install result for $target: $dev_server_install_status" ;;
@@ -190,7 +191,7 @@ personal_arch_ensure_unit() {
   if ! systemctl is-active --quiet "$unit"; then
     if ! sudo systemctl start "$unit"; then
       if [[ "$defer_for_reboot" == 1 ]] && personal_arch_reboot_pending; then
-        record_change system.reboot
+        personal_arch_reboot_deferred=1
         return 2
       fi
       die "failed to start $unit"
@@ -361,7 +362,7 @@ personal_arch_configure_xfce() {
 }
 
 personal_arch_configure_session_files() {
-  local home
+  local home asset target
 
   home="$(dev_server_home)"
   ensure_directory "$home/.config/autostart" 0755
@@ -372,21 +373,21 @@ personal_arch_configure_session_files() {
   ensure_directory "$home/.local/share/xfce4" 0755
   ensure_directory "$home/.local/share/xfce4/helpers" 0755
 
-  install_managed_file "$(personal_arch_asset dotfiles/gammastep-autostart.desktop)" \
-    "$home/.config/autostart/gammastep.desktop" 0644 desktop.session
-  install_managed_file "$(personal_arch_asset dotfiles/gammastep.config)" \
-    "$home/.config/gammastep/config.ini" 0644 desktop.session
-  install_managed_file "$(personal_arch_asset dotfiles/ghostty-autostart.desktop)" \
-    "$home/.config/autostart/ghostty.desktop" 0644 desktop.session
-  install_managed_file "$(personal_arch_asset dotfiles/ghostty.config)" \
-    "$home/.config/ghostty/config.ghostty" 0644 desktop.session
-  install_managed_file "$(personal_arch_asset dotfiles/ghostty-xfce-helper.desktop)" \
-    "$home/.local/share/xfce4/helpers/ghostty.desktop" 0644 desktop.session
-  install_managed_file "$(personal_arch_asset dotfiles/xfce4-clipman-autostart.desktop)" \
-    "$home/.config/autostart/xfce4-clipman-plugin-autostart.desktop" \
-    0644 desktop.session
-  install_managed_file "$(personal_arch_asset dotfiles/xfce4-helpers.rc)" \
-    "$home/.config/xfce4/helpers.rc" 0644 desktop.session
+  while read -r asset target; do
+    install_managed_file "$(personal_arch_asset "dotfiles/$asset")" \
+      "$home/$target" 0644 desktop.session
+    if [[ "$dev_server_install_status" != 'UP TO DATE' ]]; then
+      personal_arch_desktop_deferred=1
+    fi
+  done <<'FILES'
+gammastep-autostart.desktop .config/autostart/gammastep.desktop
+gammastep.config .config/gammastep/config.ini
+ghostty-autostart.desktop .config/autostart/ghostty.desktop
+ghostty.config .config/ghostty/config.ghostty
+ghostty-xfce-helper.desktop .local/share/xfce4/helpers/ghostty.desktop
+xfce4-clipman-autostart.desktop .config/autostart/xfce4-clipman-plugin-autostart.desktop
+xfce4-helpers.rc .config/xfce4/helpers.rc
+FILES
 }
 
 personal_arch_configure_cursor() {
@@ -539,7 +540,7 @@ personal_arch_configure_root_files() {
     render_result UPDATED initramfs
   fi
   if ! personal_arch_boot_consumed user "$(dev_server_active_dir)/dracut.sha256"; then
-    record_change system.reboot
+    personal_arch_reboot_deferred=1
   fi
 
   personal_arch_install_root_file \
@@ -552,7 +553,7 @@ personal_arch_configure_root_files() {
     "$(personal_arch_asset systemd-boot/loader.conf)" \
     /efi/loader/loader.conf 0640
   if ! personal_arch_boot_consumed root /efi/loader/loader.conf; then
-    record_change system.reboot
+    personal_arch_reboot_deferred=1
   fi
   personal_arch_install_root_file \
     "$(personal_arch_asset systemd/zram-generator.conf)" \
@@ -582,7 +583,7 @@ personal_arch_configure_zram() {
       dev_server_record_active_sha zram "$desired_sha"
       return 0
     fi
-    record_change system.reboot
+    personal_arch_reboot_deferred=1
     return 0
   fi
   if ((activation_required)); then
@@ -591,7 +592,7 @@ personal_arch_configure_zram() {
   fi
   if ! sudo systemctl start systemd-zram-setup@zram0.service; then
     if personal_arch_reboot_pending; then
-      record_change system.reboot
+      personal_arch_reboot_deferred=1
       return 0
     fi
     die "failed to start systemd-zram-setup@zram0.service"
@@ -660,7 +661,9 @@ personal_arch_configure_services() {
   if ! id -nG "$user" | tr ' ' '\n' | grep -Fqx docker; then
     sudo usermod -aG docker "$user"
     render_result CHANGED "$user" "added to docker group"
-    record_change desktop.session
+    # Read by workstation_report_deferrals.
+    # shellcheck disable=SC2034
+    personal_arch_desktop_deferred=1
   fi
 
   personal_arch_ensure_unit reflector.timer
@@ -681,6 +684,8 @@ personal_arch_apply() {
   personal_arch_configure_xfce
   personal_arch_configure_services
   if personal_arch_reboot_pending; then
-    record_change system.reboot
+    # Read by workstation_report_deferrals.
+    # shellcheck disable=SC2034
+    personal_arch_reboot_deferred=1
   fi
 }

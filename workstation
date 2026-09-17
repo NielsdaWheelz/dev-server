@@ -56,18 +56,20 @@ workstation_select_target() {
 }
 
 workstation_report_deferrals() {
-  if has_change desktop.session; then
-    if [[ "$workstation_platform" == macos ]]; then
+  if [[ "$workstation_platform" == macos ]]; then
+    if ((personal_macos_desktop_deferred)); then
       render_result DEFERRED Ghostty \
         "reload config with cmd+shift+, or reopen Ghostty"
-    else
+    fi
+  else
+    if ((personal_arch_desktop_deferred)); then
       render_result DEFERRED "desktop session" \
         "log out and back in to activate session changes"
     fi
-  fi
-  if has_change system.reboot; then
-    render_result DEFERRED reboot \
-      "reboot to activate kernel or boot-time changes"
+    if ((personal_arch_reboot_deferred)); then
+      render_result DEFERRED reboot \
+        "reboot to activate kernel or boot-time changes"
+    fi
   fi
 }
 
