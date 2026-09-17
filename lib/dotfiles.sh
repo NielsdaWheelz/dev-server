@@ -318,39 +318,12 @@ dotfiles_install_tmux_repos() {
     "$home/.tmux/plugins/tmux-continuum" tmux.config || return 1
 }
 
-dotfiles_reload_tmux_if_changed() {
-  local desired_sha observed_sha status
-
-  command -v tmux >/dev/null 2>&1 || return 0
-  if tmux list-sessions >/dev/null 2>&1; then
-    status=0
-  else
-    status=$?
-  fi
-  ((status == 0)) || {
-    ((status == 1)) && return 0
-    die 'could not observe tmux session state'
-  }
-
-  desired_sha="$(dev_server_sha256 "$(dev_server_home)/.tmux.conf")"
-  if observed_sha="$(tmux show-options -gv @dev-server-config-sha 2>/dev/null)"; then
-    [[ "$observed_sha" =~ ^[0-9a-f]{64}$ ]] ||
-      die 'running tmux config identity is invalid'
-    [[ "$observed_sha" == "$desired_sha" ]] && return 0
-  fi
-
-  tmux source-file "$(dev_server_home)/.tmux.conf" ||
-    die 'could not reload tmux configuration'
-  tmux set-option -gq @dev-server-config-sha "$desired_sha" ||
-    die 'could not record the running tmux config identity'
-  render_result RELOADED tmux
-}
-
 dotfiles_install() {
+  tmux_report_binary_activation
   dotfiles_validate_inputs
   dotfiles_install_dirs || return 1
   dotfiles_install_files || return 1
   dotfiles_install_tmux_repos || return 1
-  dotfiles_reload_tmux_if_changed || return 1
+  tmux_reload_if_changed || return 1
   dotfiles_install_shell_repos || return 1
 }

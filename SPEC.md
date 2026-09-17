@@ -96,7 +96,7 @@ more privileged consumer. interrupted activation must remain retryable.
 
 | change | owning consumer action |
 |---|---|
-| `tmux.config` | source a running server once; store loaded hash in its live option |
+| `tmux.config` | source a running server once; store the config and plugin-generation hash in its live option |
 | `shell.config`, `ai.instructions` | future shells or agent sessions |
 | `desktop.session` | defer to login or manual ghostty reload |
 | `ssh.config` | validate, then reload ssh |
@@ -106,6 +106,10 @@ more privileged consumer. interrupted activation must remain retryable.
 | `codex.runtime` | explicit authorized drain/restart of all three services |
 | `tailscale.serve` | reconcile private mapping; no tailscale restart |
 | `system.reboot` | report only |
+
+tmux activation belongs to `lib/tmux.sh` on all three hosts. package installation
+precedes it; dotfiles install the config and immutable plugin generations before
+reload. the live identity advances only after successful reload.
 
 consumer actions remain beside their subsystem. deduplicate within one run.
 never infer a restart target from arbitrary processes. native package/service

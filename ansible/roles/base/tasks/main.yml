@@ -162,41 +162,6 @@
   register: base_docker_version_after
   changed_when: false
 
-- name: Read installed tmux client version
-  ansible.builtin.command: tmux -V
-  register: base_tmux_client_version
-  changed_when: false
-  failed_when: >-
-    base_tmux_client_version.rc != 0 or
-    not (base_tmux_client_version.stdout is match('^tmux [!-~]{1,60}$'))
-
-- name: Inspect active tmux server
-  ansible.builtin.command: tmux list-sessions
-  become: true
-  become_user: "{{ devbox_user }}"
-  register: base_tmux_sessions
-  changed_when: false
-  failed_when: false
-
-- name: Read active tmux server version
-  ansible.builtin.command:
-    argv: [tmux, display-message, -p, "#{version}"]
-  become: true
-  become_user: "{{ devbox_user }}"
-  register: base_tmux_server_version
-  changed_when: false
-  failed_when: false
-  when: base_tmux_sessions.rc == 0
-
-- name: Report deferred tmux binary activation
-  ansible.builtin.debug:
-    msg: DEV_SERVER_TMUX_DEFERRED
-  when: >-
-    base_tmux_sessions.rc not in [0, 1] or
-    (base_tmux_sessions.rc == 0 and
-      (base_tmux_server_version.rc != 0 or
-       ('tmux ' ~ base_tmux_server_version.stdout) != base_tmux_client_version.stdout))
-
 - name: Read current timezone
   ansible.builtin.command: timedatectl show -p Timezone --value
   register: base_current_timezone

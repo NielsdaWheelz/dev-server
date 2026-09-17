@@ -5,6 +5,7 @@
     dev_server_home_dir="/home/{{ devbox_user }}"
     dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/tmux.sh"
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/dotfiles.sh"
     dotfiles_install
   args:
@@ -15,7 +16,12 @@
   environment:
     HOME: "/home/{{ devbox_user }}"
   changed_when: >-
-    shell_dotfiles_apply.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED)  ')
+    shell_dotfiles_apply.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED|RELOADED)  ')
+
+- name: Report deferred tmux binary activation
+  ansible.builtin.debug:
+    msg: DEV_SERVER_TMUX_DEFERRED
+  when: "shell_dotfiles_apply.stdout is regex('(?m)^DEFERRED  tmux:')"
 
 - name: Set user shell to zsh
   ansible.builtin.user:

@@ -5,6 +5,8 @@ base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 # shellcheck source=lib/common.sh
 source "$base_dir/lib/common.sh"
+# shellcheck source=lib/tmux.sh
+source "$base_dir/lib/tmux.sh"
 # shellcheck source=lib/dotfiles.sh
 source "$base_dir/lib/dotfiles.sh"
 # shellcheck source=lib/personal-arch.sh
