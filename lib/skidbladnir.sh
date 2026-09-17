@@ -1043,14 +1043,6 @@ skidbladnir_wait_for_active() {
   return 1
 }
 
-skidbladnir_service_loaded() {
-  local state
-
-  [[ "$1" == macos ]] || return 2
-  state="$(skidbladnir_service_state "$1")" || return 2
-  [[ "$state" != absent ]]
-}
-
 skidbladnir_service_enabled() {
   local disabled line value=''
   local matches=0
@@ -1079,7 +1071,7 @@ skidbladnir_activate_service() {
   local was_active="$3"
   local needs_activation="$4"
   local unit_changed="$5"
-  local target domain label enabled_status loaded_status
+  local target domain label enabled_status state
 
   skidbladnir_activation_status=''
   skidbladnir_enablement_changed=0
@@ -1122,24 +1114,23 @@ skidbladnir_activate_service() {
       launchctl enable "$domain/$label" || return 1
       skidbladnir_enablement_changed=1
     fi
-    if ((was_active)); then
-      if ((needs_activation)); then
-        if ((unit_changed)); then
-          launchctl bootout "$domain/$label" || return 1
-          launchctl bootstrap "$domain" "$target" || return 1
-        else
-          launchctl kickstart -k "$domain/$label" || return 1
-        fi
-        skidbladnir_activation_status=RESTARTED
-      fi
+    if ((was_active && !needs_activation)); then
+      return 0
+    fi
+    # launchd retains the loaded definition even while its process is stopped.
+    state="$(skidbladnir_service_state "$platform")" || return 1
+    if [[ "$state" != absent ]] && ((unit_changed)); then
+      launchctl bootout "$domain/$label" || return 1
+      state=absent
+    fi
+    if [[ "$state" == absent ]]; then
+      launchctl bootstrap "$domain" "$target" || return 1
     else
-      if skidbladnir_service_loaded "$platform"; then
-        launchctl kickstart -k "$domain/$label" || return 1
-      else
-        loaded_status=$?
-        ((loaded_status == 1)) || return 1
-        launchctl bootstrap "$domain" "$target" || return 1
-      fi
+      launchctl kickstart -k "$domain/$label" || return 1
+    fi
+    if ((was_active)); then
+      skidbladnir_activation_status=RESTARTED
+    else
       skidbladnir_activation_status=STARTED
     fi
     ;;
