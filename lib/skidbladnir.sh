@@ -959,11 +959,11 @@ skidbladnir_service_state() {
     else
       rc=$?
     fi
-    if ((rc == 3)); then
-      printf '%s\n' inactive
-      return 0
-    fi
-    return 2
+    case "$rc" in
+    3) printf '%s\n' inactive ;;
+    4) printf '%s\n' absent ;;
+    *) return 2 ;;
+    esac
     ;;
   macos)
     if output="$(launchctl print "gui/$(id -u)/dev.niels.skidbladnir" 2>/dev/null)"; then
@@ -1017,7 +1017,7 @@ skidbladnir_wait_for_active() {
 }
 
 skidbladnir_service_enabled() {
-  local disabled line value=''
+  local disabled line rc value=''
   local matches=0
   local pattern='^[[:space:]]*"dev[.]niels[.]skidbladnir"[[:space:]]*=>[[:space:]]*(enabled|disabled),?[[:space:]]*$'
   case "$1" in
@@ -1033,7 +1033,17 @@ skidbladnir_service_enabled() {
     ((matches <= 1)) || return 2
     [[ "$value" != disabled ]]
     ;;
-  arch | devbox) systemctl --user is-enabled --quiet skidbladnir.service ;;
+  arch | devbox)
+    if systemctl --user is-enabled --quiet skidbladnir.service; then
+      return 0
+    else
+      rc=$?
+    fi
+    case "$rc" in
+    1 | 4) return 1 ;;
+    *) return 2 ;;
+    esac
+    ;;
   *) return 1 ;;
   esac
 }
@@ -1199,6 +1209,11 @@ skidbladnir_restore_runtime() {
   local share="$home/.local/share/skidbladnir"
   local unit_generation active_status
 
+  if [[ -z "$prior_current" && "$platform" != macos && "$was_enabled" == 0 ]]; then
+    # systemd needs the unit file to remove its enablement links.
+    systemctl --user disable skidbladnir.service >/dev/null 2>&1 || return 1
+  fi
+
   if [[ -n "$active_unit" ]]; then
     unit_generation="$share/units/$active_unit"
     skidbladnir_unit_generation_owned "$unit_generation" || return 1
@@ -1259,7 +1274,7 @@ skidbladnir_restore_runtime() {
   if [[ "$was_enabled" == 0 ]]; then
     if [[ "$platform" == macos ]]; then
       launchctl disable "gui/$(id -u)/dev.niels.skidbladnir" >/dev/null 2>&1 || return 1
-    else
+    elif [[ -n "$prior_current" ]]; then
       systemctl --user disable skidbladnir.service >/dev/null 2>&1 || return 1
     fi
   fi
