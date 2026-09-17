@@ -23,6 +23,7 @@
     - role: workspace_assets
     - role: security
     - role: shell
+    - role: github
     - role: ai_tools
     - role: codex_shared
     - role: skidbladnir

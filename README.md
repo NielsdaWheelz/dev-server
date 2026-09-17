@@ -221,6 +221,7 @@ launcher is retired.
 | file installation and result reporting | `lib/common.sh` |
 | workstation packages, personal policy, dotfiles, tmux activation | `lib/packages-*.sh`, `lib/personal-*.sh`, `lib/dotfiles.sh`, `lib/tmux.sh` |
 | ai binaries, accounts, shared services | `lib/ai-tools.sh`, `lib/codex-services.sh`, `assets/codex/`, `assets/routers/ai-profile` |
+| devbox github identity and ssh client policy | `ansible/roles/github/`; `devbox` owns account enrollment checks |
 | skid deployment and host integration | `lib/skidbladnir.sh`, `assets/skidbladnir/` |
 | devbox host configuration | `ansible/roles/`, `cloud-init-devbox.template.yaml` |
 
