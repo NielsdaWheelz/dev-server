@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set +x
+[[ -n "${ARCH_PASS:-}" ]] || exit 1
+printf '%s\n' "$ARCH_PASS"

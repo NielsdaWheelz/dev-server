@@ -147,10 +147,39 @@ workstation_stage_declared_inputs() {
   skidbladnir_release_pin_file="$dev_server_assets_root/skidbladnir/release-pin.json"
 }
 
+workstation_prepare_arch_sudo() {
+  # keep credentials out of shell tracing and never execute the env file.
+  set +x
+  local line
+  if [[ -z "${ARCH_PASS:-}" && -f "$base_dir/.env" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line="${line%$'\r'}"
+      [[ "$line" == ARCH_PASS=* ]] || continue
+      ARCH_PASS="${line#ARCH_PASS=}"
+      case "$ARCH_PASS" in
+      \"*\" | \'*\') ARCH_PASS="${ARCH_PASS:1:${#ARCH_PASS}-2}" ;;
+      esac
+      break
+    done <"$base_dir/.env"
+  fi
+  [[ -n "${ARCH_PASS:-}" ]] || die 'set ARCH_PASS in the environment or the repo .env for arch apply'
+  export ARCH_PASS
+  export SUDO_ASKPASS="$base_dir/assets/routers/arch-sudo-askpass"
+  [[ -x "$SUDO_ASKPASS" ]] || die 'arch sudo askpass helper is unavailable'
+  require_cmd sudo
+  # applies to all sourced host libraries; yay gets the same flag explicitly.
+  sudo() { command sudo --askpass "$@"; }
+  sudo --reset-timestamp --validate </dev/null || die 'arch sudo authentication failed'
+}
+
 workstation_preflight() {
   local serve_status
 
   workstation_select_target
+  if [[ "$workstation_platform" == arch ]]; then
+    workstation_prepare_arch_sudo
+    exec </dev/null
+  fi
   # Consumed by the profile installer and shared helper.
   # shellcheck disable=SC2034
   dev_server_ai_host="$workstation_target"

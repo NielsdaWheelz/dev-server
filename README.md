@@ -29,7 +29,7 @@ Prerequisites:
 
 - macOS on the owned MacBook with Homebrew and the App Store Tailscale app
   installed and signed in; or Arch Linux on the exact owned `arch` host with
-  `pacman`, `yay`, and interactive sudo elevation for declared machine policy;
+  `pacman`, `yay`, and `ARCH_PASS` for sudo elevation;
 - Git, curl, Python 3, tmux, Tailscale, and the platform's standard service
   tools;
 - existing GitHub, AI-tool, Tailscale, SSH, and Skíðblaðnir credentials where
@@ -40,6 +40,15 @@ Run:
 ```sh
 ./workstation apply
 ```
+
+arch apply is noninteractive. set `ARCH_PASS` in the environment or in the
+repo's ignored `.env` as `ARCH_PASS=your-password` and restrict that file to
+mode `0600`. values are literal, with optional enclosing single or double
+quotes; the file is never executed. an environment value takes precedence.
+sudo uses an askpass helper; pacman and yay use `--noconfirm`. yay skips its
+clean-build, diff, and editor menus. missing or rejected credentials fail the
+run. this does not grant passwordless sudo or persist the password on arch
+when it is supplied through the environment.
 
 The order is native packages, repo-owned files, exact-host personal policy,
 the shared Codex services plus native Claude, and Skíðblaðnir. Package managers
@@ -69,7 +78,11 @@ An already-matching installation is unchanged. The account wrappers and host
 helper add no startup update check; upstream Codex retains its own behavior.
 Apply reconciles Claude explicitly to the native `latest` channel without
 reading an account profile's update-channel preference.
-Plain `claude` and `claude-work` retain their native behavior.
+interactive zsh aliases add `--yolo` to `codex`, `codex-work`, and `codex-work2`,
+and `--dangerously-skip-permissions` to `claude` and `claude-work`.
+these defaults live in `assets/dotfiles/zsh_helpers`; after apply, open a new
+shell or run `source ~/.zsh_helpers`. use `command codex` or `command claude`
+(also with work profile names) to bypass the aliases for one invocation.
 Use normal commands, including flags, positional prompts and subcommands:
 
 ```sh
@@ -486,6 +499,6 @@ Skíðblaðnir health/Serve postconditions.
   those repositories remain the freshness authority and may advance majors.
 - CI is hermetic and non-deploying. Final live applies, fleet/device acceptance,
   and release publication remain explicit operator actions.
-- Arch fleet acceptance runs from an attached operator terminal and may prompt
-  for sudo; the user/agent account never receives blanket passwordless
-  elevation.
+- arch apply supports ssh without a tty, using `ARCH_PASS` for sudo. first-time
+  account enrollment and reboot/session changes remain reported actions;
+  the user/agent account never receives blanket passwordless elevation.

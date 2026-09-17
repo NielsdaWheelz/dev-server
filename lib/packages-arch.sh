@@ -140,7 +140,7 @@ packages_validate_inputs() {
 
 packages_install() {
   local docker_after
-  local -a pacman_arguments=(-Syu --needed)
+  local -a pacman_arguments=(-Syu --needed --noconfirm)
   local packages_after
   local packages_before
   local tmux_after
@@ -161,7 +161,9 @@ packages_install() {
 
   if ((${#packages_arch_aur_packages[@]} > 0)); then
     require_cmd yay
-    yay -S --needed "${packages_arch_aur_packages[@]}"
+    yay -S --needed --noconfirm --sudoflags=--askpass \
+      --answerclean None --answerdiff None --answeredit None \
+      "${packages_arch_aur_packages[@]}"
   fi
 
   packages_after="$(packages_arch_snapshot)"

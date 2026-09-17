@@ -33,7 +33,7 @@ Owned elsewhere:
 - Skíðblaðnir release certification and cross-artifact Android validation;
 - isolation for unattended agents. skid's accepted launch policy selects
   provider permission bypasses through its host profiles (§8.5); the installer
-  adds no isolation. other launch paths retain their existing permission policy.
+  adds no isolation. interactive zsh aliases select the same bypass flags (§8.3).
 
 trade-off: the upstream handoff adds one cross-repository dependency. skid owns
 its unattended launch policy; the installer declares and validates its exact flags.
@@ -162,7 +162,9 @@ Trade-off: host names remain hard-coded. This is safer and smaller than pretendi
 ### 8.2 Packages
 
 - macOS: `brew update` plus `brew bundle`; let Homebrew decide missing/outdated/no-op state. Tailscale MUST be absent from the Brewfile. The exact `/Applications/Tailscale.app` bundle, App Store receipt, and executable CLI are preconditions; apply may start that app and reconcile its owned private Serve mapping, but MUST NOT install, upgrade, replace, uninstall, or sign in to Tailscale.
-- Arch: full `pacman -Syu --needed`, then the declared AUR manifest. Partial upgrades are forbidden.
+- arch: full `pacman -Syu --needed --noconfirm`, then the declared aur manifest
+  through yay with `--noconfirm` and clean-build/diff/editor menu answers `None`.
+  partial upgrades are forbidden.
 - Ubuntu: Ansible apt cache plus declared packages at the configured repository candidate; unattended security updates remain. Distribution upgrades and automatic reboot are forbidden.
 - Before the first Ubuntu apt transaction, install a needrestart override for exactly `codex-shared@personal.service`, `codex-shared@work.service`, and `codex-shared@work2.service`. Preserve all other overrides and native stale-service reporting; package maintenance MUST defer these three services to explicit `--restart-codex` activation.
 - Delete `packages/arch.remove.txt`. Removal is an explicit operator action outside apply.
@@ -211,6 +213,10 @@ Trade-offs: rolling OS repositories favor freshness over byte-for-byte replay of
   commands and automation guidance. The full guide ships with the skid binary;
   no second instruction installer or provider-specific skill is introduced.
 - The wrapper dispatches only by its fixed basename; remove cwd/`-C` inference and `*-personal` aliases. Retain isolation tests.
+- interactive zsh helpers alias `codex`, `codex-work`, and `codex-work2` with
+  `--yolo`, and `claude` and `claude-work` with `--dangerously-skip-permissions`.
+  `command <profile>` bypasses these aliases; executable wrappers still forward
+  caller arguments unchanged.
 - AI installation MUST NOT depend on a Skíðblaðnir Claude plugin.
 - Use native/standard lock formats where they preserve the desired update contract. Pin Git plugin commits and Ansible. `curl | sh`, `curl | bash`, executable `@latest`, and mutable branch execution are forbidden.
 - Install Codex once per host at the npm user-global prefix `$HOME/.local`; plain
@@ -523,9 +529,13 @@ Trade-off: exact lock updates are manual; rolling AI tools reconcile during host
 
 Trade-off: CI does not perform a destructive real-host apply. Failure injection and the final local Arch apply cover the lifecycle without creating a disposable fleet.
 
-Arch live acceptance MUST use an attached operator terminal and normal sudo
-authentication. Do not grant the user/agent account blanket passwordless
-elevation to make automation unattended.
+arch apply and live acceptance support ssh without a tty. read `ARCH_PASS`
+from the environment or the ignored repo `.env` (literal values, optional
+enclosing quotes, no evaluation); environment values take precedence. use a
+sudo askpass helper for every elevation, including yay, and validate credentials
+before host changes. missing or rejected credentials fail without prompting.
+do not grant the user/agent account blanket passwordless elevation. account
+enrollment and reboot/session requirements remain explicit reported actions.
 
 ## 9. Files
 
@@ -591,7 +601,7 @@ Packages B and C may run in parallel after A; D may join once G has published th
 7. Busy Docker, tmux binary, desktop-session, and reboot-required changes are reported, never forced.
 8. Unsupported platform/host, symlinked protected path, invalid secret, or public Serve state fails closed.
 9. Static checks discover all tracked shell, JSON, YAML, and plist files; Ansible syntax and contract tests run in CI.
-10. production executable/configuration paths contain no doctor or `converge` symbol, legacy command alias, private tailscale localapi, executable `@latest`, pipe-to-shell installer, or automatic arch removal. automated permission bypasses are limited to §8.5's exact flags in the three skid host configs and their validator. human wrappers forward native arguments without parsing or imposing policy; jarvis retains its closed, independently constrained interface. documentation and negative tests may name forbidden behavior.
+10. production executable/configuration paths contain no doctor or `converge` symbol, legacy command alias, private tailscale localapi, executable `@latest`, pipe-to-shell installer, or automatic arch removal. default permission bypasses are limited to §8.5's exact flags in the three skid host configs and their validator, and §8.3's interactive zsh aliases. human wrappers forward native arguments without parsing or imposing policy; jarvis retains its closed, independently constrained interface. documentation and negative tests may name forbidden behavior.
 11. README documents only the two apply journeys, prerequisites, actions, and cutover boundary.
 
 ## 13. Implementation rule
