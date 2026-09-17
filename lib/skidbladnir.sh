@@ -56,11 +56,12 @@ PYPIN
   uv="$base/bootstrap/bin/uv"
   marker="$release/.installed"
   wanted="$revision uv=0.11.28 python=3.12.13 claude-sdk frozen"
-  mkdir -p "$base/releases" "$home/.local/bin" || return 1
-  chmod 0700 "$base" "$base/releases" || return 1
+  ensure_directory "$base" 0700 || return 1
+  ensure_directory "$base/releases" 0700 || return 1
   if [[ ! -x "$uv" ]] || [[ "$("$uv" --version | awk '{print $2}')" != 0.11.28 ]]; then
     python3 -m venv "$base/bootstrap" || return 1
     "$base/bootstrap/bin/python" -m pip --disable-pip-version-check install --quiet --upgrade 'uv==0.11.28' || return 1
+    changed=1
   fi
   if [[ ! -f "$marker" ]] || [[ "$(cat "$marker")" != "$wanted" ]] || [[ ! -x "$release/.venv/bin/provider-runtime-control" ]]; then
     require_cmd git
@@ -75,7 +76,7 @@ PYPIN
     chmod 0600 "$marker" || return 1
     changed=1
   fi
-  wrapper="$(mktemp "$base/.wrapper.XXXXXX")" || return 1
+  wrapper="$(mktemp "${TMPDIR:-/tmp}/dev-server-native-control.XXXXXX")" || return 1
   python3 - "$release/.venv/bin/provider-runtime-control" >"$wrapper" <<'PYWRAPPER' || {
 import shlex, sys
 print('#!/bin/sh\nexec ' + shlex.quote(sys.argv[1]) + ' "$@"')
@@ -945,33 +946,6 @@ skidbladnir_active_identity() {
   [[ "$framed" == "$value"$'\n.' && "$value" =~ ^[0-9a-f]{64}$ ]] || return 2
   printf '%s\n' "$value"
 }
-
-skidbladnir_record_active_identity() (
-  local path="$1"
-  local value="$2"
-  local temporary=''
-
-  cleanup_active_identity_stage() {
-    [[ -z "$temporary" ]] || rm -f -- "$temporary"
-  }
-  trap cleanup_active_identity_stage EXIT
-  trap 'exit 129' HUP
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
-
-  temporary="$(mktemp "$(dirname "$path")/.$(basename "$path").input.XXXXXX")" || return 1
-  printf '%s\n' "$value" >"$temporary" || {
-    rm -f -- "$temporary"
-    return 1
-  }
-  chmod 0600 "$temporary" || {
-    rm -f -- "$temporary"
-    return 1
-  }
-  atomic_install_file "$temporary" "$path" 0600 || {
-    return 1
-  }
-)
 
 skidbladnir_service_state() {
   local platform="$1"
@@ -1969,11 +1943,11 @@ skidbladnir_apply() {
     render_result CHANGED skidbladnir.enablement 'enabled at login'
   [[ -z "$skidbladnir_activation_status" ]] ||
     render_result "$skidbladnir_activation_status" skid.runtime "$version"
-  skidbladnir_record_active_identity "$runtime_state" "$runtime_identity" || {
+  dev_server_record_active_sha skid.runtime "$runtime_identity" || {
     skidbladnir_discard_stage "$share" "$stage"
     die 'could not record the active Skidbladnir runtime identity'
   }
-  skidbladnir_record_active_identity "$unit_state" "$unit_identity" || {
+  dev_server_record_active_sha skid.unit "$unit_identity" || {
     skidbladnir_discard_stage "$share" "$stage"
     die 'could not record the active Skidbladnir unit identity'
   }
