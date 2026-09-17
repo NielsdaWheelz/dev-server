@@ -1317,6 +1317,67 @@ PY
   tests_run=$((tests_run + 1))
 }
 
+test_apt_preserves_shared_codex_until_explicit_restart() {
+  python3 - "$repo_dir/ansible/roles/base/tasks/main.yml" <<'PY' ||
+import pathlib
+import subprocess
+import sys
+
+import yaml
+
+tasks = yaml.safe_load(pathlib.Path(sys.argv[1]).read_text())
+first_apt = next(i for i, task in enumerate(tasks) if "ansible.builtin.apt" in task)
+directories = [(i, task["ansible.builtin.file"]) for i, task in enumerate(tasks)
+               if task.get("ansible.builtin.file", {}).get("path") == "/etc/needrestart/conf.d"]
+configs = [(i, task["ansible.builtin.copy"]) for i, task in enumerate(tasks)
+           if task.get("ansible.builtin.copy", {}).get("dest") ==
+           "/etc/needrestart/conf.d/99-dev-server-codex.conf"]
+assert len(directories) == len(configs) == 1, "missing exact shared Codex needrestart policy"
+directory_index, directory = directories[0]
+config_index, config = configs[0]
+assert directory_index < config_index < first_apt, "needrestart policy must precede apt"
+assert directory["state"] == "directory"
+assert (directory["owner"], directory["group"], directory["mode"]) == ("root", "root", "0755")
+assert (config["owner"], config["group"], config["mode"]) == ("root", "root", "0644")
+subprocess.run(["perl", "-e", r'''
+use strict;
+use warnings;
+our %nrconf = (restart => 'a', override_rc => {
+    qr(^other-enabled\.service$) => 1,
+    qr(^other-disabled\.service$) => 0,
+});
+my $configuration = do { local $/; <STDIN> };
+eval $configuration;
+die $@ if $@;
+die "global restart policy changed" unless $nrconf{restart} eq 'a';
+die "existing overrides replaced" unless keys(%{$nrconf{override_rc}}) == 3;
+for my $case (
+    ['codex-shared@personal.service', 0],
+    ['codex-shared@work.service', 0],
+    ['codex-shared@work2.service', 0],
+    ['other-enabled.service', 1],
+    ['other-disabled.service', 0],
+    ['codex-shared@work3.service', undef],
+    ['other-codex-shared@work.service', undef],
+    ['codex-shared@work.service.extra', undef],
+    ['codex-shared@workXservice', undef],
+    ['sshd.service', undef],
+) {
+    my ($service, $expected) = @$case;
+    my @matches = grep { $service =~ $_ } keys %{$nrconf{override_rc}};
+    if (defined $expected) {
+        die "wrong policy for $service" unless @matches == 1 &&
+            $nrconf{override_rc}->{$matches[0]} == $expected;
+    } else {
+        die "unrelated service policy changed: $service" if @matches;
+    }
+}
+'''], input=config["content"], text=True, check=True)
+PY
+    fail 'apt must preserve exactly the three managed shared Codex services'
+  tests_run=$((tests_run + 1))
+}
+
 test_codex_runtime_activation_contract() {
   python3 - \
     "$repo_dir/lib/common.sh" \
@@ -1414,6 +1475,7 @@ test_rootless_docker_repair_lifecycle
 test_static_boundary_contract
 test_remote_managed_state_preflight_contract
 test_ufw_ingress_boundary_contract
+test_apt_preserves_shared_codex_until_explicit_restart
 test_codex_runtime_activation_contract
 test_codex_explicit_restart_is_independent_of_configuration_change
 test_supplementary_groups_have_one_owner
