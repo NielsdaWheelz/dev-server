@@ -190,7 +190,6 @@ codex_services_activate() {
     --config "$(dev_server_home)/.config/codex-shared/profiles.json" \
     --host "$codex_services_host" install-discovery)" || return "$?"
   if [[ -n "$discovery" ]]; then
-    record_change codex.runtime
     render_result CHANGED codex.runtime 'native discovery links installed'
   fi
   if [[ "$codex_services_host" == arch ]] && ((codex_services_changed)); then

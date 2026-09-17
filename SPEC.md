@@ -71,8 +71,9 @@ it consumes the staged controller closure and reports real changes. native
 package managers own resolution and partial-install repair; there is no package
 rollback layer.
 
-`lib/common.sh` owns atomic file installation, hashes, typed changes, and result
-rendering. it does not own package policy, service names, product schemas, or a
+`lib/common.sh` owns atomic file installation, hashes, and result rendering.
+subsystems own their activation state and pending deferrals.
+the shared library does not own package policy, service names, product schemas, or a
 workflow engine. product configuration semantics belong to the product;
 deployment declarations own host paths, pins, identities, and launch arguments.
 

@@ -88,7 +88,6 @@ PYWRAPPER
   rm -f -- "$wrapper"
   ((status == 0)) || return "$status"
   if ((changed)) || [[ "$dev_server_install_status" != 'UP TO DATE' ]]; then
-    record_change skid.native
     render_result INSTALLED skid.native 'pinned provider helper and frozen SDK environment'
   fi
 }
@@ -1284,9 +1283,6 @@ skidbladnir_install_runtime_files() {
   [[ -L "$home/.local/bin/skidbladnir" ]] || skidbladnir_command_installed=1
   skidbladnir_atomic_symlink "$home/.local/bin/skidbladnir" \
     '../share/skidbladnir/current/skidbladnir' binary || return 1
-  if ((skidbladnir_unit_changed)); then
-    record_change skid.unit
-  fi
 }
 
 skidbladnir_install_integration_file() {
@@ -1333,7 +1329,6 @@ bin/agent-hook bin/agent-hook 0755
 FILES
   ((skidbladnir_directory_changed == 0)) || skidbladnir_integration_changed=1
   if ((skidbladnir_integration_changed)); then
-    record_change skid.integration
     render_result CHANGED skid.integration 'hooks and notifications installed'
   fi
 }
@@ -1487,7 +1482,6 @@ skidbladnir_reconcile_serve() {
   ((${#post} <= 65536)) || return 1
   [[ "$(printf '%s' "$post" |
     skidbladnir_serve_classification "$skidbladnir_serve_hostname")" == desired ]] || return 1
-  record_change tailscale.serve
   render_result CHANGED tailscale.serve 'private /v1 mapping installed'
 }
 
@@ -1717,7 +1711,6 @@ skidbladnir_apply() {
       skidbladnir_discard_stage "$share" "$stage"
       die 'could not promote the Skidbladnir generation'
     }
-    record_change skid.runtime
     render_result INSTALLED skid.runtime "$generation_name"
   fi
 
@@ -1886,7 +1879,6 @@ skidbladnir_apply() {
       skidbladnir_discard_stage "$share" "$stage"
       die 'could not activate the Skidbladnir generation pointer'
     }
-    record_change skid.runtime
     pointer_changed=1
   fi
 

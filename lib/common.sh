@@ -5,7 +5,6 @@ dev_server_root="$(cd "$dev_server_lib_dir/.." && pwd -P)"
 dev_server_home_dir="${dev_server_home_dir:-$HOME}"
 dev_server_assets_root="${dev_server_assets_root:-$dev_server_root/assets}"
 
-dev_server_changes='|'
 dev_server_result_mutations=0
 dev_server_result_activations=0
 dev_server_result_deferrals=0
@@ -152,41 +151,6 @@ for declared in sys.argv[2:]:
 print(digest.hexdigest())
 PY
     die 'could not fingerprint declared inputs'
-}
-
-_dev_server_validate_change() {
-  local change_id="$1"
-
-  [[ "$change_id" =~ ^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)+$ ]] ||
-    die "invalid change identifier: $change_id"
-
-  case "$change_id" in
-  tmux.config | shell.config | ai.instructions | desktop.session | ssh.config | docker.config | skid.unit | skid.runtime | skid.native | skid.integration | codex.runtime | tailscale.serve | system.reboot) ;;
-  *) die "unregistered change identifier: $change_id" ;;
-  esac
-}
-
-record_change() {
-  (($# == 1)) || die 'record_change needs one change identifier'
-  local change_id="$1"
-  _dev_server_validate_change "$change_id"
-
-  case "$dev_server_changes" in
-  *"|$change_id|"*) return 0 ;;
-  esac
-
-  dev_server_changes="${dev_server_changes}${change_id}|"
-}
-
-has_change() {
-  (($# == 1)) || die 'has_change needs one change identifier'
-  local change_id="$1"
-  _dev_server_validate_change "$change_id"
-
-  case "$dev_server_changes" in
-  *"|$change_id|"*) return 0 ;;
-  *) return 1 ;;
-  esac
 }
 
 _dev_server_print_result() {
@@ -477,18 +441,16 @@ atomic_install_file_as_root() {
 }
 
 install_managed_file() {
-  (($# == 4)) || die 'install_managed_file needs source, target, mode, and change identifier'
+  (($# == 4)) || die 'install_managed_file needs source, target, mode, and result subject'
   local source="$1"
   local target="$2"
   local mode="$3"
-  local change_id="$4"
+  local subject="$4"
 
-  _dev_server_validate_change "$change_id"
   atomic_install_file "$source" "$target" "$mode" || return 1
   case "$dev_server_install_status" in
   INSTALLED | UPDATED)
-    record_change "$change_id"
-    render_result "$dev_server_install_status" "$change_id" "$target"
+    render_result "$dev_server_install_status" "$subject" "$target"
     ;;
   UP\ TO\ DATE) ;;
   *) die "invalid atomic install result: $dev_server_install_status" ;;

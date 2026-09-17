@@ -174,7 +174,6 @@ dotfiles_install_git_repo() {
   local url="$1"
   local commit="$2"
   local dest="$3"
-  local change="$4"
   local generation plugin_root slug status head existing_target
 
   [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "invalid Git plugin commit: $commit"
@@ -219,7 +218,6 @@ dotfiles_install_git_repo() {
   dotfiles_atomic_symlink "$generation" "$dest" ||
     die "could not activate the declared Git plugin generation: $dest"
   dotfiles_prune_git_generations "$url" "$generation" "$plugin_root"
-  record_change "$change"
   render_result "$status" "Git plugin" "$(basename "$dest")@$commit"
 }
 
@@ -230,11 +228,11 @@ dotfiles_install_shell_repos() {
   dotfiles_install_git_repo \
     https://github.com/Aloxaf/fzf-tab \
     24105b15714bfec37989ed5c5b6e60f572253019 \
-    "$home/.zsh/fzf-tab" shell.config || return 1
+    "$home/.zsh/fzf-tab" || return 1
   dotfiles_install_git_repo \
     https://github.com/romkatv/powerlevel10k.git \
     3308262dfbd743b6e1d3956a2b5572f7a049d692 \
-    "$home/.zsh/powerlevel10k" shell.config || return 1
+    "$home/.zsh/powerlevel10k" || return 1
 }
 
 dotfiles_install_tmux_repos() {
@@ -244,15 +242,15 @@ dotfiles_install_tmux_repos() {
   dotfiles_install_git_repo \
     https://github.com/tmux-plugins/tpm \
     e261deb1b47614eed3400089ce7197dc68acc4eb \
-    "$home/.tmux/plugins/tpm" tmux.config || return 1
+    "$home/.tmux/plugins/tpm" || return 1
   dotfiles_install_git_repo \
     https://github.com/tmux-plugins/tmux-resurrect \
     cff343cf9e81983d3da0c8562b01616f12e8d548 \
-    "$home/.tmux/plugins/tmux-resurrect" tmux.config || return 1
+    "$home/.tmux/plugins/tmux-resurrect" || return 1
   dotfiles_install_git_repo \
     https://github.com/tmux-plugins/tmux-continuum \
     0698e8f4b17d6454c71bf5212895ec055c578da0 \
-    "$home/.tmux/plugins/tmux-continuum" tmux.config || return 1
+    "$home/.tmux/plugins/tmux-continuum" || return 1
 }
 
 dotfiles_install() {
