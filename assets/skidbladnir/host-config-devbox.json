@@ -10,7 +10,7 @@
       "command": "/home/niels/bin/codex",
       "environment": [{"name": "CODEX_HOME", "value": "/home/niels/.codex"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/home/niels/.local/bin/codex"}],
-      "arguments": []
+      "arguments": ["--yolo"]
     },
     {
       "key": "work",
@@ -19,7 +19,7 @@
       "command": "/home/niels/bin/codex-work",
       "environment": [{"name": "CODEX_HOME", "value": "/home/niels/.codex-work"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/home/niels/.local/bin/codex"}],
-      "arguments": []
+      "arguments": ["--yolo"]
     },
     {
       "key": "work2",
@@ -28,7 +28,7 @@
       "command": "/home/niels/bin/codex-work2",
       "environment": [{"name": "CODEX_HOME", "value": "/home/niels/.codex-work2"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/home/niels/.local/bin/codex"}],
-      "arguments": []
+      "arguments": ["--yolo"]
     },
     {
       "key": "claude-work",
@@ -37,7 +37,7 @@
       "command": "/home/niels/bin/claude-work",
       "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/home/niels/.claude-work"}],
       "foregroundSignatures": [{"argument0": "/home/niels/.local/bin/claude"}],
-      "arguments": ["--plugin-dir", "/home/niels/.local/share/skidbladnir/claude-agent-identity"]
+      "arguments": ["--dangerously-skip-permissions", "--plugin-dir", "/home/niels/.local/share/skidbladnir/claude-agent-identity"]
     }
   ]
 }

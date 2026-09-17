@@ -268,8 +268,9 @@ for profile in profiles:
     if (not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", key) or not plain(profile["label"], 64) or
             not absolute(profile["command"]) or profile["command"] != commands[key]):
         raise SystemExit(1)
-    expected_arguments = [] if provider == "Codex" else [
-        "--plugin-dir", home + "/.local/share/skidbladnir/claude-agent-identity"]
+    expected_arguments = ["--yolo"] if provider == "Codex" else [
+        "--dangerously-skip-permissions", "--plugin-dir",
+        home + "/.local/share/skidbladnir/claude-agent-identity"]
     expected_signatures = ([{"executableBase": "codex"}, {
         "executableBase": "node", "argument1": codex_backend
     }] if provider == "Codex" else [{"argument0": claude_backend}])
