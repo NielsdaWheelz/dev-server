@@ -154,46 +154,59 @@
 
 - name: Reconcile the exact UFW ingress boundary
   ansible.builtin.shell: |
-    set -euo pipefail
-    before="$(ufw status verbose)"
-    changed=0
-    if ! grep -Fq 'Status: active' <<<"$before"; then
-      ufw --force reset
-      before="$(ufw status verbose)"
-      changed=1
-    fi
-    public_rules="$(
-      while IFS= read -r rule; do
-        [[ "$rule" =~ ^\[[[:space:]]*([0-9]+)\] ]] || continue
-        rule_number="${BASH_REMATCH[1]}"
-        rule="$(sed 's/^[^]]*]//' <<<"$rule")"
-        [[ "$rule" == *'ALLOW IN'* ]] || continue
-        target="${rule%%ALLOW IN*}"
-        [[ "$target" != *'on tailscale0'* ]] || continue
-        printf '%s\n' "$rule_number"
-      done < <(ufw status numbered)
-    )"
-    public_rules="$(sort -rn <<<"$public_rules")"
-    while IFS= read -r rule_number; do
-      if [[ -n "$rule_number" ]]; then
-        ufw --force delete "$rule_number"
-        changed=1
-      fi
-    done <<<"$public_rules"
-    if ! grep -Fq 'Default: deny (incoming), allow (outgoing)' <<<"$before"; then
-      ufw default deny incoming
-      ufw default allow outgoing
-      changed=1
-    fi
-    if ! grep -Eq '^Anywhere( \(v6\))? on tailscale0[[:space:]]+ALLOW IN' <<<"$before"; then
-      ufw allow in on tailscale0
-      changed=1
-    fi
-    if ! grep -Fq 'Status: active' <<<"$before"; then
-      ufw --force enable
-      changed=1
-    fi
-    ((changed == 0)) || printf 'DEV_SERVER_UFW_CHANGED=1\n'
+    python3 - <<'PY'
+    import shlex
+    import subprocess
+
+    def ufw(*args):
+        return subprocess.run(
+            ["ufw", *args], check=True, text=True, stdout=subprocess.PIPE
+        ).stdout
+
+    def rules():
+        return [shlex.split(line)[1:] for line in ufw("show", "added").splitlines()
+                if line.startswith("ufw ")]
+
+    def public_ingress(rule):
+        if rule[0] not in ("allow", "limit") or rule[1:2] == ["out"]:
+            return False
+        target = rule[2:] if rule[1:2] == ["in"] else rule[1:]
+        return target[:2] != ["on", "tailscale0"]
+
+    before = ufw("status", "verbose")
+    active = "Status: active" in before
+    changed = False
+    if not active:
+        ufw("--force", "reset")
+        changed = True
+
+    declared = rules()
+    for rule in declared:
+        if public_ingress(rule):
+            ufw("--force", "delete", *rule)
+            changed = True
+
+    defaults = "Default: deny (incoming), allow (outgoing)"
+    if defaults not in before:
+        ufw("default", "deny", "incoming")
+        ufw("default", "allow", "outgoing")
+        changed = True
+    tailnet = ["allow", "in", "on", "tailscale0"]
+    if tailnet not in declared:
+        ufw(*tailnet)
+        changed = True
+    if not active:
+        ufw("--force", "enable")
+        changed = True
+
+    after = ufw("status", "verbose")
+    if "Status: active" not in after or defaults not in after:
+        raise SystemExit("UFW is not active with the declared default policies")
+    if any(public_ingress(rule) for rule in rules()):
+        raise SystemExit("non-tailnet inbound acceptance remains in UFW")
+    if changed:
+        print("DEV_SERVER_UFW_CHANGED=1")
+    PY
   args:
     executable: /bin/bash
   register: security_ufw_apply
