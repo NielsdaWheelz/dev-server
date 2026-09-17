@@ -268,8 +268,14 @@ credential preservation, private serve/ssh ingress, absent bootstrap exposure,
 and required host/account boundaries. report pending login, reboot, container,
 and tmux activation. no separate doctor duplicates these checks.
 
-there are no automated tests or ci checks in this checkout. verify changes
-directly and record the result until [the replacement](docs/issues/test-system-rebuild.md).
+there is no retained test suite or repository ci workflow. for each bounded code
+change, verify the finding, write a temporary integration or live test, define
+the change, and compare behavior before and after it. review adversarially,
+remove the temporary test, and record evidence and limitations in the pr.
+commit, push, merge, and clean up before starting the next slice. run syntax
+and native checks appropriate to the boundary; temporary tests do not provide
+ongoing regression coverage.
+
 use the owned arch host for live arch acceptance. a service check is not a
 provider model turn or device acceptance claim.
 
