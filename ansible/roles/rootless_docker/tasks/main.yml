@@ -15,6 +15,9 @@
       - >-
         not rootless_docker_active_identity.stat.exists or
         rootless_docker_active_identity.stat.mode == "0600"
+      - >-
+        not rootless_docker_active_identity.stat.exists or
+        rootless_docker_active_identity.stat.pw_name == devbox_user
     fail_msg: Invalid recorded active rootless Docker identity
 
 - name: Read recorded active rootless Docker identity
@@ -75,6 +78,7 @@
   ansible.builtin.file:
     path: "/home/{{ devbox_user }}/.config/docker"
     state: directory
+    follow: false
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: "0755"

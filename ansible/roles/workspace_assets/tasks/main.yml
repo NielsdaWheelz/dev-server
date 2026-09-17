@@ -3,6 +3,7 @@
   ansible.builtin.file:
     path: "/home/{{ devbox_user }}/.local/share/dev-server/{{ item }}"
     state: directory
+    follow: false
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: "0755"

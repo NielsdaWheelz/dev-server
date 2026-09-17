@@ -56,7 +56,9 @@ packages_validate_inputs() {
 }
 
 packages_install() {
+  local upgrade="${1:-0}"
   local attempt
+  local -a bundle_arguments=(--no-upgrade)
   local tmux_after
   local packages_after
   local packages_before
@@ -71,9 +73,12 @@ packages_install() {
     die "App Store Tailscale installation is unavailable"
 
   packages_before="$(packages_macos_snapshot)"
-  brew update
+  if ((upgrade)); then
+    brew update
+    bundle_arguments=(--upgrade)
+  fi
   HOMEBREW_NO_AUTO_UPDATE=1 brew bundle \
-    --file "$dev_server_root/packages/Brewfile"
+    "${bundle_arguments[@]}" --file "$dev_server_root/packages/Brewfile"
   tmux_after="$(packages_macos_tmux_version)"
   packages_after="$(packages_macos_snapshot)"
 

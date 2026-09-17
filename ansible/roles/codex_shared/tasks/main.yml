@@ -1,17 +1,15 @@
 ---
 # Root composition proves the coupled activation identity before this role.
 # This role installs desired inputs only; it never restarts an active backend.
-# Security resolves the declaration and owns the development user's groups.
-- name: Grant Jarvis shared socket access
-  ansible.builtin.user:
-    name: "{{ codex_shared_config.jarvis_user }}"
-    groups: "{{ codex_shared_config.client_group }}"
-    append: true
+- name: Read the single shared Codex declaration
+  ansible.builtin.set_fact:
+    codex_shared_config: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/codex/profiles.json') | from_json }}"
 
 - name: Ensure root-owned shared Codex installation directories
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: directory
+    follow: false
     owner: root
     group: "{{ item.group }}"
     mode: "{{ item.mode }}"
@@ -72,6 +70,7 @@
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: directory
+    follow: false
     owner: "{{ item.owner }}"
     group: "{{ codex_shared_config.client_group }}"
     mode: "{{ item.mode }}"

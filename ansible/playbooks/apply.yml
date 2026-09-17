@@ -15,9 +15,6 @@
           - ansible_facts['hostname'] == 'dev-server'
         fail_msg: Refusing to apply outside the exact Ubuntu devbox target
 
-    - name: Validate all existing remote managed state before mutation
-      ansible.builtin.import_tasks: tasks/remote-preflight.yml
-
     - name: Admit or drain the coupled shared Codex runtime before mutation
       ansible.builtin.import_tasks: tasks/codex-runtime-preflight.yml
   roles:

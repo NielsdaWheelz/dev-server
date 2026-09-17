@@ -423,6 +423,7 @@ skidbladnir_prepare_directories() {
   skidbladnir_ensure_directory "$home/.local/bin" 0755
   skidbladnir_ensure_directory "$home/.local/share" 0755
   skidbladnir_ensure_directory "$home/.local/share/skidbladnir" 0700
+  skidbladnir_ensure_directory "$home/.local/share/skidbladnir/artifacts" 0700
   skidbladnir_ensure_directory "$home/.local/share/skidbladnir/releases" 0700
   skidbladnir_ensure_directory "$home/.local/share/skidbladnir/units" 0700
   skidbladnir_ensure_directory "$home/.local/state" 0755
@@ -471,6 +472,7 @@ skidbladnir_validate_protected_paths() {
     "$home/.local" \
     "$home/.local/share" \
     "$share" \
+    "$share/artifacts" \
     "$share/releases" \
     "$share/units" \
     "$home/.local/state" \
@@ -575,28 +577,6 @@ skidbladnir_cleanup_stale_stages() {
   fi
 }
 
-skidbladnir_validate_owned_roots() {
-  local home="$1"
-  local share="$home/.local/share/skidbladnir"
-  local config="$home/.config/skidbladnir"
-  local entry name
-
-  while IFS= read -r entry; do
-    name="$(basename "$entry")"
-    case "$name" in
-    .apply.lock | releases | units | current | previous | claude-agent-identity) ;;
-    *) return 1 ;;
-    esac
-  done < <(find "$share" -mindepth 1 -maxdepth 1 -print)
-  while IFS= read -r entry; do
-    name="$(basename "$entry")"
-    case "$name" in
-    bearer | machine-handle | client.json | android-signing.p12 | android-signing.properties | android-signing.password) ;;
-    *) return 1 ;;
-    esac
-  done < <(find "$config" -mindepth 1 -maxdepth 1 -print)
-}
-
 skidbladnir_restore_signal_trap() {
   local signal="$1"
   local saved="$2"
@@ -626,19 +606,31 @@ skidbladnir_archive_members_exact() {
   [[ "$types" == $'-\n-\n-' ]]
 }
 
-skidbladnir_prepare_candidate() {
-  local platform="$1"
-  local stage="$2"
-  local version="$3"
-  local source_sha="$4"
-  local url="$5"
-  local archive_sha="$6"
-  local manifest_platform="$7"
-  local host_config="$8"
+skidbladnir_prepare_artifact() {
+  local stage="$1"
+  local version="$2"
+  local source_sha="$3"
+  local url="$4"
+  local archive_sha="$5"
+  local manifest_platform="$6"
+  local artifact="$7"
   local archive="$stage/archive.tar.gz"
-  local payload="$stage/generation"
+  local payload="$stage/artifact"
   local identity framed
 
+  # The directory key records archive admission. The receipt catches accidental
+  # changes to its extracted files without downloading or extracting again.
+  if [[ -e "$artifact" || -L "$artifact" ]]; then
+    [[ -d "$artifact" && ! -L "$artifact" ]] || return 6
+    identity="$(skidbladnir_active_identity "$artifact/identity.sha256")" || return 6
+    [[ "$(skidbladnir_payload_hashes "$artifact" | dev_server_sha256_stream)" == "$identity" ]] || return 6
+    [[ "$(file_mode "$artifact/skidbladnir")" == 755 &&
+    "$(file_mode "$artifact/characters.json")" == 644 &&
+    "$(file_mode "$artifact/release.json")" == 644 ]] || return 6
+    skidbladnir_release_manifest_matches "$artifact/release.json" \
+      "$manifest_platform" "$source_sha" "$version" || return 4
+    return 0
+  fi
   skidbladnir_download "$url" "$archive" || return 1
   [[ "$(dev_server_sha256 "$archive")" == "$archive_sha" ]] || return 2
   skidbladnir_archive_members_exact "$archive" || return 3
@@ -655,38 +647,43 @@ skidbladnir_prepare_candidate() {
   framed="$("$payload/skidbladnir" version && printf .)" || return 5
   identity="${framed%$'\n.'}"
   [[ "$framed" == "$identity"$'\n.' && "$identity" == "$version $source_sha" ]] || return 5
-  install -m 0600 "$host_config" "$payload/host-config.json" || return 1
-  [[ -f "$payload/host-config.json" && ! -L "$payload/host-config.json" ]] || return 1
+  skidbladnir_payload_hashes "$payload" | dev_server_sha256_stream >"$payload/identity.sha256" || return 1
+  chmod 0600 "$payload/identity.sha256" || return 1
+  mv "$payload" "$artifact"
 }
 
 skidbladnir_generation_exact() {
   local desired="$1"
   local installed="$2"
-  local entries
+  local host_config="$3"
 
-  [[ -d "$installed" && ! -L "$installed" ]] || return 1
-  entries="$(find "$installed" -mindepth 1 -maxdepth 1 -print | sed "s#^$installed/##" | LC_ALL=C sort)" || return 1
-  [[ "$entries" == $'characters.json\nhost-config.json\nrelease.json\nskidbladnir' ]] || return 1
-  [[ "$(file_mode "$installed/skidbladnir" 2>/dev/null)" == 755 ]] || return 1
-  [[ "$(file_mode "$installed/characters.json" 2>/dev/null)" == 644 ]] || return 1
-  [[ "$(file_mode "$installed/release.json" 2>/dev/null)" == 644 ]] || return 1
-  [[ "$(file_mode "$installed/host-config.json" 2>/dev/null)" == 600 ]] || return 1
+  skidbladnir_generation_owned "$installed" || return 1
   cmp -s "$desired/skidbladnir" "$installed/skidbladnir" &&
     cmp -s "$desired/characters.json" "$installed/characters.json" &&
     cmp -s "$desired/release.json" "$installed/release.json" &&
-    cmp -s "$desired/host-config.json" "$installed/host-config.json"
+    cmp -s "$host_config" "$installed/host-config.json"
+}
+
+skidbladnir_payload_hashes() {
+  local payload="$1"
+  local name digest
+
+  for name in skidbladnir characters.json release.json; do
+    digest="$(dev_server_sha256 "$payload/$name")" || return 1
+    printf '%s\0%s\n' "$name" "$digest"
+  done
 }
 
 skidbladnir_runtime_identity() {
   local generation="$1"
-  local name
+  local host_config="${2:-$generation/host-config.json}"
+  local digest
 
-  for name in skidbladnir characters.json release.json host-config.json; do
-    [[ -f "$generation/$name" && ! -L "$generation/$name" ]] || return 1
-  done
-  for name in skidbladnir characters.json release.json host-config.json; do
-    printf '%s\0%s\n' "$name" "$(dev_server_sha256 "$generation/$name")"
-  done | dev_server_sha256_stream
+  digest="$(dev_server_sha256 "$host_config")" || return 1
+  {
+    skidbladnir_payload_hashes "$generation" || return 1
+    printf 'host-config.json\0%s\n' "$digest"
+  } | dev_server_sha256_stream
 }
 
 skidbladnir_unit_source() {
@@ -1184,11 +1181,9 @@ skidbladnir_running_binary_matches() {
     [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
     /usr/sbin/lsof -a -p "$pid" -d txt -Fn 2>/dev/null |
       grep -Fqx "n$expected" || return 1
-    executable="$expected"
     ;;
   *) return 1 ;;
   esac
-  [[ "$(dev_server_sha256 "$executable" 2>/dev/null)" == "$(dev_server_sha256 "$expected" 2>/dev/null)" ]]
 }
 
 skidbladnir_authenticated_health() (
@@ -1499,23 +1494,6 @@ skidbladnir_preflight_serve() {
   esac
 }
 
-skidbladnir_preflight_existing_serve() {
-  skidbladnir_observe_serve || return 1
-  case "$skidbladnir_serve_state" in
-  desired | empty | missing) return 0 ;;
-  signed-out)
-    render_result ACTION tailscale.serve 'sign in to Tailscale, then rerun apply'
-    return 2
-    ;;
-  stale)
-    skidbladnir_serve_action
-    return 2
-    ;;
-  public) return 3 ;;
-  *) return 1 ;;
-  esac
-}
-
 skidbladnir_reconcile_serve() {
   local post
 
@@ -1626,10 +1604,32 @@ skidbladnir_retain_unit_generations() {
   done < <(find "$units" -mindepth 1 -maxdepth 1 -print0)
 }
 
+skidbladnir_retain_artifact() {
+  local desired="$1"
+  local path name entries owned
+
+  # Rollback generations already contain their complete payload. Keep only the
+  # desired cache; leave unrelated files and directories alone.
+  for path in "$(dirname "$desired")"/*; do
+    [[ "$path" != "$desired" && -d "$path" && ! -L "$path" ]] || continue
+    name="${path##*/}"
+    [[ "$name" =~ ^[0-9a-f]{64}$ ]] || continue
+    entries="$(find "$path" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)" || return 1
+    [[ "$entries" == $'characters.json\nidentity.sha256\nrelease.json\nskidbladnir' ]] || continue
+    owned=1
+    for name in skidbladnir characters.json release.json identity.sha256; do
+      [[ -f "$path/$name" && ! -L "$path/$name" ]] || owned=0
+    done
+    ((owned)) || continue
+    skidbladnir_active_identity "$path/identity.sha256" >/dev/null || continue
+    rm -R -- "$path" || return 1
+  done
+}
+
 skidbladnir_apply() {
   local platform="$1"
   local home share releases units config host_config pin_line version source_sha url archive_sha manifest_platform
-  local stage generation_name generation prior_current='' prior_previous='' prior_version=''
+  local stage artifact generation_name generation prior_current='' prior_previous='' prior_version=''
   local rollback_current='' rollback_previous='' rollback_version=''
   local current_identity='' previous_identity='' previous_version='' verified_runtime=''
   local unit_target runtime_identity unit_identity active_runtime='' active_unit=''
@@ -1654,7 +1654,7 @@ skidbladnir_apply() {
   releases="$share/releases"
   units="$share/units"
   config="$home/.config/skidbladnir"
-  skidbladnir_validate_local_state "$home"
+  skidbladnir_validate_protected_paths "$home"
   if skidbladnir_preflight_serve; then
     serve_preflight_status=0
   else
@@ -1689,8 +1689,6 @@ skidbladnir_apply() {
   skidbladnir_validate_local_state "$home"
   skidbladnir_cleanup_stale_stages "$share" ||
     die 'stale Skidbladnir staging state is invalid'
-  skidbladnir_validate_owned_roots "$home" ||
-    die 'legacy or unowned Skidbladnir state remains; complete the hard-cut runbook'
   skidbladnir_validate_installed_generations "$home" ||
     die 'installed Skidbladnir generation topology is invalid'
   skidbladnir_validate_installed_unit_generations "$home" ||
@@ -1707,8 +1705,9 @@ skidbladnir_apply() {
   trap 'skidbladnir_cleanup_stage "$share" "$stage" >/dev/null 2>&1 || true; exit 129' HUP
   trap 'skidbladnir_cleanup_stage "$share" "$stage" >/dev/null 2>&1 || true; exit 130' INT
   trap 'skidbladnir_cleanup_stage "$share" "$stage" >/dev/null 2>&1 || true; exit 143' TERM
-  if skidbladnir_prepare_candidate "$platform" "$stage" "$version" "$source_sha" \
-    "$url" "$archive_sha" "$manifest_platform" "$host_config"; then
+  artifact="$share/artifacts/$archive_sha"
+  if skidbladnir_prepare_artifact "$stage" "$version" "$source_sha" \
+    "$url" "$archive_sha" "$manifest_platform" "$artifact"; then
     preparation_status=0
   else
     preparation_status=$?
@@ -1720,6 +1719,7 @@ skidbladnir_apply() {
     3) die 'Skidbladnir archive members are invalid' ;;
     4) die 'Skidbladnir release manifest differs from the release pin' ;;
     5) die 'Skidbladnir binary identity differs from the release pin' ;;
+    6) die "Skidbladnir cached artifact is invalid: $artifact" ;;
     *) die 'could not prepare the Skidbladnir release' ;;
     esac
   fi
@@ -1729,18 +1729,25 @@ skidbladnir_apply() {
     die 'could not install native agent control'
   }
 
-  runtime_identity="$(skidbladnir_runtime_identity "$stage/generation")" || {
+  runtime_identity="$(skidbladnir_runtime_identity "$artifact" "$host_config")" || {
     skidbladnir_discard_stage "$share" "$stage"
     die 'Skidbladnir runtime identity is invalid'
   }
   generation_name="$version-$runtime_identity"
   generation="$releases/$generation_name"
   if [[ -e "$generation" || -L "$generation" ]]; then
-    if ! skidbladnir_generation_exact "$stage/generation" "$generation"; then
+    if ! skidbladnir_generation_exact "$artifact" "$generation" "$host_config"; then
       skidbladnir_discard_stage "$share" "$stage"
       die 'immutable Skidbladnir generation differs from its admitted release'
     fi
   else
+    mkdir -m 0700 "$stage/generation" &&
+      install -m 0755 "$artifact/skidbladnir" "$stage/generation/skidbladnir" &&
+      install -m 0644 "$artifact/characters.json" "$artifact/release.json" "$stage/generation/" &&
+      install -m 0600 "$host_config" "$stage/generation/host-config.json" || {
+      skidbladnir_discard_stage "$share" "$stage"
+      die 'could not stage the Skidbladnir generation'
+    }
     mv "$stage/generation" "$generation" || {
       skidbladnir_discard_stage "$share" "$stage"
       die 'could not promote the Skidbladnir generation'
@@ -1849,14 +1856,17 @@ skidbladnir_apply() {
     rollback_was_enabled="$was_enabled"
   fi
   if ((was_active)) && [[ -n "$prior_current" ]]; then
-    if [[ -n "$prior_previous" && "$active_runtime" == "$previous_identity" ]] &&
-      skidbladnir_authenticated_health "$home" "$previous_version" "$platform" "$prior_previous"; then
-      verified_runtime=previous
-    elif skidbladnir_authenticated_health "$home" "$prior_version" "$platform" "$prior_current"; then
+    if skidbladnir_running_binary_matches "$platform" "$home" "$prior_current"; then
       verified_runtime=current
     elif [[ -n "$prior_previous" ]] &&
-      skidbladnir_authenticated_health "$home" "$previous_version" "$platform" "$prior_previous"; then
+      skidbladnir_running_binary_matches "$platform" "$home" "$prior_previous"; then
       verified_runtime=previous
+    fi
+    if { [[ "$verified_runtime" == current ]] &&
+      skidbladnir_authenticated_health "$home" "$prior_version" "$platform" "$prior_current"; } ||
+      { [[ "$verified_runtime" == previous ]] &&
+        skidbladnir_authenticated_health "$home" "$previous_version" "$platform" "$prior_previous"; }; then
+      :
     else
       if [[ -n "$rollback_current" ]]; then
         if ! skidbladnir_restore_runtime "$platform" "$home" "$stage" \
@@ -1926,16 +1936,18 @@ skidbladnir_apply() {
   if ! skidbladnir_activate_service "$platform" "$home" "$was_active" \
     "$needs_activation" "$needs_unit_reload"; then
     activation_failed=1
-  elif skidbladnir_wait_for_active "$platform"; then
-    skidbladnir_authenticated_health "$home" "$version" "$platform" ||
+  elif ((needs_activation)); then
+    if skidbladnir_wait_for_active "$platform"; then
+      skidbladnir_authenticated_health "$home" "$version" "$platform" ||
+        activation_failed=1
+    else
+      service_observation=$?
+      if ((service_observation != 1)); then
+        skidbladnir_discard_stage "$share" "$stage"
+        die 'Skidbladnir activation state could not be observed; active identity was not advanced'
+      fi
       activation_failed=1
-  else
-    service_observation=$?
-    if ((service_observation != 1)); then
-      skidbladnir_discard_stage "$share" "$stage"
-      die 'Skidbladnir activation state could not be observed; active identity was not advanced'
     fi
-    activation_failed=1
   fi
   # Publish the human command only after activation succeeds. A failed upgrade
   # from a release without this command must not leave it pointing at old grammar.
@@ -2003,16 +2015,14 @@ skidbladnir_apply() {
     skidbladnir_discard_stage "$share" "$stage"
     die 'Skidbladnir unit retention found an unowned generation'
   }
+  skidbladnir_retain_artifact "$artifact" || {
+    skidbladnir_discard_stage "$share" "$stage"
+    die 'could not remove an obsolete Skidbladnir artifact cache'
+  }
   skidbladnir_discard_stage "$share" "$stage"
   skidbladnir_restore_signal_trap HUP "$saved_hup"
   skidbladnir_restore_signal_trap INT "$saved_int"
   skidbladnir_restore_signal_trap TERM "$saved_term"
 
-  skidbladnir_secret_valid "$config/machine-handle" '^mh-[0-9a-f]{32}$' ||
-    die 'Skidbladnir machine handle changed after activation'
-  skidbladnir_secret_valid "$config/bearer" '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$' ||
-    die 'Skidbladnir bearer changed after activation'
-  skidbladnir_authenticated_health "$home" "$version" "$platform" ||
-    die 'Skidbladnir postcondition health check failed'
   exec 9>&-
 }

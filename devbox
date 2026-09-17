@@ -7,12 +7,6 @@ base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$base_dir/lib/common.sh"
 # shellcheck source=lib/remote-devbox.sh
 source "$base_dir/lib/remote-devbox.sh"
-# shellcheck source=lib/dotfiles.sh
-source "$base_dir/lib/dotfiles.sh"
-# shellcheck source=lib/ai-tools.sh
-source "$base_dir/lib/ai-tools.sh"
-# shellcheck source=lib/skidbladnir.sh
-source "$base_dir/lib/skidbladnir.sh"
 
 server_name='dev-server'
 server_type='cpx31'
@@ -47,26 +41,27 @@ ssh_known_hosts_candidate=''
 ssh_known_hosts_candidate_old=''
 ansible_output=''
 codex_restart_authorized=0
+devbox_upgrade=0
 steady_rules=''
 bootstrap_rules=''
 bootstrap_cidr=''
 bootstrap_cleanup_required=0
 new_host_key_established=0
 host_key_enrollment=0
-devbox_desired_snapshot=''
 devbox_declared_stage=''
 
 usage() {
   cat <<'EOF'
-Usage: ./devbox apply
-       ./devbox apply --restart-codex
+Usage: ./devbox apply [--restart-codex]
+       ./devbox upgrade [--restart-codex]
        ./devbox help
 
 Create the devbox when absent, or apply its declared state over tailnet SSH.
+apply keeps installed software; upgrade refreshes it before applying configuration.
 
 An existing host must already have the dev-server-deploy principal, its
-deployment key, and a verified host key. The hard-cutover runbook establishes
-those once; apply has no privileged-user or public-SSH fallback.
+deployment key, and a verified host key. There is no privileged-user or
+public-SSH fallback.
 EOF
 }
 
@@ -652,8 +647,10 @@ devbox_snapshot() {
 }
 
 devbox_stage_declared_inputs() {
-  local staged_snapshot
+  local desired_snapshot staged_snapshot
 
+  desired_snapshot="$(devbox_snapshot "$base_dir")" ||
+    die 'could not resolve devbox desired inputs'
   devbox_declared_stage="$(mktemp -d "${TMPDIR:-/tmp}/devbox-declared.XXXXXX")" ||
     die 'could not stage devbox desired inputs'
   chmod 0700 "$devbox_declared_stage" || die 'could not secure devbox desired inputs'
@@ -667,8 +664,8 @@ devbox_stage_declared_inputs() {
     "$devbox_declared_stage/" || die 'could not stage devbox controller inputs'
   staged_snapshot="$(devbox_snapshot "$devbox_declared_stage")" ||
     die 'could not verify staged devbox desired inputs'
-  [[ "$staged_snapshot" == "$devbox_desired_snapshot" ]] ||
-    die 'staged devbox desired inputs differ from their validated source'
+  [[ "$staged_snapshot" == "$desired_snapshot" ]] ||
+    die 'devbox inputs changed while staging; rerun'
   ansible_config="$devbox_declared_stage/ansible.cfg"
   ansible_inventory="$devbox_declared_stage/ansible/inventory/devbox.yml"
   ansible_apply_playbook="$devbox_declared_stage/ansible/playbooks/apply.yml"
@@ -681,9 +678,6 @@ devbox_validate_declared_inputs() {
   for path in "$ansible_inventory" "$ansible_apply_playbook" "$template"; do
     [[ -f "$path" && ! -L "$path" ]] || die "invalid devbox declared input: $path"
   done
-  dotfiles_validate_declared_inputs
-  ai_validate_inputs
-  skidbladnir_validate_declared_inputs devbox
   for path in \
     __BOOTSTRAP_SSH_CIDR__:1 \
     __DEPLOY_PUBLIC_KEY__:1 \
@@ -695,22 +689,6 @@ devbox_validate_declared_inputs() {
     [[ "$(grep -Foc "${path%:*}" "$template")" == "${path##*:}" ]] ||
       die "cloud-init placeholder is not exact: ${path%:*}"
   done
-  devbox_desired_snapshot="$(devbox_snapshot "$base_dir")" ||
-    die 'could not resolve devbox desired inputs'
-  devbox_stage_declared_inputs
-  ANSIBLE_CONFIG="$ansible_config" ANSIBLE_NOCOLOR=1 \
-    run_ansible_playbook --syntax-check \
-    -i "$ansible_inventory" "$ansible_apply_playbook" >/dev/null ||
-    die 'devbox Ansible declaration is invalid'
-}
-
-devbox_verify_desired_inputs() {
-  local observed
-
-  observed="$(devbox_snapshot "$devbox_declared_stage")" ||
-    die 'could not verify devbox desired inputs'
-  [[ "$observed" == "$devbox_desired_snapshot" ]] ||
-    die 'devbox desired inputs changed during apply; rerun'
 }
 
 preflight() {
@@ -740,6 +718,7 @@ preflight() {
   fi
   operator_public_key="$(private_key_public "$operator_identity")" ||
     die "operator identity is not a valid private key: $operator_identity"
+  devbox_stage_declared_inputs
   devbox_validate_declared_inputs
 
   observe_server || die 'could not resolve the exact Hetzner devbox server'
@@ -894,10 +873,13 @@ apply_new_server() {
 }
 
 run_ansible_apply() {
-  local codex_restart_value=false rc skid_action_code
+  local codex_restart_value=false upgrade_value=false rc skid_action_code
 
   if ((codex_restart_authorized)); then
     codex_restart_value=true
+  fi
+  if ((devbox_upgrade)); then
+    upgrade_value=true
   fi
 
   ansible_output="$(mktemp "${TMPDIR:-/tmp}/devbox-ansible.XXXXXX")"
@@ -906,7 +888,7 @@ run_ansible_apply() {
     ANSIBLE_NOCOLOR=1 \
     run_ansible_playbook \
     --ssh-common-args "-F $ssh_include" \
-    --extra-vars "{\"devbox_codex_runtime_restart_authorized\":$codex_restart_value}" \
+    --extra-vars "{\"devbox_codex_runtime_restart_authorized\":$codex_restart_value,\"devbox_upgrade_packages\":$upgrade_value}" \
     -i "$ansible_inventory" "$ansible_apply_playbook" \
     >"$ansible_output" 2>&1
   rc=$?
@@ -1023,7 +1005,6 @@ cmd_apply() {
   trap 'exit 130' INT
   trap 'exit 143' TERM
   preflight
-  devbox_verify_desired_inputs
 
   if [[ -n "$server_id" ]]; then
     reconcile_existing_firewall_boundary
@@ -1033,11 +1014,9 @@ cmd_apply() {
   else
     apply_new_server
   fi
-  devbox_verify_desired_inputs
   if ! run_ansible_apply; then
     finish_results devbox
   fi
-  devbox_verify_desired_inputs
   check_github_enrollment
   firewall_rules_match "$steady_rules" ||
     die 'devbox public bootstrap ingress remains in the Hetzner firewall'
@@ -1050,7 +1029,8 @@ main() {
   local command="${1:-}"
 
   case "$command" in
-  apply)
+  apply | upgrade)
+    [[ "$command" != upgrade ]] || devbox_upgrade=1
     shift
     cmd_apply "$@"
     ;;

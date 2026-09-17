@@ -96,6 +96,7 @@ ai_codex_matches() {
 }
 
 ai_install_codex() {
+  local upgrade="${1:-0}"
   local binary
   local candidate
   local home
@@ -106,10 +107,6 @@ ai_install_codex() {
   home="$(dev_server_home)"
   prefix="$home/.local"
   binary="$(ai_codex_binary)"
-  candidate="$(npm view @openai/codex dist-tags.latest)" ||
-    die 'could not resolve the latest stable Codex release'
-  [[ "$candidate" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
-    die 'npm latest must identify a stable Codex release'
   npm_prefix="$(npm config get prefix)" || die "could not read the npm global prefix"
   if [[ "$npm_prefix" != "$prefix" ]]; then
     npm config set --location=user prefix "$prefix" ||
@@ -119,6 +116,18 @@ ai_install_codex() {
     render_result CHANGED "npm global prefix" "$prefix"
   fi
 
+  if ((upgrade == 0)) && [[ -e "$binary" || -L "$binary" ]]; then
+    if ! candidate="$(ai_package_version "$(ai_codex_manifest)" @openai/codex 2>/dev/null)" ||
+      ! ai_codex_matches "$candidate"; then
+      die 'installed Codex is invalid; run ./workstation upgrade or ./devbox upgrade to repair it'
+    fi
+    return 0
+  fi
+
+  candidate="$(npm view @openai/codex dist-tags.latest)" ||
+    die 'could not resolve the latest stable Codex release'
+  [[ "$candidate" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    die 'npm latest must identify a stable Codex release'
   if ai_codex_matches "$candidate"; then
     return 0
   fi
@@ -192,6 +201,7 @@ ai_bootstrap_claude_native() (
 )
 
 ai_install_claude() {
+  local upgrade="${1:-0}"
   local before
   local binary
   local home
@@ -201,6 +211,7 @@ ai_install_claude() {
   home="$(dev_server_home)"
   binary="$(ai_claude_binary)"
   if before="$(ai_claude_native_version)"; then
+    ((upgrade)) || return 0
     HOME="$home" "$binary" install latest ||
       die "Claude native latest-channel reconciliation failed"
     version="$(ai_claude_native_version)" ||
@@ -226,8 +237,8 @@ ai_install_claude() {
 }
 
 ai_install_packages() {
-  ai_install_codex || return 1
-  ai_install_claude || return 1
+  ai_install_codex "${1:-0}" || return 1
+  ai_install_claude "${1:-0}" || return 1
 }
 
 ai_install_profiles() {
@@ -277,7 +288,7 @@ ai_install() {
   ai_require_codex_runtime
   ai_validate_inputs
   ai_install_dirs || return 1
-  ai_install_packages || return 1
+  ai_install_packages "${1:-0}" || return 1
   ai_install_profiles || return 1
   ai_install_instructions || return 1
 }

@@ -20,15 +20,17 @@ source "$base_dir/lib/codex-services.sh"
 
 workstation_platform=''
 workstation_target=''
-workstation_desired_snapshot=''
 workstation_declared_stage=''
 workstation_restart_codex=0
+workstation_upgrade=0
 
 usage() {
   printf '%s\n' \
-    'Usage: ./workstation apply' \
-    '       ./workstation apply --restart-codex' \
-    '       ./workstation help'
+    'Usage: ./workstation apply [--restart-codex]' \
+    '       ./workstation upgrade [--restart-codex]' \
+    '       ./workstation help' \
+    '' \
+    'apply keeps installed software; upgrade refreshes it before applying configuration.'
 }
 
 workstation_select_target() {
@@ -107,8 +109,10 @@ workstation_cleanup_on_exit() {
 }
 
 workstation_stage_declared_inputs() {
-  local staged_snapshot
+  local desired_snapshot staged_snapshot
 
+  desired_snapshot="$(workstation_snapshot "$base_dir")" ||
+    die 'could not resolve workstation desired inputs'
   workstation_declared_stage="$(
     mktemp -d "${TMPDIR:-/tmp}/workstation-declared.XXXXXX"
   )" || die 'could not stage workstation desired inputs'
@@ -135,8 +139,8 @@ workstation_stage_declared_inputs() {
   esac
   staged_snapshot="$(workstation_snapshot "$workstation_declared_stage")" ||
     die 'could not verify staged workstation desired inputs'
-  [[ "$staged_snapshot" == "$workstation_desired_snapshot" ]] ||
-    die 'staged workstation desired inputs differ from their validated source'
+  [[ "$staged_snapshot" == "$desired_snapshot" ]] ||
+    die 'workstation inputs changed while staging; rerun'
 
   # Read by the platform package library selected at runtime.
   # shellcheck disable=SC2034
@@ -164,7 +168,8 @@ workstation_prepare_arch_sudo() {
   fi
   [[ -n "${ARCH_PASS:-}" ]] || die 'set ARCH_PASS in the environment or the repo .env for arch apply'
   export ARCH_PASS
-  export SUDO_ASKPASS="$base_dir/assets/routers/arch-sudo-askpass"
+  SUDO_ASKPASS="$(dev_server_assets_dir)/routers/arch-sudo-askpass"
+  export SUDO_ASKPASS
   [[ -x "$SUDO_ASKPASS" ]] || die 'arch sudo askpass helper is unavailable'
   require_cmd sudo
   # applies to all sourced host libraries; yay gets the same flag explicitly.
@@ -173,9 +178,8 @@ workstation_prepare_arch_sudo() {
 }
 
 workstation_preflight() {
-  local serve_status
-
   workstation_select_target
+  workstation_stage_declared_inputs
   if [[ "$workstation_platform" == arch ]]; then
     workstation_prepare_arch_sudo
     exec </dev/null
@@ -183,41 +187,7 @@ workstation_preflight() {
   # Consumed by the profile installer and shared helper.
   # shellcheck disable=SC2034
   dev_server_ai_host="$workstation_target"
-  packages_validate_inputs
-  dotfiles_validate_declared_inputs
-  dotfiles_validate_local_state
-  ai_validate_inputs
-  if [[ "$workstation_platform" == arch ]]; then
-    personal_arch_validate_declared_inputs
-  else
-    personal_macos_validate_declared_inputs
-  fi
-  skidbladnir_validate_declared_inputs "$workstation_platform"
-  skidbladnir_validate_local_state "$(dev_server_home)"
-  if skidbladnir_preflight_existing_serve; then
-    serve_status=0
-  else
-    serve_status=$?
-  fi
-  case "$serve_status" in
-  0) ;;
-  2) finish_results "$workstation_target" ;;
-  3) die 'public Tailscale exposure is enabled for Skidbladnir HTTPS 8443' ;;
-  *) die 'could not inspect the private Skidbladnir Serve boundary' ;;
-  esac
-  workstation_desired_snapshot="$(workstation_snapshot "$base_dir")" ||
-    die 'could not resolve workstation desired inputs'
-  workstation_stage_declared_inputs
   codex_services_preflight "$workstation_target" "$workstation_restart_codex"
-}
-
-workstation_verify_desired_inputs() {
-  local observed
-
-  observed="$(workstation_snapshot "$workstation_declared_stage")" ||
-    die 'could not verify workstation desired inputs'
-  [[ "$observed" == "$workstation_desired_snapshot" ]] ||
-    die 'workstation desired inputs changed during apply; rerun'
 }
 
 workstation_apply() {
@@ -226,7 +196,7 @@ workstation_apply() {
   trap 'exit 130' INT
   trap 'exit 143' TERM
   workstation_preflight
-  packages_install
+  packages_install "$workstation_upgrade"
   dotfiles_install
   if [[ "$workstation_platform" == arch ]]; then
     personal_arch_apply
@@ -234,10 +204,9 @@ workstation_apply() {
     personal_macos_apply
   fi
   codex_services_install
-  ai_install
+  ai_install "$workstation_upgrade"
   codex_services_activate
   skidbladnir_apply "$workstation_platform"
-  workstation_verify_desired_inputs
   workstation_report_deferrals
   finish_results "$workstation_target"
 }
@@ -253,7 +222,8 @@ main() {
   shift
 
   case "$operation" in
-  apply)
+  apply | upgrade)
+    [[ "$operation" != upgrade ]] || workstation_upgrade=1
     if (($# == 1)) && [[ "$1" == --restart-codex ]]; then
       workstation_restart_codex=1
       shift

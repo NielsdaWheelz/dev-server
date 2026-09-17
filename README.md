@@ -1,504 +1,208 @@
-# Dev Server
+# dev-server
 
-One-user convergence for the owned `macbook`, `arch`, and Hetzner `devbox` hosts.
-It installs declared state, activates only affected consumers, proves critical
-postconditions, and reports mutations, deferrals, or required actions.
-
-The public surface is intentionally complete and small:
+one-user host configuration for `macbook`, `arch`, and the hetzner `devbox`.
 
 ```sh
 ./workstation apply
 ./devbox apply
-./test
 ```
 
-An omitted or unknown operation exits `64`. Apply exits `0` when declared state
-is installed, `2` when a manual action is required, and `1` on an operational or
-invariant failure. Rerunning is safe. With fixed native package candidates, an
-immediate second apply performs no managed-state mutation or activation. It
-reports `UP TO DATE` when no deferral remains; otherwise it repeats the current
-deferrals and the deferral-only host summary.
-
-The detailed capability contract and acceptance criteria are in [SPEC.md](SPEC.md).
-Fleet invitation, acceptance, reboot, and outage workflows live in the
-[Skíðblaðnir repository](https://github.com/NielsdaWheelz/skidbladnir).
-
-## Workstation
-
-Prerequisites:
-
-- macOS on the owned MacBook with Homebrew and the App Store Tailscale app
-  installed and signed in; or Arch Linux on the exact owned `arch` host with
-  `pacman`, `yay`, and `ARCH_PASS` for sudo elevation;
-- Git, curl, Python 3, tmux, Tailscale, and the platform's standard service
-  tools;
-- existing GitHub, AI-tool, Tailscale, SSH, and Skíðblaðnir credentials where
-  enrollment has already occurred.
-
-Run:
+`apply` installs declared configuration and missing requirements without seeking
+newer installed packages or ai tools. use `upgrade` deliberately to update the
+software and then apply the configuration:
 
 ```sh
-./workstation apply
+./workstation upgrade
+./devbox upgrade
 ```
 
-arch apply is noninteractive. set `ARCH_PASS` in the environment or in the
-repo's ignored `.env` as `ARCH_PASS=your-password` and restrict that file to
-mode `0600`. values are literal, with optional enclosing single or double
-quotes; the file is never executed. an environment value takes precedence.
-sudo uses an askpass helper; pacman and yay use `--noconfirm`. yay skips its
-clean-build, diff, and editor menus. missing or rejected credentials fail the
-run. this does not grant passwordless sudo or persist the password on arch
-when it is supplied through the environment.
+an unchanged apply makes no managed-state change or service activation. exit
+`0` means installed, with any deferred activation reported; `2` means an exact
+manual action is required; `1` means failure; `64` means invalid invocation.
+rerun after fixing the reported problem. `--help` lists the public commands.
 
-The order is native packages, repo-owned files, exact-host personal policy,
-the shared Codex services plus native Claude, and Skíðblaðnir. Package managers
-may refresh their own metadata. Apply never removes Arch packages, restarts
-tmux, reboots, logs out, or interrupts running containers. Those cases are
-reported as `DEFERRED`.
-On macOS, apply verifies and may start the exact App Store Tailscale app but
-never installs, upgrades, replaces, or signs in to it.
+[the specification](SPEC.md) defines ownership, activation, and failure behavior.
+there are currently no automated tests, runner, or ci checks. direct verification
+is required until [the test-system rebuild](docs/issues/test-system-rebuild.md).
 
-macos apply installs ghostty and its meslo font through homebrew. the exact
-configuration lives in [`assets/dotfiles/ghostty-macos.config`](assets/dotfiles/ghostty-macos.config)
-and is installed at `~/Library/Application Support/com.mitchellh.ghostty/config.ghostty`.
-edit the repo copy: apply replaces the installed file. it uses meslo at 13pt,
-default keybindings, and notifications for commands running at least 30 seconds
-that finish while unfocused. after a config change, press `cmd+shift+,` in ghostty
-or reopen it. apply leaves running terminals alone.
+## workstation
 
-`codex`, `codex-work`, and `codex-work2` select Personal, Work and Work2 by
-setting `CODEX_HOME`, then directly execute the installed native CLI with your
-arguments, environment, cwd and exit behavior intact. Each account has one
-supervised App Server on each host. Every Codex profile uses the same
-exact npm binary at `~/.local/bin/codex`; every
-Claude profile executes one Anthropic-native binary at `~/.local/bin/claude`.
-Apply resolves Codex's npm `latest` channel once, requires a stable release,
-and installs that candidate using normal npm integrity with scripts disabled.
-An already-matching installation is unchanged. The account wrappers and host
-helper add no startup update check; upstream Codex retains its own behavior.
-Apply reconciles Claude explicitly to the native `latest` channel without
-reading an account profile's update-channel preference.
-interactive zsh aliases add `--yolo` to `codex`, `codex-work`, and `codex-work2`,
-and `--dangerously-skip-permissions` to `claude` and `claude-work`.
-these defaults live in `assets/dotfiles/zsh_helpers`; after apply, open a new
-shell or run `source ~/.zsh_helpers`. use `command codex` or `command claude`
-(also with work profile names) to bypass the aliases for one invocation.
-Use normal commands, including flags, positional prompts and subcommands:
+macos needs homebrew and the app store tailscale app, installed and signed in.
+linux support is limited to the owned arch host, with pacman and yay. both need
+git, curl, python 3, tmux, tailscale, and native service tools. existing github,
+ai-tool, ssh, tailscale, and skid credentials are preserved.
+
+arch operations run without a tty. supply `ARCH_PASS` through the environment
+or the ignored repo `.env`, as `ARCH_PASS=your-password`, with file mode `0600`.
+values are literal, with optional enclosing single or double quotes; the file
+is never executed. the environment takes precedence. sudo uses the managed
+askpass helper, and pacman/yay run noninteractively. missing or rejected
+credentials fail before host changes. no passwordless sudo is granted.
+
+`apply` checks that arch's declared packages are installed. missing packages
+require `./workstation upgrade`, which performs a full system upgrade before
+reconciling the aur manifest. this avoids unsupported partial upgrades.
+macos apply uses homebrew's no-upgrade path; installing a missing formula can
+still update dependencies needed by that formula. neither operation installs,
+upgrades, replaces, or signs in to the app store tailscale app.
+
+configuration is applied in order: native packages, dotfiles, exact-host personal
+policy, ai tools/shared codex services, then skid. desktop login, reboot, busy
+containers, and tmux binary activation are reported as `DEFERRED`. repo-owned
+activation never forces them. native package installation/upgrade scripts can
+still restart their services; schedule upgrades accordingly.
+
+macos installs ghostty and its meslo font through homebrew. edit
+[`assets/dotfiles/ghostty-macos.config`](assets/dotfiles/ghostty-macos.config);
+apply installs it at
+`~/Library/Application Support/com.mitchellh.ghostty/config.ghostty`.
+reload with `cmd+shift+,` or reopen ghostty. running terminals are left alone.
+
+## ai accounts and services
+
+`codex`, `codex-work`, and `codex-work2` select their existing account homes and
+execute the single native binary at `~/.local/bin/codex`. `claude` and
+`claude-work` use the single anthropic-native binary at `~/.local/bin/claude`.
+wrappers preserve arguments, environment, cwd, and exit behavior.
+
+`apply` retains valid installed versions and bootstraps a missing tool.
+`upgrade` resolves codex's stable npm `latest` once and uses normal npm integrity
+with scripts disabled; claude uses native `install latest`, independent of
+account update-channel preferences. wrappers add no startup update lookup.
+upstream tools retain their own behavior.
+
+interactive zsh aliases add `--yolo` to the three codex commands and
+`--dangerously-skip-permissions` to both claude commands. the defaults live in
+[`assets/dotfiles/zsh_helpers`](assets/dotfiles/zsh_helpers). after applying,
+start a shell or `source ~/.zsh_helpers`. `command codex`, `command claude`, and
+the corresponding work names bypass the alias for one invocation.
 
 ```sh
 codex-work login
 codex-work2 resume
 ```
 
-MacBook uses three LaunchAgents; Arch uses three user systemd services. They
-start with the user session, restart on failure, and listen only on private
-Unix sockets at `~/.local/run/codex-shared/<profile>/app-server.sock`.
-Account homes and credentials are preserved. There is no Jarvis account or
-cross-user launcher on either workstation.
+each host supervises three codex app servers, one per account. macbook uses
+launchagents; arch uses user systemd services; devbox uses system services as
+`niels`. workstation sockets are private at
+`~/.local/run/codex-shared/<profile>/app-server.sock`. devbox grants only the
+intended local client group access. account homes and credentials stay intact.
 
-Native discovery uses an exact symlink from each account's
-`app-server-control/app-server-control.sock` to its supervised socket. Apply
-refuses a conflicting native path before draining or changing managed runtime
-inputs; it never takes over another daemon or overwrites its socket.
+native discovery links each account's
+`app-server-control/app-server-control.sock` to its supervised socket. a
+conflicting path produces `ACTION`; apply never takes over another daemon.
+compatible interactive launches can reuse the discovered server. native startup
+overrides or an unavailable server can select an embedded backend. explicit
+`--remote unix://…` requires attachment but has different command, cwd, config,
+and resume semantics. the wrappers do not parse these choices.
 
-Native Codex automatically reuses an available discovered server for compatible
-interactive launches. This is **not an always-shared guarantee**: native startup
-overrides such as `-c`, `--profile`, feature/hook overrides, or an unavailable
-server can select an embedded backend. Noninteractive/admin commands retain
-their native execution paths. Explicit `--remote unix://…` requires attachment
-and fails on connection failure, but supports only native remote-capable
-commands and has different cwd/config/resume semantics. The wrappers neither
-parse arguments nor invent fallback behavior. Native `app-server daemon stop`
-and `app-server daemon restart` cannot manage these externally supervised
-servers; use the owning host apply workflow.
-
-Native automatic reuse keeps the caller's local cwd/config-loading path, but
-tools execute in the server's environment, not the calling shell's. Account
-configuration remains user-owned; long-lived-server reload behavior and full
-resume/config parity are not promised. No notifier `-c` override is injected.
-jarvis cognition retains its isolated native runtime. worker control now uses
-skid's common peer cli and the target host user's existing authority. native
-thread permission policy still belongs to the provider; terminal attachment
-does not replace it. the dedicated jarvis worker launcher is retired.
-
-Human-CLI correction deployed 2026-09-09 from `08254bb` to MacBook, Devbox and
-Arch. All nine native default-socket probes and installed command checks passed;
-second applies changed nothing and preserved server PIDs. Linux boundary tests
-passed 18/18, including peer authentication and inherited-setgid handling;
-the routine suite and isolated pinned-TUI discovery gate passed. Jarvis's
-canonical socket access and closed launcher rejection were verified without
-restarting Jarvis or creating a thread/terminal. No model-turn, tmux or device
-acceptance is claimed. On Arch, open a new shell to pick up the corrected PATH.
-The obsolete installed Devbox `assets/codex/codex-profile` was removed from
-runtime inputs and preserved at
-`/var/backups/codex-human-cutover.t3r534rg/codex-profile`; no runtime migration or
-fallback remains.
-
-Ordinary apply may update the CLI, starts missing services, and leaves healthy
-running services alone. Changed operational config/helper/unit inputs cannot
-replace a running account's inputs. After
-finishing active turns, explicitly authorize the shared-service restart:
+shared tools execute in the server environment. calling-shell credentials are
+not inherited, and long-lived-server config reload and full resume/config parity
+are not promised. native daemon stop/restart cannot manage these supervised
+services. after finishing active turns, explicitly restart them with:
 
 ```sh
 ./workstation apply --restart-codex
+./devbox apply --restart-codex
 ```
 
-This restarts the three managed Codex services even when configuration has not
-changed; it never stops tmux sessions. Running servers may use an older release
-than the updated CLI until restarted. Native crash/reboot recovery still starts
-the installed release. A newer version is not proof of protocol compatibility:
-actual capability, response and authority validation stays strict.
-`assets/codex/profiles.json` declares only schema-v3 operational paths, principals
-and profiles, with no package/version fields. All hosts and Jarvis use that one
-closed declaration; no old-schema fallback or second account map exists.
+`upgrade` accepts the same flag. without it, healthy running codex services keep
+their current backend, even after a cli upgrade. changed operational inputs
+produce `ACTION` before replacing the coupled files. the flag restarts all three
+services even when their inputs are unchanged; tmux sessions survive.
 
-Personal instructions for all five profiles live in
-[`assets/agent-instructions.md`](assets/agent-instructions.md). Workstation
-and devbox apply install the same contents into each profile:
+[`assets/codex/profiles.json`](assets/codex/profiles.json) owns operational account
+paths and principals. [`assets/agent-instructions.md`](assets/agent-instructions.md)
+is installed into the five account homes as `AGENTS.md` or `CLAUDE.md`. edit the
+repo source; apply replaces the installed copies. new sessions load changes.
+project instructions, skills, settings, history, and authentication remain
+separately owned.
 
-| Profile | Managed instruction file |
-|---|---|
-| `codex` | `~/.codex/AGENTS.md` |
-| `codex-work` | `~/.codex-work/AGENTS.md` |
-| `codex-work2` | `~/.codex-work2/AGENTS.md` |
-| `claude` | `~/.claude/CLAUDE.md` |
-| `claude-work` | `~/.claude-work/CLAUDE.md` |
+## agent fleet
 
-Edit the source file in this repository; apply replaces edits to the installed
-copies, including edits through an app's custom-instructions settings. Start
-new agent sessions after applying. Project instructions and skills still
-provide their own guidance.
-
-## Agent fleet
-
-Run `skid` for the session list, or `skid list`, `skid info reviewer`, and
-`skid enter reviewer` for ordinary commands. Configuration defaults to
+run `skid`, `skid list`, `skid info reviewer`, or `skid enter reviewer`.
+`skid --help` documents commands and automation; use `--json` and returned
+`--ref` values for scripts. clients default to
 `~/.config/skidbladnir/client.json`; `--machine arch` disambiguates a name.
-Automation uses `--json` and returned `--ref` values; literal prompts can use
-`skid send --ref REF --stdin --json`. The shared profile instructions include
-this vocabulary, startup-dialog handling, and unknown-outcome rules.
 
-new skid agent sessions use `--yolo` for codex and
-`--dangerously-skip-permissions` for claude. the three host configs own these
-flags; claude retains its identity plugin. apply the host configuration to
-activate the policy for new sessions. existing sessions keep their launch policy.
+new skid sessions use codex `--yolo` and claude
+`--dangerously-skip-permissions`, with claude's identity plugin retained.
+the three host configs own this policy. existing sessions keep their launch
+arguments. `interrupt` retains a session; `stop` attempts provider halt and closes
+it; `kill` closes only that terminal. linked work can survive another session.
 
-`interrupt` retains the session. `stop` attempts provider halt and then closes it;
-`kill` only closes that exact terminal. Shared work can survive another linked
-session. Phone and desktop navigation are shared; skid no longer creates grouped
-sessions. The managed tmux template declares the three required attachment options.
+release pins are authoritative. verified local artifacts are reused; unchanged
+apply does not download the skid release again. configuration changes produce
+an immutable runtime generation. failed activation restores the prior healthy
+generation. `skid` and `skidbladnir` point to the same current binary.
+local host-config admission remains until
+[upstream provides a standalone validator](docs/issues/skid-config-validation.md).
 
-The installer publishes `skid` and `skidbladnir` as links to one current binary.
-Release pins remain authoritative. Coordinate the CLI/Jarvis/phone cutover, stage
-instructions for new agents, and preserve busy providers. Gateway-only and
-instruction-only rollout avoids unrelated workstation activation.
+provider control uses `~/.local/bin/provider-runtime-control`, installed from
+[`assets/skidbladnir/native-control.json`](assets/skidbladnir/native-control.json).
+the pinned source and frozen environment own provider dependencies. codex uses
+terminal control/history; claude-work retains native state/history. provider
+sockets stay local; peer control uses skid's authenticated private gateway.
 
-## Devbox
+fleet enrollment, bearer distribution, session operations, release acceptance,
+and outage recovery belong to the
+[skid repository](https://github.com/NielsdaWheelz/skidbladnir). its
+`scripts/fleet provision-clients` provisions user clients and jarvis's client
+configuration; rerun after an interrupted copy or bearer rotation.
 
-Prerequisites:
+## devbox
 
-- authenticated `hcloud` context `dev-infra`, local Tailscale, `gh`, SSH,
-  Python 3, and `uvx`;
+prerequisites:
+
+- authenticated `hcloud` context `dev-infra`, local tailscale, `gh`, ssh,
+  python 3, and `uvx`;
 - operator key `~/.ssh/id_ed25519` and distinct deployment key
-  `~/.ssh/dev-server-deploy`, both regular private-key files with mode `0600`;
-- `Include ~/.ssh/config.d/*` in the operator's top-level SSH config;
-- for a new server only, a short-lived reusable Tailscale auth key in
-  `secrets/tailscale-auth-key`, containing exactly one newline-terminated value
-  with mode `0600`.
-
-Create the deployment key once if needed:
+  `~/.ssh/dev-server-deploy`, regular private-key files with mode `0600`;
+- `Include ~/.ssh/config.d/*` in the operator's ssh config;
+- for a new server, a short-lived reusable tailscale auth key in
+  `secrets/tailscale-auth-key`: one newline-terminated value, mode `0600`.
 
 ```sh
 ssh-keygen -t ed25519 -f "$HOME/.ssh/dev-server-deploy" -C dev-server-deploy
 chmod 0600 "$HOME/.ssh/dev-server-deploy"
 install -d -m 0700 secrets
-printf '%s\n' 'tskey-auth-...' >secrets/tailscale-auth-key
-chmod 0600 secrets/tailscale-auth-key
 ```
 
-Run:
+create the deployment key only if absent, place the bootstrap auth key in the
+specified file, then run `./devbox apply`.
 
-```sh
-./devbox apply
-```
+for a missing server, apply creates it, limits temporary public ssh to the
+operator's exact ipv4 `/32`, establishes its openssh host key over the tailnet,
+and removes bootstrap ingress on success or failure. an existing server uses
+strict tailnet openssh as `dev-server-deploy`; it never opens public ssh or
+resets host keys. `dev-server` remains the unprivileged `niels` operator alias.
+missing github enrollment produces one exact manual action.
 
-When the server is absent, apply creates it, limits temporary public SSH to the
-operator's exact IPv4 `/32`, establishes the OpenSSH host key over the tailnet,
-and removes bootstrap ingress on success or failure. When it exists, apply uses
-only strict tailnet OpenSSH as `dev-server-deploy`; it never opens public SSH or
-resets host keys. Ansible owns Ubuntu state. `dev-server` remains the unprivileged
-`niels` operator alias.
+ansible owns ubuntu configuration. apply retains installed package versions;
+upgrade selects current candidates. pgvector remains exactly pinned and held.
+rootless docker setup is rebuilt only when its package, unit, or daemon config
+changes and no container is running; otherwise activation is deferred.
 
-Missing GitHub enrollment is reported as one exact `ACTION`. Apply does not
-mutate GitHub accounts or keys. Controller inputs are validated, copied with
-their modes to one immutable per-run stage, and consumed only from that stage.
-Rootless Docker's supported unit/context setup is rebuilt only when its
-package, generated unit, or daemon config identity changed and no container is
-running; otherwise activation is deferred.
+this repository supplies jarvis's shared prerequisites: utc host time,
+postgresql 16 and qualified pgvector, the `jarvis` account, and ownership of
+`/opt/jarvis`, `/var/lib/jarvis`, and `/etc/jarvis`. the
+[jarvis repository](https://github.com/NielsdaWheelz/jarvis) owns releases,
+python environment, database/roles, migrations, service, credentials, and
+backup/recovery. dev-server never deploys jarvis or touches nexus application
+state. jarvis is independent of developer rootless docker.
 
-The existing Hetzner devbox is also the approved host for Jarvis v1. This
-repository converges only its shared prerequisites: UTC host time, PostgreSQL
-16/pgvector availability, a dedicated `jarvis` service account, and the base
-`/opt/jarvis`, `/var/lib/jarvis`, and `/etc/jarvis` ownership boundary. The
-[Jarvis repository](https://github.com/NielsdaWheelz/jarvis) owns the
-application release, locked Python environment, database and roles,
-migrations, systemd service, credentials, backup/restore, and operational
-recovery. `./devbox apply` never deploys Jarvis, reads its credentials, or
-touches Nexus application state. Jarvis is host-native and is not part of the
-developer's rootless Docker lifecycle.
+jarvis cognition uses the existing shared codex services; worker tools use the
+common skid cli and the target user's authority. the dedicated jarvis worker
+launcher is retired.
 
-devbox apply installs and starts personal, work and work2 shared codex
-system services. jarvis cognition connects to those existing services; worker
-tools invoke `/usr/local/libexec/skidbladnir`. running services with changed operational inputs require
-`./devbox apply --restart-codex` after active turns finish. That explicit flag
-also restarts unchanged services to pick up an updated CLI; a CLI-only update
-never triggers the restart itself. every configured skid peer can host codex
-and claude terminal agents. provider sockets remain local; control crosses the
-existing authenticated skid https gateway.
+## development
 
-all three hosts install `~/.local/bin/provider-runtime-control` from
-`assets/skidbladnir/native-control.json`, using private uv 0.11.28, python
-3.12.13, and the pinned source's frozen `claude-sdk` environment. skid exposes
-codex personal/work/work2 and claude-work. codex uses terminal control/history;
-claude-work retains native state/history. host configuration contains no codex
-native endpoints. helper
-revisions retain separate environments; this costs disk and an initial download.
+edit declarations, then apply on the intended host. use upgrade for rolling
+software updates; review exact git, extension, native-control, and skid pin
+changes in the repository. use subsystem-native status commands to investigate
+a failure. there is no separate doctor or compatibility layer.
 
-skid's `scripts/fleet provision-clients` copies the existing fleet bearers into
-mode-0600 user configs and `/etc/jarvis/agent-client.json`, using the established
-deployment principal for the latter. clients then address peers directly.
-copying is sequential; rerun after a failed copy or bearer rotation.
-
-the agent-control cutover briefly stops jarvis: drain old worker actions, apply
-the coupled host release, provision client configs, activate new jarvis, then
-disable/remove the old installed `jarvis-codex-launcher.socket` and template
-service. source deletion does not retire installed units. follow skid's
-`docs/agent-control.md`; preserve shared servers, accounts, pairings, and tmux
-lifetimes. the branch's v0.3.0 pins name a built candidate; publication and live
-acceptance remain pending.
-
-## One-time hard cutover
-
-This release does not read, migrate, alias, or fall back to any legacy command,
-layout, state file, or release-pin schema. The cut is deliberately irreversible;
-preserve credentials and identities, then remove only the exact obsolete paths
-below before the first new apply on each host.
-
-### Existing devbox: establish the privilege boundary
-
-Use the Hetzner console, not an unverified SSH session. Install both public keys,
-the deployment principal, tailnet-only OpenSSH, and its constrained ownership:
-
-```sh
-sudo useradd --create-home --shell /bin/bash dev-server-deploy
-sudo install -d -m 0700 -o dev-server-deploy -g dev-server-deploy \
-  /home/dev-server-deploy/.ssh
-printf '%s\n' 'DEPLOYMENT_PUBLIC_KEY' | sudo tee \
-  /home/dev-server-deploy/.ssh/authorized_keys >/dev/null
-sudo chown dev-server-deploy:dev-server-deploy \
-  /home/dev-server-deploy/.ssh/authorized_keys
-sudo chmod 0600 /home/dev-server-deploy/.ssh/authorized_keys
-printf '%s\n' 'dev-server-deploy ALL=(ALL:ALL) NOPASSWD:ALL' | sudo tee \
-  /etc/sudoers.d/90-dev-server-deploy >/dev/null
-sudo chmod 0440 /etc/sudoers.d/90-dev-server-deploy
-sudo visudo -cf /etc/sudoers.d/90-dev-server-deploy
-sudo ufw allow in on tailscale0 to any port 22 proto tcp
-sudo systemctl enable --now ssh
-sudo tailscale set --ssh=false
-```
-
-Ensure `niels` still has the operator public key and no blanket passwordless
-sudo. Record the server's Ed25519 host-key fingerprint from the console:
-
-```sh
-sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub -E sha256
-```
-
-On the workstation, set the exact tailnet FQDN, scan only its Ed25519 key,
-rewrite its host field to the stable alias, and compare the displayed SHA256
-fingerprint byte-for-byte with the console value. Stop if they differ.
-
-```sh
-TAILNET_FQDN='dev-server.example-tailnet.ts.net'
-scan_file="$(mktemp "$HOME/.ssh/dev-server.scan.XXXXXX")"
-ssh-keyscan -T 10 -t ed25519 "$TAILNET_FQDN" 2>/dev/null |
-  awk '{$1="dev-server"; print}' >"$scan_file"
-chmod 0600 "$scan_file"
-ssh-keygen -lf "$scan_file" -E sha256
-```
-
-After verification, replace only the exact `dev-server` entry atomically:
-
-```sh
-known_hosts="$HOME/.ssh/known_hosts"
-known_candidate="$(mktemp "$HOME/.ssh/known_hosts.cutover.XXXXXX")"
-touch "$known_hosts"
-chmod 0600 "$known_hosts"
-cat "$known_hosts" >"$known_candidate"
-ssh-keygen -R dev-server -f "$known_candidate" >/dev/null
-rm -f "$known_candidate.old"
-cat "$scan_file" >>"$known_candidate"
-chmod 0600 "$known_candidate"
-mv "$known_candidate" "$known_hosts"
-rm -f "$scan_file"
-ssh -o BatchMode=yes -o IdentitiesOnly=yes \
-  -o HostKeyAlias=dev-server -o StrictHostKeyChecking=yes \
-  -i "$HOME/.ssh/id_ed25519" "niels@$TAILNET_FQDN" true
-ssh -o BatchMode=yes -o IdentitiesOnly=yes \
-  -o HostKeyAlias=dev-server -o StrictHostKeyChecking=yes \
-  -i "$HOME/.ssh/dev-server-deploy" \
-  "dev-server-deploy@$TAILNET_FQDN" sudo -n true
-```
-
-Trade-off: two SSH credentials and a manual, console-anchored host-key ceremony
-add one-time work; remote agents no longer inherit deployment privilege.
-
-### Every host: remove exact legacy installer state
-
-Stop the Skíðblaðnir service using the native service manager. Preserve
-`~/.config/skidbladnir/bearer`, `machine-handle`, the three
-`android-signing.*` release credentials, AI credentials, Docker data, SSH keys,
-Tailscale identity, and existing integration settings. Remove only:
-
-```sh
-rm -f "$HOME/.local/bin/skidbladnir"
-rm -f "$HOME/.local/share/skidbladnir/characters.json"
-rm -f "$HOME/.local/share/skidbladnir/release.json"
-rm -f "$HOME/.local/share/skidbladnir/release-bundle.tar.gz"
-rm -f "$HOME/.local/share/skidbladnir/.release-activation-required"
-rm -f "$HOME/.local/share/skidbladnir/.converge.lock"
-rm -f "$HOME/.config/skidbladnir/host-config.json"
-rm -R "$HOME/.local/share/skidbladnir/.release-transaction"
-```
-
-On Arch, also disable and remove the exact retired user units and autostart:
-
-```sh
-systemctl --user disable --now xfce4-clipman.service
-systemctl --user disable --now gammastep.service
-systemctl --user disable --now app-com.mitchellh.ghostty.service
-rm -f "$HOME/.config/systemd/user/xfce4-clipman.service"
-rm -f "$HOME/.config/systemd/user/gammastep.service"
-rm -f "$HOME/.config/systemd/user/app-com.mitchellh.ghostty.service"
-rm -f "$HOME/.config/autostart/xfce4-clipman.desktop"
-systemctl --user daemon-reload
-```
-
-Remove the former local cloud-state duplicate. On the devbox, also remove the
-exact stale files from the user cache; do not use globs:
-
-```sh
-rm -f secrets/devbox-state.env
-cache="$HOME/.local/share/dev-server"
-rm -f "$cache/lib/doctor.sh"
-rm -f "$cache/lib/packages-arch.sh"
-rm -f "$cache/lib/packages-macos.sh"
-rm -f "$cache/lib/remote-devbox.sh"
-rm -f "$cache/lib/skidbladnir-invite.sh"
-rm -f "$cache/lib/skidbladnir-operator.sh"
-rm -f "$cache/skidbladnir"
-rm -f "$cache/assets/routers/ai-router"
-rm -f "$cache/assets/ai/package.json"
-rm -f "$cache/assets/ai/package-lock.json"
-rmdir "$cache/assets/ai"
-rm -f "$cache/assets/dotfiles/gammastep-autostart.desktop"
-rm -f "$cache/assets/dotfiles/gammastep.config"
-rm -f "$cache/assets/dotfiles/ghostty-autostart.desktop"
-rm -f "$cache/assets/dotfiles/ghostty-xfce-helper.desktop"
-rm -f "$cache/assets/dotfiles/ghostty.config"
-rm -f "$cache/assets/dotfiles/xfce4-clipman-autostart.desktop"
-rm -f "$cache/assets/dotfiles/xfce4-helpers.rc"
-rm -f "$cache/assets/skidbladnir/agent-hooks-arch.json"
-rm -f "$cache/assets/skidbladnir/agent-hooks-macbook.json"
-rm -f "$cache/assets/skidbladnir/host-config-arch.json"
-rm -f "$cache/assets/skidbladnir/host-config-macbook.json"
-rm -f "$cache/assets/skidbladnir/dev.niels.skidbladnir.plist"
-rm -f "$cache/assets/skidbladnir/skid-notify-macbook"
-```
-
-Finally retire only wrapper symlinks that still target the old router; preserve
-plain upstream binaries and never remove `.codex*` or `.claude*` state:
-
-```sh
-router="$HOME/.local/libexec/ai-router"
-for wrapper in \
-  "$HOME/bin/codex" \
-  "$HOME/bin/codex-personal" \
-  "$HOME/bin/codex-work" \
-  "$HOME/bin/codex-work2" \
-  "$HOME/bin/claude" \
-  "$HOME/bin/claude-personal" \
-  "$HOME/bin/claude-work"
-do
-  if [ -L "$wrapper" ] && [ "$(readlink "$wrapper")" = "$router" ]; then
-    rm -f "$wrapper"
-  fi
-done
-rm -f "$router"
-```
-
-After `~/.local/bin/claude --version` succeeds and that path is a symlink into
-`~/.local/share/claude/versions/`, remove the exact retired private npm tree:
-
-```sh
-test -L "$HOME/.local/bin/claude"
-case "$(readlink "$HOME/.local/bin/claude")" in
-  "$HOME/.local/share/claude/versions/"*) ;;
-  *) exit 1 ;;
-esac
-"$HOME/.local/bin/claude" --version
-rm -R "$HOME/.local/share/dev-server/ai-tools"
-```
-
-Ensure `~/.gitconfig.local` contains any machine-only identity/settings. Retire
-the exact former GitHub SSH rewrite without hiding inspection errors:
-
-```sh
-if git config --global --get-all 'url.git@github.com:.insteadOf' >/dev/null; then
-  git config --global --unset-all 'url.git@github.com:.insteadOf'
-fi
-```
-
-The new pinned plugins are immutable generations behind managed links. They do
-not adopt legacy in-place clones. Inspect each old clone with `git status`,
-preserve any local work, then remove only these exact paths before apply:
-
-```sh
-rm -R "$HOME/.zsh/fzf-tab"
-rm -R "$HOME/.zsh/powerlevel10k"
-rm -R "$HOME/.tmux/plugins/tpm"
-rm -R "$HOME/.tmux/plugins/tmux-resurrect"
-rm -R "$HOME/.tmux/plugins/tmux-continuum"
-```
-
-Then run the appropriate apply command and verify the reported private
-Skíðblaðnir health/Serve postconditions.
-
-## Boundaries and trade-offs
-
-- Native OS repositories, Codex and Anthropic-native Claude are rolling
-  rather than byte-replayable. Git plugins, Cursor extensions, and Skíðblaðnir
-  are exact reviewable pins and therefore can lag upstream until manually
-  bumped.
-- Native package and npm updates can partially complete; rerun their native
-  reconcilers. Git plugin candidates are isolated until an atomic link switch.
-  Only Skíðblaðnir has repository-owned service rollback.
-- Skíðblaðnir no-op apply re-downloads its small archive to re-prove admission.
-  Generation identity includes host configuration, so a routing-only change
-  creates a new immutable generation at the same published release pin.
-- Desktop login, reboot, busy Docker, and tmux-server activation are never
-  forced. Public exposure, credentials, checksums, host-key continuity, and the
-  last healthy Skíðblaðnir generation are never traded away for convenience.
-- Existing-devbox safety repair may close or attach only the exact steady
-  Hetzner firewall before tailnet reachability is available. An inactive UFW
-  store is reset and rebuilt because its persisted rules cannot be observed
-  safely while disabled.
-- Immutable per-run input copies cost a small amount of local disk and I/O.
-  Devbox Node.js is constrained to rolling major 24 rather than exact package
-  bytes. Workstations accept their native candidate at version 24 or newer;
-  those repositories remain the freshness authority and may advance majors.
-- CI is hermetic and non-deploying. Final live applies, fleet/device acceptance,
-  and release publication remain explicit operator actions.
-- arch apply supports ssh without a tty, using `ARCH_PASS` for sudo. first-time
-  account enrollment and reboot/session changes remain reported actions;
-  the user/agent account never receives blanket passwordless elevation.
+keep changes and verification proportional to this one-user system. record
+unresolved work in [`docs/issues/`](docs/issues/), one file per issue; delete the
+record when resolved. package-manager failures are repaired by rerunning their
+native operation. only skid has repository-owned service rollback.

@@ -139,6 +139,7 @@ packages_validate_inputs() {
 }
 
 packages_install() {
+  local upgrade="${1:-0}"
   local docker_after
   local -a pacman_arguments=(-Syu --needed --noconfirm)
   local packages_after
@@ -152,23 +153,30 @@ packages_install() {
 
   dev_server_validate_active_sha docker.package
 
-  packages_before="$(packages_arch_snapshot)"
+  if ((upgrade)); then
+    packages_before="$(packages_arch_snapshot)"
+    if ((${#packages_arch_pacman_packages[@]} > 0)); then
+      pacman_arguments+=("${packages_arch_pacman_packages[@]}")
+    fi
+    sudo pacman "${pacman_arguments[@]}"
 
-  if ((${#packages_arch_pacman_packages[@]} > 0)); then
-    pacman_arguments+=("${packages_arch_pacman_packages[@]}")
-  fi
-  sudo pacman "${pacman_arguments[@]}"
+    if ((${#packages_arch_aur_packages[@]} > 0)); then
+      require_cmd yay
+      yay -S --needed --noconfirm --sudoflags=--askpass \
+        --answerclean None --answerdiff None --answeredit None \
+        "${packages_arch_aur_packages[@]}"
+    fi
 
-  if ((${#packages_arch_aur_packages[@]} > 0)); then
-    require_cmd yay
-    yay -S --needed --noconfirm --sudoflags=--askpass \
-      --answerclean None --answerdiff None --answeredit None \
-      "${packages_arch_aur_packages[@]}"
-  fi
-
-  packages_after="$(packages_arch_snapshot)"
-  if [[ "$packages_after" != "$packages_before" ]]; then
-    render_result UPDATED "Arch packages"
+    packages_after="$(packages_arch_snapshot)"
+    if [[ "$packages_after" != "$packages_before" ]]; then
+      render_result UPDATED "Arch packages"
+    fi
+  else
+    if ! pacman -Q "${packages_arch_pacman_packages[@]}" "${packages_arch_aur_packages[@]}" >/dev/null; then
+      render_result ACTION "Arch packages" \
+        'run ./workstation upgrade to install missing packages with a full system upgrade'
+      return 2
+    fi
   fi
 
   dev_server_prepare_active_dir
