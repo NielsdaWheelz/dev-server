@@ -52,6 +52,14 @@ containers, and tmux binary activation are reported as `DEFERRED`. repo-owned
 activation never forces them. native package installation/upgrade scripts can
 still restart their services; schedule upgrades accordingly.
 
+arch touchpad policy lives in
+[`assets/xorg/90-dev-server-huawei-touchpad.conf`](assets/xorg/90-dev-server-huawei-touchpad.conf).
+xorg loads it when the display server starts. apply reports `DEFERRED` on every
+run while an existing xorg process predates the installed policy; restart the
+display server or reboot when convenient. this timestamp check tracks pending
+activation, not device behavior. `xorg-xinput` is no longer required; apply and
+upgrade do not remove an already installed package.
+
 macos installs ghostty and its meslo font through homebrew. edit
 [`assets/dotfiles/ghostty-macos.config`](assets/dotfiles/ghostty-macos.config);
 apply installs it at

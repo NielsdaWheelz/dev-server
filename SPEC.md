@@ -121,6 +121,12 @@ rather than trying to restart them. temporary candidates are cleaned on exit.
 exact-host desktop/hardware policy is separate from package installation.
 macos homebrew owns ghostty and its font; the repo owns its configuration.
 arch policy owns its declared hardware, boot, touchpad, and desktop settings.
+xorg exclusively applies the touchpad declaration at display-server startup.
+every apply compares the installed file's modification time with all live xorg
+process starts and reports deferred activation until the file predates them.
+equal-second ordering remains deferred; exited processes are not consumers.
+restart the display server or reboot to activate changes. timestamp ordering
+assumes normal host clock continuity and does not verify device behavior.
 macos tailscale is app-store-owned; verify and optionally start the exact app,
 but never install, update, replace, or sign in to it.
 
