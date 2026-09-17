@@ -277,6 +277,12 @@ service, credentials, backups, and recovery. preserve those contents and nexus
 state. jarvis is independent of developer rootless docker and is not an apply
 postcondition.
 
+a reviewed pgvector pin change authorizes the exact package upgrade or rollback
+on apply or upgrade. refresh package metadata when the installed version differs,
+then install the declared version and keep it held. qualification of application
+and database compatibility remains with jarvis; no other pgvector version is a
+fallback.
+
 ## verification and development
 
 package-manager success proves the requested package operation. additional
