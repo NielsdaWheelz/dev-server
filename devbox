@@ -5,8 +5,6 @@ base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 # shellcheck source=lib/common.sh
 source "$base_dir/lib/common.sh"
-# shellcheck source=lib/remote-devbox.sh
-source "$base_dir/lib/remote-devbox.sh"
 
 server_name='dev-server'
 server_type='cpx31'
@@ -282,11 +280,14 @@ ssh_with_identity() {
   local identity="$2"
   local host="$3"
   local strict="$4"
-  local remote_command
+  local remote_command='' arg escaped
   local -a host_key_options=(-o IdentitiesOnly=yes)
   shift 4
 
-  remote_command="$(quote_remote_args "$@")"
+  for arg in "$@"; do
+    printf -v escaped '%q' "$arg"
+    remote_command+="$escaped "
+  done
   if ((host_key_enrollment)); then
     host_key_options=(
       -o GlobalKnownHostsFile=/dev/null
@@ -886,7 +887,7 @@ run_ansible_apply() {
   set +e
   ANSIBLE_CONFIG="$ansible_config" \
     ANSIBLE_NOCOLOR=1 \
-    run_ansible_playbook \
+    uvx --from ansible-core==2.19.2 ansible-playbook \
     --ssh-common-args "-F $ssh_include" \
     --extra-vars "{\"devbox_codex_runtime_restart_authorized\":$codex_restart_value,\"devbox_upgrade_packages\":$upgrade_value}" \
     -i "$ansible_inventory" "$ansible_apply_playbook" \
