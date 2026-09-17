@@ -31,11 +31,12 @@ Owned elsewhere:
 
 - Skíðblaðnir invitation, fleet operation, acceptance, lifetime, reboot, and outage workflows;
 - Skíðblaðnir release certification and cross-artifact Android validation;
-- isolation for unattended unsafe agents. Automated/default launches cannot
-  select unsafe permission modes. An owner manually invoking a Codex client
-  may explicitly opt into native `--yolo`; the installer adds no isolation.
+- isolation for unattended agents. skid's accepted launch policy selects
+  provider permission bypasses through its host profiles (§8.5); the installer
+  adds no isolation. other launch paths retain their existing permission policy.
 
-Trade-off: the upstream handoff adds one cross-repository dependency, and safe agent defaults reduce unattended autonomy; both remove product/security policy from a host installer.
+trade-off: the upstream handoff adds one cross-repository dependency. skid owns
+its unattended launch policy; the installer declares and validates its exact flags.
 
 ## 3. Goals
 
@@ -463,7 +464,10 @@ Rules:
   `skid.integration`; they MUST NOT restart the gateway. Shared Codex clients
   do not add a second notifier policy; account notification remains user-owned.
 - Configure only private `/v1` Tailscale Serve through the supported CLI. No Funnel, private LocalAPI credentials, ETag/CAS client, or hostname surgery. A stale mapping produces one exact recovery `ACTION` and exit `2`.
-- Default host configs MUST NOT contain `--dangerously-bypass-approvals-and-sandbox`, Claude automatic permission mode, or an equivalent bypass.
+- host configs launch all three codex profiles with `--yolo` and claude-work
+  with `--dangerously-skip-permissions`, retaining its fixed identity plugin.
+  these deployment-owned arguments apply to new skid agent sessions on every
+  host; account wrappers continue forwarding caller arguments unchanged.
 
 Release pin schema (`assets/skidbladnir/release-pin.json`):
 
@@ -587,7 +591,7 @@ Packages B and C may run in parallel after A; D may join once G has published th
 7. Busy Docker, tmux binary, desktop-session, and reboot-required changes are reported, never forced.
 8. Unsupported platform/host, symlinked protected path, invalid secret, or public Serve state fails closed.
 9. Static checks discover all tracked shell, JSON, YAML, and plist files; Ansible syntax and contract tests run in CI.
-10. Production executable/configuration paths contain no doctor or `converge` symbol, legacy command alias, automated/default unsafe agent bypass, private Tailscale LocalAPI, executable `@latest`, pipe-to-shell installer, or automatic Arch removal. Human wrappers forward native arguments without parsing or imposing policy; Jarvis retains its closed, independently constrained interface. Documentation and negative tests may name forbidden behavior.
+10. production executable/configuration paths contain no doctor or `converge` symbol, legacy command alias, private tailscale localapi, executable `@latest`, pipe-to-shell installer, or automatic arch removal. automated permission bypasses are limited to §8.5's exact flags in the three skid host configs and their validator. human wrappers forward native arguments without parsing or imposing policy; jarvis retains its closed, independently constrained interface. documentation and negative tests may name forbidden behavior.
 11. README documents only the two apply journeys, prerequisites, actions, and cutover boundary.
 
 ## 13. Implementation rule

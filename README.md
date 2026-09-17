@@ -165,6 +165,11 @@ Automation uses `--json` and returned `--ref` values; literal prompts can use
 `skid send --ref REF --stdin --json`. The shared profile instructions include
 this vocabulary, startup-dialog handling, and unknown-outcome rules.
 
+new skid agent sessions use `--yolo` for codex and
+`--dangerously-skip-permissions` for claude. the three host configs own these
+flags; claude retains its identity plugin. apply the host configuration to
+activate the policy for new sessions. existing sessions keep their launch policy.
+
 `interrupt` retains the session. `stop` attempts provider halt and then closes it;
 `kill` only closes that exact terminal. Shared work can survive another linked
 session. Phone and desktop navigation are shared; skid no longer creates grouped

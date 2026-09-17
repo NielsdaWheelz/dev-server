@@ -321,21 +321,17 @@ test_pin_and_config_contract() (
       "$line Personal Forge shared launcher"
   done
   jq -e '
-    all(.profiles[] | select(.provider == "Codex"); .arguments == []) and
+    all(.profiles[] | select(.provider == "Codex"); .arguments == ["--yolo"]) and
     all(.profiles[] | select(.provider == "Claude");
       .command as $command |
       ($command |
         if endswith("/.local/bin/claude")
         then sub("/\\.local/bin/claude$"; "")
         else sub("/bin/claude-work$"; "") end) as $home |
-      .arguments == ["--plugin-dir", ($home + "/.local/share/skidbladnir/claude-agent-identity")])
+      .arguments == ["--dangerously-skip-permissions", "--plugin-dir", ($home + "/.local/share/skidbladnir/claude-agent-identity")])
   ' \
     "$repo_dir"/assets/skidbladnir/host-config-*.json >/dev/null ||
-    fail 'safe host configs do not activate only the fixed Claude plugin'
-  if grep -En 'dangerously-bypass-approvals-and-sandbox|permission-mode|skip-permissions' \
-    "$repo_dir"/assets/skidbladnir/host-config-*.json >"$fixture/unsafe-host-config"; then
-    fail 'host configs contain an approval or permission bypass'
-  fi
+    fail 'host configs must launch Codex with --yolo and Claude with --dangerously-skip-permissions and the fixed identity plugin'
 )
 
 test_platform_scoped_declared_inputs() (

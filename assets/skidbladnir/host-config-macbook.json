@@ -10,7 +10,7 @@
       "command": "/Users/nnandal/bin/codex",
       "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
-      "arguments": []
+      "arguments": ["--yolo"]
     },
     {
       "key": "work",
@@ -19,7 +19,7 @@
       "command": "/Users/nnandal/bin/codex-work",
       "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-work"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
-      "arguments": []
+      "arguments": ["--yolo"]
     },
     {
       "key": "work2",
@@ -28,7 +28,7 @@
       "command": "/Users/nnandal/bin/codex-work2",
       "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-work2"}],
       "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
-      "arguments": []
+      "arguments": ["--yolo"]
     },
     {
       "key": "claude-work",
@@ -37,7 +37,7 @@
       "command": "/Users/nnandal/bin/claude-work",
       "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/Users/nnandal/.claude-work"}],
       "foregroundSignatures": [{"argument0": "/Users/nnandal/.local/bin/claude"}],
-      "arguments": ["--plugin-dir", "/Users/nnandal/.local/share/skidbladnir/claude-agent-identity"]
+      "arguments": ["--dangerously-skip-permissions", "--plugin-dir", "/Users/nnandal/.local/share/skidbladnir/claude-agent-identity"]
     }
   ]
 }

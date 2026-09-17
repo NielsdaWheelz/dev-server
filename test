@@ -206,6 +206,13 @@ for relative in paths:
     text = path.read_text(encoding="utf-8")
     for label, pattern in patterns:
         for match in pattern.finditer(text):
+            if (label == "unsafe agent bypass" and relative in {
+                "assets/skidbladnir/host-config-arch.json",
+                "assets/skidbladnir/host-config-devbox.json",
+                "assets/skidbladnir/host-config-macbook.json",
+                "lib/skidbladnir.sh",
+            } and match.group(0) in {"--yolo", "dangerously-skip-permissions"}):
+                continue
             line = text.count("\n", 0, match.start()) + 1
             failures.append(f"{relative}:{line}: {label}: {match.group(0)}")
     joined = text.replace("\\\n", " ")
