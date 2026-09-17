@@ -6,17 +6,12 @@ dev_server_home_dir="${dev_server_home_dir:-$HOME}"
 dev_server_assets_root="${dev_server_assets_root:-$dev_server_root/assets}"
 
 dev_server_changes='|'
-dev_server_change_count=0
 dev_server_result_mutations=0
 dev_server_result_activations=0
 dev_server_result_deferrals=0
 dev_server_result_actions=0
 dev_server_result_errors=0
 dev_server_install_status='UP TO DATE'
-
-log() {
-  printf '%s\n' "$*"
-}
 
 warn() {
   printf 'warning: %s\n' "$*" >&2
@@ -181,7 +176,6 @@ record_change() {
   esac
 
   dev_server_changes="${dev_server_changes}${change_id}|"
-  dev_server_change_count=$((dev_server_change_count + 1))
 }
 
 has_change() {
@@ -462,17 +456,6 @@ _dev_server_atomic_install_impl() (
     die "could not promote managed target: $target"
   _dev_server_staging=''
 
-  if ! _dev_server_run "$privilege" test -f "$target" ||
-    _dev_server_run "$privilege" test -L "$target"; then
-    die "promoted managed target is invalid: $target"
-  fi
-  observed_mode="$(_dev_server_observed_mode "$privilege" "$target")" ||
-    die "promoted managed target mode is unreadable: $target"
-  if ! _dev_server_run "$privilege" cmp -s "$source" "$target" ||
-    [[ "$observed_mode" != "$desired_mode" ]]; then
-    die "promoted managed target failed verification: $target"
-  fi
-
   printf '%s\n' "$status"
 )
 
@@ -493,15 +476,15 @@ atomic_install_file_as_root() {
   _dev_server_atomic_install root "$@"
 }
 
-_dev_server_install_managed() {
-  local privilege="$1"
-  local source="$2"
-  local target="$3"
-  local mode="$4"
-  local change_id="$5"
+install_managed_file() {
+  (($# == 4)) || die 'install_managed_file needs source, target, mode, and change identifier'
+  local source="$1"
+  local target="$2"
+  local mode="$3"
+  local change_id="$4"
 
   _dev_server_validate_change "$change_id"
-  _dev_server_atomic_install "$privilege" "$source" "$target" "$mode" || return 1
+  atomic_install_file "$source" "$target" "$mode" || return 1
   case "$dev_server_install_status" in
   INSTALLED | UPDATED)
     record_change "$change_id"
@@ -510,16 +493,6 @@ _dev_server_install_managed() {
   UP\ TO\ DATE) ;;
   *) die "invalid atomic install result: $dev_server_install_status" ;;
   esac
-}
-
-install_managed_file() {
-  (($# == 4)) || die 'install_managed_file needs source, target, mode, and change identifier'
-  _dev_server_install_managed user "$@"
-}
-
-install_managed_file_as_root() {
-  (($# == 4)) || die 'install_managed_file_as_root needs source, target, mode, and change identifier'
-  _dev_server_install_managed root "$@"
 }
 
 _dev_server_ensure_directory_impl() (
