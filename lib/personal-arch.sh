@@ -123,13 +123,11 @@ personal_arch_require_runtime() {
   require_cmd gammastep
   require_cmd ghostty
   require_cmd gsettings
-  require_cmd pgrep
   require_cmd stat
   require_cmd sudo
   require_cmd systemctl
   require_cmd xfce4-clipman
   require_cmd xfconf-query
-  require_cmd xinput
 
 }
 
@@ -482,93 +480,46 @@ PY
   printf '%s\n' "$dev_server_install_status"
 )
 
-personal_arch_apply_touchpad_runtime() {
-  local device
-  local motion_points_string
-  local motion_step
-  local source
-  local -a motion_points=()
-
-  [[ "${XDG_SESSION_TYPE:-}" == x11 ]] || return 1
-  device="$(xinput list --id-only 'SYNA1D31:00 06CB:CD48 Touchpad' 2>/dev/null || true)"
-  [[ -n "$device" ]] || return 1
-
-  source="$(personal_arch_asset xorg/90-dev-server-huawei-touchpad.conf)"
-  motion_points_string="$(awk -F '"' '$2 == "AccelPointsMotion" { print $4; exit }' "$source")"
-  motion_step="$(awk -F '"' '$2 == "AccelStepMotion" { print $4; exit }' "$source")"
-  read -r -a motion_points <<<"$motion_points_string"
-  [[ "${#motion_points[@]}" -ge 2 && -n "$motion_step" ]] ||
-    die "invalid touchpad motion curve: $source"
-
-  xinput set-prop --type=float --format=32 "$device" \
-    'libinput Accel Custom Fallback Points' 0.0 1.0
-  xinput set-prop "$device" 'libinput Accel Custom Fallback Step' 1.0
-  xinput set-prop --type=float --format=32 "$device" \
-    'libinput Accel Custom Motion Points' "${motion_points[@]}"
-  xinput set-prop "$device" 'libinput Accel Custom Motion Step' "$motion_step"
-  xinput set-prop --type=float --format=32 "$device" \
-    'libinput Accel Custom Scroll Points' 0.0 1.0
-  xinput set-prop "$device" 'libinput Accel Custom Scroll Step' 1.0
-  xinput set-prop "$device" 'libinput Accel Profile Enabled' 0 0 1
-  xinput set-prop "$device" 'libinput Click Method Enabled' 0 1
-  xinput set-prop "$device" 'libinput Disable While Typing Enabled' 1
-  xinput set-prop "$device" 'libinput Horizontal Scroll Enabled' 1
-  xinput set-prop "$device" 'libinput Natural Scrolling Enabled' 1
-  xinput set-prop "$device" 'libinput Scroll Method Enabled' 1 0 0
-  xinput set-prop "$device" 'libinput Scrolling Pixel Distance' 15
-  xinput set-prop "$device" 'libinput Tapping Enabled' 1
-  xinput set-prop "$device" 'libinput Tapping Button Mapping Enabled' 1 0
-  xinput set-prop "$device" 'libinput Tapping Drag Enabled' 1
-  xinput set-prop "$device" 'libinput Tapping Drag Lock Enabled' 0
-}
-
-personal_arch_touchpad_runtime_configured() {
-  local properties
-
-  [[ "${XDG_SESSION_TYPE:-}" == x11 ]] || return 1
-  properties="$(xinput list-props 'SYNA1D31:00 06CB:CD48 Touchpad' 2>/dev/null)" ||
-    return 1
-  grep -Eq 'libinput Accel Profile Enabled \([0-9]+\):[[:space:]]+0, 0, 1' \
-    <<<"$properties" &&
-    grep -Eq 'libinput Accel Custom Motion Step \([0-9]+\):[[:space:]]+0\.105000' \
-      <<<"$properties" &&
-    grep -Eq 'libinput Natural Scrolling Enabled \([0-9]+\):[[:space:]]+1' \
-      <<<"$properties" &&
-    grep -Eq 'libinput Click Method Enabled \([0-9]+\):[[:space:]]+0, 1' \
-      <<<"$properties"
-}
-
-personal_arch_desktop_session_running() {
+personal_arch_report_touchpad_activation() {
   local status
 
-  if pgrep -u "$(id -u)" -x xfce4-session >/dev/null 2>&1; then
+  if python3 - "$1" <<'PY'; then
+import os
+from pathlib import Path
+import sys
+
+modified = os.stat(sys.argv[1]).st_mtime_ns // 1_000_000_000
+boot = next(int(line.split()[1]) for line in Path("/proc/stat").read_text().splitlines()
+            if line.startswith("btime "))
+ticks_per_second = os.sysconf("SC_CLK_TCK")
+for process in Path("/proc").iterdir():
+    if not process.name.isdecimal():
+        continue
+    try:
+        record = (process / "stat").read_bytes()
+    except (FileNotFoundError, ProcessLookupError):
+        continue
+    identity, fields = record.rsplit(b") ", 1)
+    name = identity.split(b"(", 1)[1]
+    fields = fields.split()
+    if name != b"Xorg" or fields[0] in (b"Z", b"X"):
+        continue
+    started = boot + int(fields[19]) // ticks_per_second
+    # Equal seconds cannot establish that the configuration predates Xorg.
+    if modified >= started:
+        raise SystemExit(2)
+PY
     return 0
   else
     status=$?
   fi
-  ((status == 1)) || die 'could not inspect the XFCE session process'
-  return 1
-}
-
-personal_arch_reconcile_touchpad_runtime() {
-  (($# == 1)) || die 'personal_arch_reconcile_touchpad_runtime needs change state'
-  local changed="$1"
-  [[ "$changed" == 0 || "$changed" == 1 ]] ||
-    die 'invalid touchpad change state'
-
-  if ((changed == 0)) && personal_arch_touchpad_runtime_configured; then
-    return 0
-  fi
-  if personal_arch_apply_touchpad_runtime; then
-    render_result RELOADED "touchpad policy"
-  elif personal_arch_desktop_session_running; then
-    record_change desktop.session
-  fi
+  ((status == 2)) || die 'could not inspect touchpad policy activation'
+  render_result DEFERRED "touchpad policy" \
+    'restart the display server or reboot to activate the installed policy'
 }
 
 personal_arch_configure_root_files() {
   local dracut_sha
-  local touchpad_changed=0
 
   ensure_directory "$(dev_server_home)/.local/state" 0755
   ensure_directory "$(dev_server_home)/.local/state/dev-server" 0700
@@ -610,9 +561,8 @@ personal_arch_configure_root_files() {
   personal_arch_install_root_file \
     "$(personal_arch_asset xorg/90-dev-server-huawei-touchpad.conf)" \
     /etc/X11/xorg.conf.d/90-dev-server-huawei-touchpad.conf 0644
-  [[ "$dev_server_install_status" == "UP TO DATE" ]] || touchpad_changed=1
-
-  personal_arch_reconcile_touchpad_runtime "$touchpad_changed"
+  personal_arch_report_touchpad_activation \
+    /etc/X11/xorg.conf.d/90-dev-server-huawei-touchpad.conf
 }
 
 personal_arch_configure_zram() {
