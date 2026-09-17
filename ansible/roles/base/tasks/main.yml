@@ -1,4 +1,21 @@
 ---
+- name: Ensure needrestart configuration directory exists
+  ansible.builtin.file:
+    path: /etc/needrestart/conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Defer package-triggered shared Codex restarts
+  ansible.builtin.copy:
+    dest: /etc/needrestart/conf.d/99-dev-server-codex.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      $nrconf{override_rc}->{qr(^codex-shared@(personal|work|work2)\.service$)} = 0;
+
 - name: Install apt keyring directories
   ansible.builtin.file:
     path: "{{ item }}"
