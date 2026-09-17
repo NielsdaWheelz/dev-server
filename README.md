@@ -171,12 +171,19 @@ install -d -m 0700 secrets
 create the deployment key only if absent, place the bootstrap auth key in the
 specified file, then run `./devbox apply`.
 
-for a missing server, apply creates it, limits temporary public ssh to the
-operator's exact ipv4 `/32`, establishes its openssh host key over the tailnet,
-and removes bootstrap ingress on success or failure. an existing server uses
-strict tailnet openssh as `dev-server-deploy`; it never opens public ssh or
-resets host keys. `dev-server` remains the unprivileged `niels` operator alias.
-missing github enrollment produces one exact manual action.
+for a missing server, apply creates it with the steady private firewall, waits
+for tailscale enrollment, and establishes its openssh host key over the tailnet.
+initial trust relies on the unique named peer authenticated by tailscale; the
+peer name is not a cryptographic binding to the hetzner server id. only after
+cloud-init succeeds, native openssh is confirmed, and both principals authenticate
+does apply save that key. public ssh is never opened.
+
+an existing server uses strict tailnet openssh as `dev-server-deploy` and never
+resets host keys. if creation stops before key enrollment, inspect cloud-init,
+tailscale, and `/etc/ssh/ssh_host_ed25519_key.pub` through the hetzner console.
+verify and enroll that key locally under `dev-server` before rerunning apply;
+there is no automatic trust reset. `dev-server` remains the unprivileged `niels`
+operator alias. missing github enrollment produces one exact manual action.
 
 ansible owns ubuntu configuration. apply retains installed package versions;
 upgrade selects current candidates. pgvector remains exactly pinned and held.

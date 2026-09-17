@@ -233,14 +233,25 @@ provisioning remain upstream operations.
 
 ## devbox boundary
 
-for an absent server: create, open operator `/32` bootstrap ssh, establish
-cloud-init/tailscale and the deployment principal, enroll the host key over the
-tailnet, close temporary ingress on success or failure, then run ansible.
+for an absent server: reject any existing named tailnet peer, create with the
+steady private firewall, and wait for cloud-init to establish tailscale and the
+deployment principal. enroll the unique named peer's openssh host key over the
+tailnet into a private candidate. all subsequent connections check that key
+strictly. promote it only after cloud-init succeeds, tailscale ssh is confirmed
+disabled, and the operator key authenticates. then run ansible. neither the
+cloud firewall nor ufw opens public ssh, including on failed creation.
+
+initial enrollment trusts the peer name authenticated by tailscale's control
+plane; it does not cryptographically bind the peer to a hetzner server id.
+the operator must keep that name unambiguous during creation. if creation stops
+before trust promotion, use the hetzner console to repair cloud-init/tailscale
+and verify `/etc/ssh/ssh_host_ed25519_key.pub`, then enroll the verified key
+locally under `dev-server`. rerunning uses the strict existing-server path.
 
 for an existing server: strict tailnet openssh as `dev-server-deploy`, steady
 cloud firewall, ansible. never open public ssh or reset known host keys. the
 only preflight mutation is repair of the exact steady hetzner firewall to close
-interrupted bootstrap exposure. hetzner and tailnet observations are authoritative;
+unexpected ingress. hetzner and tailnet observations are authoritative;
 there is no executable or duplicate local cloud-state file.
 
 hetzner firewall and ufw independently deny public application/ssh ingress.
