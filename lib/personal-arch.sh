@@ -57,64 +57,8 @@ personal_arch_validate_declared_inputs() {
     [[ -f "$asset" && ! -L "$asset" ]] || die "invalid personal asset: $asset"
   done
 
-  personal_arch_validate_cursor_state
-
   dev_server_validate_active_sha dracut
   dev_server_validate_active_sha zram
-}
-
-personal_arch_validate_cursor_state() {
-  local home settings_file
-
-  home="$(dev_server_home)"
-  settings_file="$home/.config/Cursor/User/settings.json"
-  require_cmd python3
-  python3 - "$home" "$settings_file" <<'PY' ||
-import json
-import os
-import stat
-import sys
-
-home, settings = map(os.path.abspath, sys.argv[1:])
-
-def unique_object(pairs):
-    value = {}
-    for key, item in pairs:
-        if key in value:
-            raise ValueError(f"duplicate JSON key: {key}")
-        value[key] = item
-    return value
-
-def reject_constant(value):
-    raise ValueError(f"invalid JSON constant: {value}")
-
-for path in (os.path.join(home, ".config"),
-             os.path.join(home, ".config", "Cursor"),
-             os.path.join(home, ".config", "Cursor", "User")):
-    try:
-        mode = os.lstat(path).st_mode
-    except FileNotFoundError:
-        continue
-    if not stat.S_ISDIR(mode):
-        raise SystemExit(f"Cursor settings directory is invalid: {path}")
-
-try:
-    metadata = os.lstat(settings)
-except FileNotFoundError:
-    raise SystemExit(0)
-if not stat.S_ISREG(metadata.st_mode):
-    raise SystemExit(f"Cursor settings file is invalid: {settings}")
-if metadata.st_size == 0:
-    raise SystemExit(0)
-if metadata.st_size > 1024 * 1024:
-    raise SystemExit(f"Cursor settings file is too large: {settings}")
-with open(settings, "r", encoding="utf-8") as stream:
-    value = json.load(stream, object_pairs_hook=unique_object,
-                      parse_constant=reject_constant)
-if not isinstance(value, dict):
-    raise SystemExit(f"Cursor settings must be an object: {settings}")
-PY
-    die "Cursor settings topology or schema is invalid: $settings_file"
 }
 
 personal_arch_require_runtime() {
@@ -397,8 +341,6 @@ personal_arch_configure_cursor() {
   local settings_file
   local status
 
-  personal_arch_validate_cursor_state
-
   current_extensions="$(cursor --list-extensions --show-versions 2>/dev/null)" ||
     die "could not inspect Cursor extensions"
   if ! grep -Fqx 'anysphere.remote-ssh@1.1.14' <<<"$current_extensions"; then
@@ -414,11 +356,10 @@ personal_arch_configure_cursor() {
     render_result "$status" "Cursor Remote SSH extension" "1.1.14"
   fi
 
-  personal_arch_validate_cursor_state
-
   home="$(dev_server_home)"
   settings_dir="$home/.config/Cursor/User"
   settings_file="$settings_dir/settings.json"
+  ensure_directory "$home/.config" 0755
   ensure_directory "$home/.config/Cursor" 0755
   ensure_directory "$settings_dir" 0755
   status="$(personal_arch_install_cursor_settings "$settings_file")" ||
@@ -434,6 +375,8 @@ personal_arch_install_cursor_settings() (
   local settings_file="$1"
   local temporary=''
 
+  require_cmd python3
+
   cleanup_cursor_settings_stage() {
     [[ -z "$temporary" ]] || rm -f -- "$temporary"
   }
@@ -447,6 +390,7 @@ personal_arch_install_cursor_settings() (
   python3 - "$settings_file" "$temporary" <<'PY' || return 1
 import json
 import os
+import stat
 import sys
 
 source, target = sys.argv[1:]
@@ -462,12 +406,23 @@ def unique_object(pairs):
 def reject_constant(value):
     raise ValueError(f"invalid JSON constant: {value}")
 
-if os.path.getsize(source) if os.path.exists(source) else 0:
-    with open(source, "r", encoding="utf-8") as stream:
-        value = json.load(stream, object_pairs_hook=unique_object,
-                          parse_constant=reject_constant)
-else:
+try:
+    metadata = os.lstat(source)
+except FileNotFoundError:
     value = {}
+else:
+    if not stat.S_ISREG(metadata.st_mode):
+        raise SystemExit(f"Cursor settings file is invalid: {source}")
+    if metadata.st_size > 1024 * 1024:
+        raise SystemExit(f"Cursor settings file is too large: {source}")
+    if metadata.st_size:
+        with open(source, "r", encoding="utf-8") as stream:
+            value = json.load(stream, object_pairs_hook=unique_object,
+                              parse_constant=reject_constant)
+    else:
+        value = {}
+if not isinstance(value, dict):
+    raise SystemExit(f"Cursor settings must be an object: {source}")
 value["remote.SSH.remotePlatform"] = {
     "dev-server": "linux",
     "macbook": "macOS",
