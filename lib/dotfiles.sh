@@ -22,67 +22,6 @@ dotfiles_validate_declared_inputs() {
   done
 }
 
-dotfiles_validate_inputs() {
-  dotfiles_validate_declared_inputs
-  require_cmd git python3
-  dotfiles_validate_local_state
-}
-
-dotfiles_validate_git_state() {
-  local url="$1"
-  local dest="$2"
-  local slug plugin_root path name target
-
-  slug="$(basename "$dest")"
-  plugin_root="$(dev_server_home)/.local/share/dev-server/git-plugins/$slug"
-  if [[ -e "$plugin_root" || -L "$plugin_root" ]]; then
-    [[ -d "$plugin_root" && ! -L "$plugin_root" ]] ||
-      die "Git plugin generation root is invalid: $plugin_root"
-    while IFS= read -r -d '' path; do
-      name="$(basename "$path")"
-      if [[ "$name" == .git-stage.?????? ]]; then
-        [[ -d "$path" && ! -L "$path" ]] ||
-          die "interrupted Git plugin stage is invalid: $path"
-      elif [[ "$name" =~ ^[0-9a-f]{40}$ ]]; then
-        dotfiles_git_repo_exact "$url" "$name" "$path" ||
-          die "Git plugin generation is invalid: $path"
-      else
-        die "unowned Git plugin generation remains: $path"
-      fi
-    done < <(find "$plugin_root" -mindepth 1 -maxdepth 1 -print0)
-  fi
-
-  [[ -e "$dest" || -L "$dest" ]] || return 0
-  [[ -L "$dest" ]] ||
-    die "unmanaged Git plugin at $dest; move it aside after preserving local changes, then rerun apply"
-  target="$(readlink "$dest")"
-  case "$target" in
-  "$plugin_root"/[0-9a-f][0-9a-f]*) ;;
-  *) die "Git plugin link is outside its managed generations: $dest" ;;
-  esac
-  name="$(basename "$target")"
-  [[ "$name" =~ ^[0-9a-f]{40}$ ]] || die "Git plugin link is invalid: $dest"
-  dotfiles_git_repo_exact "$url" "$name" "$target" ||
-    die "Git plugin link target is invalid: $dest"
-}
-
-dotfiles_validate_local_state() {
-  local home
-
-  require_cmd find git
-  home="$(dev_server_home)"
-  dotfiles_validate_git_state \
-    https://github.com/Aloxaf/fzf-tab "$home/.zsh/fzf-tab"
-  dotfiles_validate_git_state \
-    https://github.com/romkatv/powerlevel10k.git "$home/.zsh/powerlevel10k"
-  dotfiles_validate_git_state \
-    https://github.com/tmux-plugins/tpm "$home/.tmux/plugins/tpm"
-  dotfiles_validate_git_state \
-    https://github.com/tmux-plugins/tmux-resurrect "$home/.tmux/plugins/tmux-resurrect"
-  dotfiles_validate_git_state \
-    https://github.com/tmux-plugins/tmux-continuum "$home/.tmux/plugins/tmux-continuum"
-}
-
 dotfiles_install_dirs() {
   local home
 
@@ -235,7 +174,6 @@ dotfiles_install_git_repo() {
   local url="$1"
   local commit="$2"
   local dest="$3"
-  local change="$4"
   local generation plugin_root slug status head existing_target
 
   [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "invalid Git plugin commit: $commit"
@@ -279,10 +217,7 @@ dotfiles_install_git_repo() {
   fi
   dotfiles_atomic_symlink "$generation" "$dest" ||
     die "could not activate the declared Git plugin generation: $dest"
-  dotfiles_git_repo_exact "$url" "$commit" "$generation" ||
-    die "activated Git plugin generation is invalid: $dest"
   dotfiles_prune_git_generations "$url" "$generation" "$plugin_root"
-  record_change "$change"
   render_result "$status" "Git plugin" "$(basename "$dest")@$commit"
 }
 
@@ -293,11 +228,11 @@ dotfiles_install_shell_repos() {
   dotfiles_install_git_repo \
     https://github.com/Aloxaf/fzf-tab \
     24105b15714bfec37989ed5c5b6e60f572253019 \
-    "$home/.zsh/fzf-tab" shell.config || return 1
+    "$home/.zsh/fzf-tab" || return 1
   dotfiles_install_git_repo \
     https://github.com/romkatv/powerlevel10k.git \
     3308262dfbd743b6e1d3956a2b5572f7a049d692 \
-    "$home/.zsh/powerlevel10k" shell.config || return 1
+    "$home/.zsh/powerlevel10k" || return 1
 }
 
 dotfiles_install_tmux_repos() {
@@ -307,50 +242,24 @@ dotfiles_install_tmux_repos() {
   dotfiles_install_git_repo \
     https://github.com/tmux-plugins/tpm \
     e261deb1b47614eed3400089ce7197dc68acc4eb \
-    "$home/.tmux/plugins/tpm" tmux.config || return 1
+    "$home/.tmux/plugins/tpm" || return 1
   dotfiles_install_git_repo \
     https://github.com/tmux-plugins/tmux-resurrect \
     cff343cf9e81983d3da0c8562b01616f12e8d548 \
-    "$home/.tmux/plugins/tmux-resurrect" tmux.config || return 1
+    "$home/.tmux/plugins/tmux-resurrect" || return 1
   dotfiles_install_git_repo \
     https://github.com/tmux-plugins/tmux-continuum \
     0698e8f4b17d6454c71bf5212895ec055c578da0 \
-    "$home/.tmux/plugins/tmux-continuum" tmux.config || return 1
-}
-
-dotfiles_reload_tmux_if_changed() {
-  local desired_sha observed_sha status
-
-  command -v tmux >/dev/null 2>&1 || return 0
-  if tmux list-sessions >/dev/null 2>&1; then
-    status=0
-  else
-    status=$?
-  fi
-  ((status == 0)) || {
-    ((status == 1)) && return 0
-    die 'could not observe tmux session state'
-  }
-
-  desired_sha="$(dev_server_sha256 "$(dev_server_home)/.tmux.conf")"
-  if observed_sha="$(tmux show-options -gv @dev-server-config-sha 2>/dev/null)"; then
-    [[ "$observed_sha" =~ ^[0-9a-f]{64}$ ]] ||
-      die 'running tmux config identity is invalid'
-    [[ "$observed_sha" == "$desired_sha" ]] && return 0
-  fi
-
-  tmux source-file "$(dev_server_home)/.tmux.conf" ||
-    die 'could not reload tmux configuration'
-  tmux set-option -gq @dev-server-config-sha "$desired_sha" ||
-    die 'could not record the running tmux config identity'
-  render_result RELOADED tmux
+    "$home/.tmux/plugins/tmux-continuum" || return 1
 }
 
 dotfiles_install() {
-  dotfiles_validate_inputs
+  tmux_report_binary_activation
+  dotfiles_validate_declared_inputs
+  require_cmd find git python3
   dotfiles_install_dirs || return 1
   dotfiles_install_files || return 1
   dotfiles_install_tmux_repos || return 1
-  dotfiles_reload_tmux_if_changed || return 1
+  tmux_reload_if_changed || return 1
   dotfiles_install_shell_repos || return 1
 }

@@ -71,8 +71,9 @@ it consumes the staged controller closure and reports real changes. native
 package managers own resolution and partial-install repair; there is no package
 rollback layer.
 
-`lib/common.sh` owns atomic file installation, hashes, typed changes, and result
-rendering. it does not own package policy, service names, product schemas, or a
+`lib/common.sh` owns atomic file installation, hashes, and result rendering.
+subsystems own their activation state and pending deferrals.
+the shared library does not own package policy, service names, product schemas, or a
 workflow engine. product configuration semantics belong to the product;
 deployment declarations own host paths, pins, identities, and launch arguments.
 
@@ -96,7 +97,7 @@ more privileged consumer. interrupted activation must remain retryable.
 
 | change | owning consumer action |
 |---|---|
-| `tmux.config` | source a running server once; store loaded hash in its live option |
+| `tmux.config` | source a running server once; store the config and plugin-generation hash in its live option |
 | `shell.config`, `ai.instructions` | future shells or agent sessions |
 | `claude.settings` | live claude sessions reload settings and re-run the status line |
 | `desktop.session` | defer to login or manual ghostty reload |
@@ -108,6 +109,10 @@ more privileged consumer. interrupted activation must remain retryable.
 | `tailscale.serve` | reconcile private mapping; no tailscale restart |
 | `system.reboot` | report only |
 
+tmux activation belongs to `lib/tmux.sh` on all three hosts. package installation
+precedes it; dotfiles install the config and immutable plugin generations before
+reload. the live identity advances only after successful reload.
+
 consumer actions remain beside their subsystem. deduplicate within one run.
 never infer a restart target from arbitrary processes. native package/service
 scripts retain their supported behavior; report other stale sessions/services
@@ -118,6 +123,12 @@ rather than trying to restart them. temporary candidates are cleaned on exit.
 exact-host desktop/hardware policy is separate from package installation.
 macos homebrew owns ghostty and its font; the repo owns its configuration.
 arch policy owns its declared hardware, boot, touchpad, and desktop settings.
+xorg exclusively applies the touchpad declaration at display-server startup.
+every apply compares the installed file's modification time with all live xorg
+process starts and reports deferred activation until the file predates them.
+equal-second ordering remains deferred; exited processes are not consumers.
+restart the display server or reboot to activate changes. timestamp ordering
+assumes normal host clock continuity and does not verify device behavior.
 macos tailscale is app-store-owned; verify and optionally start the exact app,
 but never install, update, replace, or sign in to it.
 
@@ -179,7 +190,8 @@ unless `--restart-codex` authorizes drain/restart. changed coupled inputs requir
 `ACTION`/exit `2` before replacement. the flag also restarts unchanged services
 to pick up a newer binary. cli-only upgrades do not change the operational
 identity or trigger a restart. record active identity only after all three
-services pass verification. never kill tmux or native history.
+services pass activity, socket permission, and connection checks. a connection
+proves transport readiness, not a provider turn. never kill tmux or native history.
 
 jarvis cognition remains a local client with its own permission policy.
 worker control belongs to skid's common peer cli and target user authority;
@@ -233,14 +245,25 @@ provisioning remain upstream operations.
 
 ## devbox boundary
 
-for an absent server: create, open operator `/32` bootstrap ssh, establish
-cloud-init/tailscale and the deployment principal, enroll the host key over the
-tailnet, close temporary ingress on success or failure, then run ansible.
+for an absent server: reject any existing named tailnet peer, create with the
+steady private firewall, and wait for cloud-init to establish tailscale and the
+deployment principal. enroll the unique named peer's openssh host key over the
+tailnet into a private candidate. all subsequent connections check that key
+strictly. promote it only after cloud-init succeeds, tailscale ssh is confirmed
+disabled, and the operator key authenticates. then run ansible. neither the
+cloud firewall nor ufw opens public ssh, including on failed creation.
+
+initial enrollment trusts the peer name authenticated by tailscale's control
+plane; it does not cryptographically bind the peer to a hetzner server id.
+the operator must keep that name unambiguous during creation. if creation stops
+before trust promotion, use the hetzner console to repair cloud-init/tailscale
+and verify `/etc/ssh/ssh_host_ed25519_key.pub`, then enroll the verified key
+locally under `dev-server`. rerunning uses the strict existing-server path.
 
 for an existing server: strict tailnet openssh as `dev-server-deploy`, steady
 cloud firewall, ansible. never open public ssh or reset known host keys. the
 only preflight mutation is repair of the exact steady hetzner firewall to close
-interrupted bootstrap exposure. hetzner and tailnet observations are authoritative;
+unexpected ingress. hetzner and tailnet observations are authoritative;
 there is no executable or duplicate local cloud-state file.
 
 hetzner firewall and ufw independently deny public application/ssh ingress.
@@ -260,6 +283,12 @@ service, credentials, backups, and recovery. preserve those contents and nexus
 state. jarvis is independent of developer rootless docker and is not an apply
 postcondition.
 
+a reviewed pgvector pin change authorizes the exact package upgrade or rollback
+on apply or upgrade. refresh package metadata when the installed version differs,
+then install the declared version and keep it held. qualification of application
+and database compatibility remains with jarvis; no other pgvector version is a
+fallback.
+
 ## verification and development
 
 package-manager success proves the requested package operation. additional
@@ -268,8 +297,14 @@ credential preservation, private serve/ssh ingress, absent bootstrap exposure,
 and required host/account boundaries. report pending login, reboot, container,
 and tmux activation. no separate doctor duplicates these checks.
 
-there are no automated tests or ci checks in this checkout. verify changes
-directly and record the result until [the replacement](docs/issues/test-system-rebuild.md).
+there is no retained test suite or repository ci workflow. for each bounded code
+change, verify the finding, write a temporary integration or live test, define
+the change, and compare behavior before and after it. review adversarially,
+remove the temporary test, and record evidence and limitations in the pr.
+commit, push, merge, and clean up before starting the next slice. run syntax
+and native checks appropriate to the boundary; temporary tests do not provide
+ongoing regression coverage.
+
 use the owned arch host for live arch acceptance. a service check is not a
 provider model turn or device acceptance claim.
 

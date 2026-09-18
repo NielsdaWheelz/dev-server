@@ -5,18 +5,12 @@ dev_server_root="$(cd "$dev_server_lib_dir/.." && pwd -P)"
 dev_server_home_dir="${dev_server_home_dir:-$HOME}"
 dev_server_assets_root="${dev_server_assets_root:-$dev_server_root/assets}"
 
-dev_server_changes='|'
-dev_server_change_count=0
 dev_server_result_mutations=0
 dev_server_result_activations=0
 dev_server_result_deferrals=0
 dev_server_result_actions=0
 dev_server_result_errors=0
 dev_server_install_status='UP TO DATE'
-
-log() {
-  printf '%s\n' "$*"
-}
 
 warn() {
   printf 'warning: %s\n' "$*" >&2
@@ -59,18 +53,6 @@ dev_server_tailscale_cli() {
     return 0
   fi
   dev_server_app_store_tailscale_cli /Applications/Tailscale.app
-}
-
-dev_server_tmux_version_is_valid() {
-  (($# == 1)) || return 1
-
-  local LC_ALL=C
-  local version="$1"
-
-  [[ "$version" == 'tmux '* ]] || return 1
-  version="${version#tmux }"
-  ((${#version} >= 1 && ${#version} <= 60)) || return 1
-  [[ "$version" =~ ^[!-~]+$ ]]
 }
 
 dev_server_sha256() {
@@ -169,42 +151,6 @@ for declared in sys.argv[2:]:
 print(digest.hexdigest())
 PY
     die 'could not fingerprint declared inputs'
-}
-
-_dev_server_validate_change() {
-  local change_id="$1"
-
-  [[ "$change_id" =~ ^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)+$ ]] ||
-    die "invalid change identifier: $change_id"
-
-  case "$change_id" in
-  tmux.config | shell.config | ai.instructions | claude.settings | desktop.session | ssh.config | docker.config | skid.unit | skid.runtime | skid.native | skid.integration | codex.runtime | tailscale.serve | system.reboot) ;;
-  *) die "unregistered change identifier: $change_id" ;;
-  esac
-}
-
-record_change() {
-  (($# == 1)) || die 'record_change needs one change identifier'
-  local change_id="$1"
-  _dev_server_validate_change "$change_id"
-
-  case "$dev_server_changes" in
-  *"|$change_id|"*) return 0 ;;
-  esac
-
-  dev_server_changes="${dev_server_changes}${change_id}|"
-  dev_server_change_count=$((dev_server_change_count + 1))
-}
-
-has_change() {
-  (($# == 1)) || die 'has_change needs one change identifier'
-  local change_id="$1"
-  _dev_server_validate_change "$change_id"
-
-  case "$dev_server_changes" in
-  *"|$change_id|"*) return 0 ;;
-  *) return 1 ;;
-  esac
 }
 
 _dev_server_print_result() {
@@ -474,17 +420,6 @@ _dev_server_atomic_install_impl() (
     die "could not promote managed target: $target"
   _dev_server_staging=''
 
-  if ! _dev_server_run "$privilege" test -f "$target" ||
-    _dev_server_run "$privilege" test -L "$target"; then
-    die "promoted managed target is invalid: $target"
-  fi
-  observed_mode="$(_dev_server_observed_mode "$privilege" "$target")" ||
-    die "promoted managed target mode is unreadable: $target"
-  if ! _dev_server_run "$privilege" cmp -s "$source" "$target" ||
-    [[ "$observed_mode" != "$desired_mode" ]]; then
-    die "promoted managed target failed verification: $target"
-  fi
-
   printf '%s\n' "$status"
 )
 
@@ -505,33 +440,21 @@ atomic_install_file_as_root() {
   _dev_server_atomic_install root "$@"
 }
 
-_dev_server_install_managed() {
-  local privilege="$1"
-  local source="$2"
-  local target="$3"
-  local mode="$4"
-  local change_id="$5"
+install_managed_file() {
+  (($# == 4)) || die 'install_managed_file needs source, target, mode, and result subject'
+  local source="$1"
+  local target="$2"
+  local mode="$3"
+  local subject="$4"
 
-  _dev_server_validate_change "$change_id"
-  _dev_server_atomic_install "$privilege" "$source" "$target" "$mode" || return 1
+  atomic_install_file "$source" "$target" "$mode" || return 1
   case "$dev_server_install_status" in
   INSTALLED | UPDATED)
-    record_change "$change_id"
-    render_result "$dev_server_install_status" "$change_id" "$target"
+    render_result "$dev_server_install_status" "$subject" "$target"
     ;;
   UP\ TO\ DATE) ;;
   *) die "invalid atomic install result: $dev_server_install_status" ;;
   esac
-}
-
-install_managed_file() {
-  (($# == 4)) || die 'install_managed_file needs source, target, mode, and change identifier'
-  _dev_server_install_managed user "$@"
-}
-
-install_managed_file_as_root() {
-  (($# == 4)) || die 'install_managed_file_as_root needs source, target, mode, and change identifier'
-  _dev_server_install_managed root "$@"
 }
 
 _dev_server_ensure_directory_impl() (

@@ -9,6 +9,7 @@ from pathlib import Path
 import pwd
 import re
 import shlex
+import socket
 import stat
 import sys
 import time
@@ -44,11 +45,11 @@ def fields(value, expected):
         invalid()
 
 
-def absolute(value, canonical=True):
+def absolute(value):
     if (not isinstance(value, str) or not value.startswith("/") or value.startswith("//")
             or len(value.encode("utf-8")) > 4096
             or any(ord(character) < 32 or ord(character) == 127 for character in value)
-            or (canonical and os.path.normpath(value) != value) or value == "/"):
+            or os.path.normpath(value) != value or value == "/"):
         invalid()
     return value
 
@@ -126,6 +127,40 @@ def grant_socket(config, key):
     raise TimeoutError
 
 
+def verify_socket(config, key):
+    path = Path(profile(config, key)["endpoint"][7:])
+    uid = pwd.getpwnam(config["development_user"]).pw_uid
+    workstation = config.get("host") in ("macbook", "arch")
+    gid = None if workstation else grp.getgrnam(config["client_group"]).gr_gid
+    ready_mode = 0o600 if workstation else 0o660
+    allowed_modes = (0o600, 0o700) if workstation else (0o660,)
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            if workstation:
+                parent = path.parent.lstat()
+                if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != uid
+                        or stat.S_IMODE(parent.st_mode) != 0o700):
+                    raise SystemExit("ERROR  shared Codex socket ownership or permissions differ")
+            item = path.lstat()
+            if (not stat.S_ISSOCK(item.st_mode) or item.st_uid != uid
+                    or (not workstation and item.st_gid != gid)
+                    or stat.S_IMODE(item.st_mode) not in allowed_modes):
+                raise SystemExit("ERROR  shared Codex socket ownership or permissions differ")
+            # Native workstation bind publishes 0700 before its asynchronous chmod.
+            # Only the final permission state permits successful verification.
+            if stat.S_IMODE(item.st_mode) == ready_mode:
+                with socket.socket(socket.AF_UNIX) as client:
+                    client.settimeout(1)
+                    client.connect(str(path))
+                return
+        except (FileNotFoundError, ConnectionRefusedError, TimeoutError):
+            pass
+        if time.monotonic() >= deadline:
+            raise SystemExit("ERROR  shared Codex socket did not become available")
+        time.sleep(0.1)
+
+
 def discovery_links(config, *, allow_missing_accounts):
     links = []
     try:
@@ -172,7 +207,7 @@ def main():
     parser.add_argument("--config", default=CONFIG)
     parser.add_argument("--host", choices=("devbox", "macbook", "arch"), default="devbox")
     parser.add_argument("mode", choices=("validate", "launcher",
-                                         "server", "grant-socket",
+                                         "server", "grant-socket", "verify-socket",
                                          "check-discovery", "install-discovery"))
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -215,9 +250,12 @@ def main():
             if changed:
                 print("CHANGED codex.runtime")
         return
-    if args.mode in ("server", "grant-socket") and len(args.arguments) == 1:
+    if args.mode in ("server", "grant-socket", "verify-socket") and len(args.arguments) == 1:
         key = args.arguments[0]
         row = profile(config, key)
+        if args.mode == "verify-socket":
+            verify_socket(config, key)
+            return
         if args.mode == "grant-socket":
             grant_socket(config, key)
             return

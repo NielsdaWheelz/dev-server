@@ -22,34 +22,6 @@ packages_arch_process_identity() {
   printf '%s\0%s\n' "$package" "$version" | dev_server_sha256_stream
 }
 
-packages_arch_reconcile_tmux_activation() {
-  local client_version server_version status
-
-  client_version="$(tmux -V 2>/dev/null)" ||
-    die "could not resolve installed tmux version"
-  dev_server_tmux_version_is_valid "$client_version" ||
-    die "installed tmux version is invalid"
-  if tmux list-sessions >/dev/null 2>&1; then
-    server_version="$(tmux display-message -p '#{version}' 2>/dev/null)" || {
-      render_result DEFERRED tmux \
-        "running server version could not be observed; restart it manually"
-      return 0
-    }
-    if [[ "$server_version" != "${client_version#tmux }" ]]; then
-      render_result DEFERRED tmux \
-        "running sessions keep the prior server until manually restarted"
-    fi
-    return 0
-  else
-    status=$?
-  fi
-  if ((status != 1)); then
-    render_result DEFERRED tmux \
-      "session state could not be proven idle; restart it manually"
-    return 0
-  fi
-}
-
 packages_arch_reconcile_docker_activation() {
   local version="$1"
   local containers desired_sha service_status
@@ -144,7 +116,6 @@ packages_install() {
   local -a pacman_arguments=(-Syu --needed --noconfirm)
   local packages_after
   local packages_before
-  local tmux_after
 
   packages_validate_inputs
   require_cmd pacman
@@ -180,9 +151,6 @@ packages_install() {
   fi
 
   dev_server_prepare_active_dir
-  tmux_after="$(packages_arch_version tmux || true)"
-  [[ -n "$tmux_after" ]] || die "could not resolve installed tmux package version"
-  packages_arch_reconcile_tmux_activation
   docker_after="$(packages_arch_version docker || true)"
   packages_arch_reconcile_docker_activation "$docker_after"
 }

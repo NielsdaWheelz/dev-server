@@ -22,8 +22,8 @@ manual action is required; `1` means failure; `64` means invalid invocation.
 rerun after fixing the reported problem. `--help` lists the public commands.
 
 [the specification](SPEC.md) defines ownership, activation, and failure behavior.
-there are currently no automated tests, runner, or ci checks. direct verification
-is required until [the test-system rebuild](docs/issues/test-system-rebuild.md).
+there is no retained test suite or repository ci workflow. changes use temporary
+integration tests and direct verification; evidence belongs in the pull request.
 
 ## workstation
 
@@ -51,6 +51,14 @@ policy, ai tools/shared codex services, then skid. desktop login, reboot, busy
 containers, and tmux binary activation are reported as `DEFERRED`. repo-owned
 activation never forces them. native package installation/upgrade scripts can
 still restart their services; schedule upgrades accordingly.
+
+arch touchpad policy lives in
+[`assets/xorg/90-dev-server-huawei-touchpad.conf`](assets/xorg/90-dev-server-huawei-touchpad.conf).
+xorg loads it when the display server starts. apply reports `DEFERRED` on every
+run while an existing xorg process predates the installed policy; restart the
+display server or reboot when convenient. this timestamp check tracks pending
+activation, not device behavior. `xorg-xinput` is no longer required; apply and
+upgrade do not remove an already installed package.
 
 macos installs ghostty and its meslo font through homebrew. edit
 [`assets/dotfiles/ghostty-macos.config`](assets/dotfiles/ghostty-macos.config);
@@ -174,15 +182,25 @@ install -d -m 0700 secrets
 create the deployment key only if absent, place the bootstrap auth key in the
 specified file, then run `./devbox apply`.
 
-for a missing server, apply creates it, limits temporary public ssh to the
-operator's exact ipv4 `/32`, establishes its openssh host key over the tailnet,
-and removes bootstrap ingress on success or failure. an existing server uses
-strict tailnet openssh as `dev-server-deploy`; it never opens public ssh or
-resets host keys. `dev-server` remains the unprivileged `niels` operator alias.
-missing github enrollment produces one exact manual action.
+for a missing server, apply creates it with the steady private firewall, waits
+for tailscale enrollment, and establishes its openssh host key over the tailnet.
+initial trust relies on the unique named peer authenticated by tailscale; the
+peer name is not a cryptographic binding to the hetzner server id. only after
+cloud-init succeeds, native openssh is confirmed, and both principals authenticate
+does apply save that key. public ssh is never opened.
+
+an existing server uses strict tailnet openssh as `dev-server-deploy` and never
+resets host keys. if creation stops before key enrollment, inspect cloud-init,
+tailscale, and `/etc/ssh/ssh_host_ed25519_key.pub` through the hetzner console.
+verify and enroll that key locally under `dev-server` before rerunning apply;
+there is no automatic trust reset. `dev-server` remains the unprivileged `niels`
+operator alias. missing github enrollment produces one exact manual action.
 
 ansible owns ubuntu configuration. apply retains installed package versions;
 upgrade selects current candidates. pgvector remains exactly pinned and held.
+a reviewed change to the qualified pgvector pin authorizes its upgrade or rollback
+on either command. package metadata refreshes when the installed version differs;
+application and database compatibility qualification belongs to jarvis.
 rootless docker setup is rebuilt only when its package, unit, or daemon config
 changes and no container is running; otherwise activation is deferred.
 
@@ -199,6 +217,20 @@ common skid cli and the target user's authority. the dedicated jarvis worker
 launcher is retired.
 
 ## development
+
+| slice | owner |
+|---|---|
+| command orchestration | `workstation`, `devbox` |
+| file installation and result reporting | `lib/common.sh` |
+| workstation packages, personal policy, dotfiles, tmux activation | `lib/packages-*.sh`, `lib/personal-*.sh`, `lib/dotfiles.sh`, `lib/tmux.sh` |
+| ai binaries, accounts, shared services | `lib/ai-tools.sh`, `lib/codex-services.sh`, `assets/codex/`, `assets/routers/ai-profile` |
+| devbox github identity and ssh client policy | `ansible/roles/github/`; `devbox` owns account enrollment checks |
+| skid deployment and host integration | `lib/skidbladnir.sh`, `assets/skidbladnir/` |
+| devbox host configuration | `ansible/roles/`, `cloud-init-devbox.template.yaml` |
+
+work one bounded slice per pr, following the
+[verification workflow](SPEC.md#verification-and-development). keep validation
+and activation with the subsystem that owns the state.
 
 edit declarations, then apply on the intended host. use upgrade for rolling
 software updates; review exact git, extension, native-control, and skid pin

@@ -2,6 +2,9 @@
 
 : "${dev_server_root:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
+personal_arch_desktop_deferred=0
+personal_arch_reboot_deferred=0
+
 personal_arch_asset() {
   printf '%s/assets/%s\n' "$dev_server_root" "$1"
 }
@@ -54,64 +57,8 @@ personal_arch_validate_declared_inputs() {
     [[ -f "$asset" && ! -L "$asset" ]] || die "invalid personal asset: $asset"
   done
 
-  personal_arch_validate_cursor_state
-
   dev_server_validate_active_sha dracut
   dev_server_validate_active_sha zram
-}
-
-personal_arch_validate_cursor_state() {
-  local home settings_file
-
-  home="$(dev_server_home)"
-  settings_file="$home/.config/Cursor/User/settings.json"
-  require_cmd python3
-  python3 - "$home" "$settings_file" <<'PY' ||
-import json
-import os
-import stat
-import sys
-
-home, settings = map(os.path.abspath, sys.argv[1:])
-
-def unique_object(pairs):
-    value = {}
-    for key, item in pairs:
-        if key in value:
-            raise ValueError(f"duplicate JSON key: {key}")
-        value[key] = item
-    return value
-
-def reject_constant(value):
-    raise ValueError(f"invalid JSON constant: {value}")
-
-for path in (os.path.join(home, ".config"),
-             os.path.join(home, ".config", "Cursor"),
-             os.path.join(home, ".config", "Cursor", "User")):
-    try:
-        mode = os.lstat(path).st_mode
-    except FileNotFoundError:
-        continue
-    if not stat.S_ISDIR(mode):
-        raise SystemExit(f"Cursor settings directory is invalid: {path}")
-
-try:
-    metadata = os.lstat(settings)
-except FileNotFoundError:
-    raise SystemExit(0)
-if not stat.S_ISREG(metadata.st_mode):
-    raise SystemExit(f"Cursor settings file is invalid: {settings}")
-if metadata.st_size == 0:
-    raise SystemExit(0)
-if metadata.st_size > 1024 * 1024:
-    raise SystemExit(f"Cursor settings file is too large: {settings}")
-with open(settings, "r", encoding="utf-8") as stream:
-    value = json.load(stream, object_pairs_hook=unique_object,
-                      parse_constant=reject_constant)
-if not isinstance(value, dict):
-    raise SystemExit(f"Cursor settings must be an object: {settings}")
-PY
-    die "Cursor settings topology or schema is invalid: $settings_file"
 }
 
 personal_arch_require_runtime() {
@@ -123,13 +70,11 @@ personal_arch_require_runtime() {
   require_cmd gammastep
   require_cmd ghostty
   require_cmd gsettings
-  require_cmd pgrep
   require_cmd stat
   require_cmd sudo
   require_cmd systemctl
   require_cmd xfce4-clipman
   require_cmd xfconf-query
-  require_cmd xinput
 
 }
 
@@ -142,7 +87,6 @@ personal_arch_install_root_file() {
   local source="$1"
   local target="$2"
   local mode="$3"
-  local change_id="${4:-}"
 
   atomic_install_file_as_root "$source" "$target" "$mode"
   # Assigned by atomic_install_file_as_root.
@@ -150,7 +94,6 @@ personal_arch_install_root_file() {
   case "$dev_server_install_status" in
   INSTALLED | UPDATED)
     render_result "$dev_server_install_status" "$target"
-    [[ -z "$change_id" ]] || record_change "$change_id"
     ;;
   UP\ TO\ DATE) ;;
   *) die "invalid install result for $target: $dev_server_install_status" ;;
@@ -192,7 +135,7 @@ personal_arch_ensure_unit() {
   if ! systemctl is-active --quiet "$unit"; then
     if ! sudo systemctl start "$unit"; then
       if [[ "$defer_for_reboot" == 1 ]] && personal_arch_reboot_pending; then
-        record_change system.reboot
+        personal_arch_reboot_deferred=1
         return 2
       fi
       die "failed to start $unit"
@@ -363,7 +306,7 @@ personal_arch_configure_xfce() {
 }
 
 personal_arch_configure_session_files() {
-  local home
+  local home asset target
 
   home="$(dev_server_home)"
   ensure_directory "$home/.config/autostart" 0755
@@ -374,21 +317,21 @@ personal_arch_configure_session_files() {
   ensure_directory "$home/.local/share/xfce4" 0755
   ensure_directory "$home/.local/share/xfce4/helpers" 0755
 
-  install_managed_file "$(personal_arch_asset dotfiles/gammastep-autostart.desktop)" \
-    "$home/.config/autostart/gammastep.desktop" 0644 desktop.session
-  install_managed_file "$(personal_arch_asset dotfiles/gammastep.config)" \
-    "$home/.config/gammastep/config.ini" 0644 desktop.session
-  install_managed_file "$(personal_arch_asset dotfiles/ghostty-autostart.desktop)" \
-    "$home/.config/autostart/ghostty.desktop" 0644 desktop.session
-  install_managed_file "$(personal_arch_asset dotfiles/ghostty.config)" \
-    "$home/.config/ghostty/config.ghostty" 0644 desktop.session
-  install_managed_file "$(personal_arch_asset dotfiles/ghostty-xfce-helper.desktop)" \
-    "$home/.local/share/xfce4/helpers/ghostty.desktop" 0644 desktop.session
-  install_managed_file "$(personal_arch_asset dotfiles/xfce4-clipman-autostart.desktop)" \
-    "$home/.config/autostart/xfce4-clipman-plugin-autostart.desktop" \
-    0644 desktop.session
-  install_managed_file "$(personal_arch_asset dotfiles/xfce4-helpers.rc)" \
-    "$home/.config/xfce4/helpers.rc" 0644 desktop.session
+  while read -r asset target; do
+    install_managed_file "$(personal_arch_asset "dotfiles/$asset")" \
+      "$home/$target" 0644 desktop.session
+    if [[ "$dev_server_install_status" != 'UP TO DATE' ]]; then
+      personal_arch_desktop_deferred=1
+    fi
+  done <<'FILES'
+gammastep-autostart.desktop .config/autostart/gammastep.desktop
+gammastep.config .config/gammastep/config.ini
+ghostty-autostart.desktop .config/autostart/ghostty.desktop
+ghostty.config .config/ghostty/config.ghostty
+ghostty-xfce-helper.desktop .local/share/xfce4/helpers/ghostty.desktop
+xfce4-clipman-autostart.desktop .config/autostart/xfce4-clipman-plugin-autostart.desktop
+xfce4-helpers.rc .config/xfce4/helpers.rc
+FILES
 }
 
 personal_arch_configure_cursor() {
@@ -397,8 +340,6 @@ personal_arch_configure_cursor() {
   local settings_dir
   local settings_file
   local status
-
-  personal_arch_validate_cursor_state
 
   current_extensions="$(cursor --list-extensions --show-versions 2>/dev/null)" ||
     die "could not inspect Cursor extensions"
@@ -415,11 +356,10 @@ personal_arch_configure_cursor() {
     render_result "$status" "Cursor Remote SSH extension" "1.1.14"
   fi
 
-  personal_arch_validate_cursor_state
-
   home="$(dev_server_home)"
   settings_dir="$home/.config/Cursor/User"
   settings_file="$settings_dir/settings.json"
+  ensure_directory "$home/.config" 0755
   ensure_directory "$home/.config/Cursor" 0755
   ensure_directory "$settings_dir" 0755
   status="$(personal_arch_install_cursor_settings "$settings_file")" ||
@@ -435,6 +375,8 @@ personal_arch_install_cursor_settings() (
   local settings_file="$1"
   local temporary=''
 
+  require_cmd python3
+
   cleanup_cursor_settings_stage() {
     [[ -z "$temporary" ]] || rm -f -- "$temporary"
   }
@@ -448,6 +390,7 @@ personal_arch_install_cursor_settings() (
   python3 - "$settings_file" "$temporary" <<'PY' || return 1
 import json
 import os
+import stat
 import sys
 
 source, target = sys.argv[1:]
@@ -463,12 +406,23 @@ def unique_object(pairs):
 def reject_constant(value):
     raise ValueError(f"invalid JSON constant: {value}")
 
-if os.path.getsize(source) if os.path.exists(source) else 0:
-    with open(source, "r", encoding="utf-8") as stream:
-        value = json.load(stream, object_pairs_hook=unique_object,
-                          parse_constant=reject_constant)
-else:
+try:
+    metadata = os.lstat(source)
+except FileNotFoundError:
     value = {}
+else:
+    if not stat.S_ISREG(metadata.st_mode):
+        raise SystemExit(f"Cursor settings file is invalid: {source}")
+    if metadata.st_size > 1024 * 1024:
+        raise SystemExit(f"Cursor settings file is too large: {source}")
+    if metadata.st_size:
+        with open(source, "r", encoding="utf-8") as stream:
+            value = json.load(stream, object_pairs_hook=unique_object,
+                              parse_constant=reject_constant)
+    else:
+        value = {}
+if not isinstance(value, dict):
+    raise SystemExit(f"Cursor settings must be an object: {source}")
 value["remote.SSH.remotePlatform"] = {
     "dev-server": "linux",
     "macbook": "macOS",
@@ -482,93 +436,46 @@ PY
   printf '%s\n' "$dev_server_install_status"
 )
 
-personal_arch_apply_touchpad_runtime() {
-  local device
-  local motion_points_string
-  local motion_step
-  local source
-  local -a motion_points=()
-
-  [[ "${XDG_SESSION_TYPE:-}" == x11 ]] || return 1
-  device="$(xinput list --id-only 'SYNA1D31:00 06CB:CD48 Touchpad' 2>/dev/null || true)"
-  [[ -n "$device" ]] || return 1
-
-  source="$(personal_arch_asset xorg/90-dev-server-huawei-touchpad.conf)"
-  motion_points_string="$(awk -F '"' '$2 == "AccelPointsMotion" { print $4; exit }' "$source")"
-  motion_step="$(awk -F '"' '$2 == "AccelStepMotion" { print $4; exit }' "$source")"
-  read -r -a motion_points <<<"$motion_points_string"
-  [[ "${#motion_points[@]}" -ge 2 && -n "$motion_step" ]] ||
-    die "invalid touchpad motion curve: $source"
-
-  xinput set-prop --type=float --format=32 "$device" \
-    'libinput Accel Custom Fallback Points' 0.0 1.0
-  xinput set-prop "$device" 'libinput Accel Custom Fallback Step' 1.0
-  xinput set-prop --type=float --format=32 "$device" \
-    'libinput Accel Custom Motion Points' "${motion_points[@]}"
-  xinput set-prop "$device" 'libinput Accel Custom Motion Step' "$motion_step"
-  xinput set-prop --type=float --format=32 "$device" \
-    'libinput Accel Custom Scroll Points' 0.0 1.0
-  xinput set-prop "$device" 'libinput Accel Custom Scroll Step' 1.0
-  xinput set-prop "$device" 'libinput Accel Profile Enabled' 0 0 1
-  xinput set-prop "$device" 'libinput Click Method Enabled' 0 1
-  xinput set-prop "$device" 'libinput Disable While Typing Enabled' 1
-  xinput set-prop "$device" 'libinput Horizontal Scroll Enabled' 1
-  xinput set-prop "$device" 'libinput Natural Scrolling Enabled' 1
-  xinput set-prop "$device" 'libinput Scroll Method Enabled' 1 0 0
-  xinput set-prop "$device" 'libinput Scrolling Pixel Distance' 15
-  xinput set-prop "$device" 'libinput Tapping Enabled' 1
-  xinput set-prop "$device" 'libinput Tapping Button Mapping Enabled' 1 0
-  xinput set-prop "$device" 'libinput Tapping Drag Enabled' 1
-  xinput set-prop "$device" 'libinput Tapping Drag Lock Enabled' 0
-}
-
-personal_arch_touchpad_runtime_configured() {
-  local properties
-
-  [[ "${XDG_SESSION_TYPE:-}" == x11 ]] || return 1
-  properties="$(xinput list-props 'SYNA1D31:00 06CB:CD48 Touchpad' 2>/dev/null)" ||
-    return 1
-  grep -Eq 'libinput Accel Profile Enabled \([0-9]+\):[[:space:]]+0, 0, 1' \
-    <<<"$properties" &&
-    grep -Eq 'libinput Accel Custom Motion Step \([0-9]+\):[[:space:]]+0\.105000' \
-      <<<"$properties" &&
-    grep -Eq 'libinput Natural Scrolling Enabled \([0-9]+\):[[:space:]]+1' \
-      <<<"$properties" &&
-    grep -Eq 'libinput Click Method Enabled \([0-9]+\):[[:space:]]+0, 1' \
-      <<<"$properties"
-}
-
-personal_arch_desktop_session_running() {
+personal_arch_report_touchpad_activation() {
   local status
 
-  if pgrep -u "$(id -u)" -x xfce4-session >/dev/null 2>&1; then
+  if python3 - "$1" <<'PY'; then
+import os
+from pathlib import Path
+import sys
+
+modified = os.stat(sys.argv[1]).st_mtime_ns // 1_000_000_000
+boot = next(int(line.split()[1]) for line in Path("/proc/stat").read_text().splitlines()
+            if line.startswith("btime "))
+ticks_per_second = os.sysconf("SC_CLK_TCK")
+for process in Path("/proc").iterdir():
+    if not process.name.isdecimal():
+        continue
+    try:
+        record = (process / "stat").read_bytes()
+    except (FileNotFoundError, ProcessLookupError):
+        continue
+    identity, fields = record.rsplit(b") ", 1)
+    name = identity.split(b"(", 1)[1]
+    fields = fields.split()
+    if name != b"Xorg" or fields[0] in (b"Z", b"X"):
+        continue
+    started = boot + int(fields[19]) // ticks_per_second
+    # Equal seconds cannot establish that the configuration predates Xorg.
+    if modified >= started:
+        raise SystemExit(2)
+PY
     return 0
   else
     status=$?
   fi
-  ((status == 1)) || die 'could not inspect the XFCE session process'
-  return 1
-}
-
-personal_arch_reconcile_touchpad_runtime() {
-  (($# == 1)) || die 'personal_arch_reconcile_touchpad_runtime needs change state'
-  local changed="$1"
-  [[ "$changed" == 0 || "$changed" == 1 ]] ||
-    die 'invalid touchpad change state'
-
-  if ((changed == 0)) && personal_arch_touchpad_runtime_configured; then
-    return 0
-  fi
-  if personal_arch_apply_touchpad_runtime; then
-    render_result RELOADED "touchpad policy"
-  elif personal_arch_desktop_session_running; then
-    record_change desktop.session
-  fi
+  ((status == 2)) || die 'could not inspect touchpad policy activation'
+  render_result DEFERRED "touchpad policy" \
+    'restart the display server or reboot to activate the installed policy'
 }
 
 personal_arch_configure_root_files() {
   local dracut_sha
-  local touchpad_changed=0
 
   ensure_directory "$(dev_server_home)/.local/state" 0755
   ensure_directory "$(dev_server_home)/.local/state/dev-server" 0700
@@ -588,7 +495,7 @@ personal_arch_configure_root_files() {
     render_result UPDATED initramfs
   fi
   if ! personal_arch_boot_consumed user "$(dev_server_active_dir)/dracut.sha256"; then
-    record_change system.reboot
+    personal_arch_reboot_deferred=1
   fi
 
   personal_arch_install_root_file \
@@ -601,7 +508,7 @@ personal_arch_configure_root_files() {
     "$(personal_arch_asset systemd-boot/loader.conf)" \
     /efi/loader/loader.conf 0640
   if ! personal_arch_boot_consumed root /efi/loader/loader.conf; then
-    record_change system.reboot
+    personal_arch_reboot_deferred=1
   fi
   personal_arch_install_root_file \
     "$(personal_arch_asset systemd/zram-generator.conf)" \
@@ -610,9 +517,8 @@ personal_arch_configure_root_files() {
   personal_arch_install_root_file \
     "$(personal_arch_asset xorg/90-dev-server-huawei-touchpad.conf)" \
     /etc/X11/xorg.conf.d/90-dev-server-huawei-touchpad.conf 0644
-  [[ "$dev_server_install_status" == "UP TO DATE" ]] || touchpad_changed=1
-
-  personal_arch_reconcile_touchpad_runtime "$touchpad_changed"
+  personal_arch_report_touchpad_activation \
+    /etc/X11/xorg.conf.d/90-dev-server-huawei-touchpad.conf
 }
 
 personal_arch_configure_zram() {
@@ -632,9 +538,7 @@ personal_arch_configure_zram() {
       dev_server_record_active_sha zram "$desired_sha"
       return 0
     fi
-    sudo systemctl daemon-reload
-    render_result RELOADED systemd "zram activation inputs changed"
-    record_change system.reboot
+    personal_arch_reboot_deferred=1
     return 0
   fi
   if ((activation_required)); then
@@ -643,7 +547,7 @@ personal_arch_configure_zram() {
   fi
   if ! sudo systemctl start systemd-zram-setup@zram0.service; then
     if personal_arch_reboot_pending; then
-      record_change system.reboot
+      personal_arch_reboot_deferred=1
       return 0
     fi
     die "failed to start systemd-zram-setup@zram0.service"
@@ -712,7 +616,9 @@ personal_arch_configure_services() {
   if ! id -nG "$user" | tr ' ' '\n' | grep -Fqx docker; then
     sudo usermod -aG docker "$user"
     render_result CHANGED "$user" "added to docker group"
-    record_change desktop.session
+    # Read by workstation_report_deferrals.
+    # shellcheck disable=SC2034
+    personal_arch_desktop_deferred=1
   fi
 
   personal_arch_ensure_unit reflector.timer
@@ -733,6 +639,8 @@ personal_arch_apply() {
   personal_arch_configure_xfce
   personal_arch_configure_services
   if personal_arch_reboot_pending; then
-    record_change system.reboot
+    # Read by workstation_report_deferrals.
+    # shellcheck disable=SC2034
+    personal_arch_reboot_deferred=1
   fi
 }

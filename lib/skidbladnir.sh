@@ -56,11 +56,12 @@ PYPIN
   uv="$base/bootstrap/bin/uv"
   marker="$release/.installed"
   wanted="$revision uv=0.11.28 python=3.12.13 claude-sdk frozen"
-  mkdir -p "$base/releases" "$home/.local/bin" || return 1
-  chmod 0700 "$base" "$base/releases" || return 1
+  ensure_directory "$base" 0700 || return 1
+  ensure_directory "$base/releases" 0700 || return 1
   if [[ ! -x "$uv" ]] || [[ "$("$uv" --version | awk '{print $2}')" != 0.11.28 ]]; then
     python3 -m venv "$base/bootstrap" || return 1
     "$base/bootstrap/bin/python" -m pip --disable-pip-version-check install --quiet --upgrade 'uv==0.11.28' || return 1
+    changed=1
   fi
   if [[ ! -f "$marker" ]] || [[ "$(cat "$marker")" != "$wanted" ]] || [[ ! -x "$release/.venv/bin/provider-runtime-control" ]]; then
     require_cmd git
@@ -75,7 +76,7 @@ PYPIN
     chmod 0600 "$marker" || return 1
     changed=1
   fi
-  wrapper="$(mktemp "$base/.wrapper.XXXXXX")" || return 1
+  wrapper="$(mktemp "${TMPDIR:-/tmp}/dev-server-native-control.XXXXXX")" || return 1
   python3 - "$release/.venv/bin/provider-runtime-control" >"$wrapper" <<'PYWRAPPER' || {
 import shlex, sys
 print('#!/bin/sh\nexec ' + shlex.quote(sys.argv[1]) + ' "$@"')
@@ -87,7 +88,6 @@ PYWRAPPER
   rm -f -- "$wrapper"
   ((status == 0)) || return "$status"
   if ((changed)) || [[ "$dev_server_install_status" != 'UP TO DATE' ]]; then
-    record_change skid.native
     render_result INSTALLED skid.native 'pinned provider helper and frozen SDK environment'
   fi
 }
@@ -946,33 +946,6 @@ skidbladnir_active_identity() {
   printf '%s\n' "$value"
 }
 
-skidbladnir_record_active_identity() (
-  local path="$1"
-  local value="$2"
-  local temporary=''
-
-  cleanup_active_identity_stage() {
-    [[ -z "$temporary" ]] || rm -f -- "$temporary"
-  }
-  trap cleanup_active_identity_stage EXIT
-  trap 'exit 129' HUP
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
-
-  temporary="$(mktemp "$(dirname "$path")/.$(basename "$path").input.XXXXXX")" || return 1
-  printf '%s\n' "$value" >"$temporary" || {
-    rm -f -- "$temporary"
-    return 1
-  }
-  chmod 0600 "$temporary" || {
-    rm -f -- "$temporary"
-    return 1
-  }
-  atomic_install_file "$temporary" "$path" 0600 || {
-    return 1
-  }
-)
-
 skidbladnir_service_state() {
   local platform="$1"
   local output rc line state='' matches=0
@@ -986,11 +959,11 @@ skidbladnir_service_state() {
     else
       rc=$?
     fi
-    if ((rc == 3)); then
-      printf '%s\n' inactive
-      return 0
-    fi
-    return 2
+    case "$rc" in
+    3) printf '%s\n' inactive ;;
+    4) printf '%s\n' absent ;;
+    *) return 2 ;;
+    esac
     ;;
   macos)
     if output="$(launchctl print "gui/$(id -u)/dev.niels.skidbladnir" 2>/dev/null)"; then
@@ -1043,16 +1016,8 @@ skidbladnir_wait_for_active() {
   return 1
 }
 
-skidbladnir_service_loaded() {
-  local state
-
-  [[ "$1" == macos ]] || return 2
-  state="$(skidbladnir_service_state "$1")" || return 2
-  [[ "$state" != absent ]]
-}
-
 skidbladnir_service_enabled() {
-  local disabled line value=''
+  local disabled line rc value=''
   local matches=0
   local pattern='^[[:space:]]*"dev[.]niels[.]skidbladnir"[[:space:]]*=>[[:space:]]*(enabled|disabled),?[[:space:]]*$'
   case "$1" in
@@ -1068,7 +1033,17 @@ skidbladnir_service_enabled() {
     ((matches <= 1)) || return 2
     [[ "$value" != disabled ]]
     ;;
-  arch | devbox) systemctl --user is-enabled --quiet skidbladnir.service ;;
+  arch | devbox)
+    if systemctl --user is-enabled --quiet skidbladnir.service; then
+      return 0
+    else
+      rc=$?
+    fi
+    case "$rc" in
+    1 | 4) return 1 ;;
+    *) return 2 ;;
+    esac
+    ;;
   *) return 1 ;;
   esac
 }
@@ -1079,7 +1054,7 @@ skidbladnir_activate_service() {
   local was_active="$3"
   local needs_activation="$4"
   local unit_changed="$5"
-  local target domain label enabled_status loaded_status
+  local target domain label enabled_status state
 
   skidbladnir_activation_status=''
   skidbladnir_enablement_changed=0
@@ -1122,24 +1097,23 @@ skidbladnir_activate_service() {
       launchctl enable "$domain/$label" || return 1
       skidbladnir_enablement_changed=1
     fi
-    if ((was_active)); then
-      if ((needs_activation)); then
-        if ((unit_changed)); then
-          launchctl bootout "$domain/$label" || return 1
-          launchctl bootstrap "$domain" "$target" || return 1
-        else
-          launchctl kickstart -k "$domain/$label" || return 1
-        fi
-        skidbladnir_activation_status=RESTARTED
-      fi
+    if ((was_active && !needs_activation)); then
+      return 0
+    fi
+    # launchd retains the loaded definition even while its process is stopped.
+    state="$(skidbladnir_service_state "$platform")" || return 1
+    if [[ "$state" != absent ]] && ((unit_changed)); then
+      launchctl bootout "$domain/$label" || return 1
+      state=absent
+    fi
+    if [[ "$state" == absent ]]; then
+      launchctl bootstrap "$domain" "$target" || return 1
     else
-      if skidbladnir_service_loaded "$platform"; then
-        launchctl kickstart -k "$domain/$label" || return 1
-      else
-        loaded_status=$?
-        ((loaded_status == 1)) || return 1
-        launchctl bootstrap "$domain" "$target" || return 1
-      fi
+      launchctl kickstart -k "$domain/$label" || return 1
+    fi
+    if ((was_active)); then
+      skidbladnir_activation_status=RESTARTED
+    else
       skidbladnir_activation_status=STARTED
     fi
     ;;
@@ -1235,6 +1209,11 @@ skidbladnir_restore_runtime() {
   local share="$home/.local/share/skidbladnir"
   local unit_generation active_status
 
+  if [[ -z "$prior_current" && "$platform" != macos && "$was_enabled" == 0 ]]; then
+    # systemd needs the unit file to remove its enablement links.
+    systemctl --user disable skidbladnir.service >/dev/null 2>&1 || return 1
+  fi
+
   if [[ -n "$active_unit" ]]; then
     unit_generation="$share/units/$active_unit"
     skidbladnir_unit_generation_owned "$unit_generation" || return 1
@@ -1295,7 +1274,7 @@ skidbladnir_restore_runtime() {
   if [[ "$was_enabled" == 0 ]]; then
     if [[ "$platform" == macos ]]; then
       launchctl disable "gui/$(id -u)/dev.niels.skidbladnir" >/dev/null 2>&1 || return 1
-    else
+    elif [[ -n "$prior_current" ]]; then
       systemctl --user disable skidbladnir.service >/dev/null 2>&1 || return 1
     fi
   fi
@@ -1319,9 +1298,6 @@ skidbladnir_install_runtime_files() {
   [[ -L "$home/.local/bin/skidbladnir" ]] || skidbladnir_command_installed=1
   skidbladnir_atomic_symlink "$home/.local/bin/skidbladnir" \
     '../share/skidbladnir/current/skidbladnir' binary || return 1
-  if ((skidbladnir_unit_changed)); then
-    record_change skid.unit
-  fi
 }
 
 skidbladnir_install_integration_file() {
@@ -1368,7 +1344,6 @@ bin/agent-hook bin/agent-hook 0755
 FILES
   ((skidbladnir_directory_changed == 0)) || skidbladnir_integration_changed=1
   if ((skidbladnir_integration_changed)); then
-    record_change skid.integration
     render_result CHANGED skid.integration 'hooks and notifications installed'
   fi
 }
@@ -1522,7 +1497,6 @@ skidbladnir_reconcile_serve() {
   ((${#post} <= 65536)) || return 1
   [[ "$(printf '%s' "$post" |
     skidbladnir_serve_classification "$skidbladnir_serve_hostname")" == desired ]] || return 1
-  record_change tailscale.serve
   render_result CHANGED tailscale.serve 'private /v1 mapping installed'
 }
 
@@ -1752,7 +1726,6 @@ skidbladnir_apply() {
       skidbladnir_discard_stage "$share" "$stage"
       die 'could not promote the Skidbladnir generation'
     }
-    record_change skid.runtime
     render_result INSTALLED skid.runtime "$generation_name"
   fi
 
@@ -1921,7 +1894,6 @@ skidbladnir_apply() {
       skidbladnir_discard_stage "$share" "$stage"
       die 'could not activate the Skidbladnir generation pointer'
     }
-    record_change skid.runtime
     pointer_changed=1
   fi
 
@@ -1978,11 +1950,11 @@ skidbladnir_apply() {
     render_result CHANGED skidbladnir.enablement 'enabled at login'
   [[ -z "$skidbladnir_activation_status" ]] ||
     render_result "$skidbladnir_activation_status" skid.runtime "$version"
-  skidbladnir_record_active_identity "$runtime_state" "$runtime_identity" || {
+  dev_server_record_active_sha skid.runtime "$runtime_identity" || {
     skidbladnir_discard_stage "$share" "$stage"
     die 'could not record the active Skidbladnir runtime identity'
   }
-  skidbladnir_record_active_identity "$unit_state" "$unit_identity" || {
+  dev_server_record_active_sha skid.unit "$unit_identity" || {
     skidbladnir_discard_stage "$share" "$stage"
     die 'could not record the active Skidbladnir unit identity'
   }

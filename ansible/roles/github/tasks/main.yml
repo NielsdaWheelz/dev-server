@@ -1,0 +1,74 @@
+---
+- name: Inspect devbox GitHub identity paths
+  ansible.builtin.stat:
+    path: "{{ item }}"
+    follow: false
+  loop:
+    - "/home/{{ devbox_user }}/.ssh/id_ed25519_github"
+    - "/home/{{ devbox_user }}/.ssh/id_ed25519_github.pub"
+  register: github_identity_paths
+
+- name: Validate devbox GitHub identity topology
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (github_identity_paths.results[0].stat.islnk |
+             default(false))
+      - >-
+        not (github_identity_paths.results[1].stat.islnk |
+             default(false))
+      - >-
+        github_identity_paths.results[0].stat.exists ==
+        github_identity_paths.results[1].stat.exists
+      - >-
+        not github_identity_paths.results[0].stat.exists or
+        (github_identity_paths.results[0].stat.isreg and
+         github_identity_paths.results[0].stat.mode == "0600")
+      - >-
+        not github_identity_paths.results[1].stat.exists or
+        github_identity_paths.results[1].stat.isreg
+    fail_msg: Invalid devbox GitHub identity topology
+
+- name: Validate existing devbox GitHub identity material
+  ansible.builtin.shell: |
+    set -euo pipefail
+    derived="$(ssh-keygen -y -f /home/{{ devbox_user }}/.ssh/id_ed25519_github | awk 'NF >= 2 { print $1 " " $2; exit }')"
+    observed="$(awk 'NF >= 2 { print $1 " " $2; exit }' /home/{{ devbox_user }}/.ssh/id_ed25519_github.pub)"
+    [[ "$derived" == "$observed" ]]
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: "{{ devbox_user }}"
+  changed_when: false
+  when: github_identity_paths.results[0].stat.exists
+
+- name: Inspect managed GitHub SSH client policy path
+  ansible.builtin.stat:
+    path: "/home/{{ devbox_user }}/.ssh/config"
+    follow: false
+  register: github_ssh_config
+
+- name: Validate managed GitHub SSH client policy path
+  ansible.builtin.assert:
+    that:
+      - not (github_ssh_config.stat.islnk | default(false))
+      - >-
+        not github_ssh_config.stat.exists or
+        github_ssh_config.stat.isreg
+    fail_msg: Invalid managed GitHub SSH client policy path
+
+- name: Install exact GitHub SSH client policy
+  ansible.builtin.copy:
+    dest: "/home/{{ devbox_user }}/.ssh/config"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0600"
+    validate: "/usr/bin/ssh -G -F %s github.com"
+    content: |
+      Host github.com
+        HostName github.com
+        User git
+        IdentityFile ~/.ssh/id_ed25519_github
+        IdentitiesOnly yes
+        AddKeysToAgent no
+        StrictHostKeyChecking accept-new

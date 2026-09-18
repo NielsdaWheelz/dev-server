@@ -5,8 +5,6 @@ base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 # shellcheck source=lib/common.sh
 source "$base_dir/lib/common.sh"
-# shellcheck source=lib/remote-devbox.sh
-source "$base_dir/lib/remote-devbox.sh"
 
 server_name='dev-server'
 server_type='cpx31'
@@ -31,7 +29,6 @@ ansible_apply_playbook="$base_dir/ansible/playbooks/apply.yml"
 ansible_config="$base_dir/ansible.cfg"
 
 server_id=''
-server_public_ip=''
 server_status=''
 firewall_id=''
 tailnet_host=''
@@ -43,10 +40,6 @@ ansible_output=''
 codex_restart_authorized=0
 devbox_upgrade=0
 steady_rules=''
-bootstrap_rules=''
-bootstrap_cidr=''
-bootstrap_cleanup_required=0
-new_host_key_established=0
 host_key_enrollment=0
 devbox_declared_stage=''
 
@@ -99,22 +92,19 @@ if len(servers) > 1:
 if not servers:
     raise SystemExit(3)
 server = servers[0]
-address = ((server.get("public_net") or {}).get("ipv4") or {}).get("ip", "")
-print("{}\t{}\t{}".format(server.get("id", ""), address,
-                           server.get("status", "")))
+print("{}\t{}".format(server.get("id", ""), server.get("status", "")))
 ' "$server_name")"
   rc=$?
   set -e
   if ((rc == 3)); then
     server_id=''
-    server_public_ip=''
     server_status=''
     return 0
   fi
   ((rc == 0)) || return 1
 
-  IFS=$'\t' read -r server_id server_public_ip server_status <<<"$observation"
-  [[ "$server_id" =~ ^[0-9]+$ && -n "$server_public_ip" ]] || return 1
+  IFS=$'\t' read -r server_id server_status <<<"$observation"
+  [[ "$server_id" =~ ^[0-9]+$ ]] || return 1
 }
 
 observe_firewall() {
@@ -162,7 +152,7 @@ for peer in peers:
         matches.append((dns_name, peer.get("Online")))
 if len(matches) > 1:
     raise SystemExit("duplicate tailnet devbox nodes")
-if not matches or not matches[0][0]:
+if not matches:
     raise SystemExit(3)
 if matches[0][1] is not True:
     raise SystemExit("tailnet devbox node is offline")
@@ -173,10 +163,6 @@ if (len(matches[0][0]) > 253 or len(labels) < 2 or
     raise SystemExit("tailnet devbox DNS name is invalid")
 print(matches[0][0])
 ' "$server_name"
-}
-
-validate_ipv4() {
-  python3 -c 'import ipaddress, sys; ipaddress.IPv4Address(sys.argv[1])' "$1"
 }
 
 steady_firewall_rules() {
@@ -191,27 +177,6 @@ steady_firewall_rules() {
   }
 ]
 JSON
-}
-
-bootstrap_firewall_rules() {
-  local cidr="$1"
-
-  printf '%s\n' '['
-  printf '%s\n' '  {'
-  printf '%s\n' '    "description": "Tailscale direct WireGuard",'
-  printf '%s\n' '    "direction": "in",'
-  printf '%s\n' '    "protocol": "udp",'
-  printf '%s\n' '    "port": "41641",'
-  printf '%s\n' '    "source_ips": ["0.0.0.0/0", "::/0"]'
-  printf '%s\n' '  },'
-  printf '%s\n' '  {'
-  printf '%s\n' '    "description": "Temporary devbox bootstrap SSH",'
-  printf '%s\n' '    "direction": "in",'
-  printf '%s\n' '    "protocol": "tcp",'
-  printf '%s\n' '    "port": "22",'
-  printf '    "source_ips": ["%s"]\n' "$cidr"
-  printf '%s\n' '  }'
-  printf '%s\n' ']'
 }
 
 firewall_rules_match() {
@@ -282,11 +247,14 @@ ssh_with_identity() {
   local identity="$2"
   local host="$3"
   local strict="$4"
-  local remote_command
+  local remote_command='' arg escaped
   local -a host_key_options=(-o IdentitiesOnly=yes)
   shift 4
 
-  remote_command="$(quote_remote_args "$@")"
+  for arg in "$@"; do
+    printf -v escaped '%q' "$arg"
+    remote_command+="$escaped "
+  done
   if ((host_key_enrollment)); then
     host_key_options=(
       -o GlobalKnownHostsFile=/dev/null
@@ -359,22 +327,8 @@ print("enabled" if prefs["RunSSH"] else "disabled")
   fi
 }
 
-wait_for_public_ssh() {
-  local attempts=60
-
-  while ((attempts > 0)); do
-    if ssh_remote "$server_public_ip" accept-new true >/dev/null 2>&1; then
-      new_host_key_established=1
-      return 0
-    fi
-    sleep 5
-    attempts=$((attempts - 1))
-  done
-  die "public bootstrap SSH did not become ready for $server_name"
-}
-
 wait_for_tailnet_host() {
-  local attempts=60 status_json
+  local attempts=180 status_json
 
   while ((attempts > 0)); do
     status_json="$("$tailscale_cli" status --json)" || return 1
@@ -388,37 +342,10 @@ wait_for_tailnet_host() {
   return 1
 }
 
-close_host_bootstrap() {
-  ((new_host_key_established == 1)) || return 0
-
-  ssh_remote "$server_public_ip" yes \
-    sudo -n -- bash -c \
-    'set -euo pipefail; cidr="$1"; ufw --force delete allow from "$cidr" to any port 22 proto tcp >/dev/null 2>&1 || true; status="$(ufw status)"; ! grep -F "$cidr" <<<"$status" | grep -Eq "(^|[[:space:]])22(/tcp)?([[:space:]]|$)"' \
-    _ "$bootstrap_cidr"
-}
-
-cleanup_bootstrap() {
-  local failed=0
-
-  close_host_bootstrap || {
-    warn 'could not prove host bootstrap UFW rule removal'
-    failed=1
-  }
-  set_firewall_rules "$steady_rules" steady || {
-    warn 'could not restore the steady Hetzner firewall rules'
-    failed=1
-  }
-  ((failed != 0)) || bootstrap_cleanup_required=0
-  return "$failed"
-}
-
 cleanup_on_exit() {
   local rc=$?
 
   trap - EXIT HUP INT TERM
-  if ((bootstrap_cleanup_required == 1)); then
-    cleanup_bootstrap || rc=1
-  fi
   [[ -z "$rendered_cloud_init" ]] || rm -f -- "$rendered_cloud_init"
   [[ -z "$ssh_include_candidate" ]] || rm -f -- "$ssh_include_candidate"
   [[ -z "$ssh_known_hosts_candidate" ]] || rm -f -- "$ssh_known_hosts_candidate"
@@ -453,9 +380,6 @@ prepare_new_host_key_candidate() {
   fi
   ssh-keygen -R "$server_name" -f "$ssh_known_hosts_candidate" >/dev/null ||
     die 'could not remove the replaced devbox alias from staged known hosts'
-  rm -f -- "$ssh_known_hosts_candidate_old"
-  ssh-keygen -R "$server_public_ip" -f "$ssh_known_hosts_candidate" >/dev/null ||
-    die 'could not remove the replaced devbox address from staged known hosts'
   rm -f -- "$ssh_known_hosts_candidate_old"
   python3 - "$ssh_known_hosts_candidate" <<'PY' ||
 import os
@@ -617,7 +541,6 @@ render_cloud_init() {
   rendered_cloud_init="$(mktemp "${TMPDIR:-/tmp}/devbox-cloud-init.XXXXXX")"
   awk \
     -v auth_key="$auth_key_base64" \
-    -v bootstrap_cidr="$bootstrap_cidr" \
     -v deploy_public_key="$deploy_public_key" \
     -v deploy_user="$deploy_user" \
     -v operator_public_key="$operator_public_key" \
@@ -625,7 +548,6 @@ render_cloud_init() {
     -v server_user="$server_user" \
     '{
       gsub("__TAILSCALE_AUTH_KEY_B64__", auth_key)
-      gsub("__BOOTSTRAP_SSH_CIDR__", bootstrap_cidr)
       gsub("__DEPLOY_PUBLIC_KEY__", deploy_public_key)
       gsub("__DEPLOY_USER__", deploy_user)
       gsub("__OPERATOR_PUBLIC_KEY__", operator_public_key)
@@ -679,7 +601,6 @@ devbox_validate_declared_inputs() {
     [[ -f "$path" && ! -L "$path" ]] || die "invalid devbox declared input: $path"
   done
   for path in \
-    __BOOTSTRAP_SSH_CIDR__:1 \
     __DEPLOY_PUBLIC_KEY__:1 \
     __DEPLOY_USER__:4 \
     __OPERATOR_PUBLIC_KEY__:1 \
@@ -737,7 +658,7 @@ preflight() {
 
   status_json="$("$tailscale_cli" status --json)" ||
     die 'could not inspect the local tailnet'
-  require_cmd awk base64 cat curl tr
+  require_cmd awk base64 cat tr
   [[ -f "$template" && ! -L "$template" ]] ||
     die "missing cloud-init template: $template"
   set +e
@@ -773,12 +694,6 @@ preflight() {
   [[ ${#auth_key} -le 4096 &&
     "$auth_key" =~ ^tskey-auth-[A-Za-z0-9_-]+$ ]] ||
     die 'Tailscale auth key has an invalid shape'
-  server_public_ip="$(curl -fsS4 https://api.ipify.org)"
-  validate_ipv4 "$server_public_ip" ||
-    die "operator public address is not IPv4: $server_public_ip"
-  bootstrap_cidr="$server_public_ip/32"
-  server_public_ip=''
-  bootstrap_rules="$(bootstrap_firewall_rules "$bootstrap_cidr")"
   render_cloud_init "$operator_public_key" "$deploy_public_key" "$auth_key"
 }
 
@@ -811,7 +726,7 @@ apply_existing_server() {
     case "$ssh_error" in
     *'Host key verification failed'* | *'Permission denied'*)
       render_result ACTION 'devbox cutover' \
-        'install the deployment principal and verify its host key, then rerun ./devbox apply'
+        'verify the deployment principal and /etc/ssh/ssh_host_ed25519_key.pub in the Hetzner console; enroll that key locally under dev-server, then rerun ./devbox apply'
       finish_results devbox
       ;;
     *) die "tailnet deployment SSH failed: ${ssh_error:-unknown error}" ;;
@@ -829,9 +744,8 @@ apply_existing_server() {
 
 apply_new_server() {
   ensure_firewall
-  bootstrap_cleanup_required=1
-  set_firewall_rules "$bootstrap_rules" bootstrap ||
-    die 'could not install bootstrap firewall rules'
+  set_firewall_rules "$steady_rules" steady ||
+    die 'could not install the steady Hetzner firewall rules'
 
   hcloud_cmd server create \
     --name "$server_name" \
@@ -848,27 +762,20 @@ apply_new_server() {
   observe_server || die 'new Hetzner devbox was not observable'
   [[ -n "$server_id" && "$server_status" == running ]] ||
     die 'new Hetzner devbox is not running'
-  validate_ipv4 "$server_public_ip" ||
-    die 'new Hetzner devbox has no valid public IPv4 address'
-  prepare_new_host_key_candidate
-  wait_for_public_ssh
-  validate_new_host_key_candidate ||
-    die 'public bootstrap SSH did not record exactly one valid devbox host key'
-  ssh_remote "$server_public_ip" yes \
-    sudo -n -- timeout 900 cloud-init status --wait ||
-    die 'cloud-init did not complete successfully'
-
   wait_for_tailnet_host >/dev/null ||
-    die 'new Hetzner devbox did not appear on the tailnet'
-  ssh_remote "$tailnet_host" yes true >/dev/null ||
-    die 'new devbox host key did not match over the tailnet'
+    die 'new Hetzner devbox did not appear on the tailnet; inspect cloud-init and Tailscale in the Hetzner console'
+  prepare_new_host_key_candidate
+  ssh_remote "$tailnet_host" accept-new true >/dev/null ||
+    die 'new devbox deployment SSH failed over the tailnet; inspect SSH and the deployment principal in the Hetzner console before verifying and enrolling the host key'
   validate_new_host_key_candidate ||
-    die 'verified devbox host key changed before trust-store promotion'
-  commit_new_host_key
-  cleanup_bootstrap || die 'bootstrap ingress cleanup failed'
+    die 'tailnet SSH did not record exactly one valid devbox host key'
+  ssh_remote "$tailnet_host" yes \
+    sudo -n -- timeout 900 cloud-init status --wait ||
+    die 'cloud-init did not complete successfully; inspect the Hetzner console before verifying and enrolling the host key'
   assert_remote_tailscale_ssh_disabled "$tailnet_host"
   ssh_operator_remote "$tailnet_host" yes true >/dev/null ||
     die 'new devbox operator SSH key was not accepted over the tailnet'
+  commit_new_host_key
   install_ssh_config
 }
 
@@ -886,7 +793,7 @@ run_ansible_apply() {
   set +e
   ANSIBLE_CONFIG="$ansible_config" \
     ANSIBLE_NOCOLOR=1 \
-    run_ansible_playbook \
+    uvx --from ansible-core==2.19.2 ansible-playbook \
     --ssh-common-args "-F $ssh_include" \
     --extra-vars "{\"devbox_codex_runtime_restart_authorized\":$codex_restart_value,\"devbox_upgrade_packages\":$upgrade_value}" \
     -i "$ansible_inventory" "$ansible_apply_playbook" \
@@ -1019,7 +926,7 @@ cmd_apply() {
   fi
   check_github_enrollment
   firewall_rules_match "$steady_rules" ||
-    die 'devbox public bootstrap ingress remains in the Hetzner firewall'
+    die 'devbox Hetzner firewall differs from the steady private rules'
   firewall_applies_only_to "$server_id" ||
     die 'devbox firewall attachment differs after apply'
   finish_results devbox

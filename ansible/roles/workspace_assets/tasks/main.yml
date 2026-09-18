@@ -30,6 +30,7 @@
     mode: "0644"
   loop:
     - common.sh
+    - tmux.sh
     - dotfiles.sh
     - ai-tools.sh
     - skidbladnir.sh

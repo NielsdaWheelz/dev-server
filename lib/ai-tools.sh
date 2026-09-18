@@ -240,11 +240,6 @@ ai_install_claude() {
   render_result "$status" "AI tool" "claude@$version"
 }
 
-ai_install_packages() {
-  ai_install_codex "${1:-0}" || return 1
-  ai_install_claude "${1:-0}" || return 1
-}
-
 ai_install_profiles() {
   local home
   local profile
@@ -291,9 +286,11 @@ ai_install_instructions() {
 # Print the claude account settings with the repo-owned statusLine key set.
 # Every other key stays as found; a missing or empty file starts from {}.
 ai_claude_settings() {
+  require_cmd python3
   python3 - "$1" "$2" <<'PY'
 import json
 import os
+import stat
 import sys
 
 settings, script = sys.argv[1:]
@@ -309,12 +306,23 @@ def unique_object(pairs):
 def reject_constant(value):
     raise ValueError(f"invalid JSON constant: {value}")
 
-if os.path.exists(settings) and os.path.getsize(settings):
-    with open(settings, "r", encoding="utf-8") as stream:
-        value = json.load(stream, object_pairs_hook=unique_object,
-                          parse_constant=reject_constant)
-else:
+try:
+    metadata = os.lstat(settings)
+except FileNotFoundError:
     value = {}
+else:
+    if not stat.S_ISREG(metadata.st_mode):
+        raise SystemExit(f"claude settings file is invalid: {settings}")
+    if metadata.st_size > 1024 * 1024:
+        raise SystemExit(f"claude settings file is too large: {settings}")
+    if metadata.st_size:
+        with open(settings, "r", encoding="utf-8") as stream:
+            value = json.load(stream, object_pairs_hook=unique_object,
+                              parse_constant=reject_constant)
+    else:
+        value = {}
+if not isinstance(value, dict):
+    raise SystemExit(f"claude settings must be an object: {settings}")
 value["statusLine"] = {"type": "command", "command": script}
 json.dump(value, sys.stdout, indent=2, ensure_ascii=False)
 sys.stdout.write("\n")
@@ -347,7 +355,8 @@ ai_install() {
   ai_require_codex_runtime
   ai_validate_inputs
   ai_install_dirs || return 1
-  ai_install_packages "${1:-0}" || return 1
+  ai_install_codex "${1:-0}" || return 1
+  ai_install_claude "${1:-0}" || return 1
   ai_install_profiles || return 1
   ai_install_instructions || return 1
   ai_install_statusline || return 1

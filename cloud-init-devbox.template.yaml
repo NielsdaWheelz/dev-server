@@ -1,6 +1,6 @@
 #cloud-config
 hostname: __SERVER_NAME__
-timezone: America/Los_Angeles
+timezone: UTC
 package_update: false
 package_upgrade: false
 ssh_pwauth: false
@@ -49,13 +49,9 @@ write_files:
       #!/usr/bin/env bash
       set -euxo pipefail
       export DEBIAN_FRONTEND=noninteractive
-      bootstrap_cidr="__BOOTSTRAP_SSH_CIDR__"
 
       cleanup() {
         set +e
-        if command -v ufw >/dev/null 2>&1; then
-          ufw --force delete allow from "$bootstrap_cidr" to any port 22 proto tcp >/dev/null 2>&1 || true
-        fi
         rm -f \
           /root/.devbox-tailscale-auth-key \
           /usr/local/sbin/devbox-bootstrap \
@@ -90,7 +86,6 @@ write_files:
       systemctl reload ssh
       ufw default deny incoming
       ufw default allow outgoing
-      ufw allow from "$bootstrap_cidr" to any port 22 proto tcp
       ufw allow in on tailscale0
       ufw --force enable
 
