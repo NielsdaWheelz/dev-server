@@ -14,6 +14,7 @@
     - assets/dotfiles
     - assets/routers
     - assets/codex
+    - assets/claude
     - assets/skidbladnir
     - assets/skidbladnir/claude-agent-identity
     - assets/skidbladnir/claude-agent-identity/.claude-plugin
@@ -54,6 +55,14 @@
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../assets/routers/ai-profile"
     dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/routers/ai-profile"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0755"
+
+- name: Install exact claude status line script
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/claude/statusline.sh"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/claude/statusline.sh"
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: "0755"
