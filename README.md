@@ -115,8 +115,11 @@ services even when their inputs are unchanged; tmux sessions survive.
 paths and principals. [`assets/agent-instructions.md`](assets/agent-instructions.md)
 is installed into the five account homes as `AGENTS.md` or `CLAUDE.md`. edit the
 repo source; apply replaces the installed copies. new sessions load changes.
-project instructions, skills, settings, history, and authentication remain
-separately owned.
+[`assets/claude/statusline.sh`](assets/claude/statusline.sh) is installed as
+`~/bin/claude-statusline` and set as the `statusLine` command in both claude
+account `settings.json` files; running sessions pick it up on the next update.
+project instructions, skills, other settings keys, history, and authentication
+remain separately owned.
 
 ## agent fleet
 

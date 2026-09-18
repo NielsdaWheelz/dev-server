@@ -23,6 +23,7 @@ NODE
 ai_validate_inputs() {
   local instructions
   local profile
+  local statusline
 
   profile="$(dev_server_assets_dir)/routers/ai-profile"
   [[ -f "$profile" && ! -L "$profile" ]] ||
@@ -30,6 +31,9 @@ ai_validate_inputs() {
   instructions="$(dev_server_assets_dir)/agent-instructions.md"
   [[ -f "$instructions" && ! -L "$instructions" && -s "$instructions" ]] ||
     die "invalid shared AI instructions: $instructions"
+  statusline="$(dev_server_assets_dir)/claude/statusline.sh"
+  [[ -f "$statusline" && ! -L "$statusline" && -s "$statusline" ]] ||
+    die "invalid claude status line script: $statusline"
   ai_codex_host validate || die 'invalid shared Codex declaration'
 }
 
@@ -284,6 +288,61 @@ ai_install_instructions() {
   done
 }
 
+# Print the claude account settings with the repo-owned statusLine key set.
+# Every other key stays as found; a missing or empty file starts from {}.
+ai_claude_settings() {
+  python3 - "$1" "$2" <<'PY'
+import json
+import os
+import sys
+
+settings, script = sys.argv[1:]
+
+def unique_object(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key: {key}")
+        value[key] = item
+    return value
+
+def reject_constant(value):
+    raise ValueError(f"invalid JSON constant: {value}")
+
+if os.path.exists(settings) and os.path.getsize(settings):
+    with open(settings, "r", encoding="utf-8") as stream:
+        value = json.load(stream, object_pairs_hook=unique_object,
+                          parse_constant=reject_constant)
+else:
+    value = {}
+value["statusLine"] = {"type": "command", "command": script}
+json.dump(value, sys.stdout, indent=2, ensure_ascii=False)
+sys.stdout.write("\n")
+PY
+}
+
+ai_install_statusline() {
+  local home script settings temporary account
+
+  home="$(dev_server_home)"
+  script="$home/bin/claude-statusline"
+  install_managed_file "$(dev_server_assets_dir)/claude/statusline.sh" \
+    "$script" 0755 claude.settings || return 1
+  for account in .claude .claude-work; do
+    settings="$home/$account/settings.json"
+    temporary="$(mktemp "$home/$account/.settings.json.XXXXXX")" || return 1
+    if ! ai_claude_settings "$settings" "$script" >"$temporary"; then
+      rm -f -- "$temporary"
+      return 1
+    fi
+    if ! install_managed_file "$temporary" "$settings" 0644 claude.settings; then
+      rm -f -- "$temporary"
+      return 1
+    fi
+    rm -f -- "$temporary" || return 1
+  done
+}
+
 ai_install() {
   ai_require_codex_runtime
   ai_validate_inputs
@@ -291,4 +350,5 @@ ai_install() {
   ai_install_packages "${1:-0}" || return 1
   ai_install_profiles || return 1
   ai_install_instructions || return 1
+  ai_install_statusline || return 1
 }

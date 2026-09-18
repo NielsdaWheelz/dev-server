@@ -81,7 +81,7 @@ deployment declarations own host paths, pins, identities, and launch arguments.
 managed files use compare-before-write and same-filesystem atomic promotion.
 verify bytes and mode before rename; preserve credentials and account state.
 a managed file is entirely repo-owned except explicitly named parser-backed
-keys, currently cursor's `remote.SSH.remotePlatform`. intentional symlinks have
+keys, currently cursor's `remote.SSH.remotePlatform` and claude's `statusLine`. intentional symlinks have
 explicit owners and targets; do not overwrite conflicting foreign paths.
 
 critical activation compares desired identity with observed/recorded active
@@ -98,6 +98,7 @@ more privileged consumer. interrupted activation must remain retryable.
 |---|---|
 | `tmux.config` | source a running server once; store loaded hash in its live option |
 | `shell.config`, `ai.instructions` | future shells or agent sessions |
+| `claude.settings` | live claude sessions reload settings and re-run the status line |
 | `desktop.session` | defer to login or manual ghostty reload |
 | `ssh.config` | validate, then reload ssh |
 | `docker.config` | rebuild/restart only with no running containers; otherwise defer |
@@ -144,8 +145,11 @@ interactive zsh aliases separately add `--yolo` for all three codex profiles and
 bypasses an alias.
 
 `assets/agent-instructions.md` supplies the five account instruction files,
-installed as mode `0600`. authentication, settings, history, project
-instructions, and skills remain user-owned. updates affect new sessions.
+installed as mode `0600`. `assets/claude/statusline.sh` is installed as
+`~/bin/claude-statusline`, and both claude account `settings.json` files carry a
+repo-owned `statusLine` key pointing at it; every other settings key,
+authentication, history, project instructions, and skills remain user-owned.
+instruction updates affect new sessions; status line updates apply live.
 
 ## shared codex services
 
