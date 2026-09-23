@@ -532,3 +532,321 @@ ensure_directory() {
 ensure_directory_as_root() {
   _dev_server_ensure_directory root "$@"
 }
+
+dev_server_strict_json_file() {
+  local path="$1"
+  local maximum_bytes="$2"
+
+  python3 - "$path" "$maximum_bytes" <<'PY'
+import json
+import os
+import stat
+import sys
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+def reject_constant(value):
+    raise ValueError(f"invalid JSON constant: {value}")
+
+path, maximum = sys.argv[1], int(sys.argv[2])
+mode = os.lstat(path).st_mode
+if not stat.S_ISREG(mode):
+    raise SystemExit(1)
+with open(path, "rb") as stream:
+    encoded = stream.read(maximum + 1)
+if not encoded or len(encoded) > maximum:
+    raise SystemExit(1)
+json.loads(encoded.decode("utf-8"), object_pairs_hook=unique_object,
+           parse_constant=reject_constant)
+PY
+}
+
+dev_server_download() {
+  (($# == 2)) || die 'dev_server_download needs a url and an output path'
+  curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 \
+    --output "$2" "$1"
+}
+
+dev_server_acquire_lock() {
+  (($# == 3)) || die 'dev_server_acquire_lock needs a lock path, a descriptor, and a name'
+  local lock="$1"
+  local descriptor="$2"
+  local name="$3"
+
+  [[ "$descriptor" =~ ^[3-9]$ ]] || die "invalid lock descriptor: $descriptor"
+  [[ ! -L "$lock" && (! -e "$lock" || -f "$lock") ]] ||
+    die "$name apply lock is invalid"
+  eval "exec $descriptor>>\"\$lock\"" || die "could not open the $name apply lock"
+  chmod 0600 "$lock" || die "could not secure the $name apply lock"
+  case "$(uname -s)" in
+  Darwin)
+    require_cmd lockf
+    lockf -s -t 0 "$descriptor" || die "$name apply is already running"
+    ;;
+  Linux)
+    require_cmd flock
+    flock -n "$descriptor" || die "$name apply is already running"
+    ;;
+  *) die "$name locking is unsupported on this platform" ;;
+  esac
+}
+
+dev_server_remove_stage() {
+  local share="$1"
+  local stage="$2"
+  local name
+
+  [[ "$(dirname "$stage")" == "$share" ]] || return 1
+  name="$(basename "$stage")"
+  [[ "$name" =~ ^\.apply\.stage\.[A-Za-z0-9]{6}$ ]] || return 1
+  [[ -d "$stage" && ! -L "$stage" ]] || return 1
+  rm -R -- "$stage"
+}
+
+dev_server_remove_stale_stages() {
+  local share="$1"
+  local stage
+  local -a stages=()
+
+  shopt -s nullglob
+  stages=("$share"/.apply.stage.*)
+  shopt -u nullglob
+  if ((${#stages[@]} > 0)); then
+    for stage in "${stages[@]}"; do
+      dev_server_remove_stage "$share" "$stage" || return 1
+    done
+  fi
+}
+
+dev_server_replace_path() {
+  python3 - "$1" "$2" <<'PY'
+import os
+import sys
+
+os.replace(sys.argv[1], sys.argv[2])
+PY
+}
+
+dev_server_atomic_symlink() (
+  local target="$1"
+  local relative="$2"
+  local directory name temporary=''
+  local attempt
+
+  dev_server_symlink_stage_cleanup() {
+    if [[ -n "$temporary" && "$(dirname "$temporary")" == "$directory" &&
+    "$(basename "$temporary")" == ".${name}.dev-server."* &&
+    -L "$temporary" ]]; then
+      rm -f -- "$temporary"
+    fi
+  }
+  trap dev_server_symlink_stage_cleanup EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  if [[ -e "$target" || -L "$target" ]]; then
+    [[ -L "$target" ]] || return 1
+    if [[ "$(readlink "$target")" == "$relative" ]]; then
+      return 0
+    fi
+  fi
+  directory="$(dirname "$target")"
+  name="$(basename "$target")"
+  for attempt in {1..32}; do
+    temporary="$directory/.$name.dev-server.$$.$RANDOM.$attempt"
+    if ln -s "$relative" "$temporary" 2>/dev/null; then
+      break
+    fi
+    temporary=''
+  done
+  [[ -n "$temporary" ]] || return 1
+  if [[ ! -L "$temporary" || "$(readlink "$temporary")" != "$relative" ]]; then
+    rm -f -- "$temporary"
+    return 1
+  fi
+  if ! dev_server_replace_path "$temporary" "$target"; then
+    rm -f -- "$temporary"
+    return 1
+  fi
+  [[ -L "$target" && "$(readlink "$target")" == "$relative" ]]
+)
+
+dev_server_remove_link() {
+  local target="$1"
+  if [[ ! -e "$target" && ! -L "$target" ]]; then
+    return 0
+  fi
+  [[ -L "$target" ]] || return 1
+  rm -f -- "$target"
+}
+
+dev_server_snapshot_file() {
+  local target="$1"
+  local snapshot="$2"
+  local mode="$3"
+
+  if [[ ! -e "$target" && ! -L "$target" ]]; then
+    : >"$snapshot.absent"
+    return
+  fi
+  [[ -f "$target" && ! -L "$target" ]] || return 1
+  install -m "$mode" "$target" "$snapshot"
+  : >"$snapshot.present"
+}
+
+dev_server_restore_file() {
+  local target="$1"
+  local snapshot="$2"
+  local mode="$3"
+
+  if [[ -f "$snapshot.present" && ! -L "$snapshot.present" &&
+    ! -e "$snapshot.absent" ]]; then
+    atomic_install_file "$snapshot" "$target" "$mode"
+  elif [[ -f "$snapshot.absent" && ! -L "$snapshot.absent" &&
+    ! -e "$snapshot.present" ]]; then
+    if [[ -e "$target" || -L "$target" ]]; then
+      [[ -f "$target" && ! -L "$target" ]] || return 1
+      rm -f -- "$target"
+    fi
+  else
+    return 1
+  fi
+}
+
+# user service observation. NAME is the launchd label on macos and the unit
+# name on arch/devbox. states: absent, inactive, active; return 2 when the
+# supervisor's answer cannot be read.
+dev_server_service_state() {
+  local platform="$1"
+  local name="$2"
+  local output rc line state='' matches=0
+  local launchd_state_pattern=$'^\tstate[[:space:]]=[[:space:]]([A-Za-z][A-Za-z[:space:]-]{0,63})$'
+
+  case "$platform" in
+  arch | devbox)
+    if output="$(systemctl --user is-active "$name" 2>/dev/null)"; then
+      rc=0
+    else
+      rc=$?
+    fi
+    # a starting, stopping or reloading server still owns its inputs and socket.
+    case "$output" in
+    active | activating | deactivating | reloading)
+      printf '%s\n' active
+      return 0
+      ;;
+    esac
+    case "$rc" in
+    3) printf '%s\n' inactive ;;
+    4) printf '%s\n' absent ;;
+    *) return 2 ;;
+    esac
+    ;;
+  macos)
+    if output="$(launchctl print "gui/$(id -u)/$name" 2>/dev/null)"; then
+      rc=0
+    else
+      rc=$?
+    fi
+    if ((rc == 113)); then
+      printf '%s\n' absent
+      return 0
+    fi
+    ((rc == 0 && ${#output} <= 65536)) || return 2
+    while IFS= read -r line; do
+      [[ "$line" == $'\tstate = '* ]] || continue
+      [[ "$line" =~ $launchd_state_pattern ]] || return 2
+      matches=$((matches + 1))
+      state="${BASH_REMATCH[1]}"
+    done <<<"$output"
+    ((matches == 1)) || return 2
+    case "$state" in
+    running | 'spawn scheduled') printf '%s\n' active ;;
+    *) printf '%s\n' inactive ;;
+    esac
+    ;;
+  *) return 2 ;;
+  esac
+}
+
+# ensure_directory without its per-directory line; callers render one aggregate.
+dev_server_directory_changed=0
+# shellcheck disable=SC2034 # read by the libraries that aggregate directory changes.
+dev_server_reconcile_directory() {
+  local output
+  output="$(ensure_directory "$1" "$2")" || return 1
+  [[ -z "$output" ]] || dev_server_directory_changed=1
+}
+
+dev_server_restore_signal_trap() {
+  local signal="$1"
+  local saved="$2"
+
+  if [[ -n "$saved" ]]; then
+    # shellcheck disable=SC2294 # trap -p emits the shell-escaped restoration command.
+    eval "$saved"
+  else
+    trap - "$signal"
+  fi
+}
+
+dev_server_service_enabled() {
+  local platform="$1"
+  local name="$2"
+  local disabled line rc value=''
+  local matches=0
+  local pattern="^[[:space:]]*\"${name//./[.]}\"[[:space:]]*=>[[:space:]]*(enabled|disabled),?[[:space:]]*$"
+
+  case "$platform" in
+  macos)
+    disabled="$(launchctl print-disabled "gui/$(id -u)" 2>/dev/null)" || return 2
+    ((${#disabled} <= 65536)) || return 2
+    while IFS= read -r line; do
+      [[ "$line" == *"\"$name\""* ]] || continue
+      [[ "$line" =~ $pattern ]] || return 2
+      matches=$((matches + 1))
+      value="${BASH_REMATCH[1]}"
+    done <<<"$disabled"
+    ((matches <= 1)) || return 2
+    [[ "$value" != disabled ]]
+    ;;
+  arch | devbox)
+    if systemctl --user is-enabled --quiet "$name"; then
+      return 0
+    else
+      rc=$?
+    fi
+    case "$rc" in
+    1 | 4) return 1 ;;
+    *) return 2 ;;
+    esac
+    ;;
+  *) return 1 ;;
+  esac
+}
+
+dev_server_service_main_pid() {
+  local platform="$1"
+  local name="$2"
+  local pid
+
+  case "$platform" in
+  arch | devbox)
+    pid="$(systemctl --user show "$name" --property MainPID --value 2>/dev/null)" || return 1
+    ;;
+  macos)
+    pid="$(launchctl print "gui/$(id -u)/$name" 2>/dev/null |
+      LC_ALL=C awk '$1 == "pid" && $2 == "=" && $3 ~ /^[1-9][0-9]*$/ {print $3}')"
+    ;;
+  *) return 1 ;;
+  esac
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  printf '%s\n' "$pid"
+}

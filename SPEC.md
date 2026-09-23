@@ -61,7 +61,8 @@ a later subsystem failure can leave earlier changes applied; rerun after repair.
 there is no whole-host transaction or duplicated all-host admission gate.
 
 workstation order is native packages, dotfiles, exact-host personal policy,
-ai tools/shared codex, skid, then remaining postconditions. linux is supported
+ai tools/shared codex, herdr, skid, then remaining postconditions. a herdr
+preflight action or apply failure stops the run before skid. linux is supported
 only on the exact owned arch host. arch elevation uses `ARCH_PASS` through
 askpass, including yay; values come from the environment or literal ignored
 repo `.env`, never evaluation. validate credentials before host changes.
@@ -103,6 +104,7 @@ more privileged consumer. interrupted activation must remain retryable.
 | `desktop.session` | defer to login or manual ghostty reload |
 | `ssh.config` | validate, then reload ssh |
 | `docker.config` | rebuild/restart only with no running containers; otherwise defer |
+| `herdr.runtime` | start once when absent; changed binary/config/unit on a running server is an operator stop, then reapply; never a restart |
 | `skid.unit`, `skid.runtime` | start or activate gateway once, with rollback |
 | `skid.integration` | future agents; no gateway restart |
 | `codex.runtime` | explicit authorized drain/restart of all three services |
@@ -197,14 +199,59 @@ jarvis cognition remains a local client with its own permission policy.
 worker control belongs to skid's common peer cli and target user authority;
 no dedicated jarvis worker launcher remains.
 
+## herdr runtime
+
+`assets/herdr/release-pin.json` is the herdr trust root: exact version, source
+commit, platform urls and executable sha256 for the raw release binaries. one
+server per host runs the pinned binary as `herdr server` under the development
+user: a user systemd unit on arch and devbox, a launchagent on macbook. it is
+login-scoped on macbook and arch; only devbox's user manager lingers. the unit
+sets `HERDR_CONFIG_PATH` to the managed `~/.local/share/herdr/config.toml`
+(automatic agent resume and every self-update check disabled) and
+`HERDR_SOCKET_PATH` to the default-session socket `~/.config/herdr/herdr.sock`,
+so a bare `herdr` in a shell attaches to the same instance. the user's own
+`~/.config/herdr/config.toml`, snapshots and detection state stay upstream's.
+the unit clears inherited herdr and xdg variables, sets `LANG`, and shares no
+lifetime with the skid gateway: `skidbladnir.service` orders after it, nothing
+requires, binds or stops the other.
+
+`herdr_preflight` runs before any mutation and returns `ACTION`/exit `2`
+without changing state for: a running server whose binary, config or unit
+differs; an unmanaged default-session snapshot before the first managed
+activation; agent-detection overrides or remote update state; named-session
+sockets; a listener on the socket whose pid is not the service's; herdr or xdg
+variables in the launchd environment. the changed-inputs line names the
+consequence (stopping ends every herdr terminal and its agents), the exact
+supervisor stop, and says not to run bare `herdr` in between; an unmanaged
+listener names its pid and `kill -TERM`; residue lines name the path to move
+aside or remove. the changed-inputs case stages and verifies the new binary
+before it reports, so the rerun after the stop cannot fail on a download. `herdr_apply` stages the
+artifact and immutable generation first and promotes `current`, the
+`~/.local/bin/herdr` link, config, unit and enablement only when the service is
+absent or inactive; it records `herdr.runtime` (binary, config and unit
+digests) only after the socket answers `ping` with the tested version and the
+bundled codex and claude detection manifests are active. a failed first
+activation stops its own candidate, removes the unit and only the snapshot it
+created, and leaves the generation unreferenced. an unchanged apply downloads,
+writes and restarts nothing. `herdr_prepare_artifact` stages the verified
+binary under the lock without promotion, for pre-window staging.
+
+herdr is never downgraded or stopped to undo a gateway change. rolling the skid
+gateway, config, unit or notifier back means checking out the last pre-pin
+dev-server commit and applying it; that release's own library restores what it
+needs, including the retired native-control helper still on disk (see
+[retirement](docs/issues/skid-legacy-asset-retirement.md)).
+
 ## skid installation
 
 `assets/skidbladnir/release-pin.json` is the release trust root: exact version,
 source commit, platform urls, and archive sha256. accept only supported release
 paths and valid schema. upstream owns packaging, product schema, release
 certification, fleet operations, and device acceptance.
-the pinned release has no standalone read-only host-config validator, so local
-admission checks remain until [that upstream gap is closed](docs/issues/skid-config-validation.md).
+the pinned release's `skidbladnir validate-host-config` admits the declared host
+config after artifact preparation; the installer keeps only deployment-owned
+checks (home-rooted paths, the four account wrappers, permission flags, and
+herdr path/socket literals equal to the unit's).
 
 under one nonblocking lock, reuse a locally verified pinned artifact or download
 and verify it. check archive digest, exact release members, manifest identity,
@@ -235,8 +282,11 @@ not restart the gateway.
 
 host configs declare codex `--yolo` and claude-work
 `--dangerously-skip-permissions`, retaining the identity plugin. these arguments
-affect new sessions. native-control source and frozen provider environment are
-separately pinned. provider sockets remain local.
+affect new sessions. the host config names the managed herdr binary, socket and
+tested version; both providers are observed through herdr terminal reads. the
+retired native-control helper is no longer managed; its installed copies stay
+only for the v0.6.0 rollback. one portable `skid-notify` writes the codex
+completion bell to its controlling terminal, if any, and otherwise exits 0. provider sockets remain local.
 
 expose only the owned private `/v1` tailscale serve mapping through supported
 cli commands. no funnel, private localapi, or hostname rewriting. a stale

@@ -780,7 +780,7 @@ apply_new_server() {
 }
 
 run_ansible_apply() {
-  local codex_restart_value=false upgrade_value=false rc skid_action_code
+  local codex_restart_value=false upgrade_value=false rc skid_action_code herdr_action_lines herdr_action_line herdr_action_subject
 
   if ((codex_restart_authorized)); then
     codex_restart_value=true
@@ -860,6 +860,25 @@ run_ansible_apply() {
     return 1
     ;;
   esac
+  # the role prints each herdr ACTION line through debug; relay them verbatim.
+  # the DEV_SERVER_HERDR_ACTION_* code is only the witness that the host exited 2.
+  herdr_action_lines="$(
+    grep -Eo '"msg": "ACTION  herdr\.[a-z]+: [^"]*"' "$ansible_output" |
+      sed -e 's/^"msg": "//' -e 's/"$//' | sort -u || true
+  )"
+  if grep -Eq 'DEV_SERVER_HERDR_ACTION_[A-Z_]+' "$ansible_output"; then
+    if [[ -z "$herdr_action_lines" ]]; then
+      rm -f -- "$ansible_output"
+      ansible_output=''
+      render_result ERROR 'herdr action' 'Ansible returned an action code without its line'
+      return 1
+    fi
+    while IFS= read -r herdr_action_line; do
+      herdr_action_subject="${herdr_action_line#ACTION  }"
+      herdr_action_subject="${herdr_action_subject%%: *}"
+      render_result ACTION "$herdr_action_subject" "${herdr_action_line#ACTION  "$herdr_action_subject": }"
+    done <<<"$herdr_action_lines"
+  fi
   rm -f -- "$ansible_output"
   ansible_output=''
 }

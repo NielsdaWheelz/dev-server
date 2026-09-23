@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.niels.herdr</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/nnandal/.local/share/herdr/current/herdr</string>
+    <string>server</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/nnandal/bin:/Users/nnandal/.local/bin:/Users/nnandal/.local/share/mise/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>LANG</key>
+    <string>en_US.UTF-8</string>
+    <key>HERDR_CONFIG_PATH</key>
+    <string>/Users/nnandal/.local/share/herdr/config.toml</string>
+    <key>HERDR_SOCKET_PATH</key>
+    <string>/Users/nnandal/.config/herdr/herdr.sock</string>
+  </dict>
+  <key>WorkingDirectory</key>
+  <string>/Users/nnandal</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key>
+  <integer>2</integer>
+  <key>ExitTimeOut</key>
+  <integer>15</integer>
+  <key>Umask</key>
+  <integer>18</integer>
+  <key>StandardOutPath</key>
+  <string>/Users/nnandal/.local/state/herdr/server.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/nnandal/.local/state/herdr/server.error.log</string>
+</dict>
+</plist>

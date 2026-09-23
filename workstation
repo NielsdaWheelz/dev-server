@@ -19,6 +19,8 @@ source "$base_dir/lib/skidbladnir.sh"
 source "$base_dir/lib/ai-tools.sh"
 # shellcheck source=lib/codex-services.sh
 source "$base_dir/lib/codex-services.sh"
+# shellcheck source=lib/herdr.sh
+source "$base_dir/lib/herdr.sh"
 
 workstation_platform=''
 workstation_target=''
@@ -192,6 +194,7 @@ workstation_preflight() {
   # shellcheck disable=SC2034
   dev_server_ai_host="$workstation_target"
   codex_services_preflight "$workstation_target" "$workstation_restart_codex"
+  herdr_preflight "$workstation_platform"
 }
 
 workstation_apply() {
@@ -210,6 +213,7 @@ workstation_apply() {
   codex_services_install
   ai_install "$workstation_upgrade"
   codex_services_activate
+  herdr_apply "$workstation_platform"
   skidbladnir_apply "$workstation_platform"
   workstation_report_deferrals
   finish_results "$workstation_target"

@@ -1,0 +1,14 @@
+# managed herdr server config, installed by dev-server at
+# ~/.local/share/herdr/config.toml and read through HERDR_CONFIG_PATH.
+# the user's own client config at ~/.config/herdr/config.toml is never touched.
+# a byte change here is a changed operational input: apply reports ACTION while
+# the server runs and installs it only after the operator stops the service.
+
+[session]
+# a cold restart creates new shells; it never resumes an agent.
+resume_agents_on_restore = false
+
+[update]
+# the release pin owns the binary; no self-update or remote manifest fetch runs.
+version_check = false
+manifest_check = false

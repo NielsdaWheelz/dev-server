@@ -47,7 +47,7 @@ still update dependencies needed by that formula. neither operation installs,
 upgrades, replaces, or signs in to the app store tailscale app.
 
 configuration is applied in order: native packages, dotfiles, exact-host personal
-policy, ai tools/shared codex services, then skid. desktop login, reboot, busy
+policy, ai tools/shared codex services, herdr, then skid. desktop login, reboot, busy
 containers, and tmux binary activation are reported as `DEFERRED`. repo-owned
 activation never forces them. native package installation/upgrade scripts can
 still restart their services; schedule upgrades accordingly.
@@ -139,21 +139,23 @@ run `skid`, `skid list`, `skid info reviewer`, or `skid enter reviewer`.
 new skid sessions use codex `--yolo` and claude
 `--dangerously-skip-permissions`, with claude's identity plugin retained.
 the three host configs own this policy. existing sessions keep their launch
-arguments. `interrupt` retains a session; `stop` attempts provider halt and closes
-it; `kill` closes only that terminal. linked work can survive another session.
+arguments. `interrupt` retains a terminal; `stop` interrupts, then requests the native
+close; `kill` closes natively. closing a final pane may close linked workspaces.
 
 release pins are authoritative. verified local artifacts are reused; unchanged
 apply does not download the skid release again. configuration changes produce
 an immutable runtime generation. failed activation restores the prior healthy
 generation. `skid` and `skidbladnir` point to the same current binary.
-local host-config admission remains until
-[upstream provides a standalone validator](docs/issues/skid-config-validation.md).
+the pinned skid binary validates its own host config before a generation is staged.
 
-provider control uses `~/.local/bin/provider-runtime-control`, installed from
-[`assets/skidbladnir/native-control.json`](assets/skidbladnir/native-control.json).
-the pinned source and frozen environment own provider dependencies. codex uses
-terminal control/history; claude-work retains native state/history. provider
-sockets stay local; peer control uses skid's authenticated private gateway.
+terminals belong to herdr: one pinned server per host from
+[`assets/herdr/release-pin.json`](assets/herdr/release-pin.json), supervised
+independently of the gateway, with agent resume and self-update disabled by
+the managed config. `herdr` in a shell attaches to that server. changing its
+binary, config or unit while it runs is reported as an action, because stopping
+it ends every herdr terminal and its agents. both providers are observed
+through terminal reads; the codex completion bell is a terminal-local `BEL`.
+provider sockets stay local; peer control uses skid's authenticated private gateway.
 
 fleet enrollment, bearer distribution, session operations, release acceptance,
 and outage recovery belong to the
@@ -225,6 +227,7 @@ launcher is retired.
 | workstation packages, personal policy, dotfiles, tmux activation | `lib/packages-*.sh`, `lib/personal-*.sh`, `lib/dotfiles.sh`, `lib/tmux.sh` |
 | ai binaries, accounts, shared services | `lib/ai-tools.sh`, `lib/codex-services.sh`, `assets/codex/`, `assets/routers/ai-profile` |
 | devbox github identity and ssh client policy | `ansible/roles/github/`; `devbox` owns account enrollment checks |
+| herdr runtime | `lib/herdr.sh`, `assets/herdr/` |
 | skid deployment and host integration | `lib/skidbladnir.sh`, `assets/skidbladnir/` |
 | devbox host configuration | `ansible/roles/`, `cloud-init-devbox.template.yaml` |
 
@@ -233,7 +236,7 @@ work one bounded slice per pr, following the
 and activation with the subsystem that owns the state.
 
 edit declarations, then apply on the intended host. use upgrade for rolling
-software updates; review exact git, extension, native-control, and skid pin
+software updates; review exact git, extension, herdr, and skid pin
 changes in the repository. use subsystem-native status commands to investigate
 a failure. there is no separate doctor or compatibility layer.
 
