@@ -7,7 +7,7 @@ critical result, and report mutations, deferrals, or required actions.
 ## commands and update policy
 
 ```text
-./workstation {apply|upgrade} [--restart-codex]
+./workstation {apply|upgrade}
 ./devbox {apply|upgrade} [--restart-codex]
 ./workstation {help|--help|-h}
 ./devbox {help|--help|-h}
@@ -17,7 +17,7 @@ critical result, and report mutations, deferrals, or required actions.
 newer installed os packages or ai tools. repository pins remain desired state:
 a changed pin is applied deliberately, including on ordinary apply.
 `upgrade` updates rolling software and then applies the same configuration.
-`--restart-codex` separately authorizes interruption of the three codex servers.
+`--restart-codex` separately authorizes interruption of the devbox's three codex servers.
 
 | owner | apply | upgrade |
 |---|---|---|
@@ -171,11 +171,15 @@ instruction updates affect new sessions; status line updates apply live.
 and devbox principals. workstation paths are projected from that declaration;
 there is no second account map or package version in it.
 
-macbook uses three launchagents; arch uses three user systemd services; devbox
-uses three system services as `niels`. workstation runtime parents/sockets are
-`0700`/`0600`; devbox normalizes only the exact parents/sockets to `0750`/`0660`
-for its intended client group. no public socket or cross-user workstation
-launcher exists. preserve all account homes and credentials.
+only the devbox runs them: three system services as `niels`, whose one client
+is jarvis's cognition. it normalizes only the exact parents/sockets to
+`0750`/`0660` for its intended client group; no public socket exists. macbook
+and arch run none: their only consumer was codex's own discovery, and an
+interactive codex without a server runs embedded. workstations keep the account
+wrappers only. the devbox pins codex 0.155.1 because 0.156 publishes the socket
+as a symlink into a private directory jarvis cannot reach
+([issue](docs/issues/codex-daemon-socket.md)); workstations track npm `latest`.
+preserve all account homes and credentials.
 
 native discovery links the account's `app-server-control/app-server-control.sock`
 to its managed endpoint. check all three before draining or changing coupled

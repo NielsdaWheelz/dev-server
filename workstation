@@ -17,21 +17,18 @@ source "$base_dir/lib/personal-macos.sh"
 source "$base_dir/lib/skidbladnir.sh"
 # shellcheck source=lib/ai-tools.sh
 source "$base_dir/lib/ai-tools.sh"
-# shellcheck source=lib/codex-services.sh
-source "$base_dir/lib/codex-services.sh"
 # shellcheck source=lib/herdr.sh
 source "$base_dir/lib/herdr.sh"
 
 workstation_platform=''
 workstation_target=''
 workstation_declared_stage=''
-workstation_restart_codex=0
 workstation_upgrade=0
 
 usage() {
   printf '%s\n' \
-    'Usage: ./workstation apply [--restart-codex]' \
-    '       ./workstation upgrade [--restart-codex]' \
+    'Usage: ./workstation apply' \
+    '       ./workstation upgrade' \
     '       ./workstation help' \
     '' \
     'apply keeps installed software; upgrade refreshes it before applying configuration.'
@@ -95,7 +92,6 @@ workstation_cleanup_on_exit() {
   local rc=$?
 
   trap - EXIT HUP INT TERM
-  codex_services_cleanup || rc=1
   if [[ -n "$workstation_declared_stage" ]]; then
     case "$workstation_declared_stage" in
     "${TMPDIR:-/tmp}"/workstation-declared.??????)
@@ -190,7 +186,6 @@ workstation_preflight() {
   # Consumed by the profile installer and shared helper.
   # shellcheck disable=SC2034
   dev_server_ai_host="$workstation_target"
-  codex_services_preflight "$workstation_target" "$workstation_restart_codex"
   herdr_preflight "$workstation_platform"
 }
 
@@ -207,9 +202,7 @@ workstation_apply() {
   else
     personal_macos_apply
   fi
-  codex_services_install
   ai_install "$workstation_upgrade"
-  codex_services_activate
   herdr_apply "$workstation_platform"
   if skidbladnir_ingress_preflight; then
     skidbladnir_apply "$workstation_platform"
@@ -232,10 +225,6 @@ main() {
   case "$operation" in
   apply | upgrade)
     [[ "$operation" != upgrade ]] || workstation_upgrade=1
-    if (($# == 1)) && [[ "$1" == --restart-codex ]]; then
-      workstation_restart_codex=1
-      shift
-    fi
     (($# == 0)) || {
       usage >&2
       return 64

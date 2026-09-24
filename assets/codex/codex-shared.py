@@ -93,10 +93,8 @@ def profile(config, key):
 
 def environment(config, row):
     account = pwd.getpwnam(config["development_user"])
-    home = config.get("home", account.pw_dir)
+    home = account.pw_dir
     path = f"{home}/bin:{home}/.local/bin:{home}/.local/share/mise/shims:"
-    if config.get("host") == "macbook":
-        path += "/opt/homebrew/bin:"
     return {"HOME": home, "USER": account.pw_name, "LOGNAME": account.pw_name,
             "CODEX_HOME": row["account_home"], "LANG": "C.UTF-8",
             "PATH": path + "/usr/local/bin:/usr/bin:/bin", "TERM": "dumb"}
@@ -130,30 +128,18 @@ def grant_socket(config, key):
 def verify_socket(config, key):
     path = Path(profile(config, key)["endpoint"][7:])
     uid = pwd.getpwnam(config["development_user"]).pw_uid
-    workstation = config.get("host") in ("macbook", "arch")
-    gid = None if workstation else grp.getgrnam(config["client_group"]).gr_gid
-    ready_mode = 0o600 if workstation else 0o660
-    allowed_modes = (0o600, 0o700) if workstation else (0o660,)
+    gid = grp.getgrnam(config["client_group"]).gr_gid
     deadline = time.monotonic() + 10
     while True:
         try:
-            if workstation:
-                parent = path.parent.lstat()
-                if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != uid
-                        or stat.S_IMODE(parent.st_mode) != 0o700):
-                    raise SystemExit("ERROR  shared Codex socket ownership or permissions differ")
             item = path.lstat()
             if (not stat.S_ISSOCK(item.st_mode) or item.st_uid != uid
-                    or (not workstation and item.st_gid != gid)
-                    or stat.S_IMODE(item.st_mode) not in allowed_modes):
+                    or item.st_gid != gid or stat.S_IMODE(item.st_mode) != 0o660):
                 raise SystemExit("ERROR  shared Codex socket ownership or permissions differ")
-            # Native workstation bind publishes 0700 before its asynchronous chmod.
-            # Only the final permission state permits successful verification.
-            if stat.S_IMODE(item.st_mode) == ready_mode:
-                with socket.socket(socket.AF_UNIX) as client:
-                    client.settimeout(1)
-                    client.connect(str(path))
-                return
+            with socket.socket(socket.AF_UNIX) as client:
+                client.settimeout(1)
+                client.connect(str(path))
+            return
         except (FileNotFoundError, ConnectionRefusedError, TimeoutError):
             pass
         if time.monotonic() >= deadline:
@@ -213,7 +199,8 @@ def main():
     args = parser.parse_args()
     # Pure declaration transforms consume source checkouts; runtime inputs stay protected.
     config = load_config(args.config, declaration=args.mode in ("validate", "launcher"))
-    if args.host != "devbox" and args.mode == "grant-socket":
+    # workstations run no shared server; they only render the account wrappers.
+    if args.host != "devbox" and args.mode not in ("validate", "launcher"):
         invalid()
     if args.mode == "validate":
         if args.arguments:
@@ -221,12 +208,8 @@ def main():
         return
     if args.host != "devbox":
         home = absolute(os.path.expanduser("~"))
-        config = {"host": args.host, "home": home,
-                  "development_user": pwd.getpwuid(os.getuid()).pw_name,
-                  "binary": f"{home}/.local/bin/codex",
-                  "cognition_cwd_parent": f"{home}/.local/share/codex-shared/empty",
-                  "profiles": {key: {"account_home": f"{home}/{Path(row['account_home']).name}",
-                                     "endpoint": f"unix://{home}/.local/run/codex-shared/{key}/app-server.sock"}
+        config = {"binary": f"{home}/.local/bin/codex",
+                  "profiles": {key: {"account_home": f"{home}/{Path(row['account_home']).name}"}
                                for key, row in config["profiles"].items()}}
     if args.mode == "launcher" and not args.arguments:
         print('#!/usr/bin/env bash\ncase "${0##*/}" in')
@@ -259,12 +242,6 @@ def main():
         if args.mode == "grant-socket":
             grant_socket(config, key)
             return
-        if args.host != "devbox":
-            cwd = Path(config["cognition_cwd_parent"])
-            metadata = cwd.lstat()
-            if (not stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != os.getuid()
-                    or stat.S_IMODE(metadata.st_mode) != 0o700 or any(cwd.iterdir())):
-                invalid()
         os.chdir(config["cognition_cwd_parent"])
         argv = [config["binary"], "app-server", "--listen", row["endpoint"]]
         os.execve(config["binary"], argv, environment(config, row))
