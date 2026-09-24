@@ -21,3 +21,4 @@ Host devbox macbook arch
   BatchMode yes
   StrictHostKeyChecking yes
   UserKnownHostsFile /etc/jarvis-herdr/known_hosts
+  LogLevel ERROR
