@@ -151,12 +151,15 @@ installer to a temporary file and syntax-checks it before execution. subsequent
 updates use native `install latest` under the normal host home. reject a
 conflicting canonical path; do not restart running claude processes.
 
-human codex wrappers select only their declared account home and execute the
-native binary, preserving argv, environment, cwd, and exit status. claude-work
-selects its existing account. wrappers add no startup lookup or argument policy.
-interactive zsh aliases separately add `--yolo` for all three codex profiles and
-`--dangerously-skip-permissions` for both claude profiles. `command <profile>`
-bypasses an alias.
+`codex-work` and `codex-work2` select only their declared account home. bare
+`codex` keeps a preset nonempty `CODEX_HOME` and otherwise selects personal:
+herdr's `agent start` types bare `codex` into a pane whose `--env` chose the
+account. all execute the native binary, preserving argv, environment, cwd, and
+exit status. claude-work selects its existing account; bare claude is the
+native binary and honors a preset `CLAUDE_CONFIG_DIR`. wrappers add no startup
+lookup or argument policy. interactive zsh aliases separately add `--yolo` for
+all three codex profiles and `--dangerously-skip-permissions` for both claude
+profiles. `command <profile>` bypasses an alias.
 
 `assets/agent-instructions.md` supplies the five account instruction files,
 installed as mode `0600`. `assets/claude/statusline.sh` is installed as

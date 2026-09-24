@@ -77,9 +77,11 @@ reload with `cmd+shift+,` or reopen ghostty. running terminals are left alone.
 
 ## ai accounts and services
 
-`codex`, `codex-work`, and `codex-work2` select their existing account homes and
-execute the single native binary at `~/.local/bin/codex`. `claude` and
-`claude-work` use the single anthropic-native binary at `~/.local/bin/claude`.
+`codex-work` and `codex-work2` select their account homes; bare `codex` selects
+personal unless `CODEX_HOME` is already set, as in a herdr pane created with
+`--env`. all three execute the single native binary at `~/.local/bin/codex`.
+`claude` and `claude-work` use the single anthropic-native binary at
+`~/.local/bin/claude`.
 wrappers preserve arguments, environment, cwd, and exit behavior.
 
 `apply` retains valid installed versions and bootstraps a missing tool.

@@ -212,9 +212,15 @@ def main():
                   "profiles": {key: {"account_home": f"{home}/{Path(row['account_home']).name}"}
                                for key, row in config["profiles"].items()}}
     if args.mode == "launcher" and not args.arguments:
+        # bare codex keeps a preset home (a herdr pane's --env) and defaults to
+        # personal; the work names are the choice, so they force theirs.
         print('#!/usr/bin/env bash\ncase "${0##*/}" in')
         for command, key in COMMANDS.items():
-            print(f'  {command}) export CODEX_HOME={shlex.quote(profile(config, key)["account_home"])} ;;')
+            home = shlex.quote(profile(config, key)["account_home"])
+            if command == "codex":
+                print(f'  codex) [[ -n "${{CODEX_HOME:-}}" ]] || CODEX_HOME={home}; export CODEX_HOME ;;')
+            else:
+                print(f'  {command}) export CODEX_HOME={home} ;;')
         print('  *) exit 64 ;;\nesac')
         print(f'exec {shlex.quote(config["binary"])} "$@"')
         return
