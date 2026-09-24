@@ -8,7 +8,11 @@ exits, and a client in `codex-clients` cannot traverse the 0700 directory.
 impact: on the devbox the three `codex-shared@*` services fail to start and
 jarvis loses cognition and its live catalog, so it cannot serve or pass
 `check-activation`. the devbox pins codex 0.155.1 in `ai_install_codex`; an
-upgrade past it reproduces the failure.
+upgrade past it reproduces the failure, and so does codex's own startup prompt:
+each new release offers `Update now` preselected (it runs `npm install -g
+@openai/codex`). herdr reads that menu as `blocked`, so an ordinary send is
+refused, but a terminal-mode enter or a hand at the keyboard installs it. on
+2026-09-24 the devbox personal profile skipped 0.156.1 "until next version".
 
 evidence (2026-09-24): the isolated linux qualification of skid pr 4 started
 `codex-shared@personal` with codex-cli 0.156.1: `status=1/FAILURE` restart loop;
