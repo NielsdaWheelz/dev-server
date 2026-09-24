@@ -1,0 +1,70 @@
+---
+# Jarvis's ssh principal for the herdr gate on every host. The private key is
+# generated here once and never leaves the devbox; its public half, committed
+# as assets/herdr/jarvis-gate.pub, is the trust root lib/herdr.sh authorizes in
+# each owner account. jarvis.service reads /etc under ProtectSystem=strict.
+- name: Create the root-owned Jarvis herdr gate directory
+  ansible.builtin.file:
+    path: /etc/jarvis-herdr
+    state: directory
+    follow: false
+    owner: root
+    group: "{{ jarvis_service_group }}"
+    mode: "0750"
+
+- name: Generate the Jarvis herdr gate key once
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -q
+      - -t
+      - ed25519
+      - -N
+      - ""
+      - -C
+      - jarvis-herdr@devbox
+      - -f
+      - /etc/jarvis-herdr/id_ed25519
+    creates: /etc/jarvis-herdr/id_ed25519
+
+- name: Give the Jarvis herdr gate key to the Jarvis principal alone
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: file
+    follow: false
+    owner: "{{ item.owner }}"
+    group: "{{ jarvis_service_group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: /etc/jarvis-herdr/id_ed25519, owner: "{{ jarvis_service_user }}", mode: "0600"}
+    - {path: /etc/jarvis-herdr/id_ed25519.pub, owner: root, mode: "0640"}
+
+- name: Install the Jarvis herdr gate ssh client configuration and host keys
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/herdr/{{ item.src }}"
+    dest: "/etc/jarvis-herdr/{{ item.dest }}"
+    owner: root
+    group: "{{ jarvis_service_group }}"
+    mode: "0640"
+  loop:
+    - {src: jarvis-ssh_config, dest: ssh_config}
+    - {src: jarvis-known_hosts, dest: known_hosts}
+
+- name: Derive the public half of the Jarvis herdr gate key
+  ansible.builtin.command:
+    argv:
+      - ssh-keygen
+      - -y
+      - -f
+      - /etc/jarvis-herdr/id_ed25519
+  register: jarvis_herdr_public_key
+  changed_when: false
+
+# Not a failure: nothing later in the play depends on the committed key, and a
+# failed play would strand codex services drained by --restart-codex.
+- name: Report a Jarvis herdr gate key that differs from the committed trust root
+  ansible.builtin.debug:
+    msg: "DEV_SERVER_JARVIS_ACTION_GATE_KEY {{ jarvis_herdr_public_key.stdout }}"
+  when: >-
+    jarvis_herdr_public_key.stdout.split()[:2] !=
+    lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/herdr/jarvis-gate.pub').split()[:2]

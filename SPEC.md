@@ -84,8 +84,10 @@ deployment declarations own host paths, pins, identities, and launch arguments.
 managed files use compare-before-write and same-filesystem atomic promotion.
 verify bytes and mode before rename; preserve credentials and account state.
 a managed file is entirely repo-owned except explicitly named parser-backed
-keys, currently cursor's `remote.SSH.remotePlatform` and claude's `statusLine`. intentional symlinks have
-explicit owners and targets; do not overwrite conflicting foreign paths.
+keys, currently cursor's `remote.SSH.remotePlatform` and claude's `statusLine`,
+and the one jarvis gate line in the owner's `~/.ssh/authorized_keys`.
+intentional symlinks have explicit owners and targets; do not overwrite
+conflicting foreign paths.
 
 critical activation compares desired identity with observed/recorded active
 identity, not just this run's file changes. record active identity only after
@@ -106,6 +108,7 @@ more privileged consumer. interrupted activation must remain retryable.
 | `ssh.config` | validate, then reload ssh |
 | `docker.config` | rebuild/restart only with no running containers; otherwise defer |
 | `herdr.runtime` | start once when absent; changed binary/config/unit on a running server is an operator stop, then reapply; never a restart |
+| `herdr.gate`, `herdr.machines`, `jarvis.gate` | the next ssh connection or `--machine` call; nothing restarts |
 | `skid.unit`, `skid.runtime` | start or activate gateway once, with rollback |
 | `skid.integration` | future agents; no gateway restart |
 | `codex.runtime` | explicit authorized drain/restart of all three services |
@@ -335,6 +338,55 @@ dev-server commit and applying it; that release's own library restores what it
 needs. the target must be herdr-era (v0.7.0 or later): the tmux-era v0.6.0
 rollback was retired on 2026-09-24 with its native-control helper and the
 workstation codex servers it verified.
+
+## herdr gate and saved machines
+
+jarvis reaches each host's herdr through an ssh forced command, never
+`--machine`, whose `sh` probes and bridge a forced command would break.
+`assets/herdr/herdr-gate` is installed as `~/.local/libexec/herdr-gate` (0755)
+on all three hosts. it splits `SSH_ORIGINAL_COMMAND` with posix `shlex`, no
+shell, and admits only the owner's "agents plus pane creation" in herdr 0.9.1's
+spelling: `agent list|get|read|explain|wait|prompt|send-keys`, `agent start
+--kind codex|claude`, `pane list|split|close` and `workspace list|create`, each
+with the flags a client needs, options after positionals, space-separated
+values. `--env` admits only `CODEX_HOME` or `CLAUDE_CONFIG_DIR` naming one of
+the five account homes. herdr's global options (`--machine`, `--remote`,
+`--session`, `--handoff`) anywhere, `--`, and everything else exit 1 with one
+content-free line before herdr runs. an admitted argv is exec'd as
+`~/.local/bin/herdr` with only `HOME` and `PATH`, so it reaches the
+default-session socket. the gate's docstring lists what it leaves out and why.
+jarvis owns the allowlist's content through its adr; a herdr pin change
+requalifies it.
+
+`herdr_apply` installs the gate, then ensures exactly one line in the owner's
+`~/.ssh/authorized_keys`:
+`restrict,command="<home>/.local/libexec/herdr-gate" <jarvis-gate.pub>`. other
+lines stay byte for byte; the file is replaced through a temporary file and
+rename at mode `0600`. an uncommitted key, or the same key under other options,
+is an `ACTION herdr.gate`; apply never edits a foreign line. on devbox that
+action, like any herdr action, withholds the run's skid apply.
+
+jarvis's side is devbox-only (`ansible/roles/jarvis_herdr`). `/etc/jarvis-herdr/`
+(root:jarvis `0750`) holds `id_ed25519` (jarvis `0600`, generated once on
+devbox, never copied off), and root:jarvis `0640` copies of
+`assets/herdr/jarvis-ssh_config` and `assets/herdr/jarvis-known_hosts`: the
+labels `devbox` (`niels@localhost`, through its own gate), `macbook` and `arch`
+(`nnandal` over the tailnet), each with `HostKeyAlias` its label,
+`IdentitiesOnly`, `BatchMode` and `StrictHostKeyChecking yes`, and their
+committed ed25519 host keys. jarvis runs `ssh -F /etc/jarvis-herdr/ssh_config
+<label> <shlex-joined herdr args>`; `ProtectSystem=strict` leaves `/etc`
+readable. `assets/herdr/jarvis-gate.pub` is the trust root. each apply derives
+the key's public half and, when it differs, `./devbox` reports `ACTION
+jarvis.gate` with the line to commit; nothing later in the play depends on it,
+so the play continues. an empty file means not yet committed.
+
+macbook and arch save the other two hosts as herdr machines:
+`assets/herdr/endpoints-<host>.json` becomes
+`~/.local/state/herdr/client/endpoints.json` (`0600`), fixed ids, session
+`default`. the file is repo-owned; `herdr machine` edits are replaced on the
+next apply. devbox saves none. `--machine` uses batch ssh with strict host
+keys, so each edge also needs the source's key authorized and the target's
+host key known; those stay operator-owned.
 
 ## skid installation
 

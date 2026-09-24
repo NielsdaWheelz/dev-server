@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""ssh forced command for jarvis's key: run one allowlisted herdr command.
+
+authorized_keys binds the key to this file (restrict,command=...). sshd hands
+over the requested command in SSH_ORIGINAL_COMMAND; it is split without a
+shell and must match the allowlist below, the owner's "agents plus pane
+creation" (skidbladnir docs/herdr-pr5.md §5), spelled in herdr 0.9.1's cli.
+an accepted argv runs as the pinned ~/.local/bin/herdr against this host's
+default-session server; anything else exits 1 without running herdr.
+
+left out on purpose: pane run, send-text and wait-output; every server,
+config, machine, integration, update, worktree, plugin, notification, tab,
+session and api command; --machine, --remote, --session and --handoff anywhere
+(herdr strips them from any position); `--` (agent start would pass the rest
+to the agent); explain --file/--agent (reads any file); the flags a client
+does not need (--ansi, --ratio, --focus, --no-focus, --right-click, split's
+--pane/--current, explain's --format/--verbose).
+"""
+
+import os
+import re
+import shlex
+import sys
+
+HOME = os.environ.get("HOME", "")
+ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")  # agent names, pane and workspace ids
+TEXT = re.compile(r".+", re.DOTALL)  # prompt text and key names
+LABEL = re.compile(r"[^-\s].*")
+PATH = re.compile(r"/.*")
+MS = re.compile(r"[0-9]{1,9}")
+STATUS = {"idle", "working", "blocked", "done", "unknown"}
+# a pane's account home: exactly one of the five declared homes.
+ENV = ({f"CODEX_HOME={HOME}/{name}" for name in (".codex", ".codex-work", ".codex-work2")} |
+       {f"CLAUDE_CONFIG_DIR={HOME}/{name}" for name in (".claude", ".claude-work")})
+GLOBAL = ("--machine", "--remote", "--remote-keybindings", "--session", "--handoff")
+
+# (group, command): (positional checks in order, {option: value check, None for
+# a flag}). options follow the positionals; None instead of options means every
+# remaining token is one more value of the last positional check (send-keys).
+COMMANDS = {
+    ("agent", "list"): ((), {}),
+    ("agent", "get"): ((ID,), {}),
+    ("agent", "read"): ((ID,), {"--source": {"visible", "recent", "recent-unwrapped", "detection"},
+                                "--lines": MS, "--format": {"text", "ansi"}}),
+    ("agent", "explain"): ((ID,), {"--json": None}),
+    ("agent", "wait"): ((ID,), {"--until": STATUS, "--timeout": MS}),
+    ("agent", "prompt"): ((ID, TEXT), {"--wait": None, "--until": STATUS, "--timeout": MS}),
+    ("agent", "send-keys"): ((ID, TEXT), None),
+    ("agent", "start"): ((ID,), {"--kind": {"codex", "claude"}, "--pane": ID, "--timeout": MS}),
+    ("pane", "list"): ((), {"--workspace": ID}),
+    ("pane", "split"): ((ID,), {"--direction": {"right", "down"}, "--cwd": PATH, "--env": ENV}),
+    ("pane", "close"): ((ID,), {}),
+    ("workspace", "list"): ((), {}),
+    ("workspace", "create"): ((), {"--cwd": PATH, "--label": LABEL, "--env": ENV}),
+}
+
+
+def fits(check, value):
+    return value in check if isinstance(check, set) else check.fullmatch(value) is not None
+
+
+def allowed(argv):
+    if len(argv) < 2 or (argv[0], argv[1]) not in COMMANDS or "--" in argv:
+        return False
+    if any(token == name or token.startswith(name + "=") for token in argv for name in GLOBAL):
+        return False
+    positionals, options = COMMANDS[argv[0], argv[1]]
+    rest = argv[2:]
+    if len(rest) < len(positionals) or not all(map(fits, positionals, rest)):
+        return False
+    rest = rest[len(positionals):]
+    if options is None:
+        return all(fits(positionals[-1], value) for value in rest)
+    while rest:
+        if rest[0] not in options:
+            return False
+        check = options[rest[0]]
+        if check is None:
+            rest = rest[1:]
+        elif len(rest) >= 2 and fits(check, rest[1]):
+            rest = rest[2:]
+        else:
+            return False
+    return True
+
+
+try:
+    argv = shlex.split(os.environ.get("SSH_ORIGINAL_COMMAND", ""))
+except ValueError:
+    argv = []
+if not HOME.startswith("/") or not allowed(argv):
+    sys.exit("herdr-gate: command refused")
+os.execve(f"{HOME}/.local/bin/herdr", ["herdr", *argv], {"HOME": HOME, "PATH": "/usr/bin:/bin"})

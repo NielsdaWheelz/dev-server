@@ -168,6 +168,25 @@ it ends every herdr terminal and its agents. both providers are observed
 through terminal reads; the codex completion bell is a terminal-local `BEL`.
 provider sockets stay local; peer control uses skid's authenticated private gateway.
 
+from either workstation, `herdr --machine devbox agent list` runs a command on
+another host's herdr, and `herdr --remote niels@dev-server` attaches to it. the
+saved machines are [`assets/herdr/endpoints-<host>.json`](assets/herdr/),
+installed by apply; `herdr machine` edits are overwritten. devbox saves none.
+each edge also needs the workstation's ssh key authorized on the target and the
+target's host key known.
+
+jarvis reaches every host through `~/.local/libexec/herdr-gate`, bound to its
+key in each owner account's `authorized_keys`; the gate runs only an allowlist
+of agent and pane commands. the key is generated on devbox and its public half
+is committed as the trust root. to bootstrap or after rebuilding devbox:
+
+```sh
+./devbox apply   # ACTION jarvis.gate: commit this line as assets/herdr/jarvis-gate.pub, ...
+printf '%s\n' 'ssh-ed25519 AAAA... jarvis-herdr@devbox' >assets/herdr/jarvis-gate.pub
+git commit assets/herdr/jarvis-gate.pub -m 'commit the jarvis gate key'
+./devbox apply   # then ./workstation apply on macbook and arch
+```
+
 fleet enrollment, bearer distribution, session operations, release acceptance,
 and outage recovery belong to the
 [skid repository](https://github.com/NielsdaWheelz/skidbladnir). its
@@ -238,7 +257,7 @@ launcher is retired.
 | workstation packages, personal policy, dotfiles, tmux activation | `lib/packages-*.sh`, `lib/personal-*.sh`, `lib/dotfiles.sh`, `lib/tmux.sh` |
 | ai binaries, accounts, shared services | `lib/ai-tools.sh`, `assets/codex/`, `assets/routers/ai-profile` |
 | devbox github identity and ssh client policy | `ansible/roles/github/`; `devbox` owns account enrollment checks |
-| herdr runtime | `lib/herdr.sh`, `assets/herdr/` |
+| herdr runtime, jarvis's gate, saved machines | `lib/herdr.sh`, `assets/herdr/`, `ansible/roles/jarvis_herdr/` |
 | skid deployment and host integration | `lib/skidbladnir.sh`, `assets/skidbladnir/` |
 | devbox host configuration | `ansible/roles/`, `cloud-init-devbox.template.yaml` |
 

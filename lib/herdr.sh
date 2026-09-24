@@ -2,9 +2,11 @@
 
 # lib/herdr.sh owns the pinned herdr server on each host: the artifact cache and
 # immutable generations under ~/.local/share/herdr, the managed server config at
-# ~/.local/share/herdr/config.toml, the user service unit, and its activation.
-# paths hang off dev_server_home_dir; the launchd label is
-# <dev_server_fleet_label_prefix>.herdr (lib/common.sh, deployment identity).
+# ~/.local/share/herdr/config.toml, the user service unit, and its activation;
+# also jarvis's ssh gate, its authorized key and the workstations' saved
+# machines (herdr_install_access). paths hang off dev_server_home_dir; the
+# launchd label is <dev_server_fleet_label_prefix>.herdr (lib/common.sh,
+# deployment identity).
 #
 # herdr_preflight PLATFORM validates the declared inputs, stages the pinned release
 # when the running server's inputs changed, and returns 2 after rendering an
@@ -426,6 +428,8 @@ herdr_prepare_directories() {
   dev_server_reconcile_directory "$home/.local/state/dev-server" 0700
   dev_server_reconcile_directory "$home/.local/state/dev-server/active" 0700
   dev_server_reconcile_directory "$home/.local/state/herdr" 0700
+  dev_server_reconcile_directory "$home/.local/libexec" 0755
+  [[ "$platform" == devbox ]] || dev_server_reconcile_directory "$home/.local/state/herdr/client" 0700
   dev_server_reconcile_directory "$home/.config" 0755
   # mode only: the directory (and devbox's group-owned sessions tree) keeps its owner and group.
   dev_server_reconcile_directory "$home/.config/herdr" 0700
@@ -438,6 +442,64 @@ herdr_prepare_directories() {
   fi
   ((dev_server_directory_changed == 0)) ||
     render_result CHANGED herdr.directories 'private directory topology installed'
+}
+
+# jarvis's gate on every host with jarvis's committed key authorized for it in
+# the owner's account, and the workstations' saved herdr machines (devbox saves
+# none). plain files: the next ssh connection or --machine call reads them.
+# other authorized_keys lines stay byte for byte; the same key under other
+# options is an ACTION, never an edit.
+herdr_install_access() {
+  local platform="$1"
+  local home="$2"
+  local keys="$home/.ssh/authorized_keys"
+  local assets candidate status=0
+
+  assets="$(dev_server_assets_dir)/herdr"
+  install_managed_file "$assets/herdr-gate" "$home/.local/libexec/herdr-gate" 0755 herdr.gate || return 1
+  case "$platform" in
+  macos) install_managed_file "$assets/endpoints-macbook.json" "$home/.local/state/herdr/client/endpoints.json" 0600 herdr.machines || return 1 ;;
+  arch) install_managed_file "$assets/endpoints-arch.json" "$home/.local/state/herdr/client/endpoints.json" 0600 herdr.machines || return 1 ;;
+  esac
+  if [[ ! -s "$assets/jarvis-gate.pub" ]]; then
+    render_result ACTION herdr.gate \
+      "jarvis's gate key is not committed; run ./devbox apply, commit the key it reports as assets/herdr/jarvis-gate.pub, then rerun apply"
+    return 0
+  fi
+  ensure_directory "$home/.ssh" 0700 || return 1
+  candidate="$(mktemp "$home/.ssh/.authorized_keys.dev-server.XXXXXX")" || return 1
+  python3 - "$assets/jarvis-gate.pub" "$keys" "$home/.local/libexec/herdr-gate" >"$candidate" <<'PY' || status=$?
+import re
+import sys
+
+pub, keys, gate = sys.argv[1:]
+with open(pub, encoding="utf-8") as stream:
+    key = stream.read()
+if not re.fullmatch(r"ssh-ed25519 [A-Za-z0-9+/]+=*( [A-Za-z0-9@._-]+)?\n", key):
+    raise SystemExit("jarvis-gate.pub is not one ssh-ed25519 public key")
+key = key.strip()
+line = f'restrict,command="{gate}" {key}'
+try:
+    with open(keys, encoding="utf-8") as stream:
+        current = stream.read()
+except FileNotFoundError:
+    current = ""
+lines = current.splitlines()
+if any(key.split()[1] in entry.split() and entry != line for entry in lines):
+    raise SystemExit(3)
+if line not in lines:
+    current += ("\n" if current and not current.endswith("\n") else "") + line + "\n"
+sys.stdout.write(current)
+PY
+  case "$status" in
+  0) install_managed_file "$candidate" "$keys" 0600 herdr.gate || status=1 ;;
+  3)
+    render_result ACTION herdr.gate "$keys holds jarvis's gate key under other options; remove that line, then rerun apply"
+    status=0
+    ;;
+  esac
+  rm -f -- "$candidate"
+  return "$status"
 }
 
 # stages the pinned executable under ARTIFACT (…/artifacts/<sha256>/herdr).
@@ -752,6 +814,7 @@ herdr_apply() {
   unit_source="$(herdr_unit_source "$platform")"
   unit_target="$(herdr_unit_target "$platform" "$home")"
   herdr_prepare_directories "$home" "$platform"
+  herdr_install_access "$platform" "$home" || die 'could not install the jarvis gate, its key or the saved machines'
   dev_server_acquire_lock "$share/.apply.lock" 8 herdr
   state="$(herdr_service_state)" || die 'could not observe herdr service state'
   if [[ "$state" == active ]]; then

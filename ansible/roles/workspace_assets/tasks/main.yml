@@ -99,6 +99,8 @@
     - release-pin.json
     - config.toml
     - herdr.service
+    - herdr-gate
+    - jarvis-gate.pub
 
 - name: Install exact Skíðblaðnir assets
   ansible.builtin.copy:
