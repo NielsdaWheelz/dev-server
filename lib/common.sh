@@ -809,12 +809,47 @@ dev_server_service_state() {
       state="${BASH_REMATCH[1]}"
     done <<<"$output"
     ((matches == 1)) || return 2
+    # a job launchd is still spawning (xpcproxy) or tearing down (SIGTERMed)
+    # owns its inputs and socket like a running one.
     case "$state" in
-    running | 'spawn scheduled') printf '%s\n' active ;;
+    running | 'spawn scheduled' | xpcproxy | SIGTERMed) printf '%s\n' active ;;
     *) printf '%s\n' inactive ;;
     esac
     ;;
   *) return 2 ;;
+  esac
+}
+
+# stops a user service and returns only when its supervisor has finished tearing
+# it down: launchctl bootout returns while the job is still exiting, and a
+# bootstrap in that window fails with EIO. the observed state decides, not the
+# stop command's exit. 0 stopped or already absent; 1 still there afterwards
+# (thirty seconds on macos, past ExitTimeOut and launchd's SIGKILL).
+dev_server_stop_service() {
+  local platform="$1"
+  local name="$2"
+  local state deadline
+
+  state="$(dev_server_service_state "$platform" "$name")" || return 1
+  [[ "$state" != absent ]] || return 0
+  case "$platform" in
+  arch | devbox)
+    systemctl --user stop "$name" >/dev/null 2>&1 || true
+    state="$(dev_server_service_state "$platform" "$name")" || return 1
+    [[ "$state" != active ]]
+    ;;
+  macos)
+    launchctl bootout "gui/$(id -u)/$name" >/dev/null 2>&1 || true
+    deadline=$((SECONDS + 30))
+    while :; do
+      if state="$(dev_server_service_state "$platform" "$name")"; then
+        [[ "$state" != absent ]] || return 0
+      fi
+      ((SECONDS < deadline)) || return 1
+      sleep 1
+    done
+    ;;
+  *) return 1 ;;
   esac
 }
 

@@ -767,7 +767,7 @@ skidbladnir_activate_service() {
     # launchd retains the loaded definition even while its process is stopped.
     state="$(skidbladnir_service_state "$platform")" || return 1
     if [[ "$state" != absent ]] && ((unit_changed)); then
-      launchctl bootout "$domain/$label" || return 1
+      skidbladnir_stop_service "$platform" || return 1
       state=absent
     fi
     if [[ "$state" == absent ]]; then
@@ -785,10 +785,12 @@ skidbladnir_activate_service() {
   esac
 }
 
+# 0 once the supervisor has torn the service down or when it was already absent.
 skidbladnir_stop_service() {
   case "$1" in
-  macos) launchctl bootout "gui/$(id -u)/$dev_server_fleet_label_prefix.skidbladnir" >/dev/null 2>&1 || true ;;
-  arch | devbox) systemctl --user stop skidbladnir.service >/dev/null 2>&1 || true ;;
+  macos) dev_server_stop_service macos "$dev_server_fleet_label_prefix.skidbladnir" ;;
+  arch | devbox) dev_server_stop_service "$1" skidbladnir.service ;;
+  *) return 1 ;;
   esac
 }
 
@@ -868,7 +870,7 @@ skidbladnir_restore_runtime() {
   local was_enabled="$8"
   local active_unit="$9"
   local share="$home/.local/share/skidbladnir"
-  local unit_generation active_status
+  local unit_generation
 
   if [[ -z "$prior_current" && "$platform" != macos && "$was_enabled" == 0 ]]; then
     # systemd needs the unit file to remove its enablement links.
@@ -908,20 +910,13 @@ skidbladnir_restore_runtime() {
     dev_server_remove_link "$home/.local/bin/skid" || return 1
   fi
 
+  skidbladnir_stop_service "$platform" || return 1
   if [[ -z "$prior_current" ]]; then
-    skidbladnir_stop_service "$platform"
     if [[ "$platform" != macos ]]; then
       systemctl --user daemon-reload >/dev/null 2>&1 || true
     fi
-    if skidbladnir_service_active "$platform"; then
-      return 1
-    else
-      active_status=$?
-    fi
-    ((active_status == 1)) || return 1
   else
     if [[ "$platform" == macos ]]; then
-      launchctl bootout "gui/$(id -u)/$dev_server_fleet_label_prefix.skidbladnir" >/dev/null 2>&1 || true
       launchctl bootstrap "gui/$(id -u)" "$unit_target" || return 1
     else
       systemctl --user daemon-reload || return 1
@@ -1291,7 +1286,6 @@ skidbladnir_apply() {
   local current_identity='' previous_identity='' previous_version='' verified_runtime=''
   local unit_target runtime_identity unit_identity active_runtime='' active_unit=''
   local runtime_state unit_state was_active=0 was_enabled=0 needs_activation=0
-  local rollback_was_enabled=0
   local needs_unit_reload=0
   local preparation_status=0 credentials_installed=0 enablement_observation=0
   local service_observation=0 activation_failed=0
@@ -1504,9 +1498,6 @@ skidbladnir_apply() {
       die 'recorded active Skidbladnir runtime generation is unavailable'
     fi
   fi
-  if [[ -n "$rollback_current" ]]; then
-    rollback_was_enabled="$was_enabled"
-  fi
   if ((was_active)) && [[ -n "$prior_current" ]]; then
     if skidbladnir_running_binary_matches "$platform" "$home" "$prior_current"; then
       verified_runtime=current
@@ -1532,7 +1523,7 @@ skidbladnir_apply() {
       fi
       if [[ -z "$active_runtime" ]]; then
         if ! skidbladnir_restore_runtime "$platform" "$home" "$stage" '' '' '' \
-          "$unit_target" 0 ''; then
+          "$unit_target" "$was_enabled" ''; then
           skidbladnir_discard_stage "$share" "$stage"
           die 'unverified Skidbladnir activation could not be removed safely'
         fi
@@ -1610,7 +1601,7 @@ skidbladnir_apply() {
   if ((activation_failed)); then
     if ! skidbladnir_restore_runtime "$platform" "$home" "$stage" "$rollback_current" \
       "$rollback_previous" "$rollback_version" "$unit_target" \
-      "$rollback_was_enabled" "$active_unit"; then
+      "$was_enabled" "$active_unit"; then
       skidbladnir_discard_stage "$share" "$stage"
       die 'Skidbladnir activation failed and the prior runtime could not be restored'
     fi

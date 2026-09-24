@@ -26,6 +26,7 @@
           'ACTION  herdr.runtime: unmanaged named session '*) code=NAMED_SESSION_RUNNING ;;
           'ACTION  herdr.runtime: stale named session socket '*) code=NAMED_SESSION_STALE ;;
           'ACTION  herdr.runtime: unmanaged server (pid '*) code=UNMANAGED_SOCKET ;;
+          'ACTION  herdr.runtime: service is loaded but not serving; '*) code=NOT_SERVING ;;
           'ACTION  herdr.runtime: start the user session, then rerun apply') code=USER_SESSION ;;
           *) continue ;;
         esac

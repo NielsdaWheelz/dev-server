@@ -296,22 +296,29 @@ requires, binds or stops the other.
 without changing state for: a running server whose binary, config or unit
 differs; an unmanaged default-session snapshot before the first managed
 activation; agent-detection overrides or remote update state; named-session
-sockets; a listener on the socket whose pid is not the service's; herdr or xdg
-variables in the launchd environment. the changed-inputs line names the
+sockets; a listener on the socket whose pid is not the service's; a loaded
+service whose socket does not answer within a few seconds (launchd parks a job
+whose program cannot be executed and does not retry when the file is repaired);
+herdr or xdg variables in the launchd environment. the changed-inputs line names the
 consequence (stopping ends every herdr terminal and its agents), the exact
 supervisor stop, and says not to run bare `herdr` in between; an unmanaged
 listener names its pid and `kill -TERM`; residue lines name the path to move
 aside or remove. the changed-inputs case stages and verifies the new binary
-before it reports, so the rerun after the stop cannot fail on a download. `herdr_apply` stages the
-artifact and immutable generation first and promotes `current`, the
-`~/.local/bin/herdr` link, config, unit and enablement only when the service is
-absent or inactive; it records `herdr.runtime` (binary, config and unit
-digests) only after the socket answers `ping` with the tested version and the
-bundled codex and claude detection manifests are active. a failed first
-activation stops its own candidate, removes the unit and only the snapshot it
-created, and leaves the generation unreferenced. an unchanged apply downloads,
-writes and restarts nothing. `herdr_prepare_artifact` stages the verified
-binary under the lock without promotion, for pre-window staging.
+before it reports, so the rerun after the stop cannot fail on a download.
+`herdr_apply` stages the artifact and immutable generation first and promotes
+`current`, the `~/.local/bin/herdr` link, config, unit and enablement only when
+the service is absent or inactive; it records `herdr.runtime` (binary, config
+and unit digests) only after the socket answers `ping` with the tested version
+and the bundled codex and claude detection manifests are active. a failed
+upgrade stops the candidate and waits for the supervisor to finish tearing it
+down, restores the unit, config, pointers, snapshot and observed enablement,
+and restarts the prior herdr and verifies it against the prior generation's
+version; the prior's own failure to verify is reported as such, never as a
+restart to retry. a failed first activation stops its own candidate, removes
+the unit and only the snapshot it created, and leaves the generation
+unreferenced. an unchanged apply downloads, writes and restarts nothing.
+`herdr_prepare_artifact` stages the verified binary under the lock without
+promotion, for pre-window staging.
 
 herdr is never downgraded or stopped to undo a gateway change. rolling the skid
 gateway, config, unit or notifier back means checking out the last pre-pin
@@ -346,9 +353,10 @@ prior verified activation inputs. both command links point to the current binary
 
 start an inactive gateway; activate once when runtime/unit identity changes.
 authenticated health and the running executable must match before recording
-active identity. on failed activation, restore the prior pointer and unit,
-restart, and verify them. a failed first install leaves the service inactive
-and candidate unreferenced. retain one prior healthy generation; prune older
+active identity. on failed activation, stop the candidate and wait for its
+teardown, restore the prior pointer, unit and observed enablement, restart, and
+verify them. a failed first install leaves the service inactive and candidate
+unreferenced. retain one prior healthy generation; prune older
 owned generations only after success.
 
 bearer, machine handle, and existing android signing credentials are private

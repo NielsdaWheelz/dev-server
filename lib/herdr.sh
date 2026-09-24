@@ -299,7 +299,7 @@ herdr_render_session_sockets() {
   shopt -s nullglob
   sockets=("$sessions"/*/herdr.sock)
   shopt -u nullglob
-  for socket in "${sockets[@]}"; do
+  for socket in ${sockets[@]+"${sockets[@]}"}; do
     found=1
     if herdr_socket_live "$socket"; then
       pid="$(herdr_socket_listener_pid "$socket")" || die 'could not identify the process holding a named session socket'
@@ -320,7 +320,7 @@ herdr_render_changed_inputs() {
 
 herdr_preflight() {
   local platform="$1"
-  local home share config_dir name value pid state actions=0
+  local home share config_dir name value pid state deadline actions=0
 
   case "$platform" in macos | arch | devbox) ;; *) die "unsupported herdr platform: $platform" ;; esac
   herdr_platform="$platform"
@@ -381,6 +381,22 @@ herdr_preflight() {
         "unmanaged server (pid $pid) holds the socket; stopping ends its terminals: kill -TERM $pid, then rerun apply"
       actions=1
     fi
+  fi
+  # a loaded service whose socket does not answer is not serving and may never
+  # heal by itself: launchd parks a job whose program cannot be executed
+  # (observed: spawn scheduled, runs = 1, no retry after the file is repaired),
+  # systemd loops on auto-restart. an unchanged apply must not call that up to date.
+  if [[ "$state" == active ]] && dev_server_active_sha_matches herdr.runtime "$herdr_desired_identity"; then
+    deadline=$((SECONDS + 5))
+    until herdr_ping "$config_dir/herdr.sock" 1 >/dev/null 2>&1; do
+      if ((SECONDS >= deadline)); then
+        render_result ACTION herdr.runtime \
+          "service is loaded but not serving; stopping ends every herdr terminal and its agents: $(herdr_stop_command), then rerun apply"
+        actions=1
+        break
+      fi
+      sleep 1
+    done
   fi
   if [[ "$state" == active ]] && ! dev_server_active_sha_matches herdr.runtime "$herdr_desired_identity"; then
     # stage the release now, so the operator's stop only ever precedes a promotion.
@@ -580,7 +596,7 @@ herdr_start_service() {
       herdr_enablement_changed=1
     fi
     if [[ "$state" != absent ]] && ((unit_changed)); then
-      launchctl bootout "$domain/$(herdr_service_name)" || return 1
+      herdr_stop_service || return 1
       state=absent
     fi
     if [[ "$state" == absent ]]; then
@@ -593,18 +609,18 @@ herdr_start_service() {
   esac
 }
 
+# 0 once the supervisor has torn the service down or when it was already absent.
 herdr_stop_service() {
-  case "$herdr_platform" in
-  macos) launchctl bootout "gui/$(id -u)/$(herdr_service_name)" >/dev/null 2>&1 || true ;;
-  arch | devbox) systemctl --user stop herdr.service >/dev/null 2>&1 || true ;;
-  esac
+  dev_server_stop_service "$herdr_platform" "$(herdr_service_name)"
 }
 
-# verifies a started server within ten seconds: ping identity, bundled
-# detection, socket mode and owner. prints the STARTED detail on success.
+# verifies a started server within ten seconds: ping identity against the
+# generation VERSION it should be running, bundled detection, socket mode and
+# owner. prints the STARTED detail on success.
 herdr_verify_started() {
   local platform="$1"
   local home="$2"
+  local version_expected="$3"
   local share="$home/.local/share/herdr"
   local socket="$home/.config/herdr/herdr.sock"
   local deadline pong='' version protocol state pid
@@ -620,7 +636,7 @@ herdr_verify_started() {
   done
   [[ -n "$pong" ]] || return 1
   read -r version protocol <<<"$pong"
-  [[ "$version" == "${herdr_version#v}" && "$protocol" == 22 ]] || return 1
+  [[ "$version" == "${version_expected#v}" && "$protocol" == 22 ]] || return 1
   herdr_manifests_bundled "$share/current/herdr" "$socket" || return 1
   [[ "$(stat -c '%a' "$socket" 2>/dev/null || stat -f '%Lp' "$socket" 2>/dev/null)" == 600 ]] || return 1
   pid="$(dev_server_service_main_pid "$platform" "$(herdr_service_name)")" || return 1
@@ -628,11 +644,12 @@ herdr_verify_started() {
   printf 'ping herdr %s protocol %s; bundled codex and claude detection\n' "$version" "$protocol"
 }
 
-# undoes a failed activation: stops only the candidate this apply started, puts
-# the unit, config, pointers and snapshot back, and when a prior activation was
-# recorded restarts and verifies that prior server. 0 restored (and prior
-# running when recorded); 3 prior inputs restored but herdr remains stopped;
-# 1 the restore itself failed.
+# undoes a failed activation: stops the candidate this apply started and waits
+# for its teardown, puts the unit, config, pointers and snapshot back, and when
+# a prior activation was recorded restarts and verifies that prior server.
+# 0 restored (and the prior verified when recorded); 3 prior inputs restored but
+# the prior herdr did not verify; 1 the restore failed or the candidate could
+# not be stopped (its inputs are still put back, so nothing stays half-promoted).
 herdr_restore() {
   local platform="$1"
   local home="$2"
@@ -643,10 +660,10 @@ herdr_restore() {
   local was_enabled="$7"
   local recorded="$8"
   local share="$home/.local/share/herdr"
-  local unit_target state
+  local unit_target state prior_version stopped=1 verified=1
 
   unit_target="$(herdr_unit_target "$platform" "$home")"
-  herdr_stop_service
+  herdr_stop_service || stopped=0
   if ((was_enabled == 0 && recorded == 0)); then
     case "$platform" in
     macos) launchctl disable "gui/$(id -u)/$(herdr_service_name)" >/dev/null 2>&1 || return 1 ;;
@@ -667,20 +684,23 @@ herdr_restore() {
   if ((snapshot_present == 0)) && [[ -e "$home/.config/herdr/session.json" ]]; then
     rm -f -- "$home/.config/herdr/session.json" || return 1
   fi
+  ((stopped)) || return 1
+  ((recorded == 1)) || return 0
+  # the prior inputs are back; run them again as skid does after a failed
+  # upgrade, and verify them as the generation they are (releases/vX.Y.Z-sha).
+  prior_version="${prior_current#releases/}"
+  prior_version="${prior_version%-*}"
   state="$(herdr_service_state)" || return 1
-  if ((recorded == 0)); then
-    [[ "$state" != active ]]
-    return
-  fi
-  # the prior inputs are back; run them again as skid does after a failed upgrade.
   herdr_start_service "$platform" "$home" "$state" 1 1 || return 3
-  herdr_verify_started "$platform" "$home" >/dev/null || return 3
+  herdr_verify_started "$platform" "$home" "$prior_version" >/dev/null || verified=0
+  # the durable preference goes back once the prior is loaded, verified or not.
   if ((was_enabled == 0)); then
     case "$platform" in
     macos) launchctl disable "gui/$(id -u)/$(herdr_service_name)" >/dev/null 2>&1 || return 1 ;;
     arch | devbox) systemctl --user disable herdr.service >/dev/null 2>&1 || return 1 ;;
     esac
   fi
+  ((verified)) || return 3
 }
 
 # keeps the current generation and the prior current one, with their artifacts.
@@ -798,7 +818,7 @@ herdr_apply() {
   trap 'herdr_abandon_candidate; exit 143' TERM
   herdr_enablement_changed=0
   if herdr_start_service "$platform" "$home" "$state" "$unit_changed" "$was_enabled" &&
-    detail="$(herdr_verify_started "$platform" "$home")"; then
+    detail="$(herdr_verify_started "$platform" "$home" "$herdr_version")"; then
     :
   else
     if herdr_restore "$platform" "$home" "$stage" "$prior_current" "$command_installed" \
@@ -812,8 +832,8 @@ herdr_apply() {
     0:0) die 'herdr first activation failed; the candidate was stopped and its unit removed' ;;
     0:*) die 'herdr first activation failed and the candidate could not be removed safely' ;;
     1:0) die 'herdr activation failed; the candidate was stopped and the prior herdr was restored and restarted' ;;
-    1:3) die 'herdr activation failed; the prior inputs were restored but herdr remains stopped; rerun apply' ;;
-    *) die 'herdr activation failed and the prior inputs could not be restored; herdr remains stopped' ;;
+    1:3) die 'herdr activation failed; the prior inputs were restored but the prior herdr did not verify' ;;
+    *) die 'herdr activation failed and the restore of the prior herdr did not complete' ;;
     esac
   fi
   ((pointer_changed == 0)) || render_result UPDATED herdr.runtime "$herdr_generation_name"
