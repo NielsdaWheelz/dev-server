@@ -181,7 +181,7 @@ key in each owner account's `authorized_keys`; the gate runs only an allowlist
 of agent and pane commands. it is policy hygiene, not containment: pane ids are
 not scoped to jarvis's panes. the key is generated on devbox and its public
 half is committed as the trust root. the first devbox apply with the gate also
-changes the shared codex inputs, so pause jarvis (or stop `jarvis.service`)
+changes the shared codex inputs, so run it inside jarvis's stopped cutover window
 and pass `--restart-codex`:
 
 ```sh
@@ -190,7 +190,9 @@ and pass `--restart-codex`:
 # ACTION  herdr.gate: jarvis's gate key is not committed; ...
 printf '%s\n' 'ssh-ed25519 AAAA... jarvis-herdr@devbox' >assets/herdr/jarvis-gate.pub
 git commit assets/herdr/jarvis-gate.pub -m 'commit the jarvis gate key'
-./devbox apply   # then ./workstation apply on macbook and arch; resume jarvis
+git push
+./devbox apply   # then ./workstation apply on macbook and arch
+# jarvis resumes only after its own cutover runbook (jarvis docs/operations.md)
 ```
 
 rebuilding devbox changes its host key and its jarvis key: update the `devbox`
