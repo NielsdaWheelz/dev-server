@@ -4,9 +4,10 @@
 : "${skidbladnir_release_pin_file:=$(dev_server_assets_dir)/skidbladnir/release-pin.json}"
 
 : "${dev_server_install_status:=UP TO DATE}"
+: "${dev_server_fleet_label_prefix:=dev.niels}"
+: "${dev_server_gateway_port:=7341}"
 skidbladnir_unit_changed=0
 skidbladnir_activation_status=''
-skidbladnir_directory_changed=0
 skidbladnir_integration_changed=0
 skidbladnir_enablement_changed=0
 skidbladnir_command_installed=0
@@ -32,66 +33,6 @@ skidbladnir_host_config_source() {
   esac
 }
 
-skidbladnir_install_native_control() {
-  local home base pin pin_fields repository revision release uv marker wanted wrapper changed=0 status=0
-  home="$(dev_server_home)"
-  base="$home/.local/share/skidbladnir-native-control"
-  pin="$(dev_server_assets_dir)/skidbladnir/native-control.json"
-  skidbladnir_strict_json_file "$pin" 4096 || die 'native control pin is invalid'
-  pin_fields="$(
-    python3 - "$pin" <<'PYPIN'
-import json, re, sys
-with open(sys.argv[1]) as stream:
-    value = json.load(stream)
-if (set(value) != {"repository", "revision"} or
-    value["repository"] != "https://github.com/NielsdaWheelz/llm-calling.git" or
-    not re.fullmatch("[0-9a-f]{40}", value["revision"])):
-    raise SystemExit(1)
-print(value["repository"], value["revision"], sep="\t")
-PYPIN
-  )" || die 'native control pin is invalid'
-  IFS=$'\t' read -r repository revision <<<"$pin_fields"
-  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || die 'native control revision is invalid'
-  release="$base/releases/$revision"
-  uv="$base/bootstrap/bin/uv"
-  marker="$release/.installed"
-  wanted="$revision uv=0.11.28 python=3.12.13 claude-sdk frozen"
-  ensure_directory "$base" 0700 || return 1
-  ensure_directory "$base/releases" 0700 || return 1
-  if [[ ! -x "$uv" ]] || [[ "$("$uv" --version | awk '{print $2}')" != 0.11.28 ]]; then
-    python3 -m venv "$base/bootstrap" || return 1
-    "$base/bootstrap/bin/python" -m pip --disable-pip-version-check install --quiet --upgrade 'uv==0.11.28' || return 1
-    changed=1
-  fi
-  if [[ ! -f "$marker" ]] || [[ "$(cat "$marker")" != "$wanted" ]] || [[ ! -x "$release/.venv/bin/provider-runtime-control" ]]; then
-    require_cmd git
-    if [[ ! -d "$release/.git" ]]; then
-      git clone --quiet --no-checkout "$repository" "$release" || return 1
-    fi
-    git -C "$release" fetch --quiet --depth=1 origin "$revision" || return 1
-    git -C "$release" checkout --quiet --detach "$revision" || return 1
-    [[ "$(git -C "$release" rev-parse HEAD)" == "$revision" ]] || die 'native checkout differs from pin'
-    "$uv" sync --project "$release" --python 3.12.13 --frozen --extra claude-sdk --no-dev || return 1
-    printf '%s\n' "$wanted" >"$marker" || return 1
-    chmod 0600 "$marker" || return 1
-    changed=1
-  fi
-  wrapper="$(mktemp "${TMPDIR:-/tmp}/dev-server-native-control.XXXXXX")" || return 1
-  python3 - "$release/.venv/bin/provider-runtime-control" >"$wrapper" <<'PYWRAPPER' || {
-import shlex, sys
-print('#!/bin/sh\nexec ' + shlex.quote(sys.argv[1]) + ' "$@"')
-PYWRAPPER
-    rm -f -- "$wrapper"
-    return 1
-  }
-  atomic_install_file "$wrapper" "$home/.local/bin/provider-runtime-control" 0755 || status=$?
-  rm -f -- "$wrapper"
-  ((status == 0)) || return "$status"
-  if ((changed)) || [[ "$dev_server_install_status" != 'UP TO DATE' ]]; then
-    render_result INSTALLED skid.native 'pinned provider helper and frozen SDK environment'
-  fi
-}
-
 skidbladnir_agent_hooks_source() {
   case "$1" in
   macos) printf '%s/skidbladnir/agent-hooks-macbook.json\n' "$(dev_server_assets_dir)" ;;
@@ -101,45 +42,11 @@ skidbladnir_agent_hooks_source() {
   esac
 }
 
-skidbladnir_strict_json_file() {
-  local path="$1"
-  local maximum_bytes="$2"
-
-  python3 - "$path" "$maximum_bytes" <<'PY'
-import json
-import os
-import stat
-import sys
-
-def unique_object(pairs):
-    result = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError(f"duplicate JSON key: {key}")
-        result[key] = value
-    return result
-
-def reject_constant(value):
-    raise ValueError(f"invalid JSON constant: {value}")
-
-path, maximum = sys.argv[1], int(sys.argv[2])
-mode = os.lstat(path).st_mode
-if not stat.S_ISREG(mode):
-    raise SystemExit(1)
-with open(path, "rb") as stream:
-    encoded = stream.read(maximum + 1)
-if not encoded or len(encoded) > maximum:
-    raise SystemExit(1)
-json.loads(encoded.decode("utf-8"), object_pairs_hook=unique_object,
-           parse_constant=reject_constant)
-PY
-}
-
 skidbladnir_release_values() {
   local platform="$1"
   local artifact
   artifact="$(skidbladnir_platform_key "$platform")"
-  skidbladnir_strict_json_file "$skidbladnir_release_pin_file" 4096 || return 1
+  dev_server_strict_json_file "$skidbladnir_release_pin_file" 4096 || return 1
 
   python3 - "$skidbladnir_release_pin_file" "$artifact" <<'PY'
 import json
@@ -183,7 +90,7 @@ skidbladnir_release_manifest_matches() {
   local source_sha="$3"
   local version="$4"
 
-  skidbladnir_strict_json_file "$manifest" 4096 || return 1
+  dev_server_strict_json_file "$manifest" 4096 || return 1
   python3 - "$manifest" "$platform" "$source_sha" "$version" <<'PY'
 import json
 import sys
@@ -201,89 +108,56 @@ skidbladnir_host_config_valid() {
   local runtime home
 
   case "$platform" in
-  macos)
-    runtime=Darwin
-    home=/Users/nnandal
-    ;;
-  arch)
-    runtime=Linux
-    home=/home/nnandal
-    ;;
-  devbox)
-    runtime=Linux
-    home=/home/niels
-    ;;
+  macos) runtime=Darwin ;;
+  arch | devbox) runtime=Linux ;;
   *) return 1 ;;
   esac
-  skidbladnir_strict_json_file "$path" 65536 || return 1
+  home="$(dev_server_home)"
+  dev_server_strict_json_file "$path" 65536 || return 1
+  # deployment-owned facts only: paths under this home, the four account wrappers,
+  # permission flags, and the herdr literals the unit renders. the schema is the
+  # candidate binary's job (validate-host-config after artifact preparation).
   python3 - "$path" "$runtime" "$home" <<'PY'
 import json
-import re
 import sys
 
 with open(sys.argv[1], "r", encoding="utf-8") as stream:
     value = json.load(stream)
 runtime, home = sys.argv[2:]
-
-def exact(value, keys):
-    return isinstance(value, dict) and sorted(value) == sorted(keys)
-
-def plain(value, maximum):
-    return (isinstance(value, str) and 0 < len(value) <= maximum and
-            all(ord(character) >= 32 and ord(character) != 127 for character in value))
-
-def absolute(value):
-    return (plain(value, 4096) and value.startswith("/") and "//" not in value and
-            "/../" not in value and "/./" not in value)
-
-if not exact(value, ["platform", "profiles", "tmux", "nativeControlPath"]) or value["platform"] != runtime:
+if not isinstance(value, dict) or value.get("platform") != runtime:
     raise SystemExit(1)
-if value["nativeControlPath"] != home + "/.local/bin/provider-runtime-control":
+if value.get("herdr") != {"path": home + "/.local/share/herdr/current/herdr",
+                          "socketPath": home + "/.config/herdr/herdr.sock",
+                          "testedVersion": "herdr 0.9.1"}:
     raise SystemExit(1)
-tmux = value["tmux"]
-if (not exact(tmux, ["path", "testedVersion"]) or not absolute(tmux["path"]) or
-        not isinstance(tmux["testedVersion"], str) or
-        not re.fullmatch(r"tmux [!-~]{1,59}", tmux["testedVersion"])):
-    raise SystemExit(1)
-profiles = value["profiles"]
-keys = ["personal", "work", "work2", "claude-work"]
-providers = ["Codex", "Codex", "Codex", "Claude"]
-if (not isinstance(profiles, list) or len(profiles) != 4 or
-        [profile.get("key") for profile in profiles if isinstance(profile, dict)] != keys or
-        [profile.get("provider") for profile in profiles if isinstance(profile, dict)] != providers):
-    raise SystemExit(1)
-codex_backend = home + "/.local/bin/codex"
-claude_backend = home + "/.local/bin/claude"
 commands = {
     "personal": home + "/bin/codex",
     "work": home + "/bin/codex-work",
     "work2": home + "/bin/codex-work2",
     "claude-work": home + "/bin/claude-work",
 }
+arguments = {
+    "Codex": ["--yolo"],
+    "Claude": ["--dangerously-skip-permissions", "--plugin-dir",
+               home + "/.local/share/skidbladnir/claude-agent-identity"],
+}
+signatures = {
+    "Codex": [{"executableBase": "codex"},
+              {"executableBase": "node", "argument1": home + "/.local/bin/codex"}],
+    "Claude": [{"argument0": home + "/.local/bin/claude"}],
+}
+profiles = value.get("profiles")
+if (not isinstance(profiles, list) or not all(isinstance(p, dict) for p in profiles) or
+        [p.get("key") for p in profiles] != list(commands)):
+    raise SystemExit(1)
 for profile in profiles:
-    if not exact(profile, ["arguments", "command", "environment", "foregroundSignatures",
-                           "key", "label", "provider"]):
+    provider = profile.get("provider")
+    if (provider not in arguments or profile.get("command") != commands[profile["key"]] or
+            profile.get("arguments") != arguments[provider] or
+            profile.get("foregroundSignatures") != signatures[provider]):
         raise SystemExit(1)
-    key, provider = profile["key"], profile["provider"]
-    if (not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", key) or not plain(profile["label"], 64) or
-            not absolute(profile["command"]) or profile["command"] != commands[key]):
-        raise SystemExit(1)
-    expected_arguments = ["--yolo"] if provider == "Codex" else [
-        "--dangerously-skip-permissions", "--plugin-dir",
-        home + "/.local/share/skidbladnir/claude-agent-identity"]
-    expected_signatures = ([{"executableBase": "codex"}, {
-        "executableBase": "node", "argument1": codex_backend
-    }] if provider == "Codex" else [{"argument0": claude_backend}])
-    environment = profile["environment"]
-    if (profile["arguments"] != expected_arguments or
-            profile["foregroundSignatures"] != expected_signatures or
-            not isinstance(environment, list) or len(environment) > 2):
-        raise SystemExit(1)
-    for item in environment:
-        if (not exact(item, ["name", "value"]) or
-                not isinstance(item["name"], str) or
-                not re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", item["name"]) or
-                not plain(item["value"], 4096)):
+    for item in profile.get("environment") or []:
+        if not isinstance(item, dict) or not str(item.get("value", "")).startswith(home + "/"):
             raise SystemExit(1)
 PY
 }
@@ -293,12 +167,13 @@ skidbladnir_validate_declared_inputs() {
   local hooks host_config path
   local -a regular_files=(
     skidbladnir-launch
+    skid-notify
     claude-agent-identity/bin/agent-hook
   )
 
   case "$platform" in
-  macos) regular_files+=(skid-notify-macbook dev.niels.skidbladnir.plist) ;;
-  arch | devbox) regular_files+=(skid-notify-linux skidbladnir.service) ;;
+  macos) regular_files+=(dev.niels.skidbladnir.plist) ;;
+  arch | devbox) regular_files+=(skidbladnir.service) ;;
   *) die "unsupported Skidbladnir platform: $platform" ;;
   esac
 
@@ -309,7 +184,7 @@ skidbladnir_validate_declared_inputs() {
   skidbladnir_host_config_valid "$host_config" "$platform" ||
     die 'Skidbladnir host config is invalid'
   hooks="$(skidbladnir_agent_hooks_source "$platform")"
-  skidbladnir_strict_json_file "$hooks" 65536 ||
+  dev_server_strict_json_file "$hooks" 65536 ||
     die 'Skidbladnir agent hooks are invalid'
   python3 - "$hooks" <<'PY' || die 'Skidbladnir agent hooks schema is invalid'
 import json
@@ -347,7 +222,7 @@ PY
     claude-agent-identity/.claude-plugin/plugin.json \
     claude-agent-identity/hooks/hooks.json; do
     path="$(dev_server_assets_dir)/skidbladnir/$path"
-    skidbladnir_strict_json_file "$path" 65536 ||
+    dev_server_strict_json_file "$path" 65536 ||
       die "invalid Skidbladnir declared JSON: $path"
   done
   skidbladnir_unit_identity "$platform" >/dev/null ||
@@ -401,14 +276,6 @@ skidbladnir_validate_present_credentials() {
   done
 }
 
-skidbladnir_ensure_directory() {
-  local path="$1"
-  local mode="$2"
-  local output
-  output="$(ensure_directory "$path" "$mode")" || return 1
-  [[ -z "$output" ]] || skidbladnir_directory_changed=1
-}
-
 skidbladnir_prepare_directories() {
   local home="$1"
   local service_parent
@@ -419,25 +286,25 @@ skidbladnir_prepare_directories() {
   *) return 1 ;;
   esac
 
-  skidbladnir_ensure_directory "$home/.local" 0755
-  skidbladnir_ensure_directory "$home/.local/bin" 0755
-  skidbladnir_ensure_directory "$home/.local/share" 0755
-  skidbladnir_ensure_directory "$home/.local/share/skidbladnir" 0700
-  skidbladnir_ensure_directory "$home/.local/share/skidbladnir/artifacts" 0700
-  skidbladnir_ensure_directory "$home/.local/share/skidbladnir/releases" 0700
-  skidbladnir_ensure_directory "$home/.local/share/skidbladnir/units" 0700
-  skidbladnir_ensure_directory "$home/.local/state" 0755
-  skidbladnir_ensure_directory "$home/.local/state/dev-server" 0700
-  skidbladnir_ensure_directory "$home/.local/state/dev-server/active" 0700
-  skidbladnir_ensure_directory "$home/.local/state/skidbladnir" 0700
-  skidbladnir_ensure_directory "$home/.config" 0755
-  skidbladnir_ensure_directory "$home/.config/skidbladnir" 0700
+  dev_server_reconcile_directory "$home/.local" 0755
+  dev_server_reconcile_directory "$home/.local/bin" 0755
+  dev_server_reconcile_directory "$home/.local/share" 0755
+  dev_server_reconcile_directory "$home/.local/share/skidbladnir" 0700
+  dev_server_reconcile_directory "$home/.local/share/skidbladnir/artifacts" 0700
+  dev_server_reconcile_directory "$home/.local/share/skidbladnir/releases" 0700
+  dev_server_reconcile_directory "$home/.local/share/skidbladnir/units" 0700
+  dev_server_reconcile_directory "$home/.local/state" 0755
+  dev_server_reconcile_directory "$home/.local/state/dev-server" 0700
+  dev_server_reconcile_directory "$home/.local/state/dev-server/active" 0700
+  dev_server_reconcile_directory "$home/.local/state/skidbladnir" 0700
+  dev_server_reconcile_directory "$home/.config" 0755
+  dev_server_reconcile_directory "$home/.config/skidbladnir" 0700
   if [[ "$2" == macos ]]; then
-    skidbladnir_ensure_directory "$home/Library" 0755
+    dev_server_reconcile_directory "$home/Library" 0755
   else
-    skidbladnir_ensure_directory "$home/.config/systemd" 0755
+    dev_server_reconcile_directory "$home/.config/systemd" 0755
   fi
-  skidbladnir_ensure_directory "$service_parent" 0755
+  dev_server_reconcile_directory "$service_parent" 0755
 }
 
 skidbladnir_validate_link() {
@@ -524,76 +391,26 @@ skidbladnir_validate_active_journals() {
   done
 }
 
-skidbladnir_acquire_apply_lock() {
-  local home="$1"
-  local lock="$home/.local/share/skidbladnir/.apply.lock"
-
-  [[ ! -L "$lock" && (! -e "$lock" || -f "$lock") ]] ||
-    die "Skidbladnir apply lock is invalid"
-  exec 9>>"$lock" || die "could not open the Skidbladnir apply lock"
-  chmod 0600 "$lock" || die "could not secure the Skidbladnir apply lock"
-  case "$(uname -s)" in
-  Darwin)
-    require_cmd lockf
-    lockf -s -t 0 9 || die "Skidbladnir apply is already running"
-    ;;
-  Linux)
-    require_cmd flock
-    flock -n 9 || die "Skidbladnir apply is already running"
-    ;;
-  *) die "Skidbladnir locking is unsupported on this platform" ;;
-  esac
-}
-
-skidbladnir_cleanup_stage() {
-  local share="$1"
-  local stage="$2"
-  local name
-
-  [[ "$(dirname "$stage")" == "$share" ]] || return 1
-  name="$(basename "$stage")"
-  [[ "$name" =~ ^\.apply\.stage\.[A-Za-z0-9]{6}$ ]] || return 1
-  [[ -d "$stage" && ! -L "$stage" ]] || return 1
-  rm -R -- "$stage"
-}
-
 skidbladnir_discard_stage() {
-  skidbladnir_cleanup_stage "$1" "$2" ||
+  dev_server_remove_stage "$1" "$2" ||
     die 'could not remove the Skidbladnir staging directory'
 }
 
-skidbladnir_cleanup_stale_stages() {
+# after skidbladnir_restore_runtime failed with STATUS: 4 keeps the stage (the
+# prior launcher and unit are still only there) and reports; anything else
+# discards it and returns to the caller's own text.
+skidbladnir_settle_failed_restore() {
   local share="$1"
-  local stage
-  local -a stages=()
+  local stage="$2"
+  local status="$3"
+  local retained
 
-  shopt -s nullglob
-  stages=("$share"/.apply.stage.*)
-  shopt -u nullglob
-  if ((${#stages[@]} > 0)); then
-    for stage in "${stages[@]}"; do
-      skidbladnir_cleanup_stage "$share" "$stage" || return 1
-    done
+  if ((status == 4)); then
+    retained="$(dev_server_retain_stage "$share" "$stage")" ||
+      die 'Skidbladnir activation failed, the candidate could not be stopped, and its stage could not be kept'
+    die "Skidbladnir activation failed and the candidate could not be stopped; its inputs remain in place and the prior launcher and unit are kept in $retained"
   fi
-}
-
-skidbladnir_restore_signal_trap() {
-  local signal="$1"
-  local saved="$2"
-
-  if [[ -n "$saved" ]]; then
-    # shellcheck disable=SC2294 # trap -p emits the shell-escaped restoration command.
-    eval "$saved"
-  else
-    trap - "$signal"
-  fi
-}
-
-skidbladnir_download() {
-  local url="$1"
-  local output="$2"
-  curl --fail --location --silent --show-error --proto '=https' --tlsv1.2 \
-    --output "$output" "$url"
+  skidbladnir_discard_stage "$share" "$stage"
 }
 
 skidbladnir_archive_members_exact() {
@@ -606,6 +423,22 @@ skidbladnir_archive_members_exact() {
   [[ "$types" == $'-\n-\n-' ]]
 }
 
+# staging alone (spec §4.3), never through skidbladnir_apply; directories exist on every host.
+# the assets are copied and rendered first (deployment identity, lib/common.sh):
+#   bash -c 'set -euo pipefail
+#     cd DEV_SERVER_CHECKOUT; source lib/common.sh; source lib/skidbladnir.sh
+#     platform=macos # or arch | devbox
+#     assets="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-assets.XXXXXX")"
+#     cp -Rp assets "$assets/assets"; dev_server_render_assets "$assets/assets"
+#     home="$(dev_server_home)"; share="$home/.local/share/skidbladnir"
+#     skidbladnir_prepare_directories "$home" "$platform"
+#     dev_server_acquire_lock "$share/.apply.lock" 9 Skidbladnir
+#     stage="$(mktemp -d "$share/.apply.stage.XXXXXX")"
+#     read -r version source_sha url archive_sha manifest_platform <<<"$(skidbladnir_release_values "$platform" | tr "\t" " ")"
+#     skidbladnir_prepare_artifact "$stage" "$version" "$source_sha" "$url" "$archive_sha" "$manifest_platform" "$share/artifacts/$archive_sha"
+#     "$share/artifacts/$archive_sha/skidbladnir" validate-host-config --host-config="$(skidbladnir_host_config_source "$platform")"
+#     dev_server_remove_stage "$share" "$stage"; rm -R "$assets"
+#     exec 9>&-'
 skidbladnir_prepare_artifact() {
   local stage="$1"
   local version="$2"
@@ -631,7 +464,7 @@ skidbladnir_prepare_artifact() {
       "$manifest_platform" "$source_sha" "$version" || return 4
     return 0
   fi
-  skidbladnir_download "$url" "$archive" || return 1
+  dev_server_download "$url" "$archive" || return 1
   [[ "$(dev_server_sha256 "$archive")" == "$archive_sha" ]] || return 2
   skidbladnir_archive_members_exact "$archive" || return 3
   mkdir -m 0700 "$payload" || return 1
@@ -696,7 +529,7 @@ skidbladnir_unit_source() {
 
 skidbladnir_unit_target() {
   case "$1" in
-  macos) printf '%s/Library/LaunchAgents/dev.niels.skidbladnir.plist\n' "$2" ;;
+  macos) printf '%s/Library/LaunchAgents/%s.skidbladnir.plist\n' "$2" "$dev_server_fleet_label_prefix" ;;
   arch | devbox) printf '%s/.config/systemd/user/skidbladnir.service\n' "$2" ;;
   *) return 1 ;;
   esac
@@ -768,15 +601,6 @@ skidbladnir_prepare_unit_generation() {
   skidbladnir_unit_generation_owned "$installed"
 }
 
-skidbladnir_replace_path() {
-  python3 - "$1" "$2" <<'PY'
-import os
-import sys
-
-os.replace(sys.argv[1], sys.argv[2])
-PY
-}
-
 skidbladnir_promote_secret() {
   python3 - "$1" "$2" <<'PY'
 import os
@@ -789,97 +613,17 @@ os.unlink(sys.argv[1])
 PY
 }
 
-skidbladnir_atomic_symlink() (
+skidbladnir_atomic_symlink() {
   local target="$1"
   local relative="$2"
   local kind="$3"
-  local directory name temporary=''
-  local attempt
 
-  skidbladnir_symlink_stage_cleanup() {
-    if [[ -n "$temporary" && "$(dirname "$temporary")" == "$directory" &&
-    "$(basename "$temporary")" == ".${name}.dev-server."* &&
-    -L "$temporary" ]]; then
-      rm -f -- "$temporary"
-    fi
-  }
-  trap skidbladnir_symlink_stage_cleanup EXIT
-  trap 'exit 129' HUP
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
-
-  if [[ -e "$target" || -L "$target" ]]; then
-    [[ -L "$target" ]] || return 1
-    if [[ "$(readlink "$target")" == "$relative" ]]; then
-      return 0
-    fi
-  fi
   case "$kind:$relative" in
   generation:releases/v*-????????????????????????????????????????????????????????????????) ;;
   binary:../share/skidbladnir/current/skidbladnir) ;;
   *) return 1 ;;
   esac
-  directory="$(dirname "$target")"
-  name="$(basename "$target")"
-  for attempt in {1..32}; do
-    temporary="$directory/.$name.dev-server.$$.$RANDOM.$attempt"
-    if ln -s "$relative" "$temporary" 2>/dev/null; then
-      break
-    fi
-    temporary=''
-  done
-  [[ -n "$temporary" ]] || return 1
-  if [[ ! -L "$temporary" || "$(readlink "$temporary")" != "$relative" ]]; then
-    rm -f -- "$temporary"
-    return 1
-  fi
-  if ! skidbladnir_replace_path "$temporary" "$target"; then
-    rm -f -- "$temporary"
-    return 1
-  fi
-  [[ -L "$target" && "$(readlink "$target")" == "$relative" ]]
-)
-
-skidbladnir_remove_link() {
-  local target="$1"
-  if [[ ! -e "$target" && ! -L "$target" ]]; then
-    return 0
-  fi
-  [[ -L "$target" ]] || return 1
-  rm -f -- "$target"
-}
-
-skidbladnir_snapshot_file() {
-  local target="$1"
-  local snapshot="$2"
-  local mode="$3"
-
-  if [[ ! -e "$target" && ! -L "$target" ]]; then
-    : >"$snapshot.absent"
-    return
-  fi
-  [[ -f "$target" && ! -L "$target" ]] || return 1
-  install -m "$mode" "$target" "$snapshot"
-  : >"$snapshot.present"
-}
-
-skidbladnir_restore_file() {
-  local target="$1"
-  local snapshot="$2"
-  local mode="$3"
-
-  if [[ -f "$snapshot.present" && ! -L "$snapshot.present" &&
-    ! -e "$snapshot.absent" ]]; then
-    atomic_install_file "$snapshot" "$target" "$mode"
-  elif [[ -f "$snapshot.absent" && ! -L "$snapshot.absent" &&
-    ! -e "$snapshot.present" ]]; then
-    if [[ -e "$target" || -L "$target" ]]; then
-      [[ -f "$target" && ! -L "$target" ]] || return 1
-      rm -f -- "$target"
-    fi
-  else
-    return 1
-  fi
+  dev_server_atomic_symlink "$target" "$relative"
 }
 
 skidbladnir_mint_secret() (
@@ -947,48 +691,9 @@ skidbladnir_active_identity() {
 }
 
 skidbladnir_service_state() {
-  local platform="$1"
-  local output rc line state='' matches=0
-  local launchd_state_pattern=$'^\tstate[[:space:]]=[[:space:]]([A-Za-z][A-Za-z[:space:]-]{0,63})$'
-
-  case "$platform" in
-  arch | devbox)
-    if systemctl --user is-active --quiet skidbladnir.service; then
-      printf '%s\n' active
-      return 0
-    else
-      rc=$?
-    fi
-    case "$rc" in
-    3) printf '%s\n' inactive ;;
-    4) printf '%s\n' absent ;;
-    *) return 2 ;;
-    esac
-    ;;
-  macos)
-    if output="$(launchctl print "gui/$(id -u)/dev.niels.skidbladnir" 2>/dev/null)"; then
-      rc=0
-    else
-      rc=$?
-    fi
-    if ((rc == 113)); then
-      printf '%s\n' absent
-      return 0
-    fi
-    ((rc == 0 && ${#output} <= 65536)) || return 2
-    while IFS= read -r line; do
-      [[ "$line" == $'\tstate = '* ]] || continue
-      [[ "$line" =~ $launchd_state_pattern ]] || return 2
-      matches=$((matches + 1))
-      state="${BASH_REMATCH[1]}"
-    done <<<"$output"
-    ((matches == 1)) || return 2
-    if [[ "$state" == running ]]; then
-      printf '%s\n' active
-    else
-      printf '%s\n' inactive
-    fi
-    ;;
+  case "$1" in
+  arch | devbox) dev_server_service_state "$1" skidbladnir.service ;;
+  macos) dev_server_service_state "$1" "$dev_server_fleet_label_prefix.skidbladnir" ;;
   *) return 2 ;;
   esac
 }
@@ -1017,33 +722,9 @@ skidbladnir_wait_for_active() {
 }
 
 skidbladnir_service_enabled() {
-  local disabled line rc value=''
-  local matches=0
-  local pattern='^[[:space:]]*"dev[.]niels[.]skidbladnir"[[:space:]]*=>[[:space:]]*(enabled|disabled),?[[:space:]]*$'
   case "$1" in
-  macos)
-    disabled="$(launchctl print-disabled "gui/$(id -u)" 2>/dev/null)" || return 2
-    ((${#disabled} <= 65536)) || return 2
-    while IFS= read -r line; do
-      [[ "$line" == *'"dev.niels.skidbladnir"'* ]] || continue
-      [[ "$line" =~ $pattern ]] || return 2
-      matches=$((matches + 1))
-      value="${BASH_REMATCH[1]}"
-    done <<<"$disabled"
-    ((matches <= 1)) || return 2
-    [[ "$value" != disabled ]]
-    ;;
-  arch | devbox)
-    if systemctl --user is-enabled --quiet skidbladnir.service; then
-      return 0
-    else
-      rc=$?
-    fi
-    case "$rc" in
-    1 | 4) return 1 ;;
-    *) return 2 ;;
-    esac
-    ;;
+  arch | devbox) dev_server_service_enabled "$1" skidbladnir.service ;;
+  macos) dev_server_service_enabled "$1" "$dev_server_fleet_label_prefix.skidbladnir" ;;
   *) return 1 ;;
   esac
 }
@@ -1086,7 +767,7 @@ skidbladnir_activate_service() {
   macos)
     target="$(skidbladnir_unit_target "$platform" "$home")"
     domain="gui/$(id -u)"
-    label=dev.niels.skidbladnir
+    label="$dev_server_fleet_label_prefix.skidbladnir"
     if skidbladnir_service_enabled "$platform"; then
       enabled_status=0
     else
@@ -1103,7 +784,7 @@ skidbladnir_activate_service() {
     # launchd retains the loaded definition even while its process is stopped.
     state="$(skidbladnir_service_state "$platform")" || return 1
     if [[ "$state" != absent ]] && ((unit_changed)); then
-      launchctl bootout "$domain/$label" || return 1
+      skidbladnir_stop_service "$platform" || return 1
       state=absent
     fi
     if [[ "$state" == absent ]]; then
@@ -1121,10 +802,12 @@ skidbladnir_activate_service() {
   esac
 }
 
+# 0 once the supervisor has torn the service down or when it was already absent.
 skidbladnir_stop_service() {
   case "$1" in
-  macos) launchctl bootout "gui/$(id -u)/dev.niels.skidbladnir" >/dev/null 2>&1 || true ;;
-  arch | devbox) systemctl --user stop skidbladnir.service >/dev/null 2>&1 || true ;;
+  macos) dev_server_stop_service macos "$dev_server_fleet_label_prefix.skidbladnir" ;;
+  arch | devbox) dev_server_stop_service "$1" skidbladnir.service ;;
+  *) return 1 ;;
   esac
 }
 
@@ -1144,15 +827,12 @@ skidbladnir_running_binary_matches() {
 
   case "$platform" in
   arch | devbox)
-    pid="$(systemctl --user show skidbladnir.service --property MainPID --value 2>/dev/null)" || return 1
-    [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+    pid="$(dev_server_service_main_pid "$platform" skidbladnir.service)" || return 1
     executable="$(readlink "/proc/$pid/exe" 2>/dev/null)" || return 1
     [[ "$executable" == "$expected" && -f "$executable" && ! -L "$executable" ]] || return 1
     ;;
   macos)
-    pid="$(launchctl print "gui/$(id -u)/dev.niels.skidbladnir" 2>/dev/null |
-      LC_ALL=C awk '$1 == "pid" && $2 == "=" && $3 ~ /^[1-9][0-9]*$/ {print $3}')"
-    [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+    pid="$(dev_server_service_main_pid "$platform" "$dev_server_fleet_label_prefix.skidbladnir")" || return 1
     /usr/sbin/lsof -a -p "$pid" -d txt -Fn 2>/dev/null |
       grep -Fqx "n$expected" || return 1
     ;;
@@ -1178,7 +858,7 @@ skidbladnir_authenticated_health() (
       printf 'silent\nshow-error\nfail\nconnect-timeout = 1\nmax-time = 2\nmax-filesize = 65536\n'
       printf 'header = "Authorization: Bearer %s"\n' "$(cat "$config/bearer")"
       printf 'header = "Skidbladnir-Machine: %s"\n' "$(cat "$config/machine-handle")"
-      printf 'url = "http://127.0.0.1:7341/v1/pressure"\n'
+      printf 'url = "http://127.0.0.1:%s/v1/pressure"\n' "$dev_server_gateway_port"
     } | curl -q --noproxy '*' --config - 2>/dev/null || true)"
     bytes="$(LC_ALL=C printf '%s' "$response" | wc -c | tr -d '[:space:]')"
     if [[ "$bytes" =~ ^[1-9][0-9]*$ && "$bytes" -le 65536 ]] &&
@@ -1196,6 +876,11 @@ skidbladnir_authenticated_health() (
   return 1
 )
 
+# undoes a failed activation in this order: confirmed stop of the candidate,
+# then launcher, unit, pointers and command links go back, then the prior
+# runtime restarts and verifies. 0 restored; 4 the candidate could not be
+# stopped, so nothing moved and the stage still holds the prior's backups;
+# 1 the restore itself failed.
 skidbladnir_restore_runtime() {
   local platform="$1"
   local home="$2"
@@ -1207,8 +892,9 @@ skidbladnir_restore_runtime() {
   local was_enabled="$8"
   local active_unit="$9"
   local share="$home/.local/share/skidbladnir"
-  local unit_generation active_status
+  local unit_generation
 
+  skidbladnir_stop_service "$platform" || return 4
   if [[ -z "$prior_current" && "$platform" != macos && "$was_enabled" == 0 ]]; then
     # systemd needs the unit file to remove its enablement links.
     systemctl --user disable skidbladnir.service >/dev/null 2>&1 || return 1
@@ -1228,39 +914,31 @@ skidbladnir_restore_runtime() {
       fi
     done
   else
-    skidbladnir_restore_file "$home/.local/bin/skidbladnir-launch" \
+    dev_server_restore_file "$home/.local/bin/skidbladnir-launch" \
       "$stage/launcher-backup" 0755 || return 1
-    skidbladnir_restore_file "$unit_target" "$stage/unit-backup" 0644 || return 1
+    dev_server_restore_file "$unit_target" "$stage/unit-backup" 0644 || return 1
   fi
   if [[ -n "$prior_current" ]]; then
     skidbladnir_atomic_symlink "$share/current" "$prior_current" generation || return 1
   else
-    skidbladnir_remove_link "$share/current" || return 1
+    dev_server_remove_link "$share/current" || return 1
   fi
   if [[ -n "$prior_previous" ]]; then
     skidbladnir_atomic_symlink "$share/previous" "$prior_previous" generation || return 1
   else
-    skidbladnir_remove_link "$share/previous" || return 1
+    dev_server_remove_link "$share/previous" || return 1
   fi
   if [[ -z "$prior_current" ]]; then
-    skidbladnir_remove_link "$home/.local/bin/skidbladnir" || return 1
-    skidbladnir_remove_link "$home/.local/bin/skid" || return 1
+    dev_server_remove_link "$home/.local/bin/skidbladnir" || return 1
+    dev_server_remove_link "$home/.local/bin/skid" || return 1
   fi
 
   if [[ -z "$prior_current" ]]; then
-    skidbladnir_stop_service "$platform"
     if [[ "$platform" != macos ]]; then
       systemctl --user daemon-reload >/dev/null 2>&1 || true
     fi
-    if skidbladnir_service_active "$platform"; then
-      return 1
-    else
-      active_status=$?
-    fi
-    ((active_status == 1)) || return 1
   else
     if [[ "$platform" == macos ]]; then
-      launchctl bootout "gui/$(id -u)/dev.niels.skidbladnir" >/dev/null 2>&1 || true
       launchctl bootstrap "gui/$(id -u)" "$unit_target" || return 1
     else
       systemctl --user daemon-reload || return 1
@@ -1273,7 +951,7 @@ skidbladnir_restore_runtime() {
   # only after the prior runtime has been bootstrapped and verified.
   if [[ "$was_enabled" == 0 ]]; then
     if [[ "$platform" == macos ]]; then
-      launchctl disable "gui/$(id -u)/dev.niels.skidbladnir" >/dev/null 2>&1 || return 1
+      launchctl disable "gui/$(id -u)/$dev_server_fleet_label_prefix.skidbladnir" >/dev/null 2>&1 || return 1
     elif [[ -n "$prior_current" ]]; then
       systemctl --user disable skidbladnir.service >/dev/null 2>&1 || return 1
     fi
@@ -1311,13 +989,9 @@ skidbladnir_install_integrations() {
   local hooks notifier_source context directory plugin source target mode
 
   hooks="$(skidbladnir_agent_hooks_source "$platform")" || return 1
-  if [[ "$platform" == macos ]]; then
-    notifier_source="$(dev_server_assets_dir)/skidbladnir/skid-notify-macbook"
-  else
-    notifier_source="$(dev_server_assets_dir)/skidbladnir/skid-notify-linux"
-  fi
+  notifier_source="$(dev_server_assets_dir)/skidbladnir/skid-notify"
   skidbladnir_integration_changed=0
-  skidbladnir_directory_changed=0
+  dev_server_directory_changed=0
   skidbladnir_install_integration_file "$notifier_source" "$home/.local/bin/skid-notify" 0755 || return 1
 
   for context in personal work work2; do
@@ -1325,14 +999,14 @@ skidbladnir_install_integrations() {
     personal) directory="$home/.codex" ;;
     *) directory="$home/.codex-$context" ;;
     esac
-    skidbladnir_ensure_directory "$directory" 0700
+    dev_server_reconcile_directory "$directory" 0700
     skidbladnir_install_integration_file "$hooks" "$directory/hooks.json" 0600 || return 1
   done
   plugin="$home/.local/share/skidbladnir/claude-agent-identity"
-  skidbladnir_ensure_directory "$plugin" 0755
-  skidbladnir_ensure_directory "$plugin/.claude-plugin" 0755
-  skidbladnir_ensure_directory "$plugin/hooks" 0755
-  skidbladnir_ensure_directory "$plugin/bin" 0755
+  dev_server_reconcile_directory "$plugin" 0755
+  dev_server_reconcile_directory "$plugin/.claude-plugin" 0755
+  dev_server_reconcile_directory "$plugin/hooks" 0755
+  dev_server_reconcile_directory "$plugin/bin" 0755
   while read -r source target mode; do
     skidbladnir_install_integration_file \
       "$(dev_server_assets_dir)/skidbladnir/claude-agent-identity/$source" \
@@ -1342,9 +1016,9 @@ skidbladnir_install_integrations() {
 hooks/hooks.json hooks/hooks.json 0644
 bin/agent-hook bin/agent-hook 0755
 FILES
-  ((skidbladnir_directory_changed == 0)) || skidbladnir_integration_changed=1
+  ((dev_server_directory_changed == 0)) || skidbladnir_integration_changed=1
   if ((skidbladnir_integration_changed)); then
-    render_result CHANGED skid.integration 'hooks and notifications installed'
+    render_result CHANGED skid.integration 'identity hooks and terminal bell notifier installed'
   fi
 }
 
@@ -1404,14 +1078,14 @@ if any(name.endswith(":8443") and enabled is True
     print("public")
 elif (tcp.get("8443") == {"HTTPS": True} and
       [(name, entry) for name, entry in web.items() if name.endswith(":8443")] == [
-          (key, {"Handlers": {"/v1": {"Proxy": "http://127.0.0.1:7341/v1"}}})
+          (key, {"Handlers": {"/v1": {"Proxy": "http://127.0.0.1:" + sys.argv[2] + "/v1"}}})
       ] and funnel.get(key, False) is False):
     print("desired")
 elif not any(name.endswith(":8443") for name in web) and tcp.get("8443") is None:
     print("empty")
 else:
     print("stale")
-' "$hostname"
+' "$hostname" "$dev_server_gateway_port"
 }
 
 skidbladnir_serve_action() {
@@ -1492,12 +1166,38 @@ skidbladnir_reconcile_serve() {
   *) return 1 ;;
   esac
   TAILSCALE_BE_CLI=1 "$skidbladnir_serve_cli" serve --bg --yes --https=8443 --set-path=/v1 \
-    http://127.0.0.1:7341/v1 >/dev/null || return 1
+    "http://127.0.0.1:$dev_server_gateway_port/v1" >/dev/null || return 1
   post="$(TAILSCALE_BE_CLI=1 "$skidbladnir_serve_cli" serve status --json 2>/dev/null || true)"
   ((${#post} <= 65536)) || return 1
   [[ "$(printf '%s' "$post" |
     skidbladnir_serve_classification "$skidbladnir_serve_hostname")" == desired ]] || return 1
   render_result CHANGED tailscale.serve 'private /v1 mapping installed'
+}
+
+# ingress is host-level: one node has one tailscale :8443 mapping, so the host
+# entry points (workstation, the devbox role) run it around skidbladnir_apply;
+# a second deployment on the same node never calls it. preflight returns 0 to
+# proceed or 2 after rendering an ACTION, with nothing to apply.
+skidbladnir_ingress_preflight() {
+  local status=0
+
+  skidbladnir_preflight_serve || status=$?
+  case "$status" in
+  0 | 2) return "$status" ;;
+  3) die 'public Tailscale exposure is enabled for Skidbladnir HTTPS 8443' ;;
+  *) die 'could not inspect the private Skidbladnir Serve boundary' ;;
+  esac
+}
+
+skidbladnir_ingress_apply() {
+  local status=0
+
+  skidbladnir_reconcile_serve || status=$?
+  case "$status" in
+  0) ;;
+  3) die 'public Tailscale exposure is enabled for Skidbladnir HTTPS 8443' ;;
+  *) die 'could not reconcile the private Skidbladnir Serve mapping' ;;
+  esac
 }
 
 skidbladnir_generation_owned() {
@@ -1608,15 +1308,20 @@ skidbladnir_apply() {
   local current_identity='' previous_identity='' previous_version='' verified_runtime=''
   local unit_target runtime_identity unit_identity active_runtime='' active_unit=''
   local runtime_state unit_state was_active=0 was_enabled=0 needs_activation=0
-  local rollback_was_enabled=0
   local needs_unit_reload=0
   local preparation_status=0 credentials_installed=0 enablement_observation=0
   local service_observation=0 activation_failed=0
-  local serve_preflight_status=0
   local pointer_changed=0
   local saved_hup saved_int saved_term
 
-  case "$platform" in macos | arch | devbox) ;; *) die "unsupported Skidbladnir platform: $platform" ;; esac
+  case "$platform" in
+  macos) ;;
+  arch | devbox)
+    [[ "$dev_server_fleet_label_prefix" == dev.niels && "$dev_server_gateway_port" == 7341 ]] ||
+      die 'deployment identity on arch and devbox is the systemd user account'
+    ;;
+  *) die "unsupported Skidbladnir platform: $platform" ;;
+  esac
   require_cmd curl jq tar python3
   skidbladnir_validate_declared_inputs "$platform"
   pin_line="$(skidbladnir_release_values "$platform")" || die 'Skidbladnir release pin is invalid'
@@ -1629,17 +1334,6 @@ skidbladnir_apply() {
   units="$share/units"
   config="$home/.config/skidbladnir"
   skidbladnir_validate_protected_paths "$home"
-  if skidbladnir_preflight_serve; then
-    serve_preflight_status=0
-  else
-    serve_preflight_status=$?
-  fi
-  case "$serve_preflight_status" in
-  0) ;;
-  2) return 0 ;;
-  3) die 'public Tailscale exposure is enabled for Skidbladnir HTTPS 8443' ;;
-  *) die 'could not inspect the private Skidbladnir Serve boundary' ;;
-  esac
   if skidbladnir_service_active "$platform"; then
     was_active=1
   else
@@ -1654,14 +1348,14 @@ skidbladnir_apply() {
     ((enablement_observation == 1)) ||
       die 'could not observe Skidbladnir service enablement'
   fi
-  skidbladnir_directory_changed=0
+  dev_server_directory_changed=0
   skidbladnir_prepare_directories "$home" "$platform"
-  if ((skidbladnir_directory_changed)); then
+  if ((dev_server_directory_changed)); then
     render_result CHANGED skidbladnir.directories 'private directory topology installed'
   fi
-  skidbladnir_acquire_apply_lock "$home"
+  dev_server_acquire_lock "$share/.apply.lock" 9 Skidbladnir
   skidbladnir_validate_local_state "$home"
-  skidbladnir_cleanup_stale_stages "$share" ||
+  dev_server_remove_stale_stages "$share" ||
     die 'stale Skidbladnir staging state is invalid'
   skidbladnir_validate_installed_generations "$home" ||
     die 'installed Skidbladnir generation topology is invalid'
@@ -1676,9 +1370,9 @@ skidbladnir_apply() {
   saved_hup="$(trap -p HUP)"
   saved_int="$(trap -p INT)"
   saved_term="$(trap -p TERM)"
-  trap 'skidbladnir_cleanup_stage "$share" "$stage" >/dev/null 2>&1 || true; exit 129' HUP
-  trap 'skidbladnir_cleanup_stage "$share" "$stage" >/dev/null 2>&1 || true; exit 130' INT
-  trap 'skidbladnir_cleanup_stage "$share" "$stage" >/dev/null 2>&1 || true; exit 143' TERM
+  trap 'dev_server_remove_stage "$share" "$stage" >/dev/null 2>&1 || true; exit 129' HUP
+  trap 'dev_server_remove_stage "$share" "$stage" >/dev/null 2>&1 || true; exit 130' INT
+  trap 'dev_server_remove_stage "$share" "$stage" >/dev/null 2>&1 || true; exit 143' TERM
   artifact="$share/artifacts/$archive_sha"
   if skidbladnir_prepare_artifact "$stage" "$version" "$source_sha" \
     "$url" "$archive_sha" "$manifest_platform" "$artifact"; then
@@ -1698,9 +1392,10 @@ skidbladnir_apply() {
     esac
   fi
 
-  skidbladnir_install_native_control || {
+  # product schema belongs to the admitted binary; the shell kept only deployment facts.
+  "$artifact/skidbladnir" validate-host-config --host-config="$host_config" >/dev/null || {
     skidbladnir_discard_stage "$share" "$stage"
-    die 'could not install native agent control'
+    die 'Skidbladnir host config is invalid'
   }
 
   runtime_identity="$(skidbladnir_runtime_identity "$artifact" "$host_config")" || {
@@ -1740,11 +1435,11 @@ skidbladnir_apply() {
     prior_previous="$(readlink "$share/previous")"
   fi
   unit_target="$(skidbladnir_unit_target "$platform" "$home")"
-  skidbladnir_snapshot_file "$home/.local/bin/skidbladnir-launch" "$stage/launcher-backup" 0755 || {
+  dev_server_snapshot_file "$home/.local/bin/skidbladnir-launch" "$stage/launcher-backup" 0755 || {
     skidbladnir_discard_stage "$share" "$stage"
     die 'Skidbladnir launcher target is invalid'
   }
-  skidbladnir_snapshot_file "$unit_target" "$stage/unit-backup" 0644 || {
+  dev_server_snapshot_file "$unit_target" "$stage/unit-backup" 0644 || {
     skidbladnir_discard_stage "$share" "$stage"
     die 'Skidbladnir unit target is invalid'
   }
@@ -1825,9 +1520,6 @@ skidbladnir_apply() {
       die 'recorded active Skidbladnir runtime generation is unavailable'
     fi
   fi
-  if [[ -n "$rollback_current" ]]; then
-    rollback_was_enabled="$was_enabled"
-  fi
   if ((was_active)) && [[ -n "$prior_current" ]]; then
     if skidbladnir_running_binary_matches "$platform" "$home" "$prior_current"; then
       verified_runtime=current
@@ -1842,19 +1534,23 @@ skidbladnir_apply() {
       :
     else
       if [[ -n "$rollback_current" ]]; then
-        if ! skidbladnir_restore_runtime "$platform" "$home" "$stage" \
+        if skidbladnir_restore_runtime "$platform" "$home" "$stage" \
           "$rollback_current" "$rollback_previous" "$rollback_version" \
           "$unit_target" "$was_enabled" "$active_unit"; then
-          skidbladnir_discard_stage "$share" "$stage"
+          :
+        else
+          skidbladnir_settle_failed_restore "$share" "$stage" $?
           die 'unhealthy interrupted Skidbladnir activation could not restore the verified prior runtime'
         fi
         skidbladnir_discard_stage "$share" "$stage"
         die 'unhealthy interrupted Skidbladnir activation; the verified prior runtime was restored'
       fi
       if [[ -z "$active_runtime" ]]; then
-        if ! skidbladnir_restore_runtime "$platform" "$home" "$stage" '' '' '' \
-          "$unit_target" 0 ''; then
-          skidbladnir_discard_stage "$share" "$stage"
+        if skidbladnir_restore_runtime "$platform" "$home" "$stage" '' '' '' \
+          "$unit_target" "$was_enabled" ''; then
+          :
+        else
+          skidbladnir_settle_failed_restore "$share" "$stage" $?
           die 'unverified Skidbladnir activation could not be removed safely'
         fi
         skidbladnir_discard_stage "$share" "$stage"
@@ -1885,7 +1581,7 @@ skidbladnir_apply() {
         die 'could not set the prior Skidbladnir generation'
       }
     else
-      skidbladnir_remove_link "$share/previous" || {
+      dev_server_remove_link "$share/previous" || {
         skidbladnir_discard_stage "$share" "$stage"
         die 'could not clear the prior Skidbladnir generation'
       }
@@ -1929,10 +1625,12 @@ skidbladnir_apply() {
       '../share/skidbladnir/current/skidbladnir' binary || activation_failed=1
   fi
   if ((activation_failed)); then
-    if ! skidbladnir_restore_runtime "$platform" "$home" "$stage" "$rollback_current" \
+    if skidbladnir_restore_runtime "$platform" "$home" "$stage" "$rollback_current" \
       "$rollback_previous" "$rollback_version" "$unit_target" \
-      "$rollback_was_enabled" "$active_unit"; then
-      skidbladnir_discard_stage "$share" "$stage"
+      "$was_enabled" "$active_unit"; then
+      :
+    else
+      skidbladnir_settle_failed_restore "$share" "$stage" $?
       die 'Skidbladnir activation failed and the prior runtime could not be restored'
     fi
     skidbladnir_discard_stage "$share" "$stage"
@@ -1963,22 +1661,6 @@ skidbladnir_apply() {
     skidbladnir_discard_stage "$share" "$stage"
     die 'could not install Skidbladnir integrations'
   }
-  if skidbladnir_reconcile_serve; then
-    preparation_status=0
-  else
-    preparation_status=$?
-  fi
-  case "$preparation_status" in
-  0) ;;
-  3)
-    skidbladnir_discard_stage "$share" "$stage"
-    die 'public Tailscale exposure is enabled for Skidbladnir HTTPS 8443'
-    ;;
-  *)
-    skidbladnir_discard_stage "$share" "$stage"
-    die 'could not reconcile the private Skidbladnir Serve mapping'
-    ;;
-  esac
   skidbladnir_retain_generations "$home" || {
     skidbladnir_discard_stage "$share" "$stage"
     die 'Skidbladnir release retention found an unowned generation'
@@ -1992,9 +1674,9 @@ skidbladnir_apply() {
     die 'could not remove an obsolete Skidbladnir artifact cache'
   }
   skidbladnir_discard_stage "$share" "$stage"
-  skidbladnir_restore_signal_trap HUP "$saved_hup"
-  skidbladnir_restore_signal_trap INT "$saved_int"
-  skidbladnir_restore_signal_trap TERM "$saved_term"
+  dev_server_restore_signal_trap HUP "$saved_hup"
+  dev_server_restore_signal_trap INT "$saved_int"
+  dev_server_restore_signal_trap TERM "$saved_term"
 
   exec 9>&-
 }

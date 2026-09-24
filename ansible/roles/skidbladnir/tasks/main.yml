@@ -1,4 +1,60 @@
 ---
+- name: Apply pinned herdr runtime
+  ansible.builtin.shell: |
+    set -uo pipefail
+    dev_server_home_dir="/home/{{ devbox_user }}"
+    dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/herdr.sh"
+    output="$(
+      set -e
+      if herdr_preflight devbox; then
+        herdr_apply devbox
+      fi
+      finish_results devbox
+    )"
+    status=$?
+    printf '%s\n' "$output"
+    if ((status == 2)); then
+      codes=0
+      while IFS= read -r line; do
+        case "$line" in
+          'ACTION  herdr.runtime: inputs changed; '*) code=INPUTS_CHANGED ;;
+          'ACTION  herdr.runtime: unmanaged session snapshot '*) code=SESSION_SNAPSHOT ;;
+          'ACTION  herdr.config: agent-detection override '*) code=DETECTION_OVERRIDE ;;
+          'ACTION  herdr.runtime: agent-detection state '*) code=DETECTION_STATE ;;
+          'ACTION  herdr.runtime: unmanaged named session '*) code=NAMED_SESSION_RUNNING ;;
+          'ACTION  herdr.runtime: stale named session socket '*) code=NAMED_SESSION_STALE ;;
+          'ACTION  herdr.runtime: unmanaged server (pid '*) code=UNMANAGED_SOCKET ;;
+          'ACTION  herdr.runtime: service is loaded but not serving; '*) code=NOT_SERVING ;;
+          'ACTION  herdr.runtime: start the user session, then rerun apply') code=USER_SESSION ;;
+          *) continue ;;
+        esac
+        printf 'DEV_SERVER_HERDR_ACTION_%s\n' "$code"
+        codes=1
+      done <<<"$output"
+      ((codes)) || exit 1
+    fi
+    exit "$status"
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: "{{ devbox_user }}"
+  environment:
+    HOME: "/home/{{ devbox_user }}"
+    PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+    XDG_RUNTIME_DIR: "/run/user/{{ base_user_uid.stdout }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ base_user_uid.stdout }}/bus"
+  register: herdr_apply_result
+  changed_when: >-
+    herdr_apply_result.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ')
+  failed_when: herdr_apply_result.rc not in [0, 2]
+
+- name: Report herdr action codes and lines
+  ansible.builtin.debug:
+    msg: "{{ item }}"
+  loop: "{{ herdr_apply_result.stdout_lines | select('match', '^(DEV_SERVER_HERDR_ACTION_[A-Z_]+$|ACTION  herdr[.])') | list }}"
+
 - name: Apply pinned Skíðblaðnir generation
   ansible.builtin.shell: |
     set -uo pipefail
@@ -8,7 +64,10 @@
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/skidbladnir.sh"
     output="$(
       set -e
-      skidbladnir_apply devbox
+      if skidbladnir_ingress_preflight; then
+        skidbladnir_apply devbox
+        skidbladnir_ingress_apply
+      fi
       finish_results devbox
     )"
     status=$?
@@ -48,21 +107,22 @@
   changed_when: >-
     skidbladnir_apply_result.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ')
   failed_when: skidbladnir_apply_result.rc not in [0, 2]
+  when: herdr_apply_result.rc == 0
 
 - name: Report missing Tailscale action code
   ansible.builtin.debug:
     msg: DEV_SERVER_SKID_ACTION_INSTALL_TAILSCALE
-  when: "'DEV_SERVER_SKID_ACTION_INSTALL_TAILSCALE' in skidbladnir_apply_result.stdout_lines"
+  when: "'DEV_SERVER_SKID_ACTION_INSTALL_TAILSCALE' in (skidbladnir_apply_result.stdout_lines | default([]))"
 
 - name: Report signed-out Tailscale action code
   ansible.builtin.debug:
     msg: DEV_SERVER_SKID_ACTION_SIGN_IN_TAILSCALE
-  when: "'DEV_SERVER_SKID_ACTION_SIGN_IN_TAILSCALE' in skidbladnir_apply_result.stdout_lines"
+  when: "'DEV_SERVER_SKID_ACTION_SIGN_IN_TAILSCALE' in (skidbladnir_apply_result.stdout_lines | default([]))"
 
 - name: Report stale Serve action code
   ansible.builtin.debug:
     msg: DEV_SERVER_SKID_ACTION_CLEAR_STALE_SERVE
-  when: "'DEV_SERVER_SKID_ACTION_CLEAR_STALE_SERVE' in skidbladnir_apply_result.stdout_lines"
+  when: "'DEV_SERVER_SKID_ACTION_CLEAR_STALE_SERVE' in (skidbladnir_apply_result.stdout_lines | default([]))"
 
 - name: Install the admitted fleet CLI where the Jarvis principal can execute it
   ansible.builtin.copy:
@@ -72,4 +132,4 @@
     owner: root
     group: root
     mode: "0755"
-  when: skidbladnir_apply_result.rc == 0
+  when: herdr_apply_result.rc == 0 and (skidbladnir_apply_result.rc | default(1)) == 0

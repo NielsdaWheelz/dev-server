@@ -15,6 +15,7 @@
     - assets/routers
     - assets/codex
     - assets/claude
+    - assets/herdr
     - assets/skidbladnir
     - assets/skidbladnir/claude-agent-identity
     - assets/skidbladnir/claude-agent-identity/.claude-plugin
@@ -33,6 +34,7 @@
     - tmux.sh
     - dotfiles.sh
     - ai-tools.sh
+    - herdr.sh
     - skidbladnir.sh
 
 - name: Install exact dotfile assets
@@ -86,6 +88,18 @@
     group: "{{ devbox_user }}"
     mode: "0600"
 
+- name: Install exact herdr installer inputs
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/herdr/{{ item }}"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/herdr/{{ item }}"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0644"
+  loop:
+    - release-pin.json
+    - config.toml
+    - herdr.service
+
 - name: Install exact Skíðblaðnir assets
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../assets/skidbladnir/{{ item.path }}"
@@ -95,8 +109,6 @@
     group: "{{ devbox_user }}"
     mode: "{{ item.mode }}"
   loop:
-    - path: native-control.json
-      mode: "0644"
     - path: release-pin.json
       mode: "0644"
     - path: host-config-devbox.json
@@ -107,7 +119,7 @@
       mode: "0644"
     - path: skidbladnir-launch
       mode: "0755"
-    - path: skid-notify-linux
+    - path: skid-notify
       mode: "0755"
     - path: claude-agent-identity/.claude-plugin/plugin.json
       mode: "0644"

@@ -19,6 +19,8 @@ source "$base_dir/lib/skidbladnir.sh"
 source "$base_dir/lib/ai-tools.sh"
 # shellcheck source=lib/codex-services.sh
 source "$base_dir/lib/codex-services.sh"
+# shellcheck source=lib/herdr.sh
+source "$base_dir/lib/herdr.sh"
 
 workstation_platform=''
 workstation_target=''
@@ -149,10 +151,7 @@ workstation_stage_declared_inputs() {
   # Read by the platform package library selected at runtime.
   # shellcheck disable=SC2034
   dev_server_root="$workstation_declared_stage"
-  dev_server_assets_root="$workstation_declared_stage/assets"
-  # Read dynamically by the already-sourced Skidbladnir library.
-  # shellcheck disable=SC2034
-  skidbladnir_release_pin_file="$dev_server_assets_root/skidbladnir/release-pin.json"
+  dev_server_render_assets "$workstation_declared_stage/assets"
 }
 
 workstation_prepare_arch_sudo() {
@@ -192,6 +191,7 @@ workstation_preflight() {
   # shellcheck disable=SC2034
   dev_server_ai_host="$workstation_target"
   codex_services_preflight "$workstation_target" "$workstation_restart_codex"
+  herdr_preflight "$workstation_platform"
 }
 
 workstation_apply() {
@@ -210,7 +210,11 @@ workstation_apply() {
   codex_services_install
   ai_install "$workstation_upgrade"
   codex_services_activate
-  skidbladnir_apply "$workstation_platform"
+  herdr_apply "$workstation_platform"
+  if skidbladnir_ingress_preflight; then
+    skidbladnir_apply "$workstation_platform"
+    skidbladnir_ingress_apply
+  fi
   workstation_report_deferrals
   finish_results "$workstation_target"
 }

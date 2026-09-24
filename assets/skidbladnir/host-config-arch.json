@@ -1,7 +1,6 @@
 {
   "platform": "Linux",
-  "tmux": {"path": "/usr/bin/tmux", "testedVersion": "tmux 3.7c"},
-  "nativeControlPath": "/home/nnandal/.local/bin/provider-runtime-control",
+  "herdr": {"path": "/home/nnandal/.local/share/herdr/current/herdr", "socketPath": "/home/nnandal/.config/herdr/herdr.sock", "testedVersion": "herdr 0.9.1"},
   "profiles": [
     {
       "key": "personal",

@@ -1,43 +1,42 @@
 {
   "platform": "Darwin",
-  "tmux": {"path": "/opt/homebrew/bin/tmux", "testedVersion": "tmux 3.7c"},
-  "nativeControlPath": "/Users/nnandal/.local/bin/provider-runtime-control",
+  "herdr": {"path": "@ROOT@/.local/share/herdr/current/herdr", "socketPath": "@ROOT@/.config/herdr/herdr.sock", "testedVersion": "herdr 0.9.1"},
   "profiles": [
     {
       "key": "personal",
       "label": "Codex · Personal",
       "provider": "Codex",
-      "command": "/Users/nnandal/bin/codex",
-      "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
+      "command": "@ROOT@/bin/codex",
+      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.codex"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "@ROOT@/.local/bin/codex"}],
       "arguments": ["--yolo"]
     },
     {
       "key": "work",
       "label": "Codex · Work",
       "provider": "Codex",
-      "command": "/Users/nnandal/bin/codex-work",
-      "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-work"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
+      "command": "@ROOT@/bin/codex-work",
+      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.codex-work"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "@ROOT@/.local/bin/codex"}],
       "arguments": ["--yolo"]
     },
     {
       "key": "work2",
       "label": "Codex · Work 2",
       "provider": "Codex",
-      "command": "/Users/nnandal/bin/codex-work2",
-      "environment": [{"name": "CODEX_HOME", "value": "/Users/nnandal/.codex-work2"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "/Users/nnandal/.local/bin/codex"}],
+      "command": "@ROOT@/bin/codex-work2",
+      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.codex-work2"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "@ROOT@/.local/bin/codex"}],
       "arguments": ["--yolo"]
     },
     {
       "key": "claude-work",
       "label": "Claude · Work",
       "provider": "Claude",
-      "command": "/Users/nnandal/bin/claude-work",
-      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "/Users/nnandal/.claude-work"}],
-      "foregroundSignatures": [{"argument0": "/Users/nnandal/.local/bin/claude"}],
-      "arguments": ["--dangerously-skip-permissions", "--plugin-dir", "/Users/nnandal/.local/share/skidbladnir/claude-agent-identity"]
+      "command": "@ROOT@/bin/claude-work",
+      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "@ROOT@/.claude-work"}],
+      "foregroundSignatures": [{"argument0": "@ROOT@/.local/bin/claude"}],
+      "arguments": ["--dangerously-skip-permissions", "--plugin-dir", "@ROOT@/.local/share/skidbladnir/claude-agent-identity"]
     }
   ]
 }

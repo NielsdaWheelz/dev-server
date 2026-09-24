@@ -61,7 +61,9 @@ a later subsystem failure can leave earlier changes applied; rerun after repair.
 there is no whole-host transaction or duplicated all-host admission gate.
 
 workstation order is native packages, dotfiles, exact-host personal policy,
-ai tools/shared codex, skid, then remaining postconditions. linux is supported
+ai tools/shared codex, herdr, the ingress preflight, skid, the ingress mapping,
+then remaining postconditions. a herdr preflight action or apply failure stops
+the run before skid; an ingress action skips skid and its mapping. linux is supported
 only on the exact owned arch host. arch elevation uses `ARCH_PASS` through
 askpass, including yay; values come from the environment or literal ignored
 repo `.env`, never evaluation. validate credentials before host changes.
@@ -103,6 +105,7 @@ more privileged consumer. interrupted activation must remain retryable.
 | `desktop.session` | defer to login or manual ghostty reload |
 | `ssh.config` | validate, then reload ssh |
 | `docker.config` | rebuild/restart only with no running containers; otherwise defer |
+| `herdr.runtime` | start once when absent; changed binary/config/unit on a running server is an operator stop, then reapply; never a restart |
 | `skid.unit`, `skid.runtime` | start or activate gateway once, with rollback |
 | `skid.integration` | future agents; no gateway restart |
 | `codex.runtime` | explicit authorized drain/restart of all three services |
@@ -197,14 +200,144 @@ jarvis cognition remains a local client with its own permission policy.
 worker control belongs to skid's common peer cli and target user authority;
 no dedicated jarvis worker launcher remains.
 
+## deployment identity
+
+three variables in `lib/common.sh` name a deployment; nothing derives one from
+another and there is no deployment name or registry.
+
+| variable | default | meaning |
+|---|---|---|
+| `dev_server_home_dir` | `$HOME` | root of every installer-owned path: `.local/{share,state,bin}`, `.config`, `Library/LaunchAgents`, locks, artifact caches, active digests, herdr socket, config and snapshot |
+| `dev_server_fleet_label_prefix` | `dev.niels` | launchd label prefix of the two fleet services, `<prefix>.herdr` and `<prefix>.skidbladnir`; codex-shared labels are not part of it |
+| `dev_server_gateway_port` | `7341` | the gateway's loopback listen port; the health check and the ingress mapping read it |
+
+the three are fixed for a deployment's life; changing one creates a new
+deployment (the restore path verifies the prior unit, which may listen
+elsewhere). a second deployment on one mac is these three set differently and
+applied through the same library functions, units and unmodified binaries.
+
+the four macbook assets that name them are templates: `dev.niels.herdr.plist`,
+`dev.niels.skidbladnir.plist`, `host-config-macbook.json` and
+`agent-hooks-macbook.json` carry `@ROOT@`, `@FLEET_LABEL_PREFIX@` and
+`@GATEWAY_PORT@`. `dev_server_render_assets DIR` renders them in place inside a
+private copy of `assets/` after the staged snapshot is verified, dies if any
+`@[A-Z_]+@` remains, and points the libraries at that copy. source filenames
+stay `dev.niels.*`; install targets are `<prefix>.*.plist`. rendering with the
+defaults reproduces the production bytes. both plists set `HOME` to the root so
+the launcher, the gateway's worker-directory root and herdr's snapshot and
+detection caches follow it. every other asset is literal: arch and devbox units
+use systemd's `%h`, and on arch and devbox deployment identity is the systemd
+user account; the libraries die there if the prefix or port differ from their
+defaults.
+
+ingress is host-level, not deployment-level: one node has one tailscale `:8443`
+mapping, and skid clients accept only that origin. `skidbladnir_ingress_preflight`
+(returns 0, or 2 after an `ACTION`) and `skidbladnir_ingress_apply` run from
+`workstation` and the devbox role around `skidbladnir_apply`; a second
+deployment never calls them and is reachable only over loopback. two deliberate
+ordering consequences: the mapping is reconciled after retention and outside
+the skid apply lock, and with a stale mapping the ingress `ACTION`/exit `2` now
+precedes declared-input, pin, protected-path and missing-tool failures.
+
+a disposable deployment for qualification on the mac is applied through the
+library entry the devbox role uses, never through `./workstation apply` (which
+would also touch the codex-shared services):
+
+```sh
+mkdir -m 0700 /private/tmp/skq   # short root: unix socket paths are capped near 104 bytes
+git -C <checkout> worktree add --detach /private/tmp/skq-src HEAD
+# edit /private/tmp/skq-src/assets/skidbladnir/release-pin.json locally if a candidate is under test; never commit it
+# env -i: a production herdr pane exports HERDR_* variables the preflight must not see; bash 4 or newer is required
+env -i HOME=/private/tmp/skq PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin \
+  dev_server_home_dir=/private/tmp/skq \
+  dev_server_fleet_label_prefix=dev.niels.skq dev_server_gateway_port=7351 \
+  bash -c 'set -uo pipefail; cd /private/tmp/skq-src
+    source lib/common.sh; source lib/herdr.sh; source lib/skidbladnir.sh
+    stage=$(mktemp -d /private/tmp/skq-assets.XXXXXX); cp -Rp assets "$stage/assets"
+    dev_server_render_assets "$stage/assets"
+    # isolation checks here, before herdr_preflight
+    output="$(set -e; if herdr_preflight macos; then herdr_apply macos; skidbladnir_apply macos; fi; finish_results macbook)"; rc=$?
+    printf "%s\n" "$output"; rm -R "$stage"; exit $rc'
+```
+
+isolation checks before the first bootstrap: `launchctl print gui/UID/<prefix>.herdr`
+and `.skidbladnir` fail; `lsof -nP -iTCP:<port> -sTCP:LISTEN` is empty;
+`grep -rn /Users/<owner>` and `grep -rEn 'dev\.niels\.(herdr|skidbladnir)([^.a-z]|$)'`
+over the rendered `herdr/` and `skidbladnir/` stage return nothing (repeat both
+over the root after apply); `launchctl getenv HERDR_*`/`XDG_*` are empty; the
+rendered plist `PATH` resolves no real `codex`, `claude`, `skid`, `skidbladnir`,
+`herdr` or `tailscale`. only labels under the prefix are ever passed to
+`launchctl`, never `enable` or `disable` (record `launchctl print-disabled
+gui/UID` before and after); production pids are recorded first and compared
+after. never run `pairing-invite` or the `agentcli` subcommands from the
+candidate binary: their origin is production's `127.0.0.1:7341`. remove with
+`launchctl bootout` of both labels, `git worktree remove`, and `rm -R` of the
+root and stage. a seeded artifact directory is trusted, not verified against a
+pin url; workers are stand-in executables, never real providers.
+
+## herdr runtime
+
+`assets/herdr/release-pin.json` is the herdr trust root: exact version, source
+commit, platform urls and executable sha256 for the raw release binaries. one
+server per host runs the pinned binary as `herdr server` under the development
+user: a user systemd unit on arch and devbox, a launchagent `<prefix>.herdr` on
+macbook whose paths hang off the deployment root. it is
+login-scoped on macbook and arch; only devbox's user manager lingers. the unit
+sets `HERDR_CONFIG_PATH` to the managed `~/.local/share/herdr/config.toml`
+(automatic agent resume and every self-update check disabled) and
+`HERDR_SOCKET_PATH` to the default-session socket `~/.config/herdr/herdr.sock`,
+so a bare `herdr` in a shell attaches to the same instance. the user's own
+`~/.config/herdr/config.toml`, snapshots and detection state stay upstream's.
+the unit clears inherited herdr and xdg variables, sets `LANG`, and shares no
+lifetime with the skid gateway: `skidbladnir.service` orders after it, nothing
+requires, binds or stops the other.
+
+`herdr_preflight` runs before any mutation and returns `ACTION`/exit `2`
+without changing state for: a running server whose binary, config or unit
+differs; an unmanaged default-session snapshot before the first managed
+activation; agent-detection overrides or remote update state; named-session
+sockets; a listener on the socket whose pid is not the service's; a loaded
+service whose socket does not answer within a few seconds (launchd parks a job
+whose program cannot be executed and does not retry when the file is repaired);
+herdr or xdg variables in the launchd environment. the changed-inputs line names the
+consequence (stopping ends every herdr terminal and its agents), the exact
+supervisor stop, and says not to run bare `herdr` in between; an unmanaged
+listener names its pid and `kill -TERM`; residue lines name the path to move
+aside or remove. the changed-inputs case stages and verifies the new binary
+before it reports, so the rerun after the stop cannot fail on a download.
+`herdr_apply` stages the artifact and immutable generation first and promotes
+`current`, the `~/.local/bin/herdr` link, config, unit and enablement only when
+the service is absent or inactive; it records `herdr.runtime` (binary, config
+and unit digests) only after the socket answers `ping` with the tested version
+and the bundled codex and claude detection manifests are active. a failed
+upgrade first stops the candidate and waits for the supervisor to finish
+tearing it down; only then do the unit, config, pointers, snapshot and observed
+enablement go back and the prior herdr restarts and verifies against the prior
+generation's version. a candidate that cannot be stopped keeps its inputs; the
+stage with the prior's backups is kept as `.apply.failed.*` in the share and
+apply reports both. the prior's own failure to verify is reported as such,
+never as a restart to retry. a failed first activation stops its own candidate, removes
+the unit and only the snapshot it created, and leaves the generation
+unreferenced. an unchanged apply downloads, writes and restarts nothing.
+`herdr_prepare_artifact` stages the verified binary under the lock without
+promotion, for pre-window staging.
+
+herdr is never downgraded or stopped to undo a gateway change. rolling the skid
+gateway, config, unit or notifier back means checking out the last pre-pin
+dev-server commit and applying it; that release's own library restores what it
+needs, including the retired native-control helper still on disk (see
+[retirement](docs/issues/skid-legacy-asset-retirement.md)).
+
 ## skid installation
 
 `assets/skidbladnir/release-pin.json` is the release trust root: exact version,
 source commit, platform urls, and archive sha256. accept only supported release
 paths and valid schema. upstream owns packaging, product schema, release
 certification, fleet operations, and device acceptance.
-the pinned release has no standalone read-only host-config validator, so local
-admission checks remain until [that upstream gap is closed](docs/issues/skid-config-validation.md).
+the pinned release's `skidbladnir validate-host-config` admits the declared host
+config after artifact preparation; the installer keeps only deployment-owned
+checks (home-rooted paths, the four account wrappers, permission flags, and
+herdr path/socket literals equal to the unit's).
 
 under one nonblocking lock, reuse a locally verified pinned artifact or download
 and verify it. check archive digest, exact release members, manifest identity,
@@ -222,9 +355,12 @@ prior verified activation inputs. both command links point to the current binary
 
 start an inactive gateway; activate once when runtime/unit identity changes.
 authenticated health and the running executable must match before recording
-active identity. on failed activation, restore the prior pointer and unit,
-restart, and verify them. a failed first install leaves the service inactive
-and candidate unreferenced. retain one prior healthy generation; prune older
+active identity. on failed activation, stop the candidate and wait for its
+teardown first; only then restore the prior pointer, unit and observed
+enablement, restart, and verify them. a candidate that cannot be stopped keeps
+its inputs, and the stage with the prior launcher and unit is kept as
+`.apply.failed.*` in the share. a failed first install leaves the service
+inactive and candidate unreferenced. retain one prior healthy generation; prune older
 owned generations only after success.
 
 bearer, machine handle, and existing android signing credentials are private
@@ -235,13 +371,17 @@ not restart the gateway.
 
 host configs declare codex `--yolo` and claude-work
 `--dangerously-skip-permissions`, retaining the identity plugin. these arguments
-affect new sessions. native-control source and frozen provider environment are
-separately pinned. provider sockets remain local.
+affect new sessions. the host config names the managed herdr binary, socket and
+tested version; both providers are observed through herdr terminal reads. the
+retired native-control helper is no longer managed; its installed copies stay
+only for the v0.6.0 rollback. one portable `skid-notify` writes the codex
+completion bell to its controlling terminal, if any, and otherwise exits 0. provider sockets remain local.
 
 expose only the owned private `/v1` tailscale serve mapping through supported
-cli commands. no funnel, private localapi, or hostname rewriting. a stale
-mapping produces one exact recovery action. fleet invitation and client bearer
-provisioning remain upstream operations.
+cli commands, from the host entry points, not from `skidbladnir_apply` (see
+deployment identity). no funnel, private localapi, or hostname rewriting. a
+stale mapping produces one exact recovery action. fleet invitation and client
+bearer provisioning remain upstream operations.
 
 ## devbox boundary
 
