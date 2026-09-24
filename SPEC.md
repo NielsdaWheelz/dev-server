@@ -329,8 +329,9 @@ promotion, for pre-window staging.
 herdr is never downgraded or stopped to undo a gateway change. rolling the skid
 gateway, config, unit or notifier back means checking out the last pre-pin
 dev-server commit and applying it; that release's own library restores what it
-needs, including the retired native-control helper still on disk (see
-[retirement](docs/issues/skid-legacy-asset-retirement.md)).
+needs. the target must be herdr-era (v0.7.0 or later): the tmux-era v0.6.0
+rollback was retired on 2026-09-24 with its native-control helper and the
+workstation codex servers it verified.
 
 ## skid installation
 
