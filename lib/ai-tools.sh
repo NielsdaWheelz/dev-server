@@ -128,8 +128,15 @@ ai_install_codex() {
     return 0
   fi
 
-  candidate="$(npm view @openai/codex dist-tags.latest)" ||
-    die 'could not resolve the latest stable Codex release'
+  # codex 0.156 publishes its app-server socket as a symlink into a private
+  # directory, which jarvis cannot reach; devbox holds the last release that binds
+  # the declared path (docs/issues/codex-daemon-socket.md).
+  if [[ "${dev_server_ai_host:-devbox}" == devbox ]]; then
+    candidate=0.155.1
+  else
+    candidate="$(npm view @openai/codex dist-tags.latest)" ||
+      die 'could not resolve the latest stable Codex release'
+  fi
   [[ "$candidate" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
     die 'npm latest must identify a stable Codex release'
   if ai_codex_matches "$candidate"; then

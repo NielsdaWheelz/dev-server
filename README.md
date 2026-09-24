@@ -99,11 +99,12 @@ codex-work login
 codex-work2 resume
 ```
 
-each host supervises three codex app servers, one per account. macbook uses
-launchagents; arch uses user systemd services; devbox uses system services as
-`niels`. workstation sockets are private at
-`~/.local/run/codex-shared/<profile>/app-server.sock`. devbox grants only the
-intended local client group access. account homes and credentials stay intact.
+the devbox supervises three codex app servers, one per account, as system
+services running as `niels`, for jarvis's cognition; it grants only the intended
+local client group access and pins codex 0.155.1 (see
+[issue](docs/issues/codex-daemon-socket.md)). macbook and arch run no shared
+server; interactive codex there runs embedded. account homes and credentials
+stay intact.
 
 native discovery links each account's
 `app-server-control/app-server-control.sock` to its supervised socket. a
@@ -119,7 +120,6 @@ are not promised. native daemon stop/restart cannot manage these supervised
 services. after finishing active turns, explicitly restart them with:
 
 ```sh
-./workstation apply --restart-codex
 ./devbox apply --restart-codex
 ```
 
@@ -234,7 +234,7 @@ launcher is retired.
 | command orchestration | `workstation`, `devbox` |
 | file installation and result reporting | `lib/common.sh` |
 | workstation packages, personal policy, dotfiles, tmux activation | `lib/packages-*.sh`, `lib/personal-*.sh`, `lib/dotfiles.sh`, `lib/tmux.sh` |
-| ai binaries, accounts, shared services | `lib/ai-tools.sh`, `lib/codex-services.sh`, `assets/codex/`, `assets/routers/ai-profile` |
+| ai binaries, accounts, shared services | `lib/ai-tools.sh`, `assets/codex/`, `assets/routers/ai-profile` |
 | devbox github identity and ssh client policy | `ansible/roles/github/`; `devbox` owns account enrollment checks |
 | herdr runtime | `lib/herdr.sh`, `assets/herdr/` |
 | skid deployment and host integration | `lib/skidbladnir.sh`, `assets/skidbladnir/` |
