@@ -4,6 +4,8 @@
 : "${skidbladnir_release_pin_file:=$(dev_server_assets_dir)/skidbladnir/release-pin.json}"
 
 : "${dev_server_install_status:=UP TO DATE}"
+: "${dev_server_fleet_label_prefix:=dev.niels}"
+: "${dev_server_gateway_port:=7341}"
 skidbladnir_unit_changed=0
 skidbladnir_activation_status=''
 skidbladnir_integration_changed=0
@@ -404,10 +406,13 @@ skidbladnir_archive_members_exact() {
   [[ "$types" == $'-\n-\n-' ]]
 }
 
-# staging alone (spec §4.3), never through skidbladnir_apply; directories exist on every host:
+# staging alone (spec §4.3), never through skidbladnir_apply; directories exist on every host.
+# the assets are copied and rendered first (deployment identity, lib/common.sh):
 #   bash -c 'set -euo pipefail
 #     cd DEV_SERVER_CHECKOUT; source lib/common.sh; source lib/skidbladnir.sh
 #     platform=macos # or arch | devbox
+#     assets="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-assets.XXXXXX")"
+#     cp -Rp assets "$assets/assets"; dev_server_render_assets "$assets/assets"
 #     home="$(dev_server_home)"; share="$home/.local/share/skidbladnir"
 #     skidbladnir_prepare_directories "$home" "$platform"
 #     dev_server_acquire_lock "$share/.apply.lock" 9 Skidbladnir
@@ -415,7 +420,7 @@ skidbladnir_archive_members_exact() {
 #     read -r version source_sha url archive_sha manifest_platform <<<"$(skidbladnir_release_values "$platform" | tr "\t" " ")"
 #     skidbladnir_prepare_artifact "$stage" "$version" "$source_sha" "$url" "$archive_sha" "$manifest_platform" "$share/artifacts/$archive_sha"
 #     "$share/artifacts/$archive_sha/skidbladnir" validate-host-config --host-config="$(skidbladnir_host_config_source "$platform")"
-#     dev_server_remove_stage "$share" "$stage"
+#     dev_server_remove_stage "$share" "$stage"; rm -R "$assets"
 #     exec 9>&-'
 skidbladnir_prepare_artifact() {
   local stage="$1"
@@ -507,7 +512,7 @@ skidbladnir_unit_source() {
 
 skidbladnir_unit_target() {
   case "$1" in
-  macos) printf '%s/Library/LaunchAgents/dev.niels.skidbladnir.plist\n' "$2" ;;
+  macos) printf '%s/Library/LaunchAgents/%s.skidbladnir.plist\n' "$2" "$dev_server_fleet_label_prefix" ;;
   arch | devbox) printf '%s/.config/systemd/user/skidbladnir.service\n' "$2" ;;
   *) return 1 ;;
   esac
@@ -671,7 +676,7 @@ skidbladnir_active_identity() {
 skidbladnir_service_state() {
   case "$1" in
   arch | devbox) dev_server_service_state "$1" skidbladnir.service ;;
-  macos) dev_server_service_state "$1" dev.niels.skidbladnir ;;
+  macos) dev_server_service_state "$1" "$dev_server_fleet_label_prefix.skidbladnir" ;;
   *) return 2 ;;
   esac
 }
@@ -702,7 +707,7 @@ skidbladnir_wait_for_active() {
 skidbladnir_service_enabled() {
   case "$1" in
   arch | devbox) dev_server_service_enabled "$1" skidbladnir.service ;;
-  macos) dev_server_service_enabled "$1" dev.niels.skidbladnir ;;
+  macos) dev_server_service_enabled "$1" "$dev_server_fleet_label_prefix.skidbladnir" ;;
   *) return 1 ;;
   esac
 }
@@ -745,7 +750,7 @@ skidbladnir_activate_service() {
   macos)
     target="$(skidbladnir_unit_target "$platform" "$home")"
     domain="gui/$(id -u)"
-    label=dev.niels.skidbladnir
+    label="$dev_server_fleet_label_prefix.skidbladnir"
     if skidbladnir_service_enabled "$platform"; then
       enabled_status=0
     else
@@ -782,7 +787,7 @@ skidbladnir_activate_service() {
 
 skidbladnir_stop_service() {
   case "$1" in
-  macos) launchctl bootout "gui/$(id -u)/dev.niels.skidbladnir" >/dev/null 2>&1 || true ;;
+  macos) launchctl bootout "gui/$(id -u)/$dev_server_fleet_label_prefix.skidbladnir" >/dev/null 2>&1 || true ;;
   arch | devbox) systemctl --user stop skidbladnir.service >/dev/null 2>&1 || true ;;
   esac
 }
@@ -808,7 +813,7 @@ skidbladnir_running_binary_matches() {
     [[ "$executable" == "$expected" && -f "$executable" && ! -L "$executable" ]] || return 1
     ;;
   macos)
-    pid="$(dev_server_service_main_pid "$platform" dev.niels.skidbladnir)" || return 1
+    pid="$(dev_server_service_main_pid "$platform" "$dev_server_fleet_label_prefix.skidbladnir")" || return 1
     /usr/sbin/lsof -a -p "$pid" -d txt -Fn 2>/dev/null |
       grep -Fqx "n$expected" || return 1
     ;;
@@ -834,7 +839,7 @@ skidbladnir_authenticated_health() (
       printf 'silent\nshow-error\nfail\nconnect-timeout = 1\nmax-time = 2\nmax-filesize = 65536\n'
       printf 'header = "Authorization: Bearer %s"\n' "$(cat "$config/bearer")"
       printf 'header = "Skidbladnir-Machine: %s"\n' "$(cat "$config/machine-handle")"
-      printf 'url = "http://127.0.0.1:7341/v1/pressure"\n'
+      printf 'url = "http://127.0.0.1:%s/v1/pressure"\n' "$dev_server_gateway_port"
     } | curl -q --noproxy '*' --config - 2>/dev/null || true)"
     bytes="$(LC_ALL=C printf '%s' "$response" | wc -c | tr -d '[:space:]')"
     if [[ "$bytes" =~ ^[1-9][0-9]*$ && "$bytes" -le 65536 ]] &&
@@ -916,7 +921,7 @@ skidbladnir_restore_runtime() {
     ((active_status == 1)) || return 1
   else
     if [[ "$platform" == macos ]]; then
-      launchctl bootout "gui/$(id -u)/dev.niels.skidbladnir" >/dev/null 2>&1 || true
+      launchctl bootout "gui/$(id -u)/$dev_server_fleet_label_prefix.skidbladnir" >/dev/null 2>&1 || true
       launchctl bootstrap "gui/$(id -u)" "$unit_target" || return 1
     else
       systemctl --user daemon-reload || return 1
@@ -929,7 +934,7 @@ skidbladnir_restore_runtime() {
   # only after the prior runtime has been bootstrapped and verified.
   if [[ "$was_enabled" == 0 ]]; then
     if [[ "$platform" == macos ]]; then
-      launchctl disable "gui/$(id -u)/dev.niels.skidbladnir" >/dev/null 2>&1 || return 1
+      launchctl disable "gui/$(id -u)/$dev_server_fleet_label_prefix.skidbladnir" >/dev/null 2>&1 || return 1
     elif [[ -n "$prior_current" ]]; then
       systemctl --user disable skidbladnir.service >/dev/null 2>&1 || return 1
     fi
@@ -1056,14 +1061,14 @@ if any(name.endswith(":8443") and enabled is True
     print("public")
 elif (tcp.get("8443") == {"HTTPS": True} and
       [(name, entry) for name, entry in web.items() if name.endswith(":8443")] == [
-          (key, {"Handlers": {"/v1": {"Proxy": "http://127.0.0.1:7341/v1"}}})
+          (key, {"Handlers": {"/v1": {"Proxy": "http://127.0.0.1:" + sys.argv[2] + "/v1"}}})
       ] and funnel.get(key, False) is False):
     print("desired")
 elif not any(name.endswith(":8443") for name in web) and tcp.get("8443") is None:
     print("empty")
 else:
     print("stale")
-' "$hostname"
+' "$hostname" "$dev_server_gateway_port"
 }
 
 skidbladnir_serve_action() {
@@ -1144,12 +1149,38 @@ skidbladnir_reconcile_serve() {
   *) return 1 ;;
   esac
   TAILSCALE_BE_CLI=1 "$skidbladnir_serve_cli" serve --bg --yes --https=8443 --set-path=/v1 \
-    http://127.0.0.1:7341/v1 >/dev/null || return 1
+    "http://127.0.0.1:$dev_server_gateway_port/v1" >/dev/null || return 1
   post="$(TAILSCALE_BE_CLI=1 "$skidbladnir_serve_cli" serve status --json 2>/dev/null || true)"
   ((${#post} <= 65536)) || return 1
   [[ "$(printf '%s' "$post" |
     skidbladnir_serve_classification "$skidbladnir_serve_hostname")" == desired ]] || return 1
   render_result CHANGED tailscale.serve 'private /v1 mapping installed'
+}
+
+# ingress is host-level: one node has one tailscale :8443 mapping, so the host
+# entry points (workstation, the devbox role) run it around skidbladnir_apply;
+# a second deployment on the same node never calls it. preflight returns 0 to
+# proceed or 2 after rendering an ACTION, with nothing to apply.
+skidbladnir_ingress_preflight() {
+  local status=0
+
+  skidbladnir_preflight_serve || status=$?
+  case "$status" in
+  0 | 2) return "$status" ;;
+  3) die 'public Tailscale exposure is enabled for Skidbladnir HTTPS 8443' ;;
+  *) die 'could not inspect the private Skidbladnir Serve boundary' ;;
+  esac
+}
+
+skidbladnir_ingress_apply() {
+  local status=0
+
+  skidbladnir_reconcile_serve || status=$?
+  case "$status" in
+  0) ;;
+  3) die 'public Tailscale exposure is enabled for Skidbladnir HTTPS 8443' ;;
+  *) die 'could not reconcile the private Skidbladnir Serve mapping' ;;
+  esac
 }
 
 skidbladnir_generation_owned() {
@@ -1264,11 +1295,17 @@ skidbladnir_apply() {
   local needs_unit_reload=0
   local preparation_status=0 credentials_installed=0 enablement_observation=0
   local service_observation=0 activation_failed=0
-  local serve_preflight_status=0
   local pointer_changed=0
   local saved_hup saved_int saved_term
 
-  case "$platform" in macos | arch | devbox) ;; *) die "unsupported Skidbladnir platform: $platform" ;; esac
+  case "$platform" in
+  macos) ;;
+  arch | devbox)
+    [[ "$dev_server_fleet_label_prefix" == dev.niels && "$dev_server_gateway_port" == 7341 ]] ||
+      die 'deployment identity on arch and devbox is the systemd user account'
+    ;;
+  *) die "unsupported Skidbladnir platform: $platform" ;;
+  esac
   require_cmd curl jq tar python3
   skidbladnir_validate_declared_inputs "$platform"
   pin_line="$(skidbladnir_release_values "$platform")" || die 'Skidbladnir release pin is invalid'
@@ -1281,17 +1318,6 @@ skidbladnir_apply() {
   units="$share/units"
   config="$home/.config/skidbladnir"
   skidbladnir_validate_protected_paths "$home"
-  if skidbladnir_preflight_serve; then
-    serve_preflight_status=0
-  else
-    serve_preflight_status=$?
-  fi
-  case "$serve_preflight_status" in
-  0) ;;
-  2) return 0 ;;
-  3) die 'public Tailscale exposure is enabled for Skidbladnir HTTPS 8443' ;;
-  *) die 'could not inspect the private Skidbladnir Serve boundary' ;;
-  esac
   if skidbladnir_service_active "$platform"; then
     was_active=1
   else
@@ -1616,22 +1642,6 @@ skidbladnir_apply() {
     skidbladnir_discard_stage "$share" "$stage"
     die 'could not install Skidbladnir integrations'
   }
-  if skidbladnir_reconcile_serve; then
-    preparation_status=0
-  else
-    preparation_status=$?
-  fi
-  case "$preparation_status" in
-  0) ;;
-  3)
-    skidbladnir_discard_stage "$share" "$stage"
-    die 'public Tailscale exposure is enabled for Skidbladnir HTTPS 8443'
-    ;;
-  *)
-    skidbladnir_discard_stage "$share" "$stage"
-    die 'could not reconcile the private Skidbladnir Serve mapping'
-    ;;
-  esac
   skidbladnir_retain_generations "$home" || {
     skidbladnir_discard_stage "$share" "$stage"
     die 'Skidbladnir release retention found an unowned generation'

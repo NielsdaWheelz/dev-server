@@ -61,8 +61,9 @@ a later subsystem failure can leave earlier changes applied; rerun after repair.
 there is no whole-host transaction or duplicated all-host admission gate.
 
 workstation order is native packages, dotfiles, exact-host personal policy,
-ai tools/shared codex, herdr, skid, then remaining postconditions. a herdr
-preflight action or apply failure stops the run before skid. linux is supported
+ai tools/shared codex, herdr, the ingress preflight, skid, the ingress mapping,
+then remaining postconditions. a herdr preflight action or apply failure stops
+the run before skid; an ingress action skips skid and its mapping. linux is supported
 only on the exact owned arch host. arch elevation uses `ARCH_PASS` through
 askpass, including yay; values come from the environment or literal ignored
 repo `.env`, never evaluation. validate credentials before host changes.
@@ -199,12 +200,88 @@ jarvis cognition remains a local client with its own permission policy.
 worker control belongs to skid's common peer cli and target user authority;
 no dedicated jarvis worker launcher remains.
 
+## deployment identity
+
+three variables in `lib/common.sh` name a deployment; nothing derives one from
+another and there is no deployment name or registry.
+
+| variable | default | meaning |
+|---|---|---|
+| `dev_server_home_dir` | `$HOME` | root of every installer-owned path: `.local/{share,state,bin}`, `.config`, `Library/LaunchAgents`, locks, artifact caches, active digests, herdr socket, config and snapshot |
+| `dev_server_fleet_label_prefix` | `dev.niels` | launchd label prefix of the two fleet services, `<prefix>.herdr` and `<prefix>.skidbladnir`; codex-shared labels are not part of it |
+| `dev_server_gateway_port` | `7341` | the gateway's loopback listen port; the health check and the ingress mapping read it |
+
+the three are fixed for a deployment's life; changing one creates a new
+deployment (the restore path verifies the prior unit, which may listen
+elsewhere). a second deployment on one mac is these three set differently and
+applied through the same library functions, units and unmodified binaries.
+
+the four macbook assets that name them are templates: `dev.niels.herdr.plist`,
+`dev.niels.skidbladnir.plist`, `host-config-macbook.json` and
+`agent-hooks-macbook.json` carry `@ROOT@`, `@FLEET_LABEL_PREFIX@` and
+`@GATEWAY_PORT@`. `dev_server_render_assets DIR` renders them in place inside a
+private copy of `assets/` after the staged snapshot is verified, dies if any
+`@[A-Z_]+@` remains, and points the libraries at that copy. source filenames
+stay `dev.niels.*`; install targets are `<prefix>.*.plist`. rendering with the
+defaults reproduces the production bytes. both plists set `HOME` to the root so
+the launcher, the gateway's worker-directory root and herdr's snapshot and
+detection caches follow it. every other asset is literal: arch and devbox units
+use systemd's `%h`, and on arch and devbox deployment identity is the systemd
+user account; the libraries die there if the prefix or port differ from their
+defaults.
+
+ingress is host-level, not deployment-level: one node has one tailscale `:8443`
+mapping, and skid clients accept only that origin. `skidbladnir_ingress_preflight`
+(returns 0, or 2 after an `ACTION`) and `skidbladnir_ingress_apply` run from
+`workstation` and the devbox role around `skidbladnir_apply`; a second
+deployment never calls them and is reachable only over loopback. two deliberate
+ordering consequences: the mapping is reconciled after retention and outside
+the skid apply lock, and with a stale mapping the ingress `ACTION`/exit `2` now
+precedes declared-input, pin, protected-path and missing-tool failures.
+
+a disposable deployment for qualification on the mac is applied through the
+library entry the devbox role uses, never through `./workstation apply` (which
+would also touch the codex-shared services):
+
+```sh
+mkdir -m 0700 /private/tmp/skq   # short root: unix socket paths are capped near 104 bytes
+git -C <checkout> worktree add --detach /private/tmp/skq-src HEAD
+# edit /private/tmp/skq-src/assets/skidbladnir/release-pin.json locally if a candidate is under test; never commit it
+# env -i: a production herdr pane exports HERDR_* variables the preflight must not see; bash 4 or newer is required
+env -i HOME=/private/tmp/skq PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin \
+  dev_server_home_dir=/private/tmp/skq \
+  dev_server_fleet_label_prefix=dev.niels.skq dev_server_gateway_port=7351 \
+  bash -c 'set -uo pipefail; cd /private/tmp/skq-src
+    source lib/common.sh; source lib/herdr.sh; source lib/skidbladnir.sh
+    stage=$(mktemp -d /private/tmp/skq-assets.XXXXXX); cp -Rp assets "$stage/assets"
+    dev_server_render_assets "$stage/assets"
+    # isolation checks here, before herdr_preflight
+    output="$(set -e; if herdr_preflight macos; then herdr_apply macos; skidbladnir_apply macos; fi; finish_results macbook)"; rc=$?
+    printf "%s\n" "$output"; rm -R "$stage"; exit $rc'
+```
+
+isolation checks before the first bootstrap: `launchctl print gui/UID/<prefix>.herdr`
+and `.skidbladnir` fail; `lsof -nP -iTCP:<port> -sTCP:LISTEN` is empty;
+`grep -rn /Users/<owner>` and `grep -rEn 'dev\.niels\.(herdr|skidbladnir)([^.a-z]|$)'`
+over the rendered `herdr/` and `skidbladnir/` stage return nothing (repeat both
+over the root after apply); `launchctl getenv HERDR_*`/`XDG_*` are empty; the
+rendered plist `PATH` resolves no real `codex`, `claude`, `skid`, `skidbladnir`,
+`herdr` or `tailscale`. only labels under the prefix are ever passed to
+`launchctl`, never `enable` or `disable` (record `launchctl print-disabled
+gui/UID` before and after); production pids are recorded first and compared
+after. never run `pairing-invite` or the `agentcli` subcommands from the
+candidate binary: their origin is production's `127.0.0.1:7341`. remove with
+`launchctl bootout` of both labels, `git worktree remove`, and `rm -R` of the
+root and stage. a seeded artifact directory is trusted, not verified against a
+pin url; workers are stand-in executables, never real providers.
+
 ## herdr runtime
 
 `assets/herdr/release-pin.json` is the herdr trust root: exact version, source
 commit, platform urls and executable sha256 for the raw release binaries. one
 server per host runs the pinned binary as `herdr server` under the development
-user: a user systemd unit on arch and devbox, a launchagent on macbook. it is
+user: a user systemd unit on arch and devbox, a launchagent `<prefix>.herdr` on
+macbook whose paths hang off the deployment root. it is
 login-scoped on macbook and arch; only devbox's user manager lingers. the unit
 sets `HERDR_CONFIG_PATH` to the managed `~/.local/share/herdr/config.toml`
 (automatic agent resume and every self-update check disabled) and
@@ -289,9 +366,10 @@ only for the v0.6.0 rollback. one portable `skid-notify` writes the codex
 completion bell to its controlling terminal, if any, and otherwise exits 0. provider sockets remain local.
 
 expose only the owned private `/v1` tailscale serve mapping through supported
-cli commands. no funnel, private localapi, or hostname rewriting. a stale
-mapping produces one exact recovery action. fleet invitation and client bearer
-provisioning remain upstream operations.
+cli commands, from the host entry points, not from `skidbladnir_apply` (see
+deployment identity). no funnel, private localapi, or hostname rewriting. a
+stale mapping produces one exact recovery action. fleet invitation and client
+bearer provisioning remain upstream operations.
 
 ## devbox boundary
 

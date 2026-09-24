@@ -3,6 +3,8 @@
 # lib/herdr.sh owns the pinned herdr server on each host: the artifact cache and
 # immutable generations under ~/.local/share/herdr, the managed server config at
 # ~/.local/share/herdr/config.toml, the user service unit, and its activation.
+# paths hang off dev_server_home_dir; the launchd label is
+# <dev_server_fleet_label_prefix>.herdr (lib/common.sh, deployment identity).
 #
 # herdr_preflight PLATFORM validates the declared inputs, stages the pinned release
 # when the running server's inputs changed, and returns 2 after rendering an
@@ -28,6 +30,8 @@
 # the recipe stages the artifact only; herdr_apply builds the generation from it.
 
 : "${dev_server_install_status:=UP TO DATE}"
+: "${dev_server_fleet_label_prefix:=dev.niels}"
+: "${dev_server_gateway_port:=7341}"
 herdr_platform=''
 herdr_version=''
 herdr_url=''
@@ -47,7 +51,7 @@ herdr_platform_key() {
 
 herdr_service_name() {
   case "$herdr_platform" in
-  macos) printf 'dev.niels.herdr\n' ;;
+  macos) printf '%s.herdr\n' "$dev_server_fleet_label_prefix" ;;
   arch | devbox) printf 'herdr.service\n' ;;
   *) return 1 ;;
   esac
@@ -63,7 +67,7 @@ herdr_unit_source() {
 
 herdr_unit_target() {
   case "$1" in
-  macos) printf '%s/Library/LaunchAgents/dev.niels.herdr.plist\n' "$2" ;;
+  macos) printf '%s/Library/LaunchAgents/%s.herdr.plist\n' "$2" "$dev_server_fleet_label_prefix" ;;
   arch | devbox) printf '%s/.config/systemd/user/herdr.service\n' "$2" ;;
   *) return 1 ;;
   esac
@@ -71,7 +75,7 @@ herdr_unit_target() {
 
 herdr_stop_command() {
   case "$herdr_platform" in
-  macos) printf 'launchctl bootout gui/%s/dev.niels.herdr\n' "$(id -u)" ;;
+  macos) printf 'launchctl bootout gui/%s/%s.herdr\n' "$(id -u)" "$dev_server_fleet_label_prefix" ;;
   arch | devbox) printf 'systemctl --user stop herdr.service\n' ;;
   *) return 1 ;;
   esac
@@ -126,18 +130,18 @@ herdr_config_valid() {
 # prints the unit's environment as NAME=VALUE lines and EXEC=<argv, tab-separated>,
 # with systemd %h rendered as HOME, after checking the supervisor policy fields.
 herdr_unit_environment() {
-  python3 - "$1" "$2" "$3" <<'PY'
+  python3 - "$1" "$2" "$3" "$4" <<'PY'
 import plistlib
 import shlex
 import sys
 
-platform, path, home = sys.argv[1:]
+platform, path, home, label = sys.argv[1:]
 environment = {}
 argv = []
 if platform == "macos":
     with open(path, "rb") as stream:
         unit = plistlib.load(stream)
-    if (unit.get("Label") != "dev.niels.herdr" or unit.get("RunAtLoad") is not True or
+    if (unit.get("Label") != label or unit.get("RunAtLoad") is not True or
             unit.get("KeepAlive") != {"SuccessfulExit": False} or unit.get("Umask") != 18 or
             unit.get("ExitTimeOut") != 15):
         raise SystemExit(1)
@@ -199,7 +203,8 @@ herdr_validate_declared_inputs() {
   herdr_config_valid "$config" || die 'herdr managed config is invalid'
   unit="$(herdr_unit_source "$platform")"
   [[ -f "$unit" && ! -L "$unit" ]] || die "invalid herdr declared file: $unit"
-  environment="$(herdr_unit_environment "$platform" "$unit" "$home")" || die 'herdr unit is invalid'
+  environment="$(herdr_unit_environment "$platform" "$unit" "$home" "$dev_server_fleet_label_prefix.herdr")" ||
+    die 'herdr unit is invalid'
   # the socket path is the one skid's host config names; identity hooks compare it byte for byte.
   if ! grep -Fqx "HERDR_SOCKET_PATH=$home/.config/herdr/herdr.sock" <<<"$environment" ||
     ! grep -Fqx "HERDR_CONFIG_PATH=$home/.local/share/herdr/config.toml" <<<"$environment" ||
@@ -338,6 +343,8 @@ herdr_preflight() {
     done
     ;;
   arch | devbox)
+    [[ "$dev_server_fleet_label_prefix" == dev.niels && "$dev_server_gateway_port" == 7341 ]] ||
+      die 'deployment identity on arch and devbox is the systemd user account'
     require_cmd systemctl ss
     if ! systemctl --user show-environment >/dev/null; then
       render_result ACTION herdr.runtime 'start the user session, then rerun apply'
@@ -569,17 +576,17 @@ herdr_start_service() {
   macos)
     domain="gui/$(id -u)"
     if ((was_enabled == 0)); then
-      launchctl enable "$domain/dev.niels.herdr" || return 1
+      launchctl enable "$domain/$(herdr_service_name)" || return 1
       herdr_enablement_changed=1
     fi
     if [[ "$state" != absent ]] && ((unit_changed)); then
-      launchctl bootout "$domain/dev.niels.herdr" || return 1
+      launchctl bootout "$domain/$(herdr_service_name)" || return 1
       state=absent
     fi
     if [[ "$state" == absent ]]; then
       launchctl bootstrap "$domain" "$unit_target" || return 1
     else
-      launchctl kickstart "$domain/dev.niels.herdr" || return 1
+      launchctl kickstart "$domain/$(herdr_service_name)" || return 1
     fi
     ;;
   *) return 1 ;;
@@ -588,7 +595,7 @@ herdr_start_service() {
 
 herdr_stop_service() {
   case "$herdr_platform" in
-  macos) launchctl bootout "gui/$(id -u)/dev.niels.herdr" >/dev/null 2>&1 || true ;;
+  macos) launchctl bootout "gui/$(id -u)/$(herdr_service_name)" >/dev/null 2>&1 || true ;;
   arch | devbox) systemctl --user stop herdr.service >/dev/null 2>&1 || true ;;
   esac
 }
@@ -642,7 +649,7 @@ herdr_restore() {
   herdr_stop_service
   if ((was_enabled == 0 && recorded == 0)); then
     case "$platform" in
-    macos) launchctl disable "gui/$(id -u)/dev.niels.herdr" >/dev/null 2>&1 || return 1 ;;
+    macos) launchctl disable "gui/$(id -u)/$(herdr_service_name)" >/dev/null 2>&1 || return 1 ;;
     arch | devbox) systemctl --user disable herdr.service >/dev/null 2>&1 || return 1 ;;
     esac
   fi
@@ -670,7 +677,7 @@ herdr_restore() {
   herdr_verify_started "$platform" "$home" >/dev/null || return 3
   if ((was_enabled == 0)); then
     case "$platform" in
-    macos) launchctl disable "gui/$(id -u)/dev.niels.herdr" >/dev/null 2>&1 || return 1 ;;
+    macos) launchctl disable "gui/$(id -u)/$(herdr_service_name)" >/dev/null 2>&1 || return 1 ;;
     arch | devbox) systemctl --user disable herdr.service >/dev/null 2>&1 || return 1 ;;
     esac
   fi

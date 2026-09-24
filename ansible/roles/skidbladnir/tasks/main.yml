@@ -63,7 +63,10 @@
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/skidbladnir.sh"
     output="$(
       set -e
-      skidbladnir_apply devbox
+      if skidbladnir_ingress_preflight; then
+        skidbladnir_apply devbox
+        skidbladnir_ingress_apply
+      fi
       finish_results devbox
     )"
     status=$?

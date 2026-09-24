@@ -47,10 +47,19 @@ still update dependencies needed by that formula. neither operation installs,
 upgrades, replaces, or signs in to the app store tailscale app.
 
 configuration is applied in order: native packages, dotfiles, exact-host personal
-policy, ai tools/shared codex services, herdr, then skid. desktop login, reboot, busy
-containers, and tmux binary activation are reported as `DEFERRED`. repo-owned
-activation never forces them. native package installation/upgrade scripts can
-still restart their services; schedule upgrades accordingly.
+policy, ai tools/shared codex services, herdr, the tailscale ingress preflight,
+skid, then the ingress mapping. desktop login, reboot, busy containers, and tmux
+binary activation are reported as `DEFERRED`. repo-owned activation never forces
+them. native package installation/upgrade scripts can still restart their
+services; schedule upgrades accordingly.
+
+deployment identity is three variables in `lib/common.sh`: `dev_server_home_dir`
+(`$HOME`), `dev_server_fleet_label_prefix` (`dev.niels`, the launchd prefix of
+the herdr and skid gateway services) and `dev_server_gateway_port` (`7341`). the
+macbook plists, host config and agent hooks are templates rendered with them at
+apply; with the defaults they render to the production bytes. on arch and devbox
+the identity is the systemd user account. [the specification](SPEC.md#deployment-identity)
+gives the disposable-deployment recipe and its isolation checks.
 
 arch touchpad policy lives in
 [`assets/xorg/90-dev-server-huawei-touchpad.conf`](assets/xorg/90-dev-server-huawei-touchpad.conf).
