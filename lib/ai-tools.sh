@@ -290,8 +290,8 @@ ai_install_instructions() {
   done
 }
 
-# Print the claude account settings with the repo-owned statusLine key set.
-# Every other key stays as found; a missing or empty file starts from {}.
+# Both accounts share one binary and therefore one update policy: latest.
+# Preserve unrelated settings; a missing or empty file starts from {}.
 ai_claude_settings() {
   require_cmd python3
   python3 - "$1" "$2" <<'PY'
@@ -331,12 +331,14 @@ else:
 if not isinstance(value, dict):
     raise SystemExit(f"claude settings must be an object: {settings}")
 value["statusLine"] = {"type": "command", "command": script}
+value["autoUpdatesChannel"] = "latest"
+value.pop("minimumVersion", None)
 json.dump(value, sys.stdout, indent=2, ensure_ascii=False)
 sys.stdout.write("\n")
 PY
 }
 
-ai_install_statusline() {
+ai_install_claude_settings() {
   local home script settings temporary account
 
   home="$(dev_server_home)"
@@ -362,9 +364,9 @@ ai_install() {
   ai_require_codex_runtime
   ai_validate_inputs
   ai_install_dirs || return 1
+  ai_install_claude_settings || return 1
   ai_install_codex "${1:-0}" || return 1
   ai_install_claude "${1:-0}" || return 1
   ai_install_profiles || return 1
   ai_install_instructions || return 1
-  ai_install_statusline || return 1
 }

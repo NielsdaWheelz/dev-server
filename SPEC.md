@@ -84,8 +84,9 @@ deployment declarations own host paths, pins, identities, and launch arguments.
 managed files use compare-before-write and same-filesystem atomic promotion.
 verify bytes and mode before rename; preserve credentials and account state.
 a managed file is entirely repo-owned except explicitly named parser-backed
-keys, currently cursor's `remote.SSH.remotePlatform` and claude's `statusLine`,
-and jarvis's gate lines in the owner's `~/.ssh/authorized_keys`.
+keys, currently cursor's `remote.SSH.remotePlatform`, claude's `statusLine`,
+`autoUpdatesChannel`, and `minimumVersion`, and jarvis's gate lines in the
+owner's `~/.ssh/authorized_keys`.
 intentional symlinks have explicit owners and targets; do not overwrite
 conflicting foreign paths.
 
@@ -151,8 +152,11 @@ agree; no stale-candidate fallback after a failed requested upgrade.
 one claude native binary is published at `$HOME/.local/bin/claude` from its
 versioned native directory. bootstrap downloads anthropic's official https
 installer to a temporary file and syntax-checks it before execution. subsequent
-updates use native `install latest` under the normal host home. reject a
-conflicting canonical path; do not restart running claude processes.
+updates use native `install latest` under the normal host home. both accounts
+share the repo-owned `latest` channel with no account version floor; reconcile
+these settings before installation. the native updater owns background updates
+and old-version cleanup. reject a conflicting canonical path; do not restart
+running claude processes.
 
 `codex-work` and `codex-work2` select only their declared account home. bare
 `codex` keeps a preset nonempty `CODEX_HOME` and otherwise selects personal:
@@ -167,8 +171,9 @@ profiles. `command <profile>` bypasses an alias.
 `assets/agent-instructions.md` supplies the five account instruction files,
 installed as mode `0600`. `assets/claude/statusline.sh` is installed as
 `~/bin/claude-statusline`, and both claude account `settings.json` files carry a
-repo-owned `statusLine` key pointing at it; every other settings key,
-authentication, history, project instructions, and skills remain user-owned.
+repo-owned `statusLine` key pointing at it. apply also sets `autoUpdatesChannel`
+to `latest` and removes `minimumVersion` in both accounts. every other settings
+key, authentication, history, project instructions, and skills remain user-owned.
 instruction updates affect new sessions; status line updates apply live.
 
 ## shared codex services

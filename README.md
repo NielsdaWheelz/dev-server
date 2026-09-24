@@ -86,9 +86,10 @@ wrappers preserve arguments, environment, cwd, and exit behavior.
 
 `apply` retains valid installed versions and bootstraps a missing tool.
 `upgrade` resolves codex's stable npm `latest` once and uses normal npm integrity
-with scripts disabled; claude uses native `install latest`, independent of
-account update-channel preferences. wrappers add no startup update lookup.
-upstream tools retain their own behavior.
+with scripts disabled; claude uses native `install latest`. both claude
+accounts follow `latest`: apply enforces that shared policy and removes
+account version floors. claude's native auto-updater handles background updates
+and old-version cleanup. wrappers add no startup update lookup.
 
 interactive zsh aliases add `--yolo` to the three codex commands and
 `--dangerously-skip-permissions` to both claude commands. the defaults live in
@@ -137,8 +138,9 @@ repo source; apply replaces the installed copies. new sessions load changes.
 [`assets/claude/statusline.sh`](assets/claude/statusline.sh) is installed as
 `~/bin/claude-statusline` and set as the `statusLine` command in both claude
 account `settings.json` files; running sessions pick it up on the next update.
-project instructions, skills, other settings keys, history, and authentication
-remain separately owned.
+the repo also owns `autoUpdatesChannel` and removes `minimumVersion` in both
+accounts. project instructions, skills, other settings keys, history, and
+authentication remain separately owned.
 
 ## agent fleet
 
