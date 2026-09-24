@@ -396,6 +396,23 @@ skidbladnir_discard_stage() {
     die 'could not remove the Skidbladnir staging directory'
 }
 
+# after skidbladnir_restore_runtime failed with STATUS: 4 keeps the stage (the
+# prior launcher and unit are still only there) and reports; anything else
+# discards it and returns to the caller's own text.
+skidbladnir_settle_failed_restore() {
+  local share="$1"
+  local stage="$2"
+  local status="$3"
+  local retained
+
+  if ((status == 4)); then
+    retained="$(dev_server_retain_stage "$share" "$stage")" ||
+      die 'Skidbladnir activation failed, the candidate could not be stopped, and its stage could not be kept'
+    die "Skidbladnir activation failed and the candidate could not be stopped; its inputs remain in place and the prior launcher and unit are kept in $retained"
+  fi
+  skidbladnir_discard_stage "$share" "$stage"
+}
+
 skidbladnir_archive_members_exact() {
   local archive="$1"
   local members types
@@ -859,6 +876,11 @@ skidbladnir_authenticated_health() (
   return 1
 )
 
+# undoes a failed activation in this order: confirmed stop of the candidate,
+# then launcher, unit, pointers and command links go back, then the prior
+# runtime restarts and verifies. 0 restored; 4 the candidate could not be
+# stopped, so nothing moved and the stage still holds the prior's backups;
+# 1 the restore itself failed.
 skidbladnir_restore_runtime() {
   local platform="$1"
   local home="$2"
@@ -872,6 +894,7 @@ skidbladnir_restore_runtime() {
   local share="$home/.local/share/skidbladnir"
   local unit_generation
 
+  skidbladnir_stop_service "$platform" || return 4
   if [[ -z "$prior_current" && "$platform" != macos && "$was_enabled" == 0 ]]; then
     # systemd needs the unit file to remove its enablement links.
     systemctl --user disable skidbladnir.service >/dev/null 2>&1 || return 1
@@ -910,7 +933,6 @@ skidbladnir_restore_runtime() {
     dev_server_remove_link "$home/.local/bin/skid" || return 1
   fi
 
-  skidbladnir_stop_service "$platform" || return 1
   if [[ -z "$prior_current" ]]; then
     if [[ "$platform" != macos ]]; then
       systemctl --user daemon-reload >/dev/null 2>&1 || true
@@ -1512,19 +1534,23 @@ skidbladnir_apply() {
       :
     else
       if [[ -n "$rollback_current" ]]; then
-        if ! skidbladnir_restore_runtime "$platform" "$home" "$stage" \
+        if skidbladnir_restore_runtime "$platform" "$home" "$stage" \
           "$rollback_current" "$rollback_previous" "$rollback_version" \
           "$unit_target" "$was_enabled" "$active_unit"; then
-          skidbladnir_discard_stage "$share" "$stage"
+          :
+        else
+          skidbladnir_settle_failed_restore "$share" "$stage" $?
           die 'unhealthy interrupted Skidbladnir activation could not restore the verified prior runtime'
         fi
         skidbladnir_discard_stage "$share" "$stage"
         die 'unhealthy interrupted Skidbladnir activation; the verified prior runtime was restored'
       fi
       if [[ -z "$active_runtime" ]]; then
-        if ! skidbladnir_restore_runtime "$platform" "$home" "$stage" '' '' '' \
+        if skidbladnir_restore_runtime "$platform" "$home" "$stage" '' '' '' \
           "$unit_target" "$was_enabled" ''; then
-          skidbladnir_discard_stage "$share" "$stage"
+          :
+        else
+          skidbladnir_settle_failed_restore "$share" "$stage" $?
           die 'unverified Skidbladnir activation could not be removed safely'
         fi
         skidbladnir_discard_stage "$share" "$stage"
@@ -1599,10 +1625,12 @@ skidbladnir_apply() {
       '../share/skidbladnir/current/skidbladnir' binary || activation_failed=1
   fi
   if ((activation_failed)); then
-    if ! skidbladnir_restore_runtime "$platform" "$home" "$stage" "$rollback_current" \
+    if skidbladnir_restore_runtime "$platform" "$home" "$stage" "$rollback_current" \
       "$rollback_previous" "$rollback_version" "$unit_target" \
       "$was_enabled" "$active_unit"; then
-      skidbladnir_discard_stage "$share" "$stage"
+      :
+    else
+      skidbladnir_settle_failed_restore "$share" "$stage" $?
       die 'Skidbladnir activation failed and the prior runtime could not be restored'
     fi
     skidbladnir_discard_stage "$share" "$stage"

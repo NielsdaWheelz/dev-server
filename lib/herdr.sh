@@ -644,12 +644,12 @@ herdr_verify_started() {
   printf 'ping herdr %s protocol %s; bundled codex and claude detection\n' "$version" "$protocol"
 }
 
-# undoes a failed activation: stops the candidate this apply started and waits
-# for its teardown, puts the unit, config, pointers and snapshot back, and when
-# a prior activation was recorded restarts and verifies that prior server.
-# 0 restored (and the prior verified when recorded); 3 prior inputs restored but
-# the prior herdr did not verify; 1 the restore failed or the candidate could
-# not be stopped (its inputs are still put back, so nothing stays half-promoted).
+# undoes a failed activation in this order: confirmed stop of the candidate,
+# then the unit, config, pointers and snapshot go back, then (when a prior
+# activation was recorded) the prior server restarts and verifies. 0 restored
+# (and the prior verified when recorded); 3 prior inputs restored but the prior
+# herdr did not verify; 4 the candidate could not be stopped, so nothing moved
+# and the stage still holds the prior's backups; 1 the restore itself failed.
 herdr_restore() {
   local platform="$1"
   local home="$2"
@@ -660,10 +660,10 @@ herdr_restore() {
   local was_enabled="$7"
   local recorded="$8"
   local share="$home/.local/share/herdr"
-  local unit_target state prior_version stopped=1 verified=1
+  local unit_target state prior_version verified=1
 
   unit_target="$(herdr_unit_target "$platform" "$home")"
-  herdr_stop_service || stopped=0
+  herdr_stop_service || return 4
   if ((was_enabled == 0 && recorded == 0)); then
     case "$platform" in
     macos) launchctl disable "gui/$(id -u)/$(herdr_service_name)" >/dev/null 2>&1 || return 1 ;;
@@ -684,7 +684,6 @@ herdr_restore() {
   if ((snapshot_present == 0)) && [[ -e "$home/.config/herdr/session.json" ]]; then
     rm -f -- "$home/.config/herdr/session.json" || return 1
   fi
-  ((stopped)) || return 1
   ((recorded == 1)) || return 0
   # the prior inputs are back; run them again as skid does after a failed
   # upgrade, and verify them as the generation they are (releases/vX.Y.Z-sha).
@@ -727,9 +726,14 @@ herdr_retain() {
 
 # signal handler for the start-to-record window of herdr_apply; runs in its scope.
 herdr_abandon_candidate() {
+  local status=0
   herdr_restore "$platform" "$home" "$stage" "$prior_current" "$command_installed" \
-    "$snapshot_present" "$was_enabled" "$recorded" >/dev/null 2>&1 || true
-  dev_server_remove_stage "$share" "$stage" >/dev/null 2>&1 || true
+    "$snapshot_present" "$was_enabled" "$recorded" >/dev/null 2>&1 || status=$?
+  if ((status == 4)); then
+    dev_server_retain_stage "$share" "$stage" >/dev/null 2>&1 || true
+  else
+    dev_server_remove_stage "$share" "$stage" >/dev/null 2>&1 || true
+  fi
 }
 
 herdr_apply() {
@@ -738,7 +742,7 @@ herdr_apply() {
   local enablement_observation=0 was_enabled=0 recorded=0 restore_status=0
   local prior_current='' pointer_changed=0 command_installed=0 snapshot_present=0
   local config_status='UP TO DATE' unit_status='UP TO DATE' unit_changed=0
-  local saved_hup saved_int saved_term
+  local saved_hup saved_int saved_term retained
 
   [[ "$platform" == "$herdr_platform" && "$herdr_preflight_admitted" == 1 ]] ||
     die 'herdr preflight did not admit this apply'
@@ -826,6 +830,11 @@ herdr_apply() {
       restore_status=0
     else
       restore_status=$?
+    fi
+    if ((restore_status == 4)); then
+      retained="$(dev_server_retain_stage "$share" "$stage")" ||
+        die 'herdr activation failed, the candidate could not be stopped, and its stage could not be kept'
+      die "herdr activation failed and the candidate could not be stopped; its inputs remain in place and the prior unit and config are kept in $retained"
     fi
     dev_server_remove_stage "$share" "$stage"
     case "$recorded:$restore_status" in

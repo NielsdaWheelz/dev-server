@@ -651,6 +651,18 @@ dev_server_remove_stage() {
   rm -R -- "$stage"
 }
 
+# keeps a stage whose backups are still the only copy of the prior inputs,
+# under a name the stale-stage sweep leaves alone. prints the new path.
+dev_server_retain_stage() {
+  local share="$1"
+  local stage="$2"
+  local retained="$share/.apply.failed.${stage##*.}"
+
+  [[ "$(dirname "$stage")" == "$share" && ! -e "$retained" ]] || return 1
+  mv "$stage" "$retained" || return 1
+  printf '%s\n' "$retained"
+}
+
 dev_server_remove_stale_stages() {
   local share="$1"
   local stage

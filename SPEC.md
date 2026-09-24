@@ -310,11 +310,13 @@ before it reports, so the rerun after the stop cannot fail on a download.
 the service is absent or inactive; it records `herdr.runtime` (binary, config
 and unit digests) only after the socket answers `ping` with the tested version
 and the bundled codex and claude detection manifests are active. a failed
-upgrade stops the candidate and waits for the supervisor to finish tearing it
-down, restores the unit, config, pointers, snapshot and observed enablement,
-and restarts the prior herdr and verifies it against the prior generation's
-version; the prior's own failure to verify is reported as such, never as a
-restart to retry. a failed first activation stops its own candidate, removes
+upgrade first stops the candidate and waits for the supervisor to finish
+tearing it down; only then do the unit, config, pointers, snapshot and observed
+enablement go back and the prior herdr restarts and verifies against the prior
+generation's version. a candidate that cannot be stopped keeps its inputs; the
+stage with the prior's backups is kept as `.apply.failed.*` in the share and
+apply reports both. the prior's own failure to verify is reported as such,
+never as a restart to retry. a failed first activation stops its own candidate, removes
 the unit and only the snapshot it created, and leaves the generation
 unreferenced. an unchanged apply downloads, writes and restarts nothing.
 `herdr_prepare_artifact` stages the verified binary under the lock without
@@ -354,9 +356,11 @@ prior verified activation inputs. both command links point to the current binary
 start an inactive gateway; activate once when runtime/unit identity changes.
 authenticated health and the running executable must match before recording
 active identity. on failed activation, stop the candidate and wait for its
-teardown, restore the prior pointer, unit and observed enablement, restart, and
-verify them. a failed first install leaves the service inactive and candidate
-unreferenced. retain one prior healthy generation; prune older
+teardown first; only then restore the prior pointer, unit and observed
+enablement, restart, and verify them. a candidate that cannot be stopped keeps
+its inputs, and the stage with the prior launcher and unit is kept as
+`.apply.failed.*` in the share. a failed first install leaves the service
+inactive and candidate unreferenced. retain one prior healthy generation; prune older
 owned generations only after success.
 
 bearer, machine handle, and existing android signing credentials are private
