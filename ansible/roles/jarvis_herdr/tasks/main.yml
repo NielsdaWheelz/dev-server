@@ -12,32 +12,28 @@
     group: "{{ jarvis_service_group }}"
     mode: "0750"
 
+# Generated under a temporary name and renamed, so an interrupted run leaves
+# either no key or a whole one; the public half is always derived, never read
+# from a .pub file.
 - name: Generate the Jarvis herdr gate key once
-  ansible.builtin.command:
-    argv:
-      - ssh-keygen
-      - -q
-      - -t
-      - ed25519
-      - -N
-      - ""
-      - -C
-      - jarvis-herdr@devbox
-      - -f
-      - /etc/jarvis-herdr/id_ed25519
+  ansible.builtin.shell: |
+    set -eu
+    rm -f /etc/jarvis-herdr/.id_ed25519.new /etc/jarvis-herdr/.id_ed25519.new.pub
+    ssh-keygen -q -t ed25519 -N '' -C jarvis-herdr@devbox -f /etc/jarvis-herdr/.id_ed25519.new
+    rm -f /etc/jarvis-herdr/.id_ed25519.new.pub
+    mv /etc/jarvis-herdr/.id_ed25519.new /etc/jarvis-herdr/id_ed25519
+  args:
+    executable: /bin/bash
     creates: /etc/jarvis-herdr/id_ed25519
 
 - name: Give the Jarvis herdr gate key to the Jarvis principal alone
   ansible.builtin.file:
-    path: "{{ item.path }}"
+    path: /etc/jarvis-herdr/id_ed25519
     state: file
     follow: false
-    owner: "{{ item.owner }}"
+    owner: "{{ jarvis_service_user }}"
     group: "{{ jarvis_service_group }}"
-    mode: "{{ item.mode }}"
-  loop:
-    - {path: /etc/jarvis-herdr/id_ed25519, owner: "{{ jarvis_service_user }}", mode: "0600"}
-    - {path: /etc/jarvis-herdr/id_ed25519.pub, owner: root, mode: "0640"}
+    mode: "0600"
 
 - name: Install the Jarvis herdr gate ssh client configuration and host keys
   ansible.builtin.copy:

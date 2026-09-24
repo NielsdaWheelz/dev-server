@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """ssh forced command for jarvis's key: run one allowlisted herdr command.
 
-authorized_keys binds the key to this file (restrict,command=...). sshd hands
-over the requested command in SSH_ORIGINAL_COMMAND; it is split without a
-shell and must match the allowlist below, the owner's "agents plus pane
-creation" (skidbladnir docs/herdr-pr5.md §5), spelled in herdr 0.9.1's cli.
-an accepted argv runs as the pinned ~/.local/bin/herdr against this host's
-default-session server; anything else exits 1 without running herdr.
+authorized_keys binds the key to this file, run by the host's pinned python3
+(restrict,command=...). sshd hands over the requested command in
+SSH_ORIGINAL_COMMAND; it is split without a shell and must match the
+allowlist below, the owner's "agents plus pane creation" (skidbladnir
+docs/herdr-pr5.md §5), spelled in herdr 0.9.1's cli. an accepted argv runs as
+the pinned ~/.local/bin/herdr against this host's default-session server;
+anything else exits 1 without running herdr. this is policy hygiene, not
+containment: pane ids are not scoped to jarvis's own panes.
 
 left out on purpose: pane run, send-text and wait-output; every server,
 config, machine, integration, update, worktree, plugin, notification, tab,
@@ -29,9 +31,11 @@ LABEL = re.compile(r"[^-\s].*")
 PATH = re.compile(r"/.*")
 MS = re.compile(r"[0-9]{1,9}")
 STATUS = {"idle", "working", "blocked", "done", "unknown"}
-# a pane's account home: exactly one of the five declared homes.
-ENV = ({f"CODEX_HOME={HOME}/{name}" for name in (".codex", ".codex-work", ".codex-work2")} |
-       {f"CLAUDE_CONFIG_DIR={HOME}/{name}" for name in (".claude", ".claude-work")})
+# a pane's account home: one of the three codex homes, or claude-work's dir.
+# personal claude runs with CLAUDE_CONFIG_DIR unset (~/.claude.json), so no
+# value selects it.
+ENV = {f"CODEX_HOME={HOME}/{name}" for name in (".codex", ".codex-work", ".codex-work2")}
+ENV.add(f"CLAUDE_CONFIG_DIR={HOME}/.claude-work")
 GLOBAL = ("--machine", "--remote", "--remote-keybindings", "--session", "--handoff")
 
 # (group, command): (positional checks in order, {option: value check, None for
