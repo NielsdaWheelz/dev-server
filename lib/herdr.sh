@@ -2,8 +2,9 @@
 
 # lib/herdr.sh owns the pinned herdr server on each host: the artifact cache and
 # immutable generations under ~/.local/share/herdr, the managed server config at
-# ~/.local/share/herdr/config.toml, the user service unit, and its activation.
-# paths hang off dev_server_home_dir; the launchd label is
+# ~/.local/share/herdr/config.toml, the user service unit, and its activation;
+# also jarvis's ssh gate and its authorized key (herdr_install_gate). paths
+# hang off dev_server_home_dir; the launchd label is
 # <dev_server_fleet_label_prefix>.herdr (lib/common.sh, deployment identity).
 #
 # herdr_preflight PLATFORM validates the declared inputs, stages the pinned release
@@ -426,6 +427,7 @@ herdr_prepare_directories() {
   dev_server_reconcile_directory "$home/.local/state/dev-server" 0700
   dev_server_reconcile_directory "$home/.local/state/dev-server/active" 0700
   dev_server_reconcile_directory "$home/.local/state/herdr" 0700
+  dev_server_reconcile_directory "$home/.local/libexec" 0755
   dev_server_reconcile_directory "$home/.config" 0755
   # mode only: the directory (and devbox's group-owned sessions tree) keeps its owner and group.
   dev_server_reconcile_directory "$home/.config/herdr" 0700
@@ -438,6 +440,81 @@ herdr_prepare_directories() {
   fi
   ((dev_server_directory_changed == 0)) ||
     render_result CHANGED herdr.directories 'private directory topology installed'
+}
+
+# jarvis's gate on every host, and exactly one authorized_keys line binding
+# jarvis's committed key to it in the owner's account, run by the platform's
+# pinned python3 rather than the shebang and the login shell's PATH. read by
+# the next ssh connection; nothing restarts. the merge works on bytes: other
+# lines keep their bytes and line endings, except earlier gate lines for
+# another key (the old jarvis key after a devbox rebuild), which it removes.
+# the committed key under other options is an ACTION, never an edit.
+herdr_install_gate() {
+  local platform="$1"
+  local home="$2"
+  local keys="$home/.ssh/authorized_keys"
+  local assets python candidate status=0
+
+  assets="$(dev_server_assets_dir)/herdr"
+  case "$platform" in
+  macos) python=/opt/homebrew/bin/python3 ;;
+  arch | devbox) python=/usr/bin/python3 ;;
+  *) return 1 ;;
+  esac
+  [[ -x "$python" ]] || die "the gate's interpreter is missing: $python"
+  install_managed_file "$assets/herdr-gate" "$home/.local/libexec/herdr-gate" 0755 herdr.gate || return 1
+  if [[ ! -s "$assets/jarvis-gate.pub" ]]; then
+    render_result ACTION herdr.gate \
+      "jarvis's gate key is not committed; run ./devbox apply, commit the key it reports as assets/herdr/jarvis-gate.pub, then rerun apply"
+    return 0
+  fi
+  ensure_directory "$home/.ssh" 0700 || return 1
+  candidate="$(mktemp "$home/.ssh/.authorized_keys.dev-server.XXXXXX")" || return 1
+  python3 - "$assets/jarvis-gate.pub" "$keys" "$python $home/.local/libexec/herdr-gate" >"$candidate" <<'PY' || status=$?
+import os
+import re
+import sys
+
+pub, keys, command = sys.argv[1], sys.argv[2], os.fsencode(sys.argv[3])
+with open(pub, "rb") as stream:
+    key = stream.read()
+if not re.fullmatch(rb"ssh-ed25519 [A-Za-z0-9+/]+=*( [A-Za-z0-9@._-]+)?\n", key):
+    raise SystemExit("jarvis-gate.pub is not one ssh-ed25519 public key")
+key = key.strip()
+line = b'restrict,command="' + command + b'" ' + key
+gated = re.compile(rb'(?:^|,)command="' + re.escape(command) + rb'"(?:,|$)')
+try:
+    with open(keys, "rb") as stream:
+        data = stream.read()
+except FileNotFoundError:
+    data = b""
+# sshd reads lines up to \n; a \r stays part of its line.
+entries = [entry for entry in re.split(rb"(?<=\n)", data) if entry]
+kept = []
+for entry in entries:
+    body = entry.rstrip(b"\r\n")
+    if body == line:
+        kept.append(entry)
+    elif key.split()[1] in body.split():
+        raise SystemExit(3)
+    # sshd's options field: everything before the first unquoted blank.
+    elif not gated.search(re.match(rb'(?:[^\s"]|"[^"]*")*', body).group()):
+        kept.append(entry)
+if not any(entry.rstrip(b"\r\n") == line for entry in kept):
+    if kept and not kept[-1].endswith(b"\n"):
+        kept.append(b"\n")
+    kept.append(line + b"\n")
+sys.stdout.buffer.write(b"".join(kept))
+PY
+  case "$status" in
+  0) install_managed_file "$candidate" "$keys" 0600 herdr.gate || status=1 ;;
+  3)
+    render_result ACTION herdr.gate "$keys holds jarvis's gate key under other options; remove that line, then rerun apply"
+    status=0
+    ;;
+  esac
+  rm -f -- "$candidate"
+  return "$status"
 }
 
 # stages the pinned executable under ARTIFACT (…/artifacts/<sha256>/herdr).
@@ -753,6 +830,7 @@ herdr_apply() {
   unit_target="$(herdr_unit_target "$platform" "$home")"
   herdr_prepare_directories "$home" "$platform"
   dev_server_acquire_lock "$share/.apply.lock" 8 herdr
+  herdr_install_gate "$platform" "$home" || die 'could not install the jarvis gate or its authorized key'
   state="$(herdr_service_state)" || die 'could not observe herdr service state'
   if [[ "$state" == active ]]; then
     # the guard for a server that started between preflight and apply.

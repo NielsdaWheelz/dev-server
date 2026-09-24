@@ -20,6 +20,7 @@
   roles:
     - role: base
     - role: jarvis_host
+    - role: jarvis_herdr
     - role: workspace_assets
     - role: security
     - role: shell

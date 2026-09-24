@@ -1,0 +1,24 @@
+# jarvis's ssh client for the herdr gate: ssh -F /etc/jarvis-herdr/ssh_config LABEL HERDR-ARGS.
+# each owner account forces the key onto ~/.local/libexec/herdr-gate.
+Host devbox
+  HostName localhost
+  User niels
+  HostKeyAlias devbox
+
+Host macbook
+  HostName niels-eriks-macbook-pro
+  User nnandal
+  HostKeyAlias macbook
+
+Host arch
+  HostName arch
+  User nnandal
+  HostKeyAlias arch
+
+Host devbox macbook arch
+  IdentityFile /etc/jarvis-herdr/id_ed25519
+  IdentitiesOnly yes
+  BatchMode yes
+  StrictHostKeyChecking yes
+  UserKnownHostsFile /etc/jarvis-herdr/known_hosts
+  LogLevel ERROR

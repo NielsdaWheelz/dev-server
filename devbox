@@ -781,6 +781,7 @@ apply_new_server() {
 
 run_ansible_apply() {
   local codex_restart_value=false upgrade_value=false rc skid_action_code herdr_action_lines herdr_action_line herdr_action_subject
+  local jarvis_gate_key
 
   if ((codex_restart_authorized)); then
     codex_restart_value=true
@@ -860,6 +861,15 @@ run_ansible_apply() {
     return 1
     ;;
   esac
+  jarvis_gate_key="$(
+    grep -Eo 'DEV_SERVER_JARVIS_ACTION_GATE_KEY ssh-ed25519 [A-Za-z0-9+/]+=*( [A-Za-z0-9@._-]+)?' "$ansible_output" |
+      sort -u || true
+  )"
+  # the jarvis_herdr role reports the devbox key when it differs from the committed one.
+  if [[ -n "$jarvis_gate_key" ]]; then
+    render_result ACTION jarvis.gate \
+      "commit this line as assets/herdr/jarvis-gate.pub, then apply every host: ${jarvis_gate_key#DEV_SERVER_JARVIS_ACTION_GATE_KEY }"
+  fi
   # the role prints each herdr ACTION line through debug; relay them verbatim.
   # the DEV_SERVER_HERDR_ACTION_* code is only the witness that the host exited 2.
   herdr_action_lines="$(

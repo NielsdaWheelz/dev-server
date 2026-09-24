@@ -77,9 +77,11 @@ reload with `cmd+shift+,` or reopen ghostty. running terminals are left alone.
 
 ## ai accounts and services
 
-`codex`, `codex-work`, and `codex-work2` select their existing account homes and
-execute the single native binary at `~/.local/bin/codex`. `claude` and
-`claude-work` use the single anthropic-native binary at `~/.local/bin/claude`.
+`codex-work` and `codex-work2` select their account homes; bare `codex` selects
+personal unless `CODEX_HOME` is already set, as in a herdr pane created with
+`--env`. all three execute the single native binary at `~/.local/bin/codex`.
+`claude` and `claude-work` use the single anthropic-native binary at
+`~/.local/bin/claude`.
 wrappers preserve arguments, environment, cwd, and exit behavior.
 
 `apply` retains valid installed versions and bootstraps a missing tool.
@@ -166,6 +168,38 @@ it ends every herdr terminal and its agents. both providers are observed
 through terminal reads; the codex completion bell is a terminal-local `BEL`.
 provider sockets stay local; peer control uses skid's authenticated private gateway.
 
+to reach another host's herdr, attach with `herdr --remote niels@dev-server`
+(or `nnandal@arch`, `nnandal@niels-eriks-macbook-pro`) or run one command with
+`ssh dev-server herdr agent list`. `--remote` starts a server on the target if
+none is listening, so do not use it while that host's herdr is stopped for a
+pin change. dev-server saves no herdr machines
+([issue](docs/issues/herdr-saved-machines.md)); these ssh keys and known hosts
+are yours to set up.
+
+jarvis reaches every host through `~/.local/libexec/herdr-gate`, bound to its
+key in each owner account's `authorized_keys`; the gate runs only an allowlist
+of agent and pane commands. it is policy hygiene, not containment: pane ids are
+not scoped to jarvis's panes. the key is generated on devbox and its public
+half is committed as the trust root. the first devbox apply with the gate also
+changes the shared codex inputs, so run it inside jarvis's stopped cutover window
+and pass `--restart-codex`:
+
+```sh
+./devbox apply --restart-codex
+# ACTION  jarvis.gate: commit this line as assets/herdr/jarvis-gate.pub, then apply every host: ssh-ed25519 AAAA... jarvis-herdr@devbox
+# ACTION  herdr.gate: jarvis's gate key is not committed; ...
+printf '%s\n' 'ssh-ed25519 AAAA... jarvis-herdr@devbox' >assets/herdr/jarvis-gate.pub
+git commit assets/herdr/jarvis-gate.pub -m 'commit the jarvis gate key'
+git push
+./devbox apply   # then ./workstation apply on macbook and arch
+# jarvis resumes only after its own cutover runbook (jarvis docs/operations.md)
+```
+
+rebuilding devbox changes its host key and its jarvis key: update the `devbox`
+line in [`assets/herdr/jarvis-known_hosts`](assets/herdr/jarvis-known_hosts)
+and the workstations' `known_hosts`, recommit `jarvis-gate.pub` from the
+reported line, and apply every host. apply removes the old key's gate line.
+
 fleet enrollment, bearer distribution, session operations, release acceptance,
 and outage recovery belong to the
 [skid repository](https://github.com/NielsdaWheelz/skidbladnir). its
@@ -198,7 +232,9 @@ for tailscale enrollment, and establishes its openssh host key over the tailnet.
 initial trust relies on the unique named peer authenticated by tailscale; the
 peer name is not a cryptographic binding to the hetzner server id. only after
 cloud-init succeeds, native openssh is confirmed, and both principals authenticate
-does apply save that key. public ssh is never opened.
+does apply save that key. public ssh is never opened. a new server also has a
+new jarvis gate key and host key; recommit both as described under
+[agent fleet](#agent-fleet).
 
 an existing server uses strict tailnet openssh as `dev-server-deploy` and never
 resets host keys. if creation stops before key enrollment, inspect cloud-init,
@@ -236,7 +272,7 @@ launcher is retired.
 | workstation packages, personal policy, dotfiles, tmux activation | `lib/packages-*.sh`, `lib/personal-*.sh`, `lib/dotfiles.sh`, `lib/tmux.sh` |
 | ai binaries, accounts, shared services | `lib/ai-tools.sh`, `assets/codex/`, `assets/routers/ai-profile` |
 | devbox github identity and ssh client policy | `ansible/roles/github/`; `devbox` owns account enrollment checks |
-| herdr runtime | `lib/herdr.sh`, `assets/herdr/` |
+| herdr runtime, jarvis's gate | `lib/herdr.sh`, `assets/herdr/`, `ansible/roles/jarvis_herdr/` |
 | skid deployment and host integration | `lib/skidbladnir.sh`, `assets/skidbladnir/` |
 | devbox host configuration | `ansible/roles/`, `cloud-init-devbox.template.yaml` |
 
