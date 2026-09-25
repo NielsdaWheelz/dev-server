@@ -3,7 +3,8 @@
 # lib/herdr.sh owns the pinned herdr server on each host: the artifact cache and
 # immutable generations under ~/.local/share/herdr, the managed server config at
 # ~/.local/share/herdr/config.toml, the user service unit, and its activation;
-# also jarvis's ssh gate and its authorized key (herdr_install_gate). paths
+# also jarvis's ssh gate and its authorized key (herdr_install_gate) and herdr's
+# codex and claude integrations in each account home (herdr_install_integrations). paths
 # hang off dev_server_home_dir; the launchd label is
 # <dev_server_fleet_label_prefix>.herdr (lib/common.sh, deployment identity).
 #
@@ -206,7 +207,7 @@ herdr_validate_declared_inputs() {
   [[ -f "$unit" && ! -L "$unit" ]] || die "invalid herdr declared file: $unit"
   environment="$(herdr_unit_environment "$platform" "$unit" "$home" "$dev_server_fleet_label_prefix.herdr")" ||
     die 'herdr unit is invalid'
-  # the socket path is the one skid's host config names; identity hooks compare it byte for byte.
+  # the socket path is the one skid's host config names for the gateway.
   if ! grep -Fqx "HERDR_SOCKET_PATH=$home/.config/herdr/herdr.sock" <<<"$environment" ||
     ! grep -Fqx "HERDR_CONFIG_PATH=$home/.local/share/herdr/config.toml" <<<"$environment" ||
     ! grep -Fqx 'LANG=en_US.UTF-8' <<<"$environment" ||
@@ -515,6 +516,56 @@ PY
   esac
   rm -f -- "$candidate"
   return "$status"
+}
+
+# herdr's codex and claude integrations, installed by the pinned binary in each
+# existing account home (CODEX_HOME for the codex homes, CLAUDE_CONFIG_DIR for
+# ~/.claude-work, neither for ~/.claude) wherever herdr's own status does not
+# call the hook current, so an unchanged apply writes nothing. status reads the
+# hook script alone; the hooks.json and settings.json entries are herdr's.
+# future sessions read them; nothing restarts. skid v0.7.0's apply owned each
+# codex hooks.json whole and herdr's installer merges, which would keep skid's
+# dead hook, so a file whose parsed json is skid's rendering is removed first.
+# the pre-pin rollback writes it again (docs/issues/skid-cli-retirement.md).
+herdr_install_integrations() {
+  local home="$1"
+  local binary="$home/.local/share/herdr/current/herdr"
+  local account dir target variable detail status
+
+  for account in .codex .codex-work .codex-work2 .claude .claude-work; do
+    dir="$home/$account"
+    [[ -d "$dir" ]] || continue
+    case "$account" in
+    .codex*) target=codex variable=CODEX_HOME ;;
+    .claude) target=claude variable='' ;;
+    .claude-work) target=claude variable=CLAUDE_CONFIG_DIR ;;
+    esac
+    detail="$target hook in $dir"
+    if [[ "$target" == codex && -f "$dir/hooks.json" ]] && python3 - "$dir/hooks.json" "$home" <<'PY'; then
+import json
+import sys
+
+path, home = sys.argv[1:]
+with open(path, "r", encoding="utf-8") as stream:
+    value = json.load(stream)
+command = (home + "/.local/bin/skidbladnir agent-hook --host-config=" + home +
+           "/.local/share/skidbladnir/current/host-config.json Codex SessionStart")
+retired = {"description": "Skíðblaðnir agent identity projection",
+           "hooks": {"SessionStart": [{"matcher": "^(startup|resume|clear)$", "hooks": [
+               {"type": "command", "command": command, "timeout": 5, "async": False}]}]}}
+raise SystemExit(0 if value == retired else 1)
+PY
+      rm -- "$dir/hooks.json" || return 1
+      detail="$detail, replacing skid's retired hooks.json"
+    else
+      status="$(env -i HOME="$home" ${variable:+"$variable=$dir"} "$binary" integration status)" || return 1
+      if grep -q "^$target: current " <<<"$status"; then
+        continue
+      fi
+    fi
+    env -i HOME="$home" ${variable:+"$variable=$dir"} "$binary" integration install "$target" >/dev/null || return 1
+    render_result CHANGED herdr.integration "$detail"
+  done
 }
 
 # stages the pinned executable under ARTIFACT (…/artifacts/<sha256>/herdr).
@@ -839,6 +890,7 @@ herdr_apply() {
       exec 8>&-
       return 2
     fi
+    herdr_install_integrations "$home" || die 'could not install the herdr integrations'
     exec 8>&-
     return 0
   fi
@@ -941,5 +993,6 @@ herdr_apply() {
     die 'herdr release retention found an unowned generation'
   }
   dev_server_remove_stage "$share" "$stage" || die 'could not remove the herdr staging directory'
+  herdr_install_integrations "$home" || die 'could not install the herdr integrations'
   exec 8>&-
 }

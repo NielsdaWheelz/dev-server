@@ -8,7 +8,6 @@
 : "${dev_server_gateway_port:=7341}"
 skidbladnir_unit_changed=0
 skidbladnir_activation_status=''
-skidbladnir_integration_changed=0
 skidbladnir_enablement_changed=0
 skidbladnir_command_installed=0
 skidbladnir_serve_cli=''
@@ -84,8 +83,8 @@ raise SystemExit(0 if value == expected else 1)
 PY
 }
 
-# Render both templates once per apply. Account homes come from the existing
-# Codex declaration; argv, signatures and hook policy belong to the templates.
+# Render the host config template once per apply. Account homes come from the
+# existing Codex declaration; labels and providers belong to the template.
 skidbladnir_render_configs() {
   local platform="$1"
   local stage="$2"
@@ -108,42 +107,34 @@ codex = json.loads((assets / "codex/profiles.json").read_text())
 replacements = {
     "ROOT": home,
     "PLATFORM": {"macos": "Darwin", "arch": "Linux", "devbox": "Linux"}[platform],
-    "CODEX_BINARY": codex["binary"] if platform == "devbox" else f"{home}/.local/bin/codex",
 }
 for key, profile in codex["profiles"].items():
     account = profile["account_home"]
     replacements[f"CODEX_HOME_{key.upper()}"] = (
         account if platform == "devbox" else f"{home}/{Path(account).name}")
 
-for name in ("host-config.json", "agent-hooks.json"):
-    template = (assets / "skidbladnir" / name).read_text()
-    # Preserve formatting so consolidating declarations does not change runtime identity.
-    rendered = re.sub(r"@([A-Z_0-9]+)@",
-                      lambda match: json.dumps(replacements[match[1]])[1:-1], template)
-    value = json.loads(rendered)
-    if name == "host-config.json":
-        pin = json.loads((assets / "herdr/release-pin.json").read_text())
-        expected_herdr = {"path": f"{home}/.local/share/herdr/current/herdr",
-                          "socketPath": f"{home}/.config/herdr/herdr.sock",
-                          "testedVersion": "herdr " + pin["version"].removeprefix("v")}
-        if value["herdr"] != expected_herdr:
-            raise SystemExit("herdr paths or tested version differ from the declared runtime")
-        for profile in value["profiles"]:
-            paths = [profile["command"], *(item["value"] for item in profile["environment"])]
-            if any(not path.startswith(home + "/") or ".." in Path(path).parts for path in paths):
-                raise SystemExit("skid profile paths must stay under the deployment home")
-    (stage / name).write_text(rendered)
+template = (assets / "skidbladnir/host-config.json").read_text()
+rendered = re.sub(r"@([A-Z_0-9]+)@",
+                  lambda match: json.dumps(replacements[match[1]])[1:-1], template)
+value = json.loads(rendered)
+pin = json.loads((assets / "herdr/release-pin.json").read_text())
+expected_herdr = {"path": f"{home}/.local/share/herdr/current/herdr",
+                  "socketPath": f"{home}/.config/herdr/herdr.sock",
+                  "testedVersion": "herdr " + pin["version"].removeprefix("v")}
+if value["herdr"] != expected_herdr:
+    raise SystemExit("herdr paths or tested version differ from the declared runtime")
+for profile in value["profiles"]:
+    paths = [item["value"] for item in profile["environment"]]
+    if any(not path.startswith(home + "/") or ".." in Path(path).parts for path in paths):
+        raise SystemExit("skid profile paths must stay under the deployment home")
+(stage / "host-config.json").write_text(rendered)
 PYTHON
 }
 
 skidbladnir_validate_declared_inputs() {
   local platform="$1"
   local path
-  local -a regular_files=(
-    skidbladnir-launch
-    skid-notify
-    claude-agent-identity/bin/agent-hook
-  )
+  local -a regular_files=(skidbladnir-launch)
 
   case "$platform" in
   macos) regular_files+=(dev.niels.skidbladnir.plist) ;;
@@ -159,14 +150,9 @@ skidbladnir_validate_declared_inputs() {
     [[ -f "$path" && ! -L "$path" ]] ||
       die "invalid Skidbladnir declared file: $path"
   done
-  for path in \
-    host-config.json agent-hooks.json \
-    claude-agent-identity/.claude-plugin/plugin.json \
-    claude-agent-identity/hooks/hooks.json; do
-    path="$(dev_server_assets_dir)/skidbladnir/$path"
-    dev_server_strict_json_file "$path" 65536 ||
-      die "invalid Skidbladnir declared JSON: $path"
-  done
+  path="$(dev_server_assets_dir)/skidbladnir/host-config.json"
+  dev_server_strict_json_file "$path" 65536 ||
+    die "invalid Skidbladnir declared JSON: $path"
   skidbladnir_unit_identity "$platform" >/dev/null ||
     die 'Skidbladnir unit inputs are invalid'
 }
@@ -299,12 +285,11 @@ skidbladnir_validate_protected_paths() {
         die "protected Skidbladnir link is invalid: $link"
     fi
   done
-  for link in "$home/.local/bin/skidbladnir" "$home/.local/bin/skid"; do
-    if [[ -e "$link" || -L "$link" ]]; then
-      skidbladnir_validate_link "$link" binary >/dev/null ||
-        die "protected Skidbladnir link is invalid: $link"
-    fi
-  done
+  link="$home/.local/bin/skidbladnir"
+  if [[ -e "$link" || -L "$link" ]]; then
+    skidbladnir_validate_link "$link" binary >/dev/null ||
+      die "protected Skidbladnir link is invalid: $link"
+  fi
   for path in \
     "$config/bearer" \
     "$config/machine-handle" \
@@ -873,7 +858,6 @@ skidbladnir_restore_runtime() {
   fi
   if [[ -z "$prior_current" ]]; then
     dev_server_remove_link "$home/.local/bin/skidbladnir" || return 1
-    dev_server_remove_link "$home/.local/bin/skid" || return 1
   fi
 
   if [[ -z "$prior_current" ]]; then
@@ -919,47 +903,6 @@ skidbladnir_install_runtime_files() {
   [[ -L "$home/.local/bin/skidbladnir" ]] || skidbladnir_command_installed=1
   skidbladnir_atomic_symlink "$home/.local/bin/skidbladnir" \
     '../share/skidbladnir/current/skidbladnir' binary || return 1
-}
-
-skidbladnir_install_integration_file() {
-  atomic_install_file "$1" "$2" "$3" || return 1
-  [[ "$dev_server_install_status" == 'UP TO DATE' ]] || skidbladnir_integration_changed=1
-}
-
-skidbladnir_install_integrations() {
-  local home="$1"
-  local hooks="$2"
-  local notifier_source directories directory plugin source target mode
-
-  notifier_source="$(dev_server_assets_dir)/skidbladnir/skid-notify"
-  skidbladnir_integration_changed=0
-  dev_server_directory_changed=0
-  skidbladnir_install_integration_file "$notifier_source" "$home/.local/bin/skid-notify" 0755 || return 1
-
-  directories="$(jq -er '.profiles[] | select(.provider == "Codex") | .environment[] |
-    select(.name == "CODEX_HOME") | .value' "$home/.local/share/skidbladnir/current/host-config.json")" || return 1
-  while IFS= read -r directory; do
-    dev_server_reconcile_directory "$directory" 0700
-    skidbladnir_install_integration_file "$hooks" "$directory/hooks.json" 0600 || return 1
-  done <<<"$directories"
-  plugin="$home/.local/share/skidbladnir/claude-agent-identity"
-  dev_server_reconcile_directory "$plugin" 0755
-  dev_server_reconcile_directory "$plugin/.claude-plugin" 0755
-  dev_server_reconcile_directory "$plugin/hooks" 0755
-  dev_server_reconcile_directory "$plugin/bin" 0755
-  while read -r source target mode; do
-    skidbladnir_install_integration_file \
-      "$(dev_server_assets_dir)/skidbladnir/claude-agent-identity/$source" \
-      "$plugin/$target" "$mode" || return 1
-  done <<'FILES'
-.claude-plugin/plugin.json .claude-plugin/plugin.json 0644
-hooks/hooks.json hooks/hooks.json 0644
-bin/agent-hook bin/agent-hook 0755
-FILES
-  ((dev_server_directory_changed == 0)) || skidbladnir_integration_changed=1
-  if ((skidbladnir_integration_changed)); then
-    render_result CHANGED skid.integration 'identity hooks and terminal bell notifier installed'
-  fi
 }
 
 skidbladnir_tailscale_cli() {
@@ -1561,13 +1504,6 @@ skidbladnir_apply() {
       activation_failed=1
     fi
   fi
-  # Publish the human command only after activation succeeds. A failed upgrade
-  # from a release without this command must not leave it pointing at old grammar.
-  if ((activation_failed == 0)); then
-    [[ -L "$home/.local/bin/skid" ]] || skidbladnir_command_installed=1
-    skidbladnir_atomic_symlink "$home/.local/bin/skid" \
-      '../share/skidbladnir/current/skidbladnir' binary || activation_failed=1
-  fi
   if ((activation_failed)); then
     if skidbladnir_restore_runtime "$platform" "$home" "$stage" "$rollback_current" \
       "$rollback_previous" "$rollback_version" "$unit_target" \
@@ -1587,7 +1523,7 @@ skidbladnir_apply() {
   ((skidbladnir_unit_changed == 0)) ||
     render_result CHANGED skid.unit 'launcher and service definition installed'
   ((skidbladnir_command_installed == 0)) ||
-    render_result INSTALLED skidbladnir.command "$home/.local/bin/skid and skidbladnir"
+    render_result INSTALLED skidbladnir.command "$home/.local/bin/skidbladnir"
   ((skidbladnir_enablement_changed == 0)) ||
     render_result CHANGED skidbladnir.enablement 'enabled at login'
   [[ -z "$skidbladnir_activation_status" ]] ||
@@ -1601,10 +1537,6 @@ skidbladnir_apply() {
     die 'could not record the active Skidbladnir unit identity'
   }
 
-  skidbladnir_install_integrations "$home" "$stage/agent-hooks.json" || {
-    skidbladnir_discard_stage "$share" "$stage"
-    die 'could not install Skidbladnir integrations'
-  }
   skidbladnir_retain_generations "$home" || {
     skidbladnir_discard_stage "$share" "$stage"
     die 'Skidbladnir release retention found an unowned generation'

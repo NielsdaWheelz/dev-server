@@ -60,10 +60,11 @@ services; schedule upgrades accordingly.
 deployment identity is three variables in `lib/common.sh`: `dev_server_home_dir`
 (`$HOME`), `dev_server_fleet_label_prefix` (`dev.niels`, the launchd prefix of
 the herdr and skid gateway services) and `dev_server_gateway_port` (`7341`). the
-macbook plists, host config and agent hooks are templates rendered with them at
-apply; with the defaults they render to the production bytes. on arch and devbox
-the identity is the systemd user account. [the specification](SPEC.md#deployment-identity)
-gives the disposable-deployment recipe and its isolation checks.
+macbook plists are templates rendered with them at apply, and skid renders its
+host config inside its own apply; with the defaults they render to the
+production bytes. on arch and devbox the identity is the systemd user account.
+[the specification](SPEC.md#deployment-identity) gives the disposable-deployment
+recipe and its isolation checks.
 
 arch touchpad policy lives in
 [`assets/xorg/90-dev-server-huawei-touchpad.conf`](assets/xorg/90-dev-server-huawei-touchpad.conf).
@@ -150,34 +151,27 @@ authentication remain separately owned.
 
 ## agent fleet
 
-run `skid`, `skid list`, `skid info reviewer`, or `skid enter reviewer`.
-`skid --help` documents commands and automation; use `--json` and returned
-`--ref` values for scripts. clients default to
-`~/.config/skidbladnir/client.json`; `--machine arch` disambiguates a name.
-
-new skid sessions use codex `--yolo` and claude
-`--dangerously-skip-permissions`, with claude's identity plugin retained.
-one [host config template](assets/skidbladnir/host-config.json) owns this policy
-for all hosts. account homes come from the existing codex declaration; one
-[hook template](assets/skidbladnir/agent-hooks.json) supplies their identity hook.
-existing sessions keep their launch arguments. `interrupt` retains a terminal;
-`stop` interrupts, then requests the native
-close; `kill` closes natively. closing a final pane may close linked workspaces.
-
-release pins are authoritative. verified local artifacts are reused; unchanged
-apply does not download the skid release again. configuration changes produce
-an immutable runtime generation. failed activation restores the prior healthy
-generation. `skid` and `skidbladnir` point to the same current binary.
-the pinned skid binary validates its own host config before a generation is staged.
-
-terminals belong to herdr: one pinned server per host from
+terminals and agents belong to herdr: one pinned server per host from
 [`assets/herdr/release-pin.json`](assets/herdr/release-pin.json), supervised
 independently of the gateway, with agent resume and self-update disabled by
 the managed config. `herdr` in a shell attaches to that server. changing its
 binary, config or unit while it runs is reported as an action, because stopping
-it ends every herdr terminal and its agents. both providers are observed
-through terminal reads; the codex completion bell is a terminal-local `BEL`.
-provider sockets stay local; peer control uses skid's authenticated private gateway.
+it ends every herdr terminal and its agents. apply installs herdr's own codex
+and claude integrations in each account home where `herdr integration status`
+does not show them current; codex asks once per account to trust the new hook.
+
+skid is the phone's gateway to its host's herdr, nothing more. a phone launch
+creates a herdr pane with the profile's account home and types the bare
+`codex` or `claude`, so the aliases above set its permission flags. one
+[host config template](assets/skidbladnir/host-config.json) declares the four
+profiles for all hosts, no arguments; account homes come from the existing
+codex declaration. release pins are authoritative. verified local artifacts are
+reused; unchanged apply does not download the skid release again.
+configuration changes produce an immutable runtime generation. failed
+activation restores the prior healthy generation. the pinned binary validates
+its own host config before a generation is staged. provider sockets stay local.
+the retired skid cli leaves files no apply removes
+([issue](docs/issues/skid-cli-retirement.md)).
 
 to reach another host's herdr, attach with `herdr --remote niels@dev-server`
 (or `nnandal@arch`, `nnandal@niels-eriks-macbook-pro`) or run one command with
@@ -211,11 +205,9 @@ line in [`assets/herdr/jarvis-known_hosts`](assets/herdr/jarvis-known_hosts)
 and the workstations' `known_hosts`, recommit `jarvis-gate.pub` from the
 reported line, and apply every host. apply removes the old key's gate line.
 
-fleet enrollment, bearer distribution, session operations, release acceptance,
-and outage recovery belong to the
-[skid repository](https://github.com/NielsdaWheelz/skidbladnir). its
-`scripts/fleet provision-clients` provisions user clients and jarvis's client
-configuration; rerun after an interrupted copy or bearer rotation.
+phone enrollment (`scripts/fleet invite`), release acceptance and outage
+recovery belong to the
+[skid repository](https://github.com/NielsdaWheelz/skidbladnir).
 
 ## devbox
 
@@ -270,9 +262,8 @@ python environment, database/roles, migrations, service, credentials, and
 backup/recovery. dev-server never deploys jarvis or touches nexus application
 state. jarvis is independent of developer rootless docker.
 
-jarvis cognition uses the existing shared codex services; worker tools use the
-common skid cli and the target user's authority. the dedicated jarvis worker
-launcher is retired.
+jarvis cognition uses the existing shared codex services; its worker tools
+reach each host's herdr through the gate (see [agent fleet](#agent-fleet)).
 
 ## development
 
@@ -283,8 +274,8 @@ launcher is retired.
 | workstation packages, personal policy, dotfiles, tmux activation | `lib/packages-*.sh`, `lib/personal-*.sh`, `lib/dotfiles.sh`, `lib/tmux.sh` |
 | ai binaries, accounts, shared services | `lib/ai-tools.sh`, `assets/codex/`, `assets/routers/ai-profile` |
 | devbox github identity and ssh client policy | `ansible/roles/github/`; `devbox` owns account enrollment checks |
-| herdr runtime, jarvis's gate | `lib/herdr.sh`, `assets/herdr/`, `ansible/roles/jarvis_herdr/` |
-| skid deployment and host integration | `lib/skidbladnir.sh`, `assets/skidbladnir/` |
+| herdr runtime and integrations, jarvis's gate | `lib/herdr.sh`, `assets/herdr/`, `ansible/roles/jarvis_herdr/` |
+| skid gateway deployment | `lib/skidbladnir.sh`, `assets/skidbladnir/` |
 | devbox host configuration | `ansible/roles/`, `cloud-init-devbox.template.yaml` |
 
 work one bounded slice per pr, following the

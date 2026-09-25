@@ -1,6 +1,0 @@
-{
-  "description": "Skíðblaðnir agent identity projection",
-  "hooks": {
-    "SessionStart": [{"matcher": "^(startup|resume|clear)$", "hooks": [{"type": "command", "command": "@ROOT@/.local/bin/skidbladnir agent-hook --host-config=@ROOT@/.local/share/skidbladnir/current/host-config.json Codex SessionStart", "timeout": 5, "async": false}]}]
-  }
-}

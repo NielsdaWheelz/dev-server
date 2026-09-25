@@ -125,12 +125,7 @@
     msg: DEV_SERVER_SKID_ACTION_CLEAR_STALE_SERVE
   when: "'DEV_SERVER_SKID_ACTION_CLEAR_STALE_SERVE' in (skidbladnir_apply_result.stdout_lines | default([]))"
 
-- name: Install the admitted fleet CLI where the Jarvis principal can execute it
-  ansible.builtin.copy:
-    src: "/home/{{ devbox_user }}/.local/share/skidbladnir/current/skidbladnir"
-    dest: /usr/local/libexec/skidbladnir
-    remote_src: true
-    owner: root
-    group: root
-    mode: "0755"
-  when: herdr_apply_result.rc == 0 and (skidbladnir_apply_result.rc | default(1)) == 0
+- name: Remove the retired fleet CLI copy for the Jarvis principal
+  ansible.builtin.file:
+    path: /usr/local/libexec/skidbladnir
+    state: absent

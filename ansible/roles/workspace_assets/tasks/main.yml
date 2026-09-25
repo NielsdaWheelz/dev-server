@@ -17,10 +17,6 @@
     - assets/claude
     - assets/herdr
     - assets/skidbladnir
-    - assets/skidbladnir/claude-agent-identity
-    - assets/skidbladnir/claude-agent-identity/.claude-plugin
-    - assets/skidbladnir/claude-agent-identity/bin
-    - assets/skidbladnir/claude-agent-identity/hooks
 
 - name: Install exact runtime libraries
   ansible.builtin.copy:
@@ -115,25 +111,18 @@
       mode: "0644"
     - path: host-config.json
       mode: "0644"
-    - path: agent-hooks.json
-      mode: "0644"
     - path: skidbladnir.service
       mode: "0644"
     - path: skidbladnir-launch
       mode: "0755"
-    - path: skid-notify
-      mode: "0755"
-    - path: claude-agent-identity/.claude-plugin/plugin.json
-      mode: "0644"
-    - path: claude-agent-identity/hooks/hooks.json
-      mode: "0644"
-    - path: claude-agent-identity/bin/agent-hook
-      mode: "0755"
 
-- name: Remove superseded host-specific Skidbladnir templates
+- name: Remove superseded Skidbladnir templates and retired cli integrations
   ansible.builtin.file:
     path: "/home/{{ devbox_user }}/.local/share/dev-server/assets/skidbladnir/{{ item }}"
     state: absent
   loop:
     - host-config-devbox.json
     - agent-hooks-devbox.json
+    - agent-hooks.json
+    - skid-notify
+    - claude-agent-identity
