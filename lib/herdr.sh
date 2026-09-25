@@ -523,14 +523,11 @@ PY
 # ~/.claude-work, neither for ~/.claude) wherever herdr's own status does not
 # call the hook current, so an unchanged apply writes nothing. status reads the
 # hook script alone; the hooks.json and settings.json entries are herdr's.
-# future sessions read them; nothing restarts. skid v0.7.0's apply owned each
-# codex hooks.json whole and herdr's installer merges, which would keep skid's
-# dead hook, so a file whose parsed json is skid's rendering is removed first.
-# the pre-pin rollback writes it again (docs/issues/skid-cli-retirement.md).
+# future sessions read them; nothing restarts.
 herdr_install_integrations() {
   local home="$1"
   local binary="$home/.local/share/herdr/current/herdr"
-  local account dir target variable detail status
+  local account dir target variable status
 
   for account in .codex .codex-work .codex-work2 .claude .claude-work; do
     dir="$home/$account"
@@ -540,31 +537,12 @@ herdr_install_integrations() {
     .claude) target=claude variable='' ;;
     .claude-work) target=claude variable=CLAUDE_CONFIG_DIR ;;
     esac
-    detail="$target hook in $dir"
-    if [[ "$target" == codex && -f "$dir/hooks.json" ]] && python3 - "$dir/hooks.json" "$home" <<'PY'; then
-import json
-import sys
-
-path, home = sys.argv[1:]
-with open(path, "r", encoding="utf-8") as stream:
-    value = json.load(stream)
-command = (home + "/.local/bin/skidbladnir agent-hook --host-config=" + home +
-           "/.local/share/skidbladnir/current/host-config.json Codex SessionStart")
-retired = {"description": "Skíðblaðnir agent identity projection",
-           "hooks": {"SessionStart": [{"matcher": "^(startup|resume|clear)$", "hooks": [
-               {"type": "command", "command": command, "timeout": 5, "async": False}]}]}}
-raise SystemExit(0 if value == retired else 1)
-PY
-      rm -- "$dir/hooks.json" || return 1
-      detail="$detail, replacing skid's retired hooks.json"
-    else
-      status="$(env -i HOME="$home" ${variable:+"$variable=$dir"} "$binary" integration status)" || return 1
-      if grep -q "^$target: current " <<<"$status"; then
-        continue
-      fi
+    status="$(env -i HOME="$home" ${variable:+"$variable=$dir"} "$binary" integration status)" || return 1
+    if grep -q "^$target: current " <<<"$status"; then
+      continue
     fi
     env -i HOME="$home" ${variable:+"$variable=$dir"} "$binary" integration install "$target" >/dev/null || return 1
-    render_result CHANGED herdr.integration "$detail"
+    render_result CHANGED herdr.integration "$target hook in $dir"
   done
 }
 

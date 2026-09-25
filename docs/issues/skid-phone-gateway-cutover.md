@@ -2,10 +2,11 @@
 
 problem: dev-server pins skid v0.8.0 and installs herdr's codex and claude
 integrations in place of skid's cli, hooks, notifier, plugin and the devbox's
-`/usr/local/libexec/skidbladnir` copy (pr 5 step 4); devbox and the macbook
-applied it on 2026-09-24, arch has not (it is down).
+`/usr/local/libexec/skidbladnir` copy (pr 5 step 4). all three hosts run it, but
+the phone's own journeys on v0.8.0 have only been seen listing.
 
-impact: arch keeps its old release and skid's hooks until its apply. v0.7.0 and
+impact: launch, stream, interrupt and stop from the phone are unobserved in
+production; a regression there would surface on first use. v0.7.0 and
 v0.8.0 reject each other's host config, so the pin, host config and integration
 switch land together in one apply per host.
 
@@ -30,11 +31,12 @@ offered codex's update with `Update now` preselected; skipped until the next
 version. `fleet verify` passes for macbook and devbox. the phone runs 8000,
 installed in place, and shows both. jarvis `39d9c9c` resumed.
 
-follow-up: apply arch when reachable and answer its hook-trust prompts; then,
-with v0.8.0 accepted on all three, remove the residue in
-[skid-cli-retirement](skid-cli-retirement.md).
+arch (2026-09-24, after its reboot): applied (v0.8.0, gate and jarvis's key,
+wrapper, herdr's hooks replacing skid's), its codex update prompt skipped until
+the next version, hook trust answered per home; the skid cli residue removed on
+all three hosts; jarvis's `verify-containment` and `fleet verify` pass for all
+three. the owner saw macbook and devbox on the phone.
 
-resolved when: every host runs v0.8.0 with `herdr integration status` current
-for codex and claude in each account home, the phone lists, launches per
-profile, streams, interrupts and stops with its existing pairings, and jarvis's
-herdr control works.
+resolved when: the owner has launched per profile, streamed, interrupted and
+stopped from the phone on v0.8.0 without reenrollment. jarvis's first agent
+journey is tracked in jarvis `docs/issues/herdr-gate-activation.md`.

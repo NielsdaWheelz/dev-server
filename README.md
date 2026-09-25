@@ -170,8 +170,6 @@ reused; unchanged apply does not download the skid release again.
 configuration changes produce an immutable runtime generation. failed
 activation restores the prior healthy generation. the pinned binary validates
 its own host config before a generation is staged. provider sockets stay local.
-the retired skid cli leaves files no apply removes
-([issue](docs/issues/skid-cli-retirement.md)).
 
 to reach another host's herdr, attach with `herdr --remote niels@dev-server`
 (or `nnandal@arch`, `nnandal@niels-eriks-macbook-pro`) or run one command with
