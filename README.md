@@ -84,9 +84,11 @@ personal unless `CODEX_HOME` is already set, as in a herdr pane created with
 `~/.local/bin/claude`.
 wrappers preserve arguments, environment, cwd, and exit behavior.
 
-`apply` retains valid installed versions and bootstraps a missing tool.
-`upgrade` resolves codex's stable npm `latest` once and uses normal npm integrity
-with scripts disabled; claude uses native `install latest`. both claude
+`apply` retains valid installed versions and bootstraps a missing tool, except
+that devbox codex always reconciles its declared pin.
+`upgrade` keeps that devbox pin; elsewhere it resolves codex's stable npm
+`latest` once. npm installation uses normal integrity checks with scripts
+disabled; claude uses native `install latest`. both claude
 accounts follow `latest`: apply enforces that shared policy and removes
 account version floors. claude's native auto-updater handles background updates
 and old-version cleanup. wrappers add no startup update lookup.

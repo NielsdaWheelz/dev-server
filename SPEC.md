@@ -24,7 +24,7 @@ a changed pin is applied deliberately, including on ordinary apply.
 | homebrew | install missing declarations without auto-update or bundle upgrades | update metadata and upgrade declared packages |
 | pacman/yay | require declared packages; missing ones produce an action | full `pacman -Syu`, then declared aur packages |
 | ubuntu apt | installed packages remain; missing requirements may refresh metadata | reconcile declared packages to repository candidates |
-| codex/claude | verify and retain installed versions; bootstrap missing tools | resolve and install stable codex npm `latest` and native claude `latest` |
+| codex/claude | reconcile the devbox codex pin; otherwise verify and retain installed versions; bootstrap missing tools | reconcile the devbox codex pin; elsewhere install stable codex npm `latest`; install native claude `latest` |
 | repo pins | install declared exact versions | same |
 
 homebrew can upgrade dependencies required by a missing formula. arch partial
@@ -145,9 +145,11 @@ remain reviewable repository inputs. no generic profile/plugin framework,
 compatibility state reader, or second package manager is introduced.
 
 one codex binary is installed at `$HOME/.local/bin/codex` through npm's user
-prefix. upgrade resolves one stable `MAJOR.MINOR.PATCH` from `latest` and uses
-npm integrity with scripts disabled. installed manifest and executable must
-agree; no stale-candidate fallback after a failed requested upgrade.
+prefix. devbox apply and upgrade reconcile its declared pin, including drift
+from a native update; workstation upgrade resolves one stable
+`MAJOR.MINOR.PATCH` from `latest`. installation uses npm integrity with scripts
+disabled. installed manifest and executable must agree; no stale-candidate
+fallback after a failed requested upgrade.
 
 one claude native binary is published at `$HOME/.local/bin/claude` from its
 versioned native directory. bootstrap downloads anthropic's official https

@@ -120,19 +120,17 @@ ai_install_codex() {
     render_result CHANGED "npm global prefix" "$prefix"
   fi
 
-  if ((upgrade == 0)) && [[ -e "$binary" || -L "$binary" ]]; then
+  # codex 0.156 publishes its app-server socket as a symlink into a private
+  # directory, which jarvis cannot reach; devbox holds the last release that binds
+  # the declared path on both apply and upgrade (docs/issues/codex-daemon-socket.md).
+  if [[ "${dev_server_ai_host:-devbox}" == devbox ]]; then
+    candidate=0.155.1
+  elif ((upgrade == 0)) && [[ -e "$binary" || -L "$binary" ]]; then
     if ! candidate="$(ai_package_version "$(ai_codex_manifest)" @openai/codex 2>/dev/null)" ||
       ! ai_codex_matches "$candidate"; then
       die 'installed Codex is invalid; run ./workstation upgrade or ./devbox upgrade to repair it'
     fi
     return 0
-  fi
-
-  # codex 0.156 publishes its app-server socket as a symlink into a private
-  # directory, which jarvis cannot reach; devbox holds the last release that binds
-  # the declared path (docs/issues/codex-daemon-socket.md).
-  if [[ "${dev_server_ai_host:-devbox}" == devbox ]]; then
-    candidate=0.155.1
   else
     candidate="$(npm view @openai/codex dist-tags.latest)" ||
       die 'could not resolve the latest stable Codex release'
@@ -151,7 +149,7 @@ ai_install_codex() {
   npm install --global --prefix "$prefix" --ignore-scripts \
     --no-audit --no-fund "@openai/codex@$candidate" || return 1
   ai_codex_matches "$candidate" ||
-    die 'installed Codex does not match the resolved npm candidate'
+    die 'installed Codex does not match the selected version'
   render_result "$status" "AI tool" "codex@$candidate"
 }
 
