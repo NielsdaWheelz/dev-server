@@ -1,15 +1,14 @@
 # skid retains a retired rollback baseline
 
 problem: the live devbox's previous pointer still names v0.6.0, while the
-supported rollback boundary is herdr-era v0.7.0 or later. the specification
-also contradicts itself about retaining the old native-control helper.
+supported rollback boundary is herdr-era v0.7.0 or later.
 
 impact: retained files suggest a rollback capability whose complete operational
 dependencies have been retired. no running-gateway failure was observed.
 
 evidence (2026-09-25): current points to v0.7.0 and previous to
 v0.6.0-6ea3ae84d2e38091d9e15e8d39f8983db114ac696b30674777a517ac9e403999.
-`SPEC.md:349-351` retires that rollback; `SPEC.md:470-471` preserves helpers for it.
+`SPEC.md` retires that rollback (herdr section, "the target must be herdr-era").
 
 pr 5 step 4 drops the contradictory helper sentence from `SPEC.md`; the
 helper copies left all hosts on 2026-09-24 (e58e1a1).

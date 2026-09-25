@@ -96,7 +96,7 @@ dev_server_home() {
 
 # the macbook assets name the deployment identity as @ROOT@, @FLEET_LABEL_PREFIX@
 # and @GATEWAY_PORT@. DIR is a private copy of assets/: the two plists are
-# rendered in place. skid renders its shared JSON templates in its own stage.
+# rendered in place. skid renders its host-config template in its own stage.
 dev_server_render_assets() {
   (($# == 1)) || die 'dev_server_render_assets needs one private assets directory'
   local assets="$1"

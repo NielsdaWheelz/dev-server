@@ -20,8 +20,8 @@ in it.
 
 blockers: do this after the owner retires the pre-pin rollback (v0.8.0
 accepted on all three hosts), because that apply reinstalls the link,
-notifier, plugin and `hooks.json`. remove `/etc/jarvis/agent-client.json` only
-after jarvis's herdr-codec release no longer reads or checks it.
+notifier, plugin and `hooks.json`. `/etc/jarvis/agent-client.json` has no reader
+since jarvis `39d9c9c`, so it can go with the rest.
 
 on every host, as the owner account (`nnandal` on macbook and arch, `niels` on
 devbox), drop the `notify` lines and skid's hook from the three codex homes and

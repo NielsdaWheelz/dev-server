@@ -8,15 +8,17 @@ impact: each host keeps v0.7.0 and skid's hooks until its apply. v0.7.0 and
 v0.8.0 reject each other's host config, so the pin, host config and integration
 switch land together in one apply per host.
 
-evidence (2026-09-24): disposable darwin qualification of the step 4 branch
-with the v0.8.0 draft's darwin archive: main to branch transition, a second
+evidence (2026-09-24): disposable darwin qualification of the rebased step 4
+tip (`d7ef936`) with the v0.8.0 draft's darwin archive: main to branch transition, a second
 apply unchanged, one phone launch per profile with its account home, rollback
 to main and forward again. linux, the ansible path, real providers and the
 phone app were not exercised. deployed jarvis `39d9c9c` already controls
 workers through herdr over ssh.
 
-follow-up: publish v0.8.0 from the draft whose `SHA256SUMS` the pin names;
-apply devbox and both workstations; answer codex's one-time hook-trust prompt
+v0.8.0 was published on 2026-09-25 with `SHA256SUMS` byte-identical to the
+draft the pin names.
+
+follow-up: apply devbox and both workstations; answer codex's one-time hook-trust prompt
 per account; install the v0.8.0 app once every gateway runs v0.8.0; then
 remove the residue in [skid-cli-retirement](skid-cli-retirement.md).
 
