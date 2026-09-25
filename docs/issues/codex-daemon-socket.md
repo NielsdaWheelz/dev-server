@@ -22,8 +22,13 @@ macbook's services under 0.156.1 published the same symlinks and
 `./workstation apply` failed `shared Codex socket ownership or permissions
 differ`; workstations no longer run shared servers.
 
-resolved when: jarvis runs its own codex process (jarvis
-`docs/issues/codex-private-process.md`) and the devbox services are deleted, or
-a codex release binds the declared path again and the devbox runs it with
+resolved when: jarvis runs its own codex process and the devbox services are
+deleted, or a codex release binds the declared path again and the devbox runs it with
 `codex-shared@*` active and jarvis's `verify-containment` passing; then remove
 the pin.
+
+blocker (2026-09-24): jarvis's current specification requires the shared
+runtime and its operations guide forbids starting a private app server. the
+previously linked `jarvis/docs/issues/codex-private-process.md` is absent from
+the checked-out jarvis repo. retiring shared services requires changing that
+consumer contract first.
