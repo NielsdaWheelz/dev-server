@@ -240,10 +240,6 @@ dotfiles_install_tmux_repos() {
 
   home="$(dev_server_home)"
   dotfiles_install_git_repo \
-    https://github.com/tmux-plugins/tpm \
-    e261deb1b47614eed3400089ce7197dc68acc4eb \
-    "$home/.tmux/plugins/tpm" || return 1
-  dotfiles_install_git_repo \
     https://github.com/tmux-plugins/tmux-resurrect \
     cff343cf9e81983d3da0c8562b01616f12e8d548 \
     "$home/.tmux/plugins/tmux-resurrect" || return 1
@@ -251,6 +247,28 @@ dotfiles_install_tmux_repos() {
     https://github.com/tmux-plugins/tmux-continuum \
     0698e8f4b17d6454c71bf5212895ec055c578da0 \
     "$home/.tmux/plugins/tmux-continuum" || return 1
+}
+
+dotfiles_retire_tpm() {
+  local home root link target changed=0
+
+  home="$(dev_server_home)"
+  root="$home/.local/share/dev-server/git-plugins/tpm"
+  link="$home/.tmux/plugins/tpm"
+  if [[ -L "$link" ]]; then
+    target="$(readlink "$link")" || return 1
+    if [[ "$target" == "$root/${target##*/}" && "${target##*/}" =~ ^[0-9a-f]{40}$ ]]; then
+      rm -- "$link" || return 1
+      changed=1
+    fi
+  fi
+  if [[ -d "$root" && ! -L "$root" ]]; then
+    dotfiles_cleanup_git_stages "$root" || return 1
+    dotfiles_prune_git_generations https://github.com/tmux-plugins/tpm '' "$root" || return 1
+    rmdir "$root" || return 1
+    changed=1
+  fi
+  ((changed == 0)) || render_result CHANGED 'tmux plugins' 'retired tpm'
 }
 
 dotfiles_install() {
@@ -261,5 +279,6 @@ dotfiles_install() {
   dotfiles_install_files || return 1
   dotfiles_install_tmux_repos || return 1
   tmux_reload_if_changed || return 1
+  dotfiles_retire_tpm || return 1
   dotfiles_install_shell_repos || return 1
 }

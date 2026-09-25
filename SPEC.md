@@ -119,6 +119,9 @@ more privileged consumer. interrupted activation must remain retryable.
 tmux activation belongs to `lib/tmux.sh` on all three hosts. package installation
 precedes it; dotfiles install the config and immutable plugin generations before
 reload. the live identity advances only after successful reload.
+resurrect and continuum load directly in that order. the repo owns their pins
+and installation; tpm's managed checkout and bindings are retired without
+removing unrelated bindings, saved layouts, or running sessions.
 
 consumer actions remain beside their subsystem. deduplicate within one run.
 never infer a restart target from arbitrary processes. native package/service

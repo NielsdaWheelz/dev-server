@@ -48,7 +48,7 @@ tmux_reload_if_changed() {
   desired_sha="$(
     {
       dev_server_sha256 "$(dev_server_home)/.tmux.conf" || exit 1
-      for plugin in tpm tmux-resurrect tmux-continuum; do
+      for plugin in tmux-resurrect tmux-continuum; do
         readlink "$(dev_server_home)/.tmux/plugins/$plugin" || exit 1
       done
     } | dev_server_sha256_stream
@@ -61,6 +61,21 @@ tmux_reload_if_changed() {
 
   tmux source-file "$(dev_server_home)/.tmux.conf" ||
     die 'could not reload tmux configuration'
+  # Retire only bindings that still execute the old manager, including custom keys.
+  python3 - "$(dev_server_home)/.tmux/plugins/tpm" <<'PY' ||
+import shlex
+import subprocess
+import sys
+
+commands = {f"{sys.argv[1]}/bindings/{action}_plugins" for action in ("install", "update", "clean")}
+bindings = subprocess.check_output(["tmux", "list-keys", "-T", "prefix"], text=True)
+for line in bindings.splitlines():
+    argv = shlex.split(line)
+    if (len(argv) == 6 and argv[:3] == ["bind-key", "-T", "prefix"]
+            and argv[4] == "run-shell" and argv[5] in commands):
+        subprocess.run(["tmux", "unbind-key", "-T", "prefix", argv[3]], check=True)
+PY
+    die 'could not retire tpm bindings'
   tmux set-option -gq @dev-server-config-sha "$desired_sha" ||
     die 'could not record the running tmux config identity'
   render_result RELOADED tmux
