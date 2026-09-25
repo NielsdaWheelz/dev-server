@@ -354,9 +354,7 @@ that variable in the environment, and reports `CHANGED herdr.integration`.
 herdr owns what it writes: the hook script, its entry in `hooks.json` or
 `settings.json`, and codex's `[features] hooks = true`. status reads the hook
 script alone, so an entry removed by hand stays removed until the script goes.
-skid v0.7.0's apply owned each codex `hooks.json` whole and herdr's installer
-merges, so a `hooks.json` whose parsed json equals skid's retired rendering is
-removed first and herdr's install follows. dev-server's claude settings write
+dev-server's claude settings write
 keeps herdr's `hooks` key; it pretty-prints herdr's compact insertion once, so
 the next apply reports `claude.settings` updated a single time, and herdr
 leaves that form alone.
