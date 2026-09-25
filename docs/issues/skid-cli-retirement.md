@@ -90,6 +90,13 @@ and on devbox as `dev-server-deploy`:
 sudo rm /etc/jarvis/agent-client.json
 ```
 
+2026-09-24: done on the macbook (notify lines dropped from `.codex-work`,
+`.codex-work2` and `.codex-personal`; `.codex-personal/hooks.json` removed;
+link, notifier and plugin removed) and on devbox (notify lines dropped from
+`.codex-work` and `.codex-work2`; link, notifier, plugin, `client.json` and
+`/etc/jarvis/agent-client.json` removed); every check below prints nothing on
+both. arch is down and remains.
+
 evidence: dev-server history. the `skid` link: `skidbladnir_apply`, from 639f1a4
 until this change. `skid-notify`, codex `hooks.json` and the plugin:
 `skidbladnir_install_integrations` and its predecessors, from e912d4f and
