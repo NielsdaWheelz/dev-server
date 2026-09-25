@@ -1,27 +1,26 @@
-# retire skid's old worker cli and integration installation
+# skid phone-gateway cutover is not live
 
-problem: dev-server still installs skid v0.7.0's worker cli, identity hooks,
-notifier, claude plugin and a root-owned cli copy for jarvis. deployed jarvis
-already controls workers through herdr over ssh. the next skid release removes
-the old interfaces.
+problem: dev-server pins skid v0.8.0 and installs herdr's codex and claude
+integrations in place of skid's cli, hooks, notifier, plugin and the devbox's
+`/usr/local/libexec/skidbladnir` copy (pr 5 step 4), but no host has applied it.
 
-impact: the jarvis cli copy has lost its current consumer; remaining integration
-machinery is tied to the old gateway release and has a planned replacement.
+impact: each host keeps v0.7.0 and skid's hooks until its apply. v0.7.0 and
+v0.8.0 reject each other's host config, so the pin, host config and integration
+switch land together in one apply per host.
 
-evidence (2026-09-25): deployed jarvis `39d9c9c`,
-`src/jarvis/agent_control.py:245`, invokes `/usr/bin/ssh`. skid main
-`7680c556` merged the phone-only gateway. release inspection found v0.8.0
-still draft and v0.7.0 latest published. upstream `docs/herdr-pr5.md`, delivery
-step 4, specifies the corresponding dev-server deletions and native herdr
-integration installation. `SPEC.md:219` still describes worker control through
-skid's peer cli and needs updating with that cutover.
+evidence (2026-09-24): disposable darwin qualification of the step 4 branch
+with the v0.8.0 draft's darwin archive: main to branch transition, a second
+apply unchanged, one phone launch per profile with its account home, rollback
+to main and forward again. linux, the ansible path, real providers and the
+phone app were not exercised. deployed jarvis `39d9c9c` already controls
+workers through herdr over ssh.
 
-follow-up: qualify and publish the upstream release, then pin it and remove the
-skid link, hooks, notifier, plugin and `/usr/local/libexec/skidbladnir` copy.
-install herdr's native account integrations in the same cutover: both writers
-touch hook/settings files. retain account instructions and the herdr ssh gate.
+follow-up: publish v0.8.0 from the draft whose `SHA256SUMS` the pin names;
+apply devbox and both workstations; answer codex's one-time hook-trust prompt
+per account; install the v0.8.0 app once every gateway runs v0.8.0; then
+remove the residue in [skid-cli-retirement](skid-cli-retirement.md).
 
-resolved when: the published gateway preserves phone journeys/pairings and
-jarvis's herdr control works; old cli/integration files are absent and only the
-native integration owner manages those hooks. no unpublished pin or live
-cutover was attempted during this audit.
+resolved when: every host runs v0.8.0 with `herdr integration status` current
+for codex and claude in each account home, the phone lists, launches per
+profile, streams, interrupts and stops with its existing pairings, and jarvis's
+herdr control works.

@@ -6,37 +6,25 @@
       "key": "personal",
       "label": "Codex · Personal",
       "provider": "Codex",
-      "command": "@ROOT@/bin/codex",
-      "environment": [{"name": "CODEX_HOME", "value": "@CODEX_HOME_PERSONAL@"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "@CODEX_BINARY@"}],
-      "arguments": ["--yolo"]
+      "environment": [{"name": "CODEX_HOME", "value": "@CODEX_HOME_PERSONAL@"}]
     },
     {
       "key": "work",
       "label": "Codex · Work",
       "provider": "Codex",
-      "command": "@ROOT@/bin/codex-work",
-      "environment": [{"name": "CODEX_HOME", "value": "@CODEX_HOME_WORK@"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "@CODEX_BINARY@"}],
-      "arguments": ["--yolo"]
+      "environment": [{"name": "CODEX_HOME", "value": "@CODEX_HOME_WORK@"}]
     },
     {
       "key": "work2",
       "label": "Codex · Work 2",
       "provider": "Codex",
-      "command": "@ROOT@/bin/codex-work2",
-      "environment": [{"name": "CODEX_HOME", "value": "@CODEX_HOME_WORK2@"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "@CODEX_BINARY@"}],
-      "arguments": ["--yolo"]
+      "environment": [{"name": "CODEX_HOME", "value": "@CODEX_HOME_WORK2@"}]
     },
     {
       "key": "claude-work",
       "label": "Claude · Work",
       "provider": "Claude",
-      "command": "@ROOT@/bin/claude-work",
-      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "@ROOT@/.claude-work"}],
-      "foregroundSignatures": [{"argument0": "@ROOT@/.local/bin/claude"}],
-      "arguments": ["--dangerously-skip-permissions", "--plugin-dir", "@ROOT@/.local/share/skidbladnir/claude-agent-identity"]
+      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "@ROOT@/.claude-work"}]
     }
   ]
 }

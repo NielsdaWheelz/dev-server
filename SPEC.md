@@ -111,7 +111,7 @@ more privileged consumer. interrupted activation must remain retryable.
 | `herdr.runtime` | start once when absent; changed binary/config/unit on a running server is an operator stop, then reapply; never a restart |
 | `herdr.gate`, `jarvis.gate` | the next ssh connection; nothing restarts |
 | `skid.unit`, `skid.runtime` | start or activate gateway once, with rollback |
-| `skid.integration` | future agents; no gateway restart |
+| `herdr.integration` | future agent sessions; nothing restarts |
 | `codex.runtime` | explicit authorized drain/restart of all three services |
 | `tailscale.serve` | reconcile private mapping; no tailscale restart |
 | `system.reboot` | report only |
@@ -217,8 +217,9 @@ services pass activity, socket permission, and connection checks. a connection
 proves transport readiness, not a provider turn. never kill tmux or native history.
 
 jarvis cognition remains a local client with its own permission policy.
-worker control belongs to skid's common peer cli and target user authority;
-no dedicated jarvis worker launcher remains.
+worker control goes through jarvis's herdr gate on each host
+([herdr gate](#herdr-gate-and-cross-host-use)); no dedicated jarvis worker
+launcher remains.
 
 ## deployment identity
 
@@ -244,11 +245,10 @@ private copy of `assets/` after the staged snapshot is verified, dies if any
 stay `dev.niels.*`; install targets are `<prefix>.*.plist`. rendering with the
 defaults reproduces the production bytes. both plists set `HOME` to the root so
 the launcher, the gateway's worker-directory root and herdr's snapshot and
-detection caches follow it. skid's `host-config.json` and `agent-hooks.json`
-are shared templates rendered inside its apply stage for every host; their
-output retains the existing byte format and runtime identity. arch and devbox
-units use systemd's `%h`, and on arch and devbox deployment identity is the systemd
-user account; the libraries die there if the prefix or port differ from their
+detection caches follow it. skid's `host-config.json` is a shared template
+rendered inside its apply stage for every host. arch and devbox units use
+systemd's `%h`, and on arch and devbox deployment identity is the systemd user
+account; the libraries die there if the prefix or port differ from their
 defaults.
 
 ingress is host-level, not deployment-level: one node has one tailscale `:8443`
@@ -286,15 +286,16 @@ and `.skidbladnir` fail; `lsof -nP -iTCP:<port> -sTCP:LISTEN` is empty;
 `grep -rn /Users/<owner>` and `grep -rEn 'dev\.niels\.(herdr|skidbladnir)([^.a-z]|$)'`
 over the rendered `herdr/` and `skidbladnir/` stage return nothing (repeat both
 over the root after apply); `launchctl getenv HERDR_*`/`XDG_*` are empty; the
-rendered plist `PATH` resolves no real `codex`, `claude`, `skid`, `skidbladnir`,
-`herdr` or `tailscale`. only labels under the prefix are ever passed to
-`launchctl`, never `enable` or `disable` (record `launchctl print-disabled
-gui/UID` before and after); production pids are recorded first and compared
-after. never run `pairing-invite` or the `agentcli` subcommands from the
-candidate binary: their origin is production's `127.0.0.1:7341`. remove with
-`launchctl bootout` of both labels, `git worktree remove`, and `rm -R` of the
-root and stage. a seeded artifact directory is trusted, not verified against a
-pin url; workers are stand-in executables, never real providers.
+rendered plist `PATH` resolves no real `codex`, `claude`, `skidbladnir`, `herdr`
+or `tailscale`; account homes created under the root before apply receive
+herdr's integrations, absent ones are skipped. only labels under the prefix
+are ever passed to `launchctl`, never `enable` or `disable` (record `launchctl
+print-disabled gui/UID` before and after); production pids are recorded first
+and compared after. never run `pairing-invite` from the candidate binary: its
+origin is production's `127.0.0.1:7341`. remove with `launchctl bootout` of
+both labels, `git worktree remove`, and `rm -R` of the root and stage. a
+seeded artifact directory is trusted, not verified against a pin url; workers
+are stand-in executables, never real providers.
 
 ## herdr runtime
 
@@ -343,12 +344,30 @@ unreferenced. an unchanged apply downloads, writes and restarts nothing.
 `herdr_prepare_artifact` stages the verified binary under the lock without
 promotion, for pre-window staging.
 
+herdr's codex and claude integrations are herdr's own. under the herdr apply
+lock, once the server is found current or verified, the pinned binary runs
+`herdr integration install codex` in each existing codex home (`CODEX_HOME`
+set) and `claude` in each existing claude config dir (`CLAUDE_CONFIG_DIR` set
+for `~/.claude-work`, unset for `~/.claude`), each only where `herdr integration
+status` in that environment does not report it current, with only `HOME` and
+that variable in the environment, and reports `CHANGED herdr.integration`.
+herdr owns what it writes: the hook script, its entry in `hooks.json` or
+`settings.json`, and codex's `[features] hooks = true`. status reads the hook
+script alone, so an entry removed by hand stays removed until the script goes.
+skid v0.7.0's apply owned each codex `hooks.json` whole and herdr's installer
+merges, so a `hooks.json` whose parsed json equals skid's retired rendering is
+removed first and herdr's install follows. dev-server's claude settings write
+keeps herdr's `hooks` key; it pretty-prints herdr's compact insertion once, so
+the next apply reports `claude.settings` updated a single time, and herdr
+leaves that form alone.
+
 herdr is never downgraded or stopped to undo a gateway change. rolling the skid
-gateway, config, unit or notifier back means checking out the last pre-pin
-dev-server commit and applying it; that release's own library restores what it
-needs. the target must be herdr-era (v0.7.0 or later): the tmux-era v0.6.0
-rollback was retired on 2026-09-24 with its native-control helper and the
-workstation codex servers it verified.
+gateway, config or unit back means checking out the last pre-pin dev-server
+commit and applying it; that release's own library restores what it needs,
+including skid's codex `hooks.json`, which the next forward apply retires again.
+the target must be herdr-era (v0.7.0 or later): the tmux-era v0.6.0 rollback was
+retired on 2026-09-24 with its native-control helper and the workstation codex
+servers it verified.
 
 ## herdr gate and cross-host use
 
@@ -424,14 +443,13 @@ source commit, platform urls, and archive sha256. accept only supported release
 paths and valid schema. upstream owns packaging, product schema, release
 certification, fleet operations, and device acceptance.
 the pinned release's `skidbladnir validate-host-config` admits the declared host
-config after artifact preparation. one `host-config.json` template owns
-profiles, launch arguments, signatures and an explicit tested herdr version;
-one `agent-hooks.json` template owns hook policy. render them for the host home
-and platform, deriving codex homes and its binary from `assets/codex/profiles.json`
-with the same workstation projection as the account wrappers. identity hooks
-install into the rendered codex account homes. the installer checks home-rooted
-profile paths and herdr path/socket/version consistency with the declared
-runtime; it does not repeat the templates' policy as a second schema.
+config after artifact preparation. one `host-config.json` template owns the
+profiles and an explicit tested herdr version. render it for the host home and
+platform, deriving codex homes from `assets/codex/profiles.json` with the same
+workstation projection as the account wrappers. the installer checks
+home-rooted profile environment paths and herdr path/socket/version
+consistency with the declared runtime; it does not repeat the template's
+policy as a second schema.
 
 under one nonblocking lock, reuse a locally verified pinned artifact or download
 and verify it. check archive digest, exact release members, manifest identity,
@@ -445,7 +463,8 @@ runtime generations live at
 binary, catalogue, release manifest, and host config. a config-only change can
 reuse release bytes while creating a new generation. `current` and `previous`
 are atomic relative links. unit/launcher generations under `units/` retain the
-prior verified activation inputs. both command links point to the current binary.
+prior verified activation inputs. the `skidbladnir` command link points to the
+current binary.
 
 start an inactive gateway; activate once when runtime/unit identity changes.
 authenticated health and the running executable must match before recording
@@ -460,22 +479,21 @@ owned generations only after success.
 bearer, machine handle, and existing android signing credentials are private
 regular mode-`0600` files and preserved. create bearer/machine handle only when
 absent. account credentials, pairings, and agent session lifetimes survive
-installation. hooks/notifier/claude integration have separate identity and do
-not restart the gateway.
+installation.
 
-host configs declare codex `--yolo` and claude-work
-`--dangerously-skip-permissions`, retaining the identity plugin. these arguments
-affect new sessions. the host config names the managed herdr binary, socket and
-tested version; both providers are observed through herdr terminal reads. the
-retired native-control helper is no longer managed; its installed copies stay
-only for the v0.6.0 rollback. one portable `skid-notify` writes the codex
-completion bell to its controlling terminal, if any, and otherwise exits 0. provider sockets remain local.
+host config profiles are `{key, label, provider, environment}`: `personal`,
+`work`, `work2` and `claude-work`, each with its account home (`CODEX_HOME` or
+`CLAUDE_CONFIG_DIR`) and no command or arguments. the gateway creates the pane
+with that environment and herdr's `agent start` types the bare `codex` or
+`claude`, so the interactive aliases set every launch's permission flags. the
+host config names the managed herdr binary, socket and tested version.
+provider sockets remain local.
 
 expose only the owned private `/v1` tailscale serve mapping through supported
 cli commands, from the host entry points, not from `skidbladnir_apply` (see
 deployment identity). no funnel, private localapi, or hostname rewriting. a
-stale mapping produces one exact recovery action. fleet invitation and client
-bearer provisioning remain upstream operations.
+stale mapping produces one exact recovery action. fleet invitation remains an
+upstream operation.
 
 ## devbox boundary
 

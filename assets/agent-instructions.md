@@ -55,4 +55,4 @@
 
 
 - agent control
-    - use native subagents and workflows when useful. use `skid` to manage independent codex and claude-code sessions locally or across the fleet. run `skid --help` for commands and automation guidance.
+    - use native subagents and workflows when useful. use herdr to manage independent codex and claude-code sessions. run `herdr --skill` for commands and automation guidance.
