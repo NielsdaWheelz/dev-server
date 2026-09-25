@@ -153,8 +153,11 @@ run `skid`, `skid list`, `skid info reviewer`, or `skid enter reviewer`.
 
 new skid sessions use codex `--yolo` and claude
 `--dangerously-skip-permissions`, with claude's identity plugin retained.
-the three host configs own this policy. existing sessions keep their launch
-arguments. `interrupt` retains a terminal; `stop` interrupts, then requests the native
+one [host config template](assets/skidbladnir/host-config.json) owns this policy
+for all hosts. account homes come from the existing codex declaration; one
+[hook template](assets/skidbladnir/agent-hooks.json) supplies their identity hook.
+existing sessions keep their launch arguments. `interrupt` retains a terminal;
+`stop` interrupts, then requests the native
 close; `kill` closes natively. closing a final pane may close linked workspaces.
 
 release pins are authoritative. verified local artifacts are reused; unchanged

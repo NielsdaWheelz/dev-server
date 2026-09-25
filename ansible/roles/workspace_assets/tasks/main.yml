@@ -113,9 +113,9 @@
   loop:
     - path: release-pin.json
       mode: "0644"
-    - path: host-config-devbox.json
+    - path: host-config.json
       mode: "0644"
-    - path: agent-hooks-devbox.json
+    - path: agent-hooks.json
       mode: "0644"
     - path: skidbladnir.service
       mode: "0644"
@@ -129,3 +129,11 @@
       mode: "0644"
     - path: claude-agent-identity/bin/agent-hook
       mode: "0755"
+
+- name: Remove superseded host-specific Skidbladnir templates
+  ansible.builtin.file:
+    path: "/home/{{ devbox_user }}/.local/share/dev-server/assets/skidbladnir/{{ item }}"
+    state: absent
+  loop:
+    - host-config-devbox.json
+    - agent-hooks-devbox.json
