@@ -27,8 +27,15 @@ deleted, or a codex release binds the declared path again and the devbox runs it
 `codex-shared@*` active and jarvis's `verify-containment` passing; then remove
 the pin.
 
-blocker (2026-09-24): jarvis's current specification requires the shared
-runtime and its operations guide forbids starting a private app server. the
-previously linked `jarvis/docs/issues/codex-private-process.md` is absent from
-the checked-out jarvis repo. retiring shared services requires changing that
-consumer contract first.
+blocker (verified 2026-09-25): deployed jarvis `39d9c9c` still requires the
+shared runtime in its specification, three-profile schema, operations guide,
+provider transport and containment checks. its cognition selects only personal;
+worker control now uses herdr over ssh. deleting the other two services alone
+would still break the declared checks.
+
+the deployed release already has `docs/issues/codex-private-process.md`: restore
+a private stdio codex transport in provider-runtime, give jarvis its own
+authenticated account home, change its contract/checks, and qualify cognition
+and the live catalog. then delete the shared services, socket/discovery
+machinery and this pin. the earlier claim that the issue was absent came from
+the stale local jarvis checkout, not the deployed release.

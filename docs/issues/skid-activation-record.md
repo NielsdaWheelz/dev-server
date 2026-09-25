@@ -14,8 +14,19 @@ selects a rollback runtime; `skidbladnir_restore_runtime` restores the recorded
 unit and launcher separately.
 
 follow-up: publish the successfully verified runtime/unit pair in one atomic
-record. consider one complete activation bundle if it removes the separate
-unit-generation bookkeeping; keep independently applied integrations separate.
+record. make one complete activation bundle own the binary reference, host
+config and service definition. this should replace separate unit generations,
+receipts and backups rather than add another recovery branch. keep independently
+applied integrations separate.
+
+audit (2026-09-25): `skidbladnir_apply` maintains an extracted artifact cache,
+runtime generations, unit/launcher generations, current/previous pointers,
+two receipts and stage backups. the separately recorded pair and the
+`skid-current-equals-previous-after-recovery.md` issue share this fragmented
+state model. the 11-line launcher is another retained activation input; direct
+service execution could remove it, after qualifying launchd's behavior when
+the executable is unavailable. do not merge herdr's terminal lifetime with
+the gateway's independently restartable lifetime.
 
 resolved when: fault injection during an upgrade that changes both runtime
 and unit cannot produce an unverified rollback pair. retain recovery from a
