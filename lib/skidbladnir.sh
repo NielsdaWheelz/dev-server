@@ -24,24 +24,6 @@ skidbladnir_platform_key() {
   esac
 }
 
-skidbladnir_host_config_source() {
-  case "$1" in
-  macos) printf '%s/skidbladnir/host-config-macbook.json\n' "$(dev_server_assets_dir)" ;;
-  arch) printf '%s/skidbladnir/host-config-arch.json\n' "$(dev_server_assets_dir)" ;;
-  devbox) printf '%s/skidbladnir/host-config-devbox.json\n' "$(dev_server_assets_dir)" ;;
-  *) die "unsupported Skidbladnir platform: $1" ;;
-  esac
-}
-
-skidbladnir_agent_hooks_source() {
-  case "$1" in
-  macos) printf '%s/skidbladnir/agent-hooks-macbook.json\n' "$(dev_server_assets_dir)" ;;
-  arch) printf '%s/skidbladnir/agent-hooks-arch.json\n' "$(dev_server_assets_dir)" ;;
-  devbox) printf '%s/skidbladnir/agent-hooks-devbox.json\n' "$(dev_server_assets_dir)" ;;
-  *) die "unsupported Skidbladnir platform: $1" ;;
-  esac
-}
-
 skidbladnir_release_values() {
   local platform="$1"
   local artifact
@@ -102,69 +84,61 @@ raise SystemExit(0 if value == expected else 1)
 PY
 }
 
-skidbladnir_host_config_valid() {
-  local path="$1"
-  local platform="$2"
-  local runtime home
+# Render both templates once per apply. Account homes come from the existing
+# Codex declaration; argv, signatures and hook policy belong to the templates.
+skidbladnir_render_configs() {
+  local platform="$1"
+  local stage="$2"
+  local assets home
 
-  case "$platform" in
-  macos) runtime=Darwin ;;
-  arch | devbox) runtime=Linux ;;
-  *) return 1 ;;
-  esac
+  assets="$(dev_server_assets_dir)"
   home="$(dev_server_home)"
-  dev_server_strict_json_file "$path" 65536 || return 1
-  # deployment-owned facts only: paths under this home, the four account wrappers,
-  # permission flags, and the herdr literals the unit renders. the schema is the
-  # candidate binary's job (validate-host-config after artifact preparation).
-  python3 - "$path" "$runtime" "$home" <<'PY'
+  [[ "$home" =~ ^/[A-Za-z0-9._/-]+$ ]] || die "invalid deployment root: $home"
+  python3 "$assets/codex/codex-shared.py" \
+    --config "$assets/codex/profiles.json" validate || return 1
+  python3 - "$assets" "$platform" "$home" "$stage" <<'PYTHON'
 import json
+from pathlib import Path
+import re
 import sys
 
-with open(sys.argv[1], "r", encoding="utf-8") as stream:
-    value = json.load(stream)
-runtime, home = sys.argv[2:]
-if not isinstance(value, dict) or value.get("platform") != runtime:
-    raise SystemExit(1)
-if value.get("herdr") != {"path": home + "/.local/share/herdr/current/herdr",
-                          "socketPath": home + "/.config/herdr/herdr.sock",
-                          "testedVersion": "herdr 0.9.1"}:
-    raise SystemExit(1)
-commands = {
-    "personal": home + "/bin/codex",
-    "work": home + "/bin/codex-work",
-    "work2": home + "/bin/codex-work2",
-    "claude-work": home + "/bin/claude-work",
+assets, platform, home, stage = sys.argv[1:]
+assets, stage = Path(assets), Path(stage)
+codex = json.loads((assets / "codex/profiles.json").read_text())
+replacements = {
+    "ROOT": home,
+    "PLATFORM": {"macos": "Darwin", "arch": "Linux", "devbox": "Linux"}[platform],
+    "CODEX_BINARY": codex["binary"] if platform == "devbox" else f"{home}/.local/bin/codex",
 }
-arguments = {
-    "Codex": ["--yolo"],
-    "Claude": ["--dangerously-skip-permissions", "--plugin-dir",
-               home + "/.local/share/skidbladnir/claude-agent-identity"],
-}
-signatures = {
-    "Codex": [{"executableBase": "codex"},
-              {"executableBase": "node", "argument1": home + "/.local/bin/codex"}],
-    "Claude": [{"argument0": home + "/.local/bin/claude"}],
-}
-profiles = value.get("profiles")
-if (not isinstance(profiles, list) or not all(isinstance(p, dict) for p in profiles) or
-        [p.get("key") for p in profiles] != list(commands)):
-    raise SystemExit(1)
-for profile in profiles:
-    provider = profile.get("provider")
-    if (provider not in arguments or profile.get("command") != commands[profile["key"]] or
-            profile.get("arguments") != arguments[provider] or
-            profile.get("foregroundSignatures") != signatures[provider]):
-        raise SystemExit(1)
-    for item in profile.get("environment") or []:
-        if not isinstance(item, dict) or not str(item.get("value", "")).startswith(home + "/"):
-            raise SystemExit(1)
-PY
+for key, profile in codex["profiles"].items():
+    account = profile["account_home"]
+    replacements[f"CODEX_HOME_{key.upper()}"] = (
+        account if platform == "devbox" else f"{home}/{Path(account).name}")
+
+for name in ("host-config.json", "agent-hooks.json"):
+    template = (assets / "skidbladnir" / name).read_text()
+    # Preserve formatting so consolidating declarations does not change runtime identity.
+    rendered = re.sub(r"@([A-Z_0-9]+)@",
+                      lambda match: json.dumps(replacements[match[1]])[1:-1], template)
+    value = json.loads(rendered)
+    if name == "host-config.json":
+        pin = json.loads((assets / "herdr/release-pin.json").read_text())
+        expected_herdr = {"path": f"{home}/.local/share/herdr/current/herdr",
+                          "socketPath": f"{home}/.config/herdr/herdr.sock",
+                          "testedVersion": "herdr " + pin["version"].removeprefix("v")}
+        if value["herdr"] != expected_herdr:
+            raise SystemExit("herdr paths or tested version differ from the declared runtime")
+        for profile in value["profiles"]:
+            paths = [profile["command"], *(item["value"] for item in profile["environment"])]
+            if any(not path.startswith(home + "/") or ".." in Path(path).parts for path in paths):
+                raise SystemExit("skid profile paths must stay under the deployment home")
+    (stage / name).write_text(rendered)
+PYTHON
 }
 
 skidbladnir_validate_declared_inputs() {
   local platform="$1"
-  local hooks host_config path
+  local path
   local -a regular_files=(
     skidbladnir-launch
     skid-notify
@@ -180,45 +154,13 @@ skidbladnir_validate_declared_inputs() {
   require_cmd python3
   skidbladnir_release_values "$platform" >/dev/null ||
     die 'Skidbladnir release pin is invalid'
-  host_config="$(skidbladnir_host_config_source "$platform")"
-  skidbladnir_host_config_valid "$host_config" "$platform" ||
-    die 'Skidbladnir host config is invalid'
-  hooks="$(skidbladnir_agent_hooks_source "$platform")"
-  dev_server_strict_json_file "$hooks" 65536 ||
-    die 'Skidbladnir agent hooks are invalid'
-  python3 - "$hooks" <<'PY' || die 'Skidbladnir agent hooks schema is invalid'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as stream:
-    value = json.load(stream)
-if not isinstance(value, dict) or sorted(value) != ["description", "hooks"]:
-    raise SystemExit(1)
-if (not isinstance(value["description"], str) or
-        not 0 < len(value["description"]) <= 128 or
-        not isinstance(value["hooks"], dict) or list(value["hooks"]) != ["SessionStart"]):
-    raise SystemExit(1)
-events = value["hooks"]["SessionStart"]
-if not isinstance(events, list) or len(events) != 1:
-    raise SystemExit(1)
-event = events[0]
-if (not isinstance(event, dict) or sorted(event) != ["hooks", "matcher"] or
-        event["matcher"] != "^(startup|resume|clear)$" or
-        not isinstance(event["hooks"], list) or len(event["hooks"]) != 1):
-    raise SystemExit(1)
-hook = event["hooks"][0]
-if (not isinstance(hook, dict) or
-        sorted(hook) != ["async", "command", "timeout", "type"] or
-        hook["type"] != "command" or hook["async"] is not False or hook["timeout"] != 5 or
-        not isinstance(hook["command"], str) or not 0 < len(hook["command"]) <= 4096):
-    raise SystemExit(1)
-PY
   for path in "${regular_files[@]}"; do
     path="$(dev_server_assets_dir)/skidbladnir/$path"
     [[ -f "$path" && ! -L "$path" ]] ||
       die "invalid Skidbladnir declared file: $path"
   done
   for path in \
+    host-config.json agent-hooks.json \
     claude-agent-identity/.claude-plugin/plugin.json \
     claude-agent-identity/hooks/hooks.json; do
     path="$(dev_server_assets_dir)/skidbladnir/$path"
@@ -436,7 +378,8 @@ skidbladnir_archive_members_exact() {
 #     stage="$(mktemp -d "$share/.apply.stage.XXXXXX")"
 #     read -r version source_sha url archive_sha manifest_platform <<<"$(skidbladnir_release_values "$platform" | tr "\t" " ")"
 #     skidbladnir_prepare_artifact "$stage" "$version" "$source_sha" "$url" "$archive_sha" "$manifest_platform" "$share/artifacts/$archive_sha"
-#     "$share/artifacts/$archive_sha/skidbladnir" validate-host-config --host-config="$(skidbladnir_host_config_source "$platform")"
+#     skidbladnir_render_configs "$platform" "$stage"
+#     "$share/artifacts/$archive_sha/skidbladnir" validate-host-config --host-config="$stage/host-config.json"
 #     dev_server_remove_stage "$share" "$stage"; rm -R "$assets"
 #     exec 9>&-'
 skidbladnir_prepare_artifact() {
@@ -984,24 +927,21 @@ skidbladnir_install_integration_file() {
 }
 
 skidbladnir_install_integrations() {
-  local platform="$1"
-  local home="$2"
-  local hooks notifier_source context directory plugin source target mode
+  local home="$1"
+  local hooks="$2"
+  local notifier_source directories directory plugin source target mode
 
-  hooks="$(skidbladnir_agent_hooks_source "$platform")" || return 1
   notifier_source="$(dev_server_assets_dir)/skidbladnir/skid-notify"
   skidbladnir_integration_changed=0
   dev_server_directory_changed=0
   skidbladnir_install_integration_file "$notifier_source" "$home/.local/bin/skid-notify" 0755 || return 1
 
-  for context in personal work work2; do
-    case "$context" in
-    personal) directory="$home/.codex" ;;
-    *) directory="$home/.codex-$context" ;;
-    esac
+  directories="$(jq -er '.profiles[] | select(.provider == "Codex") | .environment[] |
+    select(.name == "CODEX_HOME") | .value' "$home/.local/share/skidbladnir/current/host-config.json")" || return 1
+  while IFS= read -r directory; do
     dev_server_reconcile_directory "$directory" 0700
     skidbladnir_install_integration_file "$hooks" "$directory/hooks.json" 0600 || return 1
-  done
+  done <<<"$directories"
   plugin="$home/.local/share/skidbladnir/claude-agent-identity"
   dev_server_reconcile_directory "$plugin" 0755
   dev_server_reconcile_directory "$plugin/.claude-plugin" 0755
@@ -1326,7 +1266,6 @@ skidbladnir_apply() {
   skidbladnir_validate_declared_inputs "$platform"
   pin_line="$(skidbladnir_release_values "$platform")" || die 'Skidbladnir release pin is invalid'
   IFS=$'\t' read -r version source_sha url archive_sha manifest_platform <<<"$pin_line"
-  host_config="$(skidbladnir_host_config_source "$platform")"
 
   home="$(dev_server_home)"
   share="$home/.local/share/skidbladnir"
@@ -1373,6 +1312,11 @@ skidbladnir_apply() {
   trap 'dev_server_remove_stage "$share" "$stage" >/dev/null 2>&1 || true; exit 129' HUP
   trap 'dev_server_remove_stage "$share" "$stage" >/dev/null 2>&1 || true; exit 130' INT
   trap 'dev_server_remove_stage "$share" "$stage" >/dev/null 2>&1 || true; exit 143' TERM
+  skidbladnir_render_configs "$platform" "$stage" || {
+    skidbladnir_discard_stage "$share" "$stage"
+    die 'could not render Skidbladnir configuration'
+  }
+  host_config="$stage/host-config.json"
   artifact="$share/artifacts/$archive_sha"
   if skidbladnir_prepare_artifact "$stage" "$version" "$source_sha" \
     "$url" "$archive_sha" "$manifest_platform" "$artifact"; then
@@ -1657,7 +1601,7 @@ skidbladnir_apply() {
     die 'could not record the active Skidbladnir unit identity'
   }
 
-  skidbladnir_install_integrations "$platform" "$home" || {
+  skidbladnir_install_integrations "$home" "$stage/agent-hooks.json" || {
     skidbladnir_discard_stage "$share" "$stage"
     die 'could not install Skidbladnir integrations'
   }

@@ -95,8 +95,8 @@ dev_server_home() {
 }
 
 # the macbook assets name the deployment identity as @ROOT@, @FLEET_LABEL_PREFIX@
-# and @GATEWAY_PORT@; every other asset is literal. DIR is a private copy of
-# assets/: the four templates are rendered in place and the libraries read that copy.
+# and @GATEWAY_PORT@. DIR is a private copy of assets/: the two plists are
+# rendered in place. skid renders its shared JSON templates in its own stage.
 dev_server_render_assets() {
   (($# == 1)) || die 'dev_server_render_assets needs one private assets directory'
   local assets="$1"
@@ -111,9 +111,7 @@ dev_server_render_assets() {
   [[ -d "$assets" && ! -L "$assets" ]] || die "rendered assets directory is invalid: $assets"
   for path in \
     herdr/dev.niels.herdr.plist \
-    skidbladnir/dev.niels.skidbladnir.plist \
-    skidbladnir/host-config-macbook.json \
-    skidbladnir/agent-hooks-macbook.json; do
+    skidbladnir/dev.niels.skidbladnir.plist; do
     path="$assets/$path"
     [[ -f "$path" && ! -L "$path" ]] || die "invalid asset template: $path"
     rendered="$(LC_ALL=C sed \

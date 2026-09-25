@@ -233,17 +233,18 @@ deployment (the restore path verifies the prior unit, which may listen
 elsewhere). a second deployment on one mac is these three set differently and
 applied through the same library functions, units and unmodified binaries.
 
-the four macbook assets that name them are templates: `dev.niels.herdr.plist`,
-`dev.niels.skidbladnir.plist`, `host-config-macbook.json` and
-`agent-hooks-macbook.json` carry `@ROOT@`, `@FLEET_LABEL_PREFIX@` and
+the two macbook plists, `dev.niels.herdr.plist` and
+`dev.niels.skidbladnir.plist`, carry `@ROOT@`, `@FLEET_LABEL_PREFIX@` and
 `@GATEWAY_PORT@`. `dev_server_render_assets DIR` renders them in place inside a
 private copy of `assets/` after the staged snapshot is verified, dies if any
 `@[A-Z_]+@` remains, and points the libraries at that copy. source filenames
 stay `dev.niels.*`; install targets are `<prefix>.*.plist`. rendering with the
 defaults reproduces the production bytes. both plists set `HOME` to the root so
 the launcher, the gateway's worker-directory root and herdr's snapshot and
-detection caches follow it. every other asset is literal: arch and devbox units
-use systemd's `%h`, and on arch and devbox deployment identity is the systemd
+detection caches follow it. skid's `host-config.json` and `agent-hooks.json`
+are shared templates rendered inside its apply stage for every host; their
+output retains the existing byte format and runtime identity. arch and devbox
+units use systemd's `%h`, and on arch and devbox deployment identity is the systemd
 user account; the libraries die there if the prefix or port differ from their
 defaults.
 
@@ -420,9 +421,14 @@ source commit, platform urls, and archive sha256. accept only supported release
 paths and valid schema. upstream owns packaging, product schema, release
 certification, fleet operations, and device acceptance.
 the pinned release's `skidbladnir validate-host-config` admits the declared host
-config after artifact preparation; the installer keeps only deployment-owned
-checks (home-rooted paths, the four account wrappers, permission flags, and
-herdr path/socket literals equal to the unit's).
+config after artifact preparation. one `host-config.json` template owns
+profiles, launch arguments, signatures and an explicit tested herdr version;
+one `agent-hooks.json` template owns hook policy. render them for the host home
+and platform, deriving codex homes and its binary from `assets/codex/profiles.json`
+with the same workstation projection as the account wrappers. identity hooks
+install into the rendered codex account homes. the installer checks home-rooted
+profile paths and herdr path/socket/version consistency with the declared
+runtime; it does not repeat the templates' policy as a second schema.
 
 under one nonblocking lock, reuse a locally verified pinned artifact or download
 and verify it. check archive digest, exact release members, manifest identity,

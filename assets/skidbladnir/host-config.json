@@ -1,5 +1,5 @@
 {
-  "platform": "Darwin",
+  "platform": "@PLATFORM@",
   "herdr": {"path": "@ROOT@/.local/share/herdr/current/herdr", "socketPath": "@ROOT@/.config/herdr/herdr.sock", "testedVersion": "herdr 0.9.1"},
   "profiles": [
     {
@@ -7,8 +7,8 @@
       "label": "Codex · Personal",
       "provider": "Codex",
       "command": "@ROOT@/bin/codex",
-      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.codex"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "@ROOT@/.local/bin/codex"}],
+      "environment": [{"name": "CODEX_HOME", "value": "@CODEX_HOME_PERSONAL@"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "@CODEX_BINARY@"}],
       "arguments": ["--yolo"]
     },
     {
@@ -16,8 +16,8 @@
       "label": "Codex · Work",
       "provider": "Codex",
       "command": "@ROOT@/bin/codex-work",
-      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.codex-work"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "@ROOT@/.local/bin/codex"}],
+      "environment": [{"name": "CODEX_HOME", "value": "@CODEX_HOME_WORK@"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "@CODEX_BINARY@"}],
       "arguments": ["--yolo"]
     },
     {
@@ -25,8 +25,8 @@
       "label": "Codex · Work 2",
       "provider": "Codex",
       "command": "@ROOT@/bin/codex-work2",
-      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.codex-work2"}],
-      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "@ROOT@/.local/bin/codex"}],
+      "environment": [{"name": "CODEX_HOME", "value": "@CODEX_HOME_WORK2@"}],
+      "foregroundSignatures": [{"executableBase": "codex"}, {"executableBase": "node", "argument1": "@CODEX_BINARY@"}],
       "arguments": ["--yolo"]
     },
     {
