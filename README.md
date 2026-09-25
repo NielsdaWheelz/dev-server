@@ -25,6 +25,10 @@ rerun after fixing the reported problem. `--help` lists the public commands.
 there is no retained test suite or repository ci workflow. changes use temporary
 integration tests and direct verification; evidence belongs in the pull request.
 
+tmux loads the pinned resurrect and continuum plugins directly. this repo owns
+their installation and updates; tpm is retired. apply removes its managed
+checkout and bindings while preserving running sessions and saved layouts.
+
 ## workstation
 
 macos needs homebrew and the app store tailscale app, installed and signed in.
