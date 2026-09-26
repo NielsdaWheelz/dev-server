@@ -94,6 +94,14 @@ second peer credential set. qualify login-shell `skid` resolution, `skid --help`
 and client config admission on all three hosts. the app owner qualifies the
 interactive browser; gateway health alone does not prove that public journey.
 
+the [original owner's qualification](https://github.com/NielsdaWheelz/skidbladnir/blob/e748d2e0bfd1c95b434913c0fff1d8ec3b6ccc7c/docs/dev-server-handoff.md)
+records this repair with dev-server `223bc5f` on all three hosts: exact public
+links, login-shell resolution, nonpartial three-peer inventory, bare-browser
+rendering/`q` exit, repeat apply and the tightened fleet verifier passed.
+gateway/runtime identities and receipts were preserved. use the current
+reviewed app source for client provisioning; its immutable `v0.9.0` script
+predates removal of the obsolete jarvis-config write.
+
 ordinary `./workstation apply|upgrade` and `./devbox apply|upgrade` provision
 shared host tools and upstream herdr. gateway maintenance is selected:
 

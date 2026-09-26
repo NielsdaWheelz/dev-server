@@ -179,5 +179,13 @@ restores the prior executable through `current`, and removes the alias after
 confirmed failed-first-activation cleanup. original removal deletes it; mobile
 installation/removal preserves its inode and target. temporary probes were
 removed; bash syntax, shellcheck, document links and diff checks passed.
-live repair and command/config acceptance are tracked in
-[the cli issue](issues/skid-cli-entrypoint.md).
+
+the original owner's [committed qualification](https://github.com/NielsdaWheelz/skidbladnir/blob/e748d2e0bfd1c95b434913c0fff1d8ec3b6ccc7c/docs/dev-server-handoff.md)
+records the root operator's repair after dev-server `223bc5f`: all three login
+shells resolve the exact public link, nonpartial three-peer inventories pass,
+and the bare browser renders and exits zero with `q` in private ptys at least
+80 by 24. macbook's peer records remained unchanged. repeat apply reports
+up to date and original's tightened fleet verifier passes everywhere.
+gateway, herdr, provider and cognition process identities and receipts were
+preserved. this closes the command/config gap; broader desktop ux waivers are
+unchanged. no live operation was performed by this source task.
