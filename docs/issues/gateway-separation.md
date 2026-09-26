@@ -1,8 +1,8 @@
-# separated gateways await release and cutover qualification
+# separated gateways await live cutover qualification
 
-problem: original skid's first separated release and live skid namespace
-handback remain pending. herdr-mobile `v0.9.0` is published and its converted
-host pin is present. github name transfer is complete.
+problem: live skid namespace handback and native coexistence qualification
+remain pending. both products' `v0.9.0` releases are published and their
+converted host pins are present. github name transfer is complete.
 
 impact: source preparation cannot establish live coexistence or authorize
 activation of unfinished releases. both products must preserve existing
@@ -25,8 +25,7 @@ phone, credential or tmux mutation is part of this source task.
 owners and blockers:
 
 - original app owner: scoped hook interaction at the integration boundary,
-  original helper live compatibility, and qualified release candidate inputs
-  for the root operator's publication from repository id `1386409483`.
+  original helper live compatibility, and native provider/control acceptance.
 - jarvis owner: cognition continuity evidence with existing workers, session
   snapshot and worker map retained.
 - root operator: published repository identity check, private recovery inventory,
@@ -39,6 +38,9 @@ publication is root-owned and does not wait for live namespace handback.
 installation does. the generation directory-mode/digest admission discrepancy
 was corrected in dev-server `94931a1`; the original ten-file contract is agreed.
 gateway replacement does not require a herdr restart or snapshot reset.
+original release source `580e099` is pinned by dev-server `ce6b96b`; release
+publication is no longer a blocker. devbox's privileged ingress correction
+needs native apply/remove qualification by the root operator.
 
 resolved when: real pins are committed, the original helper and both host
 interfaces are qualified, and every live acceptance row in the runbook has

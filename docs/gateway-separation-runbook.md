@@ -27,9 +27,11 @@ map `darwinArm64Sha256` and `linuxAmd64Sha256` into the corresponding host
 artifacts, and derive their canonical release-download urls. the deployment
 does not consume the apk, signing-certificate or checksum-file digests.
 
-original skid's published pin remains required before its activation: version,
-source commit, archive url and sha256 for both platforms. never fill these
-fields from an anticipated release. verify canonical repositories by numeric id:
+original skid `v0.9.0` is published from
+`580e0992d1ee0d7334cefc6561e7f55a5836baf5`. dev-server pin commit `ce6b96b`
+converts upstream pin `50a688b` to the same host-only schema; both canonical
+host archives, digests and manifests were verified. published pins do not
+authorize live namespace handback. verify canonical repositories by numeric id:
 
 ```sh
 gh api repos/NielsdaWheelz/herdr-mobile --jq '{id,full_name}'
@@ -90,11 +92,25 @@ commands on the target workstation; the devbox command addresses the existing
 devbox through its strict deployment connection. provider executable upgrades
 remain a separate host operation. the other gateway may be absent.
 
+devbox uses the existing `dev-server-deploy` principal's elevation for tailscale
+ingress. its root preflight runs before user runtime apply/remove; the gateway
+stays owned by `niels`, including its user service, home and dbus environment.
+only after that operation succeeds does a separate root task reconcile the
+selected handler. root ingress uses the system command path and the two
+deployment-owned libraries in `/usr/local/libexec/dev-server-gateway`, not
+the user's runtime copies. no tailscale
+operator permission is granted to `niels`, and workstation elevation is unchanged.
+an action from preflight or runtime defers subsequent tasks. a later ingress
+failure remains an error; it does not undo a verified gateway operation. resolve
+the reported host-level failure and rerun the same selected operation.
+
 ingress operations affect only the selected `/v1` handler. unrelated handlers,
 including handlers on the same port, must survive. public funnel on that
 origin is a failure. manual removal, when an operator has verified ownership,
 uses `tailscale serve --https=8444 --set-path=/v1 off` for herdr-mobile or
-`tailscale serve --https=8443 --set-path=/v1 off` for skid. never use
+`tailscale serve --https=8443 --set-path=/v1 off` for skid. on devbox, issue these
+through the deployment principal with `sudo`, not from unprivileged `niels`.
+never use
 `tailscale serve reset` or port-wide cleanup. this uses the supported
 [serve command](https://tailscale.com/docs/reference/tailscale-cli/serve).
 
@@ -364,7 +380,7 @@ on each live platform, the root operator and app/jarvis owners must record:
 
 | boundary | macbook | devbox | arch | owner / blocker |
 | --- | --- | --- | --- | --- |
-| both gateways healthy concurrently | NOT_RUN | NOT_RUN | NOT_RUN | root / original skid pin and handback |
+| both gateways healthy concurrently | NOT_RUN | NOT_RUN | NOT_RUN | root / namespace handback and live qualification |
 | repeat apply and independent absent-product apply | NOT_RUN | NOT_RUN | NOT_RUN | root / staged releases |
 | restart, reinstall, rollback preserve other workers/attachments | NOT_RUN | NOT_RUN | NOT_RUN | app + root / live window |
 | all forge/manual profiles use correct home/hooks | NOT_RUN | NOT_RUN | NOT_RUN | app + root / existing-account and hook coexistence |

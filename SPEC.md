@@ -488,6 +488,11 @@ gateway validation never inspects android signing files.
 
 serve operations own only `/v1` on the selected port and preserve all unrelated
 handlers and ports. no funnel, reset, private localapi or hostname rewriting.
+on devbox, the deployment principal runs ingress preflight and mutation as
+root with a system command path; gateway reconciliation remains under `niels`.
+preflight must pass before runtime apply/remove, and runtime reconciliation
+must succeed before ingress mutation. this grants no tailscale operator rights
+to the user and changes no workstation elevation policy.
 foreign handlers require operator resolution. scoped removal never stops
 upstream herdr or tmux, and must preserve other products, provider state,
 signing files and unrelated files. native removal/rollback qualification must

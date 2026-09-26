@@ -2,7 +2,8 @@
 
 2026-09-25, against dev-server baseline `8498933`. temporary probes were
 removed; no test framework or ci workflow was added. fixtures and service
-stand-ins establish installer behavior only. live activation is pending.
+stand-ins establish installer behavior only. live acceptance belongs to the
+cutover operator.
 the provider-routing correction follows owner handoff `7da90d8`: ordinary and
 herdr accounts retain their existing homes and state. the earlier private
 herdr-home proposal is withdrawn; its earlier fixture results are not routing
@@ -18,8 +19,11 @@ private-home probes are historical, not acceptance for the revised routing.
 | ansible | ordinary apply and selected gateway playbooks passed syntax checks; disposable callback probe rejects silent exit 2 and accepts exit 2 with an action |
 | app config contracts | corrected existing-home mobile configs render for macos/linux and pass the available mac app validator; the mobile handoff reports the published v0.9.0 binary accepts these homes; original skid's real mac renderer output passes its validator built from the `3bd0ae4` implementation; native linux execution remains unrun here |
 | published mobile pin | documented conversion preserves v0.9.0, source `68a652d7ccbeaaf472ef1c5f3a4ea6949808bca4`, and both host digests; github confirms canonical repository id `1342599607`, immutable release and exact tag commit; downloaded archives pass digest, member and manifest checks, and native mac version/config validation |
+| published original pin | `ce6b96b` converts upstream `50a688b` to the host schema for v0.9.0 source `580e0992d1ee0d7334cefc6561e7f55a5836baf5`; canonical repository id `1386409483`, immutable release and tag agree; both downloaded host archives pass digest/member/manifest checks, native mac version matches, and the deployment parser accepts all three platforms |
 | selected commands | invalid input rejected; selected pending pins return action/2 before product-home mutation, regardless of the other gateway's invalid port; absent removal needs no release pin or provider assets |
 | ingress | a fake tailscale cli verified selected handler apply/remove while preserving the other port and an unrelated same-port handler; foreign handlers and public exposure on the selected origin refused |
+| devbox ingress privilege | old `ce6b96b` task reproduces runtime mutation followed by a denied user write on apply/remove; corrected rendered tasks pass both products and repeat paths with that same restriction; only root tasks run ingress using root-owned libraries/system path; opposite-port and same-port handlers and unrelated funnel state are preserved |
+| devbox ingress failures | preflight actions/public exposure stop before runtime; runtime actions/hard failures prevent ingress; silent exit 2 is rejected and actual write failures remain errors for apply/remove; these are disposable task/cli probes, not native sudo or tailscale qualification |
 | independent installer lifecycle | each product passed disposable first install, repeat apply, forced failed-upgrade recovery and removal with the other absent |
 | coinstalled isolation | both products in one disposable home retained identical opposite-product trees, links, units, receipts/pairs and simulated running state after selected repeat, failed upgrade and removal in both directions |
 | receipts and recovery | interrupted promotion restores the atomic verified runtime/unit pair; duplicate previous pointer clears; failed retry of an unpaired first candidate returns to no active runtime |
@@ -49,14 +53,17 @@ the source checks found and repaired inherited or split-exposed defects:
 gateway signing validation, old-name archive ordering, hyphenated receipt
 rejection, separate receipt writes authorizing a mixed pair, recovery producing
 duplicate pointers, generation admission omitting directory mode/digest suffix,
-and silent remote exit 2 being reported as success. helper
+silent remote exit 2 being reported as success, and devbox ingress writes
+running as the unprivileged gateway user. the coordinating operator reported
+that final privilege defect during live apply; the correction places only
+ingress under the existing deployment principal's root authority. helper
 environments are built at their final immutable paths; moving a built python
 environment would leave broken entry-point paths.
 
 ## limits and decisions
 
-herdr-mobile's published host pin is recorded and its artifacts verified in
-temporary directories. original skid's published pin remains unavailable.
+both published host pins are recorded and their artifacts verified in
+temporary directories.
 no live service, provider account, tmux session, phone,
 repository namespace or credential was changed by this source work. the devbox
 codex feature observation used only a disposable empty home.
@@ -65,7 +72,7 @@ live supervisor behavior, authenticated provider hooks/control, worker and
 attachment continuity, existing-account history/hook coexistence, tailnet reachability and phone
 acceptance are `NOT_RUN`. the [runbook](gateway-separation-runbook.md) names
 their owners, sequence and evidence requirements; the
-[open issue](issues/gateway-separation.md) tracks publication and cutover.
+[open issue](issues/gateway-separation.md) tracks remaining cutover qualification.
 
 the implementation retains the existing artifact/runtime/unit machinery,
 shared through two explicit product owners. one atomic pair makes recovery

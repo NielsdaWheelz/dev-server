@@ -42,7 +42,7 @@
         group: "{{ devbox_user }}"
         mode: '0644'
       loop: >-
-        {{ ['common.sh', 'gateway-ingress.sh', 'gateway-runtime.sh', gateway_product ~ '.sh']
+        {{ ['common.sh', 'gateway-runtime.sh', gateway_product ~ '.sh']
            + (['skid-provider.sh'] if gateway_product == 'skidbladnir' and gateway_operation == 'apply' else []) }}
 
     - name: Install selected gateway assets
@@ -63,31 +63,60 @@
         mode: preserve
       when: gateway_product == 'skidbladnir' and gateway_operation == 'apply'
 
-    - name: Reconcile selected gateway and ingress
+    - name: Ensure root-owned gateway ingress library directory exists
+      ansible.builtin.file:
+        path: /usr/local/libexec/dev-server-gateway
+        state: directory
+        follow: false
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Install root-owned gateway ingress libraries
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../lib/{{ item }}"
+        dest: "/usr/local/libexec/dev-server-gateway/{{ item }}"
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - common.sh
+        - gateway-ingress.sh
+
+    - name: Preflight selected gateway ingress
+      ansible.builtin.shell: |
+        set -euo pipefail
+        source /usr/local/libexec/dev-server-gateway/common.sh
+        source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
+        {{ gateway_product | replace('-', '_') }}_ingress_preflight
+        finish_results devbox
+      args:
+        executable: /bin/bash
+      become: true
+      become_user: root
+      environment:
+        PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      register: ingress_preflight_result
+      changed_when: false
+      failed_when: >-
+        ingress_preflight_result.rc not in [0, 2] or
+        (ingress_preflight_result.rc == 2 and
+         not (ingress_preflight_result.stdout is regex('(?m)^ACTION  ')))
+
+    - name: Reconcile selected gateway runtime
       ansible.builtin.shell: |
         set -euo pipefail
         dev_server_home_dir="/home/{{ devbox_user }}"
         dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
         source "$dev_server_assets_root/../lib/common.sh"
-        source "$dev_server_assets_root/../lib/gateway-ingress.sh"
         source "$dev_server_assets_root/../lib/{{ gateway_product }}.sh"
         if [[ '{{ gateway_product }}' == skidbladnir && '{{ gateway_operation }}' == apply ]]; then
           source "$dev_server_assets_root/../lib/skid-provider.sh"
         fi
         if [[ '{{ gateway_operation }}' == apply ]]; then
-          if {{ gateway_product | replace('-', '_') }}_ingress_preflight; then
-            {{ gateway_product | replace('-', '_') }}_apply devbox
-            if {{ gateway_product | replace('-', '_') }}_ingress_apply; then :; else
-              status=$?
-              ((status == 2)) || exit "$status"
-            fi
-          fi
+          {{ gateway_product | replace('-', '_') }}_apply devbox
         else
           {{ gateway_product | replace('-', '_') }}_remove devbox
-          if {{ gateway_product | replace('-', '_') }}_ingress_remove; then :; else
-            status=$?
-            ((status == 2)) || exit "$status"
-          fi
         fi
         finish_results devbox
       args:
@@ -99,6 +128,7 @@
         PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
         XDG_RUNTIME_DIR: "/run/user/{{ gateway_user_uid.stdout }}"
         DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ gateway_user_uid.stdout }}/bus"
+      when: ingress_preflight_result.rc == 0
       register: gateway_result
       changed_when: gateway_result.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ')
       failed_when: >-
@@ -106,7 +136,33 @@
         (gateway_result.rc == 2 and
          not (gateway_result.stdout is regex('(?m)^ACTION  ')))
 
+    - name: Reconcile selected gateway ingress
+      ansible.builtin.shell: |
+        set -euo pipefail
+        source /usr/local/libexec/dev-server-gateway/common.sh
+        source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
+        {{ gateway_product | replace('-', '_') }}_ingress_{{ gateway_operation }}
+        finish_results devbox
+      args:
+        executable: /bin/bash
+      become: true
+      become_user: root
+      environment:
+        PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      when: ingress_preflight_result.rc == 0 and gateway_result.rc | default(1) == 0
+      register: ingress_result
+      changed_when: ingress_result.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ')
+      failed_when: >-
+        ingress_result.rc not in [0, 2] or
+        (ingress_result.rc == 2 and
+         not (ingress_result.stdout is regex('(?m)^ACTION  ')))
+
     - name: Report selected gateway result
       ansible.builtin.debug:
         msg: "{{ item }}"
-      loop: "{{ gateway_result.stdout_lines | select('match', '^(ACTION|INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ') | list }}"
+      loop: >-
+        {{ ((ingress_preflight_result.stdout_lines | default([]))
+            + (gateway_result.stdout_lines | default([]))
+            + (ingress_result.stdout_lines | default([])))
+           | select('match', '^(ACTION|INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ')
+           | list }}
