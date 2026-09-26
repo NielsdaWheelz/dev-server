@@ -273,79 +273,6 @@ ai_install_profiles() {
     "$home/bin/claude-work" 0755 shell.config || return 1
 }
 
-# Skid's marker is set only for new product-owned terminals. Bash login shells
-# do not necessarily read .bashrc; install the same guarded source in the
-# effective login file and in .bashrc for interactive subshells.
-ai_install_skid_shell_init() {
-  local home login path candidate mode
-  home="$(dev_server_home)"
-  login=''
-  for path in .bash_profile .bash_login .profile; do
-    if [[ -e "$home/$path" || -L "$home/$path" ]]; then
-      login="$path"
-      break
-    fi
-  done
-  login="${login:-.bash_profile}"
-  for path in "$login" .bashrc; do
-    ai_install_skid_shell_source "$home/$path" || return $?
-  done
-  if [[ -e "$home/.zlogin" || -L "$home/.zlogin" ]]; then
-    ai_install_skid_shell_source "$home/.zlogin" || return $?
-  fi
-}
-
-ai_install_skid_shell_source() {
-  local target="$1" candidate mode=0644
-  [[ ! -L "$target" ]] || {
-    render_result ACTION shell.config "skid shell startup target is a symlink: $target"
-    return 2
-  }
-  if [[ -e "$target" ]]; then
-    [[ -f "$target" ]] || return 1
-    mode="$(file_mode "$target")" || return 1
-  fi
-  candidate="$(mktemp "$(dirname "$target")/.skid-shell-init.XXXXXX")" || return 1
-  if ! python3 - "$target" >"$candidate" <<'PY'; then
-import os
-import sys
-
-path = sys.argv[1]
-begin = b"# dev-server skid shell init begin"
-end = b"# dev-server skid shell init end"
-block = (begin + b"\n"
-         b'if [ "${SKIDBLADNIR_SHELL:-}" = 1 ]; then\n'
-         b'  . "$HOME/.local/share/skidbladnir/current/providers/shell-init"\n'
-         b'fi\n' + end + b"\n")
-try:
-    with open(path, "rb") as stream:
-        old = stream.read(1048577)
-except FileNotFoundError:
-    old = b""
-if len(old) > 1048576:
-    raise SystemExit("shell startup file is too large")
-if old.endswith(block):
-    result = old
-elif old.count(block) == 1 and old.count(begin) == 1 and old.count(end) == 1:
-    offset = old.index(block)
-    kept = old[:offset] + old[offset + len(block):]
-    result = kept + (b"\n" if kept and not kept.endswith(b"\n") else b"") + block
-elif begin in old or end in old:
-    raise SystemExit("skid shell init marker is incomplete or duplicated")
-else:
-    result = old + (b"\n" if old and not old.endswith(b"\n") else b"") + block
-sys.stdout.buffer.write(result)
-PY
-    rm -f -- "$candidate"
-    return 1
-  fi
-  install_managed_file "$candidate" "$target" "$mode" shell.config || {
-    rm -f -- "$candidate"
-    return 1
-  }
-  rm -f -- "$candidate"
-}
-
 ai_install_instructions() {
   local instructions
   local instruction_home
@@ -439,6 +366,5 @@ ai_install() {
   ai_install_codex "${1:-0}" || return 1
   ai_install_claude "${1:-0}" || return 1
   ai_install_profiles || return 1
-  ai_install_skid_shell_init || return $?
   ai_install_instructions || return 1
 }

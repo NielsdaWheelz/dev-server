@@ -11,11 +11,12 @@ its directory/instructions elsewhere, and the gate rejects the new home.
 evidence (2026-09-25): an in-memory work-home change to `.codex-employer`
 changed the generated launcher while installer fixtures selected `.codex-work`.
 the current consumers are `lib/ai-tools.sh`, `lib/herdr.sh`,
-`assets/herdr/herdr-gate`, `assets/herdr-mobile/host-config.json` and its renderer.
+`assets/herdr/herdr-gate`, both gateway host configs/renderers and skid's
+scoped provider launcher.
 
 follow-up: resolve the existing declaration once for the host and use those
 paths consistently, preserving command behavior, account state and the gate's
-explicit command policy. original skid's scoped private homes remain separate.
+explicit command policy. original skid now uses the same accounts.
 do not migrate providers or introduce an account registry to resolve duplication.
 
 resolved when: one declared normal-home change produces consistent consumer

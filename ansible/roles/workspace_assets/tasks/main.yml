@@ -30,7 +30,6 @@
     - dotfiles.sh
     - ai-tools.sh
     - herdr.sh
-    - provider-homes.sh
 
 - name: Install exact dotfile assets
   ansible.builtin.copy:

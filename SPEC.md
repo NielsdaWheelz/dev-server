@@ -182,10 +182,20 @@ native executable. normal homes remain `.codex`, `.codex-work`, `.codex-work2`,
 semantics. they are shared user state, not herdr-owned or cognition-only state.
 preserve authentication, configuration, history, memories, plugins and trust.
 
-original skid's own forge and marked bash/zsh terminals select its private
-homes through scoped commands. ordinary and genuine herdr terminals do not
-load those functions. the original app owns environment creation and removal
-of inherited `HERDR_*`; upstream herdr starts with no tmux context. the contract is in the
+original skid's own forge and marked bash/zsh terminals select those same
+accounts through scoped native commands. manual personal claude leaves
+`CLAUDE_CONFIG_DIR` unset, preserving its native default state including
+`~/.claude.json`. neither gateway provisions or rewrites provider homes.
+ordinary and genuine herdr terminals do not load those functions.
+skid apply owns startup-file validation and guarded
+source installation; shared provider maintenance has no skid prerequisite.
+startup symlinks retain their identity; skid edits their regular targets while
+preserving unrelated content and modes. the original app owns environment
+creation and removal of inherited `HERDR_*`; upstream herdr starts with no tmux
+context. skid sets `SKIDBLADNIR_AGENT=1` only at provider exec; its explicitly
+loaded claude plugin rejects foreign/herdr contexts before reading input or
+config and still verifies process identity. skid installs no codex hooks.
+the contract is in the
 [runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract).
 
 interactive zsh aliases separately add `--yolo` for all three codex profiles
@@ -450,8 +460,9 @@ generation admission requires directory mode `0700` and a basename digest
 suffix equal to the computed runtime identity for both products.
 the stable helper command follows `current`, so
 gateway rollback selects its matching immutable helper revision. private
-provider homes, authentication and independently applied hook/settings files
-are persistent account state and are not rolled back with gateway binaries.
+helper environments remain while retained generations reference them. shared
+provider authentication, history, trust and settings are user state; gateway
+installation and rollback never write them.
 
 before recording activation, verify authenticated health and the running
 executable. a single atomic `<receipt>.pair` records the verified runtime/unit

@@ -98,11 +98,11 @@ their authentication, configuration, history, memories, plugins and trust stay
 in place. existing environment-override semantics and native herdr integrations
 remain intact; jarvis keeps its existing worker map and cognition services.
 
-only original skid's forge and marked bash/zsh terminals use its scoped
-launcher and fresh homes under `~/.local/share/skidbladnir/providers/`.
-authenticate normally and inspect/trust skid's hooks there; do not copy account
-trees or discovery sockets. skid invokes codex's packaged native executable
-and the shared native claude command directly.
+original skid's forge and marked bash/zsh terminals use those same accounts
+through scoped commands. skid invokes codex's packaged native executable and
+the shared native claude command directly. personal claude leaves
+`CLAUDE_CONFIG_DIR` unset. skid loads its claude identity plugin explicitly; it
+installs no codex hooks and never provisions or rewrites account state.
 [the runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract)
 gives the exact worker map and app environment contract.
 
@@ -137,9 +137,8 @@ stay intact.
 native discovery links each account's
 `app-server-control/app-server-control.sock` to its supervised socket. a
 conflicting path produces `ACTION`; apply never takes over another daemon.
-normal account clients retain this native discovery behavior. original skid's
-private homes have no copied discovery links; their sessions run embedded. explicit
-`--remote unix://…` requires attachment but has different command, cwd, config,
+account clients, including skid's native launches, retain this discovery
+behavior. explicit `--remote unix://…` requires attachment but has different command, cwd, config,
 and resume semantics. the wrappers do not parse these choices.
 
 shared tools execute in the server environment. calling-shell credentials are
@@ -179,9 +178,10 @@ upstream herdr remains one pinned server per host from
 [`assets/herdr/release-pin.json`](assets/herdr/release-pin.json), supervised
 independently. changing its runtime while it runs requires an explicit stop
 because stopping ends its terminals and agents. herdr integrations remain in
-the existing normal account homes. original skid has its own private homes,
-hooks and separately pinned native helper. provider binaries and tailscale
-remain shared host tools with separate upgrade operations.
+the existing normal account homes. original skid shares those accounts and has
+an explicitly loaded claude plugin and separately pinned native helper.
+provider binaries and tailscale remain shared host tools with separate upgrade
+operations.
 
 host templates live under [`assets/herdr-mobile`](assets/herdr-mobile) and
 [`assets/skidbladnir`](assets/skidbladnir). each admitted binary validates its
@@ -282,7 +282,7 @@ reach each host's herdr through the gate (see [agent fleet](#agent-fleet)).
 | devbox github identity and ssh client policy | `ansible/roles/github/`; `devbox` owns account enrollment checks |
 | herdr runtime and integrations, jarvis's gate | `lib/herdr.sh`, `assets/herdr/`, `ansible/roles/jarvis_herdr/` |
 | gateway ownership and shared activation | `lib/herdr-mobile.sh`, `lib/skidbladnir.sh`, `lib/gateway-runtime.sh`, `assets/{herdr-mobile,skidbladnir}/` |
-| private provider homes and skid helper | `lib/provider-homes.sh`, `lib/skid-provider.sh`, `assets/skid-provider/` |
+| scoped skid commands and helper | `lib/skid-provider.sh`, `assets/skid-provider/` |
 | devbox host configuration | `ansible/roles/`, `cloud-init-devbox.template.yaml` |
 
 work one bounded slice per pr, following the

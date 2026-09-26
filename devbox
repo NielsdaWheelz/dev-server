@@ -605,8 +605,7 @@ devbox_gateway_snapshot() {
     paths+=("assets/$product")
   fi
   if [[ "$product" == skidbladnir && "$operation" == apply ]]; then
-    paths+=(assets/skid-provider assets/agent-instructions.md
-      lib/skid-provider.sh lib/provider-homes.sh)
+    paths+=(assets/skid-provider lib/skid-provider.sh)
   fi
   dev_server_declared_snapshot "$root" "${paths[@]}"
 }
@@ -640,10 +639,8 @@ devbox_stage_gateway_inputs() {
   if [[ "$product" == skidbladnir && "$operation" == apply ]]; then
     cp -Rp "$base_dir/assets/skid-provider" "$devbox_declared_stage/assets/skid-provider" ||
       die 'could not stage skid provider assets'
-    cp -p "$base_dir/assets/agent-instructions.md" "$devbox_declared_stage/assets/" ||
-      die 'could not stage provider instructions'
-    cp -p "$base_dir/lib/skid-provider.sh" "$base_dir/lib/provider-homes.sh" \
-      "$devbox_declared_stage/lib/" || die 'could not stage provider libraries'
+    cp -p "$base_dir/lib/skid-provider.sh" "$devbox_declared_stage/lib/" ||
+      die 'could not stage provider library'
   fi
   staged_snapshot="$(devbox_gateway_snapshot "$devbox_declared_stage" "$product" "$operation")" ||
     die 'could not verify staged gateway inputs'

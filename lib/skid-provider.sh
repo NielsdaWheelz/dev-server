@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-source "$(dirname "${BASH_SOURCE[0]}")/provider-homes.sh"
-
 # The npm javascript launcher selects this same packaged executable. Skid's
 # config and product-local command require the native path, not that launcher.
 skidbladnir_native_paths() {
@@ -55,14 +53,15 @@ PY
     render_result ACTION skid.native 'original skid owner has not qualified the pinned native helper'
     return 2
   fi
-  if ! skidbladnir_native_paths "$home" >/dev/null || [[ ! -x "$home/bin/claude-statusline" ]]; then
-    render_result ACTION skid.providers 'install the shared native codex, claude, and status line before skid'
+  if ! skidbladnir_native_paths "$home" >/dev/null; then
+    render_result ACTION skid.providers 'install the shared native codex and claude before skid'
     return 2
   fi
   command -v git >/dev/null && command -v python3 >/dev/null || {
     render_result ACTION skid.native 'git and python3 are required for the pinned helper'
     return 2
   }
+  skidbladnir_shell_setup "$home" check || return $?
   for source in native-control-launch native-control-claude provider-command shell-init \
     claude-agent-identity/.claude-plugin/plugin.json \
     claude-agent-identity/hooks/hooks.json claude-agent-identity/bin/agent-hook; do
@@ -148,7 +147,7 @@ assert version("claude-agent-sdk") == "0.2.130"
 PY
   local probe
   probe="$(mktemp "$base/.probe.XXXXXX")" || return 1
-  if printf '{}\n' | env -i HOME="$home" CODEX_HOME="$home/.local/share/skidbladnir/providers/codex-personal" \
+  if printf '{}\n' | env -i HOME="$home" CODEX_HOME="$home/.codex" \
       PATH="$home/.local/bin:/usr/bin:/bin" "$release/.venv/bin/provider-runtime-control" >"$probe" 2>/dev/null; then
     rm -f -- "$probe"
     return 1
@@ -191,7 +190,7 @@ PY
   rm -f -- "$wrapper"
   probe="$(mktemp "$base/.probe.XXXXXX")" || return 1
   if printf '{}\n' | env -i HOME="$home" \
-      CLAUDE_CONFIG_DIR="$home/.local/share/skidbladnir/providers/claude-work" \
+      CLAUDE_CONFIG_DIR="$home/.claude-work" \
       SKIDBLADNIR_CLAUDE_COMMAND="$home/.local/bin/claude" \
       PATH=/usr/bin:/bin "$candidate/providers/native-control" >"$probe" 2>/dev/null; then
     rm -f -- "$probe"
@@ -210,20 +209,110 @@ PY
   rm -f -- "$probe"
 }
 
-skidbladnir_provider_apply() {
-  local home="$1" stage="$2" target mode account root plugin
-  skidbladnir_provider_preflight "$home" || return $?
-  [[ -f "$stage/host-config.json" && ! -L "$stage/host-config.json" &&
-     -f "$stage/agent-hooks.json" && ! -L "$stage/agent-hooks.json" ]] ||
-    die 'rendered skid provider config or hooks are missing'
-  dev_server_strict_json_file "$stage/host-config.json" 65536 || die 'rendered skid host config is invalid'
-  dev_server_strict_json_file "$stage/agent-hooks.json" 16384 || die 'rendered skid codex hooks are invalid'
-  provider_homes_prepare "$home" skidbladnir || return 1
-  skidbladnir_provider_install_helper "$home" "$stage" || return $?
-  root="$home/.local/share/skidbladnir/providers"
-  for account in codex-personal codex-work codex-work2; do
-    install_managed_file "$stage/agent-hooks.json" "$root/$account/hooks.json" 0600 skid.integration || return 1
+# A normal host apply must not touch startup files for an optional gateway.
+# Skid checks them before staging, then installs its own guarded source.
+skidbladnir_shell_setup() {
+  local home="$1" operation="$2" login='' path target
+  for path in .bash_profile .bash_login .profile; do
+    if [[ -e "$home/$path" || -L "$home/$path" ]]; then
+      login="$path"
+      break
+    fi
   done
+  login="${login:-.bash_profile}"
+  local -a paths=("$login" .bashrc .zshrc)
+  [[ ! -e "$home/.zlogin" && ! -L "$home/.zlogin" ]] || paths+=(.zlogin)
+  for path in "${paths[@]}"; do
+    target="$(python3 - "$home/$path" <<'PY'
+import os
+import sys
+
+path = sys.argv[1]
+target = os.path.realpath(path)
+if ((os.path.lexists(path) and not os.path.isfile(target)) or
+        "\n" in target or "\r" in target):
+    raise SystemExit(1)
+print(target)
+PY
+)" || {
+      render_result ACTION skid.shell "startup target is not a regular file: $home/$path"
+      return 2
+    }
+    if [[ "$operation" == install ]]; then
+      skidbladnir_shell_source "$target" "$path" || return $?
+    fi
+  done
+}
+
+skidbladnir_shell_source() {
+  local target="$1" startup="$2" candidate mode=0644
+  if [[ -e "$target" ]]; then
+    mode="$(file_mode "$target")" || return 1
+  fi
+  candidate="$(mktemp "$(dirname "$target")/.skid-shell-init.XXXXXX")" || return 1
+  if ! python3 - "$target" "$startup" >"$candidate" <<'PY'; then
+import sys
+
+path, startup = sys.argv[1:]
+begin = b"# dev-server skid shell init begin"
+end = b"# dev-server skid shell init end"
+block = (begin + b"\n"
+         b'if [ "${SKIDBLADNIR_SHELL:-}" = 1 ] && [ "${HERDR_ENV:-}" != 1 ]; then\n'
+         b'  . "$HOME/.local/share/skidbladnir/current/providers/shell-init"\n'
+         b'fi\n' + end + b"\n")
+old_block = (begin + b"\n"
+             b'if [ "${SKIDBLADNIR_SHELL:-}" = 1 ]; then\n'
+             b'  . "$HOME/.local/share/skidbladnir/current/providers/shell-init"\n'
+             b'fi\n' + end + b"\n")
+old_zsh_guard = (b"# Original skid marks only shells it creates. Source after shared aliases.\n"
+                 b'if [[ "${SKIDBLADNIR_SHELL:-}" == 1 ]]; then\n'
+                 b'  source "$HOME/.local/share/skidbladnir/current/providers/shell-init"\n'
+                 b'fi\n')
+zsh_guard = (b"# Original skid marks only shells it creates. Source after shared aliases.\n"
+             b'if [[ "${SKIDBLADNIR_SHELL:-}" == 1 && "${HERDR_ENV:-}" != 1 ]]; then\n'
+             b'  source "$HOME/.local/share/skidbladnir/current/providers/shell-init"\n'
+             b'fi\n')
+try:
+    with open(path, "rb") as stream:
+        old = stream.read(1048577)
+except FileNotFoundError:
+    old = b""
+if len(old) > 1048576:
+    raise SystemExit("shell startup file is too large")
+if old.count(begin) > 1 or old.count(end) > 1:
+    raise SystemExit("skid shell init marker is duplicated")
+owned = block if block in old else old_block if old_block in old else b""
+if (begin in old or end in old) and not owned:
+    raise SystemExit("skid shell init marker is incomplete")
+kept = old.replace(owned, b"") if owned else old
+guard_count = old.count(old_zsh_guard) + old.count(zsh_guard)
+if startup == ".zshrc" and guard_count:
+    if guard_count != 1:
+        raise SystemExit("skid zsh guard is duplicated")
+    kept = kept.replace(old_zsh_guard, b"").replace(zsh_guard, b"")
+    selected = zsh_guard
+else:
+    selected = block
+result = kept + (b"\n" if kept and not kept.endswith(b"\n") else b"") + selected
+sys.stdout.buffer.write(result)
+PY
+    rm -f -- "$candidate"
+    return 1
+  fi
+  install_managed_file "$candidate" "$target" "$mode" skid.shell || {
+    rm -f -- "$candidate"
+    return 1
+  }
+  rm -f -- "$candidate"
+}
+
+skidbladnir_provider_apply() {
+  local home="$1" stage="$2" target mode plugin
+  skidbladnir_provider_preflight "$home" || return $?
+  [[ -f "$stage/host-config.json" && ! -L "$stage/host-config.json" ]] ||
+    die 'rendered skid provider config is missing'
+  dev_server_strict_json_file "$stage/host-config.json" 65536 || die 'rendered skid host config is invalid'
+  skidbladnir_provider_install_helper "$home" "$stage" || return $?
   plugin="$stage/providers/claude-agent-identity"
   mkdir -m 0755 "$plugin" || return 1
   for target in .claude-plugin hooks bin; do
@@ -235,4 +324,5 @@ skidbladnir_provider_apply() {
     cp "$(dev_server_assets_dir)/skid-provider/claude-agent-identity/$target" "$plugin/$target" || return 1
     chmod "$mode" "$plugin/$target" || return 1
   done
+  skidbladnir_shell_setup "$home" install || return $?
 }

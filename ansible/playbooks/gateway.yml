@@ -43,7 +43,7 @@
         mode: '0644'
       loop: >-
         {{ ['common.sh', 'gateway-ingress.sh', 'gateway-runtime.sh', gateway_product ~ '.sh']
-           + (['provider-homes.sh', 'skid-provider.sh'] if gateway_product == 'skidbladnir' and gateway_operation == 'apply' else []) }}
+           + (['skid-provider.sh'] if gateway_product == 'skidbladnir' and gateway_operation == 'apply' else []) }}
 
     - name: Install selected gateway assets
       ansible.builtin.copy:
@@ -61,15 +61,6 @@
         owner: "{{ devbox_user }}"
         group: "{{ devbox_user }}"
         mode: preserve
-      when: gateway_product == 'skidbladnir' and gateway_operation == 'apply'
-
-    - name: Install shared provider instructions for original Skidbladnir
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../assets/agent-instructions.md"
-        dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/agent-instructions.md"
-        owner: "{{ devbox_user }}"
-        group: "{{ devbox_user }}"
-        mode: '0600'
       when: gateway_product == 'skidbladnir' and gateway_operation == 'apply'
 
     - name: Reconcile selected gateway and ingress

@@ -39,9 +39,6 @@ replacements = {
     "TMUX_VERSION": tmux_version,
     "CODEX": codex,
     "CLAUDE": claude,
-    "HOOK_COMMAND": shlex.join([f"{home}/.local/bin/skidbladnir", "agent-hook",
-                                f"--host-config={home}/.local/share/skidbladnir/current/host-config.json",
-                                "Codex", "SessionStart"]),
 }
 def render(name):
     value = json.loads((assets / "skidbladnir" / name).read_text())
@@ -59,20 +56,20 @@ def render(name):
     return value
 
 value = render("host-config.json")
-expected = f"{home}/.local/share/skidbladnir/providers"
 if (set(value) != {"platform", "tmux", "nativeControlPath", "profiles"} or
         value["nativeControlPath"] != f"{home}/.local/bin/skidbladnir-provider-runtime-control" or
         value["tmux"] != {"path": tmux_path, "testedVersion": tmux_version} or
         [row.get("key") for row in value["profiles"]] !=
         ["personal", "work", "work2", "claude-work"]):
     raise SystemExit("skid host configuration differs from deployment contract")
+accounts = {"personal": ("CODEX_HOME", ".codex"),
+            "work": ("CODEX_HOME", ".codex-work"),
+            "work2": ("CODEX_HOME", ".codex-work2"),
+            "claude-work": ("CLAUDE_CONFIG_DIR", ".claude-work")}
 for row in value["profiles"]:
-    key = row["key"]
-    leaf = f"codex-{key}" if key != "claude-work" else "claude-work"
-    if row["environment"] != [{"name": "CODEX_HOME" if key != "claude-work" else "CLAUDE_CONFIG_DIR",
-                               "value": f"{expected}/{leaf}"}]:
-        raise SystemExit("skid provider home is outside its namespace")
-render("agent-hooks.json")
+    name, leaf = accounts[row["key"]]
+    if row["environment"] != [{"name": name, "value": f"{home}/{leaf}"}]:
+        raise SystemExit("skid provider home differs from existing account")
 providers = Path(stage, "providers")
 providers.mkdir(mode=0o700)
 command = (assets / "skid-provider/provider-command").read_text()

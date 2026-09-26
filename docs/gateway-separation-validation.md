@@ -6,7 +6,9 @@ stand-ins establish installer behavior only. live activation is pending.
 the provider-routing correction follows owner handoff `7da90d8`: ordinary and
 herdr accounts retain their existing homes and state. the earlier private
 herdr-home proposal is withdrawn; its earlier fixture results are not routing
-acceptance for this correction.
+acceptance for this correction. coordinating handoff `2ad2cab` extends existing
+accounts to skid using original implementation `3bd0ae4`. its former
+private-home probes are historical, not acceptance for the revised routing.
 
 ## checks completed
 
@@ -14,7 +16,7 @@ acceptance for this correction.
 | --- | --- |
 | static checks | bash/zsh syntax, shellcheck, json/plist parsing, herdr gate python syntax, and `git diff --check` passed |
 | ansible | ordinary apply and selected gateway playbooks passed syntax checks; disposable callback probe rejects silent exit 2 and accepts exit 2 with an action |
-| app config contracts | corrected existing-home mobile configs render for macos/linux and pass the available mac app validator; the mobile handoff reports the published v0.9.0 binary accepts these homes; native linux execution of the corrected config remains unrun here; original skid config qualification is unchanged |
+| app config contracts | corrected existing-home mobile configs render for macos/linux and pass the available mac app validator; the mobile handoff reports the published v0.9.0 binary accepts these homes; original skid's real mac renderer output passes its validator built from the `3bd0ae4` implementation; native linux execution remains unrun here |
 | published mobile pin | documented conversion preserves v0.9.0, source `68a652d7ccbeaaf472ef1c5f3a4ea6949808bca4`, and both host digests; github confirms canonical repository id `1342599607`, immutable release and exact tag commit; downloaded archives pass digest, member and manifest checks, and native mac version/config validation |
 | selected commands | invalid input rejected; selected pending pins return action/2 before product-home mutation, regardless of the other gateway's invalid port; absent removal needs no release pin or provider assets |
 | ingress | a fake tailscale cli verified selected handler apply/remove while preserving the other port and an unrelated same-port handler; foreign handlers and public exposure on the selected origin refused |
@@ -28,10 +30,14 @@ acceptance for this correction.
 | namespace boundary | unmarked legacy skid bearer refused and preserved; receipt names support herdr-mobile while rejecting malformed/path-traversal names |
 | ordinary/herdr routing | wrappers, alias definitions and profile installation match baseline `8498933`; eight disposable mac/linux bash/zsh interactive/login entry paths retain normal homes, explicit bare-command overrides and forge selections; named work commands keep their original account selection; bare claude remains native |
 | provider-state preservation | fake account settings/hooks/auth sentinels remain byte-identical; no private herdr home or bare claude wrapper is created; the fake herdr integration sees only existing normal homes and leaves its installed native hooks intact |
-| scoped skid routing | marked shells select only skid's private homes and preserve arguments/context scrubbing; genuine `HERDR_ENV=1` panes remain unchanged even with an inherited skid marker; guarded startup insertion remains idempotent and preserves user bytes |
+| shared installer ownership | real `ai_install` from `1296309` fails with action/2 on a valid symlinked bash login file; corrected installation passes with only native downloads/preflight stubbed and leaves the link, target bytes and mode unchanged |
+| skid shell setup | disposable real setup preserves symlink identity, unrelated bytes and modes, is idempotent, and keeps one source per file; bash/zsh interactive and login shells restore scoped commands after late aliases, while unmarked and genuine herdr shells skip skid file access |
+| skid account preservation | real renderer/provider-apply callback, with only helper installation stubbed, preserves bytes/modes of 21 fake account auth/settings/hooks/history and `.claude.json` sentinels; no private provider homes or codex hook file are created |
+| scoped skid commands | all five rendered account commands select existing homes, leave personal claude's home variable unset, preserve flags/quoted arguments, set the provider-exec marker and scrub inherited runtime context; real callback startup passes bash/zsh interactive/login routing and the herdr guard |
+| skid hook boundary | actual app binary silently skips foreign/herdr hooks before reading missing config; malformed marked input reports a content-free failure without blocking startup; live authenticated hook publication remains unrun |
+| corrected skid generation | staged ten-file identity matches an independent encoding/hash; config/launcher/shell/plugin assets match the owner templates; source closures no longer include private-home provisioning or codex hook assets |
 | herdr declarations | macos/arch/devbox service validation passes without provider-home overrides and with an unrelated gateway port; the gate admits the existing normal selectors and rejects the withdrawn private selectors |
-| native helper | actual pinned frozen installation and repeat apply passed in a disposable home; final-path entry point and rendered launcher returned the expected invalid-request envelope; exact shim bytes/mode, selected native command/private home, quoted environment paths and missing-native/missing-shim refusal passed |
-| fresh codex homes | mac codex 0.157.0 and devbox 0.155.1 report hooks enabled with empty disposable homes; no feature setting or account data copied |
+| native helper | actual pinned frozen installation and repeat apply passed in a disposable home; final-path entry point and rendered launcher returned the expected invalid-request envelope; exact shim bytes/mode, selected native command/disposable home, quoted environment paths and missing-native/missing-shim refusal passed; these checks establish dispatch, not account behavior |
 | cognition declarations | eight operational inputs below remain byte-identical to baseline; this is source evidence, not live continuity acceptance |
 
 unchanged cognition inputs: `assets/codex/{profiles.json,codex-shared.py,
@@ -64,11 +70,14 @@ their owners, sequence and evidence requirements; the
 the implementation retains the existing artifact/runtime/unit machinery,
 shared through two explicit product owners. one atomic pair makes recovery
 authoritative while retaining the published informational receipt names.
-only original skid's private homes require fresh login/trust. ordinary and herdr
-homes, native integrations and jarvis's existing worker map remain intact.
-shell setup adds guarded bash/zsh
-sources; ordinary unmarked shells do not load skid functions. gateway
-maintenance requires already installed shared host tools and never upgrades
+both products retain existing provider accounts, native integrations and
+jarvis's worker map. gateway replacement preserves the supervised herdr runtime,
+workers and snapshot. skid-owned shell setup adds guarded bash/zsh sources;
+ordinary unmarked and genuine herdr shells do not load skid functions. the
+managed zsh template retains one inert guard so ordinary dotfile reinstallation
+cannot erase skid support; no extension framework or once-per-shell flag is
+introduced. shared account settings/history remain visible across products.
+gateway maintenance requires already installed shared host tools and never upgrades
 them. helper/plugin rollback and the original app's implemented fleet verifier
 use the agreed ten-file generation contract.
 separately pinned helper environments remain on disk, preserving all retained
