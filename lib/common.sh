@@ -3,12 +3,12 @@
 dev_server_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 dev_server_root="$(cd "$dev_server_lib_dir/.." && pwd -P)"
 # deployment identity: the root of every installer-owned path, the launchd label
-# prefix of the two fleet services (<prefix>.herdr, <prefix>.skidbladnir; never
-# codex-shared) and the gateway's loopback port. fixed for a deployment's life;
-# a second deployment on one mac is these three set differently.
+# prefix of the fleet services and the gateways' loopback ports. fixed for a
+# deployment's life; a second deployment on one mac uses distinct values.
 dev_server_home_dir="${dev_server_home_dir:-$HOME}"
 dev_server_fleet_label_prefix="${dev_server_fleet_label_prefix:-dev.niels}"
 dev_server_gateway_port="${dev_server_gateway_port:-7341}"
+dev_server_mobile_gateway_port="${dev_server_mobile_gateway_port:-7342}"
 dev_server_assets_root="${dev_server_assets_root:-$dev_server_root/assets}"
 
 dev_server_result_mutations=0
@@ -96,28 +96,44 @@ dev_server_home() {
 
 # the macbook assets name the deployment identity as @ROOT@, @FLEET_LABEL_PREFIX@
 # and @GATEWAY_PORT@. DIR is a private copy of assets/: the two plists are
-# rendered in place. skid renders its host-config template in its own stage.
+# rendered in place. each gateway renders its config in its own stage. the
+# optional second argument selects one product and does not inspect the others.
 dev_server_render_assets() {
-  (($# == 1)) || die 'dev_server_render_assets needs one private assets directory'
+  (($# == 1 || $# == 2)) || die 'dev_server_render_assets needs an assets directory and optional product'
   local assets="$1"
-  local path rendered
+  local product="${2:-all}" path rendered
+  local -a paths=() sed_args=()
 
   [[ "$dev_server_home_dir" =~ ^/[A-Za-z0-9._/-]+$ ]] ||
     die "invalid deployment root: $dev_server_home_dir"
   [[ "$dev_server_fleet_label_prefix" =~ ^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$ ]] ||
     die "invalid fleet label prefix: $dev_server_fleet_label_prefix"
-  [[ "$dev_server_gateway_port" =~ ^[1-9][0-9]{0,4}$ ]] || die "invalid gateway port: $dev_server_gateway_port"
-  ((dev_server_gateway_port <= 65535)) || die "invalid gateway port: $dev_server_gateway_port"
   [[ -d "$assets" && ! -L "$assets" ]] || die "rendered assets directory is invalid: $assets"
-  for path in \
-    herdr/dev.niels.herdr.plist \
-    skidbladnir/dev.niels.skidbladnir.plist; do
+  sed_args=(
+    -e "s|@ROOT@|$dev_server_home_dir|g"
+    -e "s|@FLEET_LABEL_PREFIX@|$dev_server_fleet_label_prefix|g"
+  )
+  case "$product" in
+  all) paths=(herdr/dev.niels.herdr.plist skidbladnir/dev.niels.skidbladnir.plist herdr-mobile/dev.niels.herdr-mobile.plist) ;;
+  herdr) paths=(herdr/dev.niels.herdr.plist) ;;
+  skidbladnir) paths=(skidbladnir/dev.niels.skidbladnir.plist) ;;
+  herdr-mobile) paths=(herdr-mobile/dev.niels.herdr-mobile.plist) ;;
+  *) die "invalid asset renderer product: $product" ;;
+  esac
+  if [[ "$product" == all || "$product" == skidbladnir ]]; then
+    [[ "$dev_server_gateway_port" =~ ^[1-9][0-9]{0,4}$ ]] || die "invalid gateway port: $dev_server_gateway_port"
+    ((dev_server_gateway_port <= 65535)) || die "invalid gateway port: $dev_server_gateway_port"
+    sed_args+=(-e "s|@GATEWAY_PORT@|$dev_server_gateway_port|g")
+  fi
+  if [[ "$product" == all || "$product" == herdr-mobile ]]; then
+    [[ "$dev_server_mobile_gateway_port" =~ ^[1-9][0-9]{0,4}$ ]] || die "invalid mobile gateway port: $dev_server_mobile_gateway_port"
+    ((dev_server_mobile_gateway_port <= 65535)) || die "invalid mobile gateway port: $dev_server_mobile_gateway_port"
+    sed_args+=(-e "s|@MOBILE_GATEWAY_PORT@|$dev_server_mobile_gateway_port|g")
+  fi
+  for path in "${paths[@]}"; do
     path="$assets/$path"
     [[ -f "$path" && ! -L "$path" ]] || die "invalid asset template: $path"
-    rendered="$(LC_ALL=C sed \
-      -e "s|@ROOT@|$dev_server_home_dir|g" \
-      -e "s|@FLEET_LABEL_PREFIX@|$dev_server_fleet_label_prefix|g" \
-      -e "s|@GATEWAY_PORT@|$dev_server_gateway_port|g" "$path" && printf .)" ||
+    rendered="$(LC_ALL=C sed "${sed_args[@]}" "$path" && printf .)" ||
       die "could not render asset template: $path"
     printf '%s' "${rendered%.}" >"$path" || die "could not write rendered asset: $path"
     ! LC_ALL=C grep -Eq '@[A-Z_]+@' "$path" || die "unrendered placeholder in asset: $path"
@@ -125,7 +141,14 @@ dev_server_render_assets() {
   dev_server_assets_root="$assets"
   # Read dynamically by the already-sourced Skidbladnir library.
   # shellcheck disable=SC2034
-  skidbladnir_release_pin_file="$assets/skidbladnir/release-pin.json"
+  if [[ "$product" == all || "$product" == skidbladnir ]]; then
+    skidbladnir_release_pin_file="$assets/skidbladnir/release-pin.json"
+  fi
+  if [[ "$product" == all || "$product" == herdr-mobile ]]; then
+    # Read dynamically by the already-sourced herdr-mobile library.
+    # shellcheck disable=SC2034
+    herdr_mobile_release_pin_file="$assets/herdr-mobile/release-pin.json"
+  fi
 }
 
 dev_server_declared_snapshot() {
@@ -323,7 +346,7 @@ dev_server_active_dir() {
 }
 
 _dev_server_validate_active_consumer() {
-  [[ "$1" =~ ^[a-z][a-z0-9]*(\.[a-z][a-z0-9_]*)*$ ]] ||
+  [[ "$1" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*(\.[a-z][a-z0-9_]*(-[a-z0-9_]+)*)*$ ]] ||
     die "invalid active identity consumer: $1"
 }
 

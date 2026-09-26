@@ -1,11 +1,10 @@
 [Unit]
 Description=Skidbladnir gateway
-After=herdr.service
 
 [Service]
 Type=simple
 Environment="PATH=%h/bin:%h/.local/bin:%h/.local/share/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-UnsetEnvironment=HERDR_SESSION HERDR_SOCKET_PATH HERDR_CLIENT_SOCKET_PATH HERDR_PANE_ID HERDR_ENV
+UnsetEnvironment=HERDR_SESSION HERDR_SOCKET_PATH HERDR_CLIENT_SOCKET_PATH HERDR_PANE_ID HERDR_ENV TMUX TMUX_PANE TMUX_TMPDIR SKIDBLADNIR_SHELL
 ExecStart=%h/.local/bin/skidbladnir-launch gateway --listen=127.0.0.1:7341 --bearer-file=%h/.config/skidbladnir/bearer --catalogue-path=%h/.local/share/skidbladnir/current/characters.json --machine-handle-file=%h/.config/skidbladnir/machine-handle --host-config=%h/.local/share/skidbladnir/current/host-config.json
 Restart=on-failure
 RestartSec=2s

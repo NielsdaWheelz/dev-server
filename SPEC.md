@@ -9,6 +9,8 @@ critical result, and report mutations, deferrals, or required actions.
 ```text
 ./workstation {apply|upgrade}
 ./devbox {apply|upgrade} [--restart-codex]
+./workstation gateway {apply|remove} {herdr-mobile|skidbladnir}
+./devbox gateway {apply|remove} {herdr-mobile|skidbladnir}
 ./workstation {help|--help|-h}
 ./devbox {help|--help|-h}
 ```
@@ -18,6 +20,13 @@ newer installed os packages or ai tools. repository pins remain desired state:
 a changed pin is applied deliberately, including on ordinary apply.
 `upgrade` updates rolling software and then applies the same configuration.
 `--restart-codex` separately authorizes interruption of the devbox's three codex servers.
+
+gateway operations select one product and leave shared host tools and upstream
+herdr alone. ordinary host apply/upgrade does not install either gateway.
+published release pins are prerequisites for gateway apply; neither the old
+herdr-backed v0.8 pin nor original skid's stale v0.6 pin is admissible as a
+separated release. source preparation and live namespace handback are distinct
+operations; see [the cutover runbook](docs/gateway-separation-runbook.md).
 
 | owner | apply | upgrade |
 |---|---|---|
@@ -60,10 +69,11 @@ foreign sockets, and privileged ownership conflicts require explicit action.
 a later subsystem failure can leave earlier changes applied; rerun after repair.
 there is no whole-host transaction or duplicated all-host admission gate.
 
-workstation order is native packages, dotfiles, exact-host personal policy,
-ai tools/shared codex, herdr, the ingress preflight, skid, the ingress mapping,
-then remaining postconditions. a herdr preflight action or apply failure stops
-the run before skid; an ingress action skips skid and its mapping. linux is supported
+workstation host apply orders native packages, dotfiles, exact-host personal
+policy, ai tools/shared codex, herdr, then remaining postconditions. a gateway
+operation stages only its own declaration closure, checks its owned ingress,
+and applies/removes that gateway and handler. neither gateway operation runs
+upstream herdr preflight or host-tool provisioning. linux is supported
 only on the exact owned arch host. arch elevation uses `ARCH_PASS` through
 askpass, including yay; values come from the environment or literal ignored
 repo `.env`, never evaluation. validate credentials before host changes.
@@ -110,7 +120,8 @@ more privileged consumer. interrupted activation must remain retryable.
 | `docker.config` | rebuild/restart only with no running containers; otherwise defer |
 | `herdr.runtime` | start once when absent; changed binary/config/unit on a running server is an operator stop, then reapply; never a restart |
 | `herdr.gate`, `jarvis.gate` | the next ssh connection; nothing restarts |
-| `skid.unit`, `skid.runtime` | start or activate gateway once, with rollback |
+| `skid.unit`, `skid.runtime` | activate original skid only, with its own rollback |
+| `herdr-mobile.unit`, `herdr-mobile.runtime` | activate herdr-mobile only, with its own rollback |
 | `herdr.integration` | future agent sessions; nothing restarts |
 | `codex.runtime` | explicit authorized drain/restart of all three services |
 | `tailscale.serve` | reconcile private mapping; no tailscale restart |
@@ -163,15 +174,20 @@ these settings before installation. the native updater owns background updates
 and old-version cleanup. reject a conflicting canonical path; do not restart
 running claude processes.
 
-`codex-work` and `codex-work2` select only their declared account home. bare
-`codex` keeps a preset nonempty `CODEX_HOME` and otherwise selects personal:
-herdr's `agent start` types bare `codex` into a pane whose `--env` chose the
-account. all execute the native binary, preserving argv, environment, cwd, and
-exit status. claude-work selects its existing account; bare claude is the
-native binary and honors a preset `CLAUDE_CONFIG_DIR`. wrappers add no startup
-lookup or argument policy. interactive zsh aliases separately add `--yolo` for
-all three codex profiles and `--dangerously-skip-permissions` for both claude
-profiles. `command <profile>` bypasses an alias.
+interactive account commands are wrappers in `~/bin`, executing the host-owned
+native binaries in `~/.local/bin`. product shell context selects herdr or skid;
+bare commands preserve an explicit profile and otherwise select that product's
+personal home. named work commands select their account within the same
+product. login-shell startup must preserve this choice. the original skid app
+owns environment creation and removal of inherited `HERDR_*`; upstream herdr
+starts with no tmux context. the fixed wrapper contract is recorded in the
+[runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract).
+
+interactive zsh aliases separately add `--yolo` for all three codex profiles
+and `--dangerously-skip-permissions` for both claude profiles. `command
+<profile>` bypasses an alias. original skid's forge profiles carry their own
+explicit arguments and claude identity plugin; herdr-mobile keeps its reduced
+provider/environment profiles and herdr's native integrations.
 
 `assets/agent-instructions.md` supplies the five account instruction files,
 installed as mode `0600`. `assets/claude/statusline.sh` is installed as
@@ -223,79 +239,33 @@ launcher remains.
 
 ## deployment identity
 
-three variables in `lib/common.sh` name a deployment; nothing derives one from
-another and there is no deployment name or registry.
+`dev_server_home_dir` defaults to `$HOME` and owns every deployment path.
+`dev_server_fleet_label_prefix` defaults to `dev.niels` for mac launchagents.
+`dev_server_gateway_port` defaults to `7341` for original skid;
+`dev_server_mobile_gateway_port` defaults to `7342` for herdr-mobile. each is
+fixed for a deployment's lifetime. linux service identity is the user account
+and product unit; each product has its own port on every platform.
 
-| variable | default | meaning |
-|---|---|---|
-| `dev_server_home_dir` | `$HOME` | root of every installer-owned path: `.local/{share,state,bin}`, `.config`, `Library/LaunchAgents`, locks, artifact caches, active digests, herdr socket, config and snapshot |
-| `dev_server_fleet_label_prefix` | `dev.niels` | launchd label prefix of the two fleet services, `<prefix>.herdr` and `<prefix>.skidbladnir`; codex-shared labels are not part of it |
-| `dev_server_gateway_port` | `7341` | the gateway's loopback listen port; the health check and the ingress mapping read it |
+`dev_server_render_assets DIR OWNER` renders only the selected owner's plist
+inside its private staged closure. the source names remain `dev.niels.*`;
+installed mac labels use the configured prefix. source declaration bytes and
+modes are checked before consumption. no gateway operation reads the other
+product's pin, config, credentials or installed state.
 
-the three are fixed for a deployment's life; changing one creates a new
-deployment (the restore path verifies the prior unit, which may listen
-elsewhere). a second deployment on one mac is these three set differently and
-applied through the same library functions, units and unmodified binaries.
+for disposable qualification, use a temporary home, unique mac label prefix,
+free loopback ports and stand-in provider executables. run with an empty
+inherited environment, explicit `HOME` and known `PATH`; never expose a
+production credential, herdr socket or provider home. before bootstrap prove
+all candidate labels and ports are absent and all rendered paths stay below
+the temporary root. invoke product libraries directly, without host-level
+serve operations. record production service identities before and after.
+only unload candidate labels and remove directories created by the probe.
+never enable/disable production labels or touch default tmux resources.
 
-the two macbook plists, `dev.niels.herdr.plist` and
-`dev.niels.skidbladnir.plist`, carry `@ROOT@`, `@FLEET_LABEL_PREFIX@` and
-`@GATEWAY_PORT@`. `dev_server_render_assets DIR` renders them in place inside a
-private copy of `assets/` after the staged snapshot is verified, dies if any
-`@[A-Z_]+@` remains, and points the libraries at that copy. source filenames
-stay `dev.niels.*`; install targets are `<prefix>.*.plist`. rendering with the
-defaults reproduces the production bytes. both plists set `HOME` to the root so
-the launcher, the gateway's worker-directory root and herdr's snapshot and
-detection caches follow it. skid's `host-config.json` is a shared template
-rendered inside its apply stage for every host. arch and devbox units use
-systemd's `%h`, and on arch and devbox deployment identity is the systemd user
-account; the libraries die there if the prefix or port differ from their
-defaults.
-
-ingress is host-level, not deployment-level: one node has one tailscale `:8443`
-mapping, and skid clients accept only that origin. `skidbladnir_ingress_preflight`
-(returns 0, or 2 after an `ACTION`) and `skidbladnir_ingress_apply` run from
-`workstation` and the devbox role around `skidbladnir_apply`; a second
-deployment never calls them and is reachable only over loopback. two deliberate
-ordering consequences: the mapping is reconciled after retention and outside
-the skid apply lock, and with a stale mapping the ingress `ACTION`/exit `2` now
-precedes declared-input, pin, protected-path and missing-tool failures.
-
-a disposable deployment for qualification on the mac is applied through the
-library entry the devbox role uses, never through `./workstation apply` (which
-would also touch the codex-shared services):
-
-```sh
-mkdir -m 0700 /private/tmp/skq   # short root: unix socket paths are capped near 104 bytes
-git -C <checkout> worktree add --detach /private/tmp/skq-src HEAD
-# edit /private/tmp/skq-src/assets/skidbladnir/release-pin.json locally if a candidate is under test; never commit it
-# env -i: a production herdr pane exports HERDR_* variables the preflight must not see; bash 4 or newer is required
-env -i HOME=/private/tmp/skq PATH=/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin \
-  dev_server_home_dir=/private/tmp/skq \
-  dev_server_fleet_label_prefix=dev.niels.skq dev_server_gateway_port=7351 \
-  bash -c 'set -uo pipefail; cd /private/tmp/skq-src
-    source lib/common.sh; source lib/herdr.sh; source lib/skidbladnir.sh
-    stage=$(mktemp -d /private/tmp/skq-assets.XXXXXX); cp -Rp assets "$stage/assets"
-    dev_server_render_assets "$stage/assets"
-    # isolation checks here, before herdr_preflight
-    output="$(set -e; if herdr_preflight macos; then herdr_apply macos; skidbladnir_apply macos; fi; finish_results macbook)"; rc=$?
-    printf "%s\n" "$output"; rm -R "$stage"; exit $rc'
-```
-
-isolation checks before the first bootstrap: `launchctl print gui/UID/<prefix>.herdr`
-and `.skidbladnir` fail; `lsof -nP -iTCP:<port> -sTCP:LISTEN` is empty;
-`grep -rn /Users/<owner>` and `grep -rEn 'dev\.niels\.(herdr|skidbladnir)([^.a-z]|$)'`
-over the rendered `herdr/` and `skidbladnir/` stage return nothing (repeat both
-over the root after apply); `launchctl getenv HERDR_*`/`XDG_*` are empty; the
-rendered plist `PATH` resolves no real `codex`, `claude`, `skidbladnir`, `herdr`
-or `tailscale`; account homes created under the root before apply receive
-herdr's integrations, absent ones are skipped. only labels under the prefix
-are ever passed to `launchctl`, never `enable` or `disable` (record `launchctl
-print-disabled gui/UID` before and after); production pids are recorded first
-and compared after. never run `pairing-invite` from the candidate binary: its
-origin is production's `127.0.0.1:7341`. remove with `launchctl bootout` of
-both labels, `git worktree remove`, and `rm -R` of the root and stage. a
-seeded artifact directory is trusted, not verified against a pin url; workers
-are stand-in executables, never real providers.
+installer control-flow probes use native-service stand-ins when no disposable
+native service is available. those results do not qualify launchd/systemd,
+provider turns, phone behavior or live coexistence. report each missing
+boundary as `NOT_RUN` with its owner and blocker.
 
 ## herdr runtime
 
@@ -311,8 +281,8 @@ sets `HERDR_CONFIG_PATH` to the managed `~/.local/share/herdr/config.toml`
 so a bare `herdr` in a shell attaches to the same instance. the user's own
 `~/.config/herdr/config.toml`, snapshots and detection state stay upstream's.
 the unit clears inherited herdr and xdg variables, sets `LANG`, and shares no
-lifetime with the skid gateway: `skidbladnir.service` orders after it, nothing
-requires, binds or stops the other.
+lifetime with either gateway. herdr-mobile orders after it; neither gateway
+requires, binds or stops it. original skid has no herdr dependency.
 
 `herdr_preflight` runs before any mutation and returns `ACTION`/exit `2`
 without changing state for: a running server whose binary, config or unit
@@ -344,28 +314,25 @@ unreferenced. an unchanged apply downloads, writes and restarts nothing.
 `herdr_prepare_artifact` stages the verified binary under the lock without
 promotion, for pre-window staging.
 
-herdr's codex and claude integrations are herdr's own. under the herdr apply
-lock, once the server is found current or verified, the pinned binary runs
-`herdr integration install codex` in each existing codex home (`CODEX_HOME`
-set) and `claude` in each existing claude config dir (`CLAUDE_CONFIG_DIR` set
-for `~/.claude-work`, unset for `~/.claude`), each only where `herdr integration
-status` in that environment does not report it current, with only `HOME` and
-that variable in the environment, and reports `CHANGED herdr.integration`.
-herdr owns what it writes: the hook script, its entry in `hooks.json` or
-`settings.json`, and codex's `[features] hooks = true`. status reads the hook
-script alone, so an entry removed by hand stays removed until the script goes.
-dev-server's claude settings write
-keeps herdr's `hooks` key; it pretty-prints herdr's compact insertion once, so
-the next apply reports `claude.settings` updated a single time, and herdr
-leaves that form alone.
+herdr's codex and claude integrations are herdr's own. provision five fresh
+private homes below `~/.local/share/herdr/providers/`: `codex-personal`,
+`codex-work`, `codex-work2`, `claude-personal`, `claude-work`. only those homes
+receive the pinned herdr binary's native integration installer. instructions
+and owned claude settings are installed there; credentials, history, trust,
+plugin caches and discovery state are never copied from ordinary accounts.
+normal provider login and inspected hook trust are cutover prerequisites.
 
-herdr is never downgraded or stopped to undo a gateway change. rolling the skid
-gateway, config or unit back means checking out the last pre-pin dev-server
-commit and applying it; that release's own library restores what it needs,
-including skid's codex `hooks.json`, which the next forward apply retires again.
-the target must be herdr-era (v0.7.0 or later): the tmux-era v0.6.0 rollback was
-retired on 2026-09-24 with its native-control helper and the workstation codex
-servers it verified.
+ordinary account homes and project settings are outside recurring product
+integration ownership. remove old product entries once, only after precise
+inventory and successful new setup, while preserving user settings and
+cognition discovery. codex can read `$HOME/.codex/hooks.json` as project config
+when launched at home: private `CODEX_HOME` alone does not prove hook isolation.
+
+herdr is never downgraded or stopped to undo a gateway change. recover each
+separated gateway with its own verified inputs. do not restore an old whole
+dev-server revision or adopt herdr-backed v0.8 as original skid. the first
+separated release may need stop-and-repair because no prior separated release
+exists. handback and recovery limits are in the cutover runbook.
 
 ## herdr gate and cross-host use
 
@@ -385,9 +352,9 @@ shell, and admits only the owner's "agents plus pane creation" in herdr 0.9.1's
 spelling: `agent list|get|read|explain|wait|prompt|send-keys`, `agent start
 --kind codex|claude`, `pane list|split|close` and `workspace list|create`, each
 with the flags a client needs, options after positionals, space-separated
-values. `--env` admits only `CODEX_HOME` naming one of the three codex homes or
-`CLAUDE_CONFIG_DIR` naming `~/.claude-work`; personal claude runs with it
-unset. herdr's global options (`--machine`, `--remote`, `--session`,
+values. `--env` admits only `CODEX_HOME` naming one of the three private herdr codex
+homes or `CLAUDE_CONFIG_DIR` naming either private herdr claude home. personal
+claude has an explicit home. the exact worker map is in the cutover runbook. herdr's global options (`--machine`, `--remote`, `--session`,
 `--handoff`) anywhere, `--`, and everything else exit 1 with one content-free
 line before herdr runs. an admitted argv is exec'd as `~/.local/bin/herdr`
 with only `HOME` and `PATH`, so it reaches the default-session socket. the
@@ -434,64 +401,82 @@ line of `assets/herdr/jarvis-known_hosts` and the workstations' own
 `known_hosts`, recommit `jarvis-gate.pub` from the reported line, and apply
 every host; the merge then revokes the old key's gate line.
 
-## skid installation
+## independent gateway installation
 
-`assets/skidbladnir/release-pin.json` is the release trust root: exact version,
-source commit, platform urls, and archive sha256. accept only supported release
-paths and valid schema. upstream owns packaging, product schema, release
-certification, fleet operations, and device acceptance.
-the pinned release's `skidbladnir validate-host-config` admits the declared host
-config after artifact preparation. one `host-config.json` template owns the
-profiles and an explicit tested herdr version. render it for the host home and
-platform, deriving codex homes from `assets/codex/profiles.json` with the same
-workstation projection as the account wrappers. the installer checks
-home-rooted profile environment paths and herdr path/socket/version
-consistency with the declared runtime; it does not repeat the template's
-policy as a second schema.
+`lib/herdr-mobile.sh` and `lib/skidbladnir.sh` own their respective fixed
+identities and host configuration. `lib/gateway-runtime.sh` shares the existing
+artifact and activation mechanics. this is a finite two-product contract,
+not a product registry or plugin deployment framework. ingress lives in
+`lib/gateway-ingress.sh` and is invoked by the host entrypoints.
 
-under one nonblocking lock, reuse a locally verified pinned artifact or download
-and verify it. check archive digest, exact release members, manifest identity,
-and executable version/source before caching the payload under
-`~/.local/share/skidbladnir/artifacts/<archive-sha256>/`. reuse verifies cached
-payload bytes against their recorded identity. unchanged apply needs no release
-download, extraction, or payload copy.
+| identity | herdr-mobile | original skid |
+| --- | --- | --- |
+| repository id | `1342599607` | `1386409483` |
+| final repository | `NielsdaWheelz/herdr-mobile` | `NielsdaWheelz/skidbladnir` |
+| owned leaf / binary | `herdr-mobile` | `skidbladnir` |
+| loopback | `127.0.0.1:7342` | `127.0.0.1:7341` |
+| private serve | `:8444/v1` | `:8443/v1` |
+| receipt stems | `herdr-mobile.runtime`, `herdr-mobile.unit` | `skid.runtime`, `skid.unit` |
 
-runtime generations live at
-`~/.local/share/skidbladnir/releases/<version>-<runtime-sha256>` and contain the
-binary, catalogue, release manifest, and host config. a config-only change can
-reuse release bytes while creating a new generation. `current` and `previous`
-are atomic relative links. unit/launcher generations under `units/` retain the
-prior verified activation inputs. the `skidbladnir` command link points to the
-current binary.
+pins under `assets/<product>/release-pin.json` name exact versions, commits,
+platform archives and digests. pending declarations admit no activation.
+repository identity is checked by the publishing/cutover operator before
+selecting pins. existing name redirects and planned version numbers are not
+release evidence. upstream owns archive/config schemas and release/device
+acceptance; each admitted binary validates its own rendered host config.
 
-start an inactive gateway; activate once when runtime/unit identity changes.
-authenticated health and the running executable must match before recording
-active identity. on failed activation, stop the candidate and wait for its
-teardown first; only then restore the prior pointer, unit and observed
-enablement, restart, and verify them. a candidate that cannot be stopped keeps
-its inputs, and the stage with the prior launcher and unit is kept as
-`.apply.failed.*` in the share. a failed first install leaves the service
-inactive and candidate unreferenced. retain one prior healthy generation; prune older
-owned generations only after success.
+herdr-mobile declares the herdr path/socket/tested version and four reduced
+`{key,label,provider,environment}` profiles using herdr's private homes. original
+skid declares tmux, `nativeControlPath`, absolute native provider commands,
+explicit arguments, environment and foreground signatures. its separately
+pinned helper and integrations belong only to skid. the original app owner's
+source-qualified handoff supplies the config and native-helper contract;
+authenticated native behavior remains a live qualification prerequisite.
 
-bearer, machine handle, and existing android signing credentials are private
-regular mode-`0600` files and preserved. create bearer/machine handle only when
-absent. account credentials, pairings, and agent session lifetimes survive
-installation.
+under a per-product lock, reuse a verified artifact or download and verify its
+archive digest, exact members, manifest and executable version/source. retain
+independent `artifacts`, `releases`, `units`, `current` and `previous` below
+the product's data root. runtime identity covers executable, catalogue,
+manifest and host config. unchanged apply downloads and activates nothing.
+skid generations also include their rendered shell launcher, shell initialization,
+native-helper launcher and claude plugin. the original app's fleet verifier
+implements the same digest contract, recorded in the
+[runbook](docs/gateway-separation-runbook.md#generation-receipt-contract).
+generation admission requires directory mode `0700` and a basename digest
+suffix equal to the computed runtime identity for both products.
+the stable helper command follows `current`, so
+gateway rollback selects its matching immutable helper revision. private
+provider homes, authentication and independently applied hook/settings files
+are persistent account state and are not rolled back with gateway binaries.
 
-host config profiles are `{key, label, provider, environment}`: `personal`,
-`work`, `work2` and `claude-work`, each with its account home (`CODEX_HOME` or
-`CLAUDE_CONFIG_DIR`) and no command or arguments. the gateway creates the pane
-with that environment and herdr's `agent start` types the bare `codex` or
-`claude`, so the interactive aliases set every launch's permission flags. the
-host config names the managed herdr binary, socket and tested version.
-provider sockets remain local.
+before recording activation, verify authenticated health and the running
+executable. a single atomic `<receipt>.pair` records the verified runtime/unit
+association and is the rollback authority. the mandated `.runtime.sha256` and
+`.unit.sha256` stems remain informational; interruption between their writes
+cannot authorize a mixed pair. recovery leaves a distinct `previous` or none.
+failed activation first confirms the candidate stopped, restores
+the verified prior inputs and observed enablement, then verifies the restored
+service. an unconfirmed stop preserves candidate inputs and recovery stage.
+a failed first activation leaves its candidate inactive and unreferenced.
+retention stays within the selected product's admitted generations; provider
+homes and android signing material are outside it.
 
-expose only the owned private `/v1` tailscale serve mapping through supported
-cli commands, from the host entry points, not from `skidbladnir_apply` (see
-deployment identity). no funnel, private localapi, or hostname rewriting. a
-stale mapping produces one exact recovery action. fleet invitation remains an
-upstream operation.
+mint a fresh private regular mode-0600 bearer and random `mh-` handle for each
+new separated installation. a private `deployment-identity` marker is created
+before the first mint, allowing interrupted first installation to retry. an
+unmarked namespace with old credentials or runtime state is refused; signing
+files do not block a fresh separated install. preserve credentials on updates.
+old herdr-backed skid
+state is an operator handback prerequisite, never an original skid recovery
+source. each product's operator `client.json` is private and independent.
+gateway validation never inspects android signing files.
+
+serve operations own only `/v1` on the selected port and preserve all unrelated
+handlers and ports. no funnel, reset, private localapi or hostname rewriting.
+foreign handlers require operator resolution. scoped removal never stops
+upstream herdr or tmux, and must preserve other products, provider state,
+signing files and unrelated files. native removal/rollback qualification must
+precede live use; source probes alone do not establish coexistence.
 
 ## devbox boundary
 
@@ -544,7 +529,7 @@ fallback.
 ## verification and development
 
 package-manager success proves the requested package operation. additional
-checks prove touched service activation, skid authenticated health/executable,
+checks prove touched service activation, gateway authenticated health/executable,
 credential preservation, private serve/ssh ingress, absent bootstrap exposure,
 and required host/account boundaries. report pending login, reboot, container,
 and tmux activation. no separate doctor duplicates these checks.

@@ -1,26 +1,42 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Shared interactive commands serve herdr. Original skid installs its own
+# functions and launcher in shells marked SKIDBLADNIR_SHELL=1.
+root="$HOME/.local/share/herdr/providers"
 case "${0##*/}" in
-claude-work)
-  state_dir="$HOME/.claude-work"
-  export CLAUDE_CONFIG_DIR="$state_dir"
+codex)
+  export CODEX_HOME="${CODEX_HOME:-$root/codex-personal}"
+  state_dir="$CODEX_HOME"
+  real_binary="$HOME/.local/bin/codex"
+  ;;
+codex-personal | codex-work | codex-work2)
+  export CODEX_HOME="$root/${0##*/}"
+  state_dir="$CODEX_HOME"
+  real_binary="$HOME/.local/bin/codex"
+  ;;
+claude)
+  export CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$root/claude-personal}"
+  state_dir="$CLAUDE_CONFIG_DIR"
+  real_binary="$HOME/.local/bin/claude"
+  ;;
+claude-personal | claude-work)
+  export CLAUDE_CONFIG_DIR="$root/${0##*/}"
+  state_dir="$CLAUDE_CONFIG_DIR"
   real_binary="$HOME/.local/bin/claude"
   ;;
 *)
-  printf 'error: unsupported AI profile command: %s\n' "${0##*/}" >&2
+  printf 'error: unsupported ai profile command: %s\n' "${0##*/}" >&2
   exit 64
   ;;
 esac
 
 [[ -d "$state_dir" && ! -L "$state_dir" ]] || {
-  printf 'error: AI profile state directory is unavailable: %s\n' \
-    "$state_dir" >&2
+  printf 'error: ai profile home is unavailable: %s\n' "$state_dir" >&2
   exit 1
 }
-
 [[ -x "$real_binary" ]] || {
-  printf 'error: AI command is unavailable: %s\n' "$real_binary" >&2
+  printf 'error: ai command is unavailable: %s\n' "$real_binary" >&2
   exit 1
 }
 exec "$real_binary" "$@"

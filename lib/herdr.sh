@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+source "$(dirname "${BASH_SOURCE[0]}")/provider-homes.sh"
+
 # lib/herdr.sh owns the pinned herdr server on each host: the artifact cache and
 # immutable generations under ~/.local/share/herdr, the managed server config at
 # ~/.local/share/herdr/config.toml, the user service unit, and its activation;
@@ -33,7 +35,6 @@
 
 : "${dev_server_install_status:=UP TO DATE}"
 : "${dev_server_fleet_label_prefix:=dev.niels}"
-: "${dev_server_gateway_port:=7341}"
 herdr_platform=''
 herdr_version=''
 herdr_url=''
@@ -172,7 +173,7 @@ else:
                 policy[key] = value
     # inherited session state that would redirect herdr or leak into every pane.
     expected_unset = {"XDG_CONFIG_HOME", "XDG_STATE_HOME", "HERDR_SESSION", "HERDR_ENV", "HERDR_PANE_ID",
-                      "HERDR_CLIENT_SOCKET_PATH", "TMUX", "TMUX_PANE", "TMUX_TMPDIR"}
+                      "HERDR_CLIENT_SOCKET_PATH", "SKIDBLADNIR_SHELL", "TMUX", "TMUX_PANE", "TMUX_TMPDIR"}
     if (unset != expected_unset or policy.get("Restart") != "on-failure" or policy.get("UMask") != "0022" or
             policy.get("WantedBy") != "default.target" or policy.get("TimeoutStopSec") != "15s"):
         raise SystemExit(1)
@@ -210,6 +211,8 @@ herdr_validate_declared_inputs() {
   # the socket path is the one skid's host config names for the gateway.
   if ! grep -Fqx "HERDR_SOCKET_PATH=$home/.config/herdr/herdr.sock" <<<"$environment" ||
     ! grep -Fqx "HERDR_CONFIG_PATH=$home/.local/share/herdr/config.toml" <<<"$environment" ||
+    ! grep -Fqx "CODEX_HOME=$home/.local/share/herdr/providers/codex-personal" <<<"$environment" ||
+    ! grep -Fqx "CLAUDE_CONFIG_DIR=$home/.local/share/herdr/providers/claude-personal" <<<"$environment" ||
     ! grep -Fqx 'LANG=en_US.UTF-8' <<<"$environment" ||
     ! grep -Fqx "EXEC=$home/.local/share/herdr/current/herdr"$'\t'"server" <<<"$environment" ||
     grep -Eq '^(HERDR_SESSION|HERDR_ENV|HERDR_PANE_ID|HERDR_CLIENT_SOCKET_PATH|XDG_CONFIG_HOME|XDG_STATE_HOME)=' <<<"$environment"; then
@@ -336,7 +339,8 @@ herdr_preflight() {
   macos)
     require_cmd launchctl
     # launchd passes setenv values to every agent; herdr would honor them over the unit.
-    for name in HERDR_SESSION HERDR_SOCKET_PATH HERDR_CONFIG_PATH HERDR_CLIENT_SOCKET_PATH XDG_CONFIG_HOME XDG_STATE_HOME; do
+    for name in HERDR_SESSION HERDR_SOCKET_PATH HERDR_CONFIG_PATH HERDR_CLIENT_SOCKET_PATH \
+      XDG_CONFIG_HOME XDG_STATE_HOME SKIDBLADNIR_SHELL TMUX TMUX_PANE TMUX_TMPDIR; do
       value="$(launchctl getenv "$name" 2>/dev/null)" || value=''
       [[ -z "$value" ]] || {
         render_result ACTION herdr.runtime "launchd environment sets $name; run launchctl unsetenv $name, then rerun apply"
@@ -345,7 +349,7 @@ herdr_preflight() {
     done
     ;;
   arch | devbox)
-    [[ "$dev_server_fleet_label_prefix" == dev.niels && "$dev_server_gateway_port" == 7341 ]] ||
+    [[ "$dev_server_fleet_label_prefix" == dev.niels ]] ||
       die 'deployment identity on arch and devbox is the systemd user account'
     require_cmd systemctl ss
     if ! systemctl --user show-environment >/dev/null; then
@@ -518,24 +522,19 @@ PY
   return "$status"
 }
 
-# herdr's codex and claude integrations, installed by the pinned binary in each
-# existing account home (CODEX_HOME for the codex homes, CLAUDE_CONFIG_DIR for
-# ~/.claude-work, neither for ~/.claude) wherever herdr's own status does not
-# call the hook current, so an unchanged apply writes nothing. status reads the
-# hook script alone; the hooks.json and settings.json entries are herdr's.
+# herdr's codex and claude integrations, installed only in its private homes.
+# status reads the hook script alone; future sessions read the integration.
 # future sessions read them; nothing restarts.
 herdr_install_integrations() {
   local home="$1"
   local binary="$home/.local/share/herdr/current/herdr"
   local account dir target variable status
 
-  for account in .codex .codex-work .codex-work2 .claude .claude-work; do
-    dir="$home/$account"
-    [[ -d "$dir" ]] || continue
+  for account in codex-personal codex-work codex-work2 claude-personal claude-work; do
+    dir="$home/.local/share/herdr/providers/$account"
     case "$account" in
-    .codex*) target=codex variable=CODEX_HOME ;;
-    .claude) target=claude variable='' ;;
-    .claude-work) target=claude variable=CLAUDE_CONFIG_DIR ;;
+    codex-*) target=codex variable=CODEX_HOME ;;
+    claude-*) target=claude variable=CLAUDE_CONFIG_DIR ;;
     esac
     status="$(env -i HOME="$home" ${variable:+"$variable=$dir"} "$binary" integration status)" || return 1
     if grep -q "^$target: current " <<<"$status"; then
@@ -859,6 +858,7 @@ herdr_apply() {
   unit_target="$(herdr_unit_target "$platform" "$home")"
   herdr_prepare_directories "$home" "$platform"
   dev_server_acquire_lock "$share/.apply.lock" 8 herdr
+  provider_homes_prepare "$home" herdr || die 'could not prepare private herdr provider homes'
   herdr_install_gate "$platform" "$home" || die 'could not install the jarvis gate or its authorized key'
   state="$(herdr_service_state)" || die 'could not observe herdr service state'
   if [[ "$state" == active ]]; then

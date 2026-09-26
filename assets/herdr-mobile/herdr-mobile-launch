@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+binary="$HOME/.local/share/herdr-mobile/current/herdr-mobile"
+
+for name in "${!SKIDBLADNIR_@}"; do
+  unset "$name"
+done
+unset TMUX TMUX_PANE TMUX_TMPDIR CODEX_HOME CLAUDE_CONFIG_DIR
+
+[[ -f "$binary" && ! -L "$binary" && -x "$binary" ]] || {
+  printf 'Herdr-mobile release binary is unavailable; rerun apply\n' >&2
+  exit 75
+}
+exec "$binary" "$@"

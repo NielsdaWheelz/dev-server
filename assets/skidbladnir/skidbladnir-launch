@@ -3,6 +3,11 @@ set -euo pipefail
 
 binary="$HOME/.local/share/skidbladnir/current/skidbladnir"
 
+for name in "${!HERDR_@}"; do
+  unset "$name"
+done
+unset TMUX TMUX_PANE TMUX_TMPDIR SKIDBLADNIR_SHELL SKIDBLADNIR_CLAUDE_COMMAND CODEX_HOME CLAUDE_CONFIG_DIR
+
 [[ -f "$binary" && ! -L "$binary" && -x "$binary" ]] || {
   printf 'Skidbladnir release binary is unavailable; rerun apply\n' >&2
   exit 75

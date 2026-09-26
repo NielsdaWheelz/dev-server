@@ -1,0 +1,30 @@
+{
+  "platform": "@PLATFORM@",
+  "herdr": {"path": "@ROOT@/.local/share/herdr/current/herdr", "socketPath": "@ROOT@/.config/herdr/herdr.sock", "testedVersion": "herdr 0.9.1"},
+  "profiles": [
+    {
+      "key": "personal",
+      "label": "Codex · Personal",
+      "provider": "Codex",
+      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.local/share/herdr/providers/codex-personal"}]
+    },
+    {
+      "key": "work",
+      "label": "Codex · Work",
+      "provider": "Codex",
+      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.local/share/herdr/providers/codex-work"}]
+    },
+    {
+      "key": "work2",
+      "label": "Codex · Work 2",
+      "provider": "Codex",
+      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.local/share/herdr/providers/codex-work2"}]
+    },
+    {
+      "key": "claude-work",
+      "label": "Claude · Work",
+      "provider": "Claude",
+      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "@ROOT@/.local/share/herdr/providers/claude-work"}]
+    }
+  ]
+}

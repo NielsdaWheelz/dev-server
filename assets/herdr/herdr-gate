@@ -31,11 +31,10 @@ LABEL = re.compile(r"[^-\s].*")
 PATH = re.compile(r"/.*")
 MS = re.compile(r"[0-9]{1,9}")
 STATUS = {"idle", "working", "blocked", "done", "unknown"}
-# a pane's account home: one of the three codex homes, or claude-work's dir.
-# personal claude runs with CLAUDE_CONFIG_DIR unset (~/.claude.json), so no
-# value selects it.
-ENV = {f"CODEX_HOME={HOME}/{name}" for name in (".codex", ".codex-work", ".codex-work2")}
-ENV.add(f"CLAUDE_CONFIG_DIR={HOME}/.claude-work")
+# a pane's account home selects one of herdr's five private profiles.
+ROOT = f"{HOME}/.local/share/herdr/providers"
+ENV = {f"CODEX_HOME={ROOT}/codex-{name}" for name in ("personal", "work", "work2")}
+ENV.update(f"CLAUDE_CONFIG_DIR={ROOT}/claude-{name}" for name in ("personal", "work"))
 GLOBAL = ("--machine", "--remote", "--remote-keybindings", "--session", "--handoff")
 
 # (group, command): (positional checks in order, {option: value check, None for

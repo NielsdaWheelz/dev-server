@@ -3,11 +3,13 @@ Description=herdr server
 
 [Service]
 Type=simple
-UnsetEnvironment=XDG_CONFIG_HOME XDG_STATE_HOME HERDR_SESSION HERDR_ENV HERDR_PANE_ID HERDR_CLIENT_SOCKET_PATH TMUX TMUX_PANE TMUX_TMPDIR
+UnsetEnvironment=XDG_CONFIG_HOME XDG_STATE_HOME HERDR_SESSION HERDR_ENV HERDR_PANE_ID HERDR_CLIENT_SOCKET_PATH SKIDBLADNIR_SHELL TMUX TMUX_PANE TMUX_TMPDIR
 Environment="PATH=%h/bin:%h/.local/bin:%h/.local/share/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Environment=LANG=en_US.UTF-8
 Environment=HERDR_CONFIG_PATH=%h/.local/share/herdr/config.toml
 Environment=HERDR_SOCKET_PATH=%h/.config/herdr/herdr.sock
+Environment=CODEX_HOME=%h/.local/share/herdr/providers/codex-personal
+Environment=CLAUDE_CONFIG_DIR=%h/.local/share/herdr/providers/claude-personal
 WorkingDirectory=%h
 ExecStart=%h/.local/share/herdr/current/herdr server
 Restart=on-failure

@@ -1,0 +1,17 @@
+[Unit]
+Description=Herdr-mobile gateway
+After=herdr.service
+
+[Service]
+Type=simple
+Environment="PATH=%h/bin:%h/.local/bin:%h/.local/share/mise/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+UnsetEnvironment=HERDR_SESSION HERDR_SOCKET_PATH HERDR_CLIENT_SOCKET_PATH HERDR_PANE_ID HERDR_ENV
+ExecStart=%h/.local/bin/herdr-mobile-launch gateway --listen=127.0.0.1:7342 --bearer-file=%h/.config/herdr-mobile/bearer --catalogue-path=%h/.local/share/herdr-mobile/current/characters.json --machine-handle-file=%h/.config/herdr-mobile/machine-handle --host-config=%h/.local/share/herdr-mobile/current/host-config.json
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=10s
+KillMode=process
+UMask=0022
+
+[Install]
+WantedBy=default.target

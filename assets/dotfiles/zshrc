@@ -151,3 +151,8 @@ if [[ -o interactive ]]; then
   done
   unset _devbox_syntax_highlighting
 fi
+
+# Original skid marks only shells it creates. Source after shared aliases.
+if [[ "${SKIDBLADNIR_SHELL:-}" == 1 ]]; then
+  source "$HOME/.local/share/skidbladnir/current/providers/shell-init"
+fi

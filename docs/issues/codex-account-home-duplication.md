@@ -1,24 +1,24 @@
-# codex account homes still have several owners
+# cognition account homes still have two declarations
 
-problem: `assets/codex/profiles.json` drives wrappers and skid, but
-`ai_install_dirs` and `ai_install_instructions` hardcode the old home names.
-the herdr gate and `herdr_install_integrations` also hardcode them. workstation home projection is repeated
-in `codex-shared.py` and `skidbladnir_render_configs`.
+problem: `assets/codex/profiles.json` owns cognition account homes, but
+`ai_install_dirs` and `ai_install_instructions` still hardcode ordinary account
+home names. changing the cognition declaration does not change those host-tool
+provisioning paths.
 
-impact: a declaration change can route an account to one home while creating
-its directory/instructions elsewhere, and the gate rejects the new home.
+impact: a declaration change can select a cognition home while creating its
+directory/instructions elsewhere.
 
 evidence (2026-09-25): an in-memory work-home change to `.codex-employer`
-changed the generated launcher while installer fixtures still selected
-`.codex-work`. references: `lib/ai-tools.sh:54,283`,
-`assets/codex/codex-shared.py:210`, `lib/skidbladnir.sh:113`,
-`lib/herdr.sh:535`, and `assets/herdr/herdr-gate:37`.
+changed the former generated launcher while installer fixtures still selected
+`.codex-work`. separation removes interactive wrappers, gateway profiles,
+integrations and the gate from this declaration: their private product homes
+are an independent fixed contract. the remaining hardcoded ordinary paths
+are in `ai_install_dirs` and `ai_install_instructions` in `lib/ai-tools.sh`.
 
-follow-up: resolve the existing declaration once for the host; use its account
-paths for directories, instructions, wrappers, integrations and the gate's
-environment allowlist. keep the gate's command policy explicit. no new account
-registry or generic profile framework.
+follow-up: use the existing cognition declaration for cognition directory and
+instruction provisioning. keep private interactive product homes separate;
+do not route workers back into cognition homes to unify unrelated ownership.
+no new account registry or generic profile framework.
 
-resolved when: changing one declared account home produces consistent paths
-in every consumer, with existing credentials preserved and unrelated gate
-commands still refused.
+resolved when: changing one declared cognition account home produces consistent
+paths in its consumers, with credentials and interactive product homes preserved.

@@ -16,7 +16,6 @@
     - assets/codex
     - assets/claude
     - assets/herdr
-    - assets/skidbladnir
 
 - name: Install exact runtime libraries
   ansible.builtin.copy:
@@ -31,7 +30,7 @@
     - dotfiles.sh
     - ai-tools.sh
     - herdr.sh
-    - skidbladnir.sh
+    - provider-homes.sh
 
 - name: Install exact dotfile assets
   ansible.builtin.copy:
@@ -97,32 +96,3 @@
     - herdr.service
     - herdr-gate
     - jarvis-gate.pub
-
-- name: Install exact Skíðblaðnir assets
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../assets/skidbladnir/{{ item.path }}"
-    dest: >-
-      /home/{{ devbox_user }}/.local/share/dev-server/assets/skidbladnir/{{ item.path }}
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    mode: "{{ item.mode }}"
-  loop:
-    - path: release-pin.json
-      mode: "0644"
-    - path: host-config.json
-      mode: "0644"
-    - path: skidbladnir.service
-      mode: "0644"
-    - path: skidbladnir-launch
-      mode: "0755"
-
-- name: Remove superseded Skidbladnir templates and retired cli integrations
-  ansible.builtin.file:
-    path: "/home/{{ devbox_user }}/.local/share/dev-server/assets/skidbladnir/{{ item }}"
-    state: absent
-  loop:
-    - host-config-devbox.json
-    - agent-hooks-devbox.json
-    - agent-hooks.json
-    - skid-notify
-    - claude-agent-identity

@@ -27,7 +27,7 @@
     - role: github
     - role: ai_tools
     - role: codex_shared
-    - role: skidbladnir
+    - role: herdr
     - role: rootless_docker
   post_tasks:
     - name: Activate and verify the coupled shared Codex runtime

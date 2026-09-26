@@ -3,11 +3,16 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>@FLEET_LABEL_PREFIX@.herdr</string>
+  <string>@FLEET_LABEL_PREFIX@.herdr-mobile</string>
   <key>ProgramArguments</key>
   <array>
-    <string>@ROOT@/.local/share/herdr/current/herdr</string>
-    <string>server</string>
+    <string>@ROOT@/.local/bin/herdr-mobile-launch</string>
+    <string>gateway</string>
+    <string>--listen=127.0.0.1:@MOBILE_GATEWAY_PORT@</string>
+    <string>--bearer-file=@ROOT@/.config/herdr-mobile/bearer</string>
+    <string>--catalogue-path=@ROOT@/.local/share/herdr-mobile/current/characters.json</string>
+    <string>--machine-handle-file=@ROOT@/.config/herdr-mobile/machine-handle</string>
+    <string>--host-config=@ROOT@/.local/share/herdr-mobile/current/host-config.json</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
@@ -15,16 +20,6 @@
     <string>@ROOT@</string>
     <key>PATH</key>
     <string>@ROOT@/bin:@ROOT@/.local/bin:@ROOT@/.local/share/mise/shims:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-    <key>LANG</key>
-    <string>en_US.UTF-8</string>
-    <key>HERDR_CONFIG_PATH</key>
-    <string>@ROOT@/.local/share/herdr/config.toml</string>
-    <key>HERDR_SOCKET_PATH</key>
-    <string>@ROOT@/.config/herdr/herdr.sock</string>
-    <key>CODEX_HOME</key>
-    <string>@ROOT@/.local/share/herdr/providers/codex-personal</string>
-    <key>CLAUDE_CONFIG_DIR</key>
-    <string>@ROOT@/.local/share/herdr/providers/claude-personal</string>
   </dict>
   <key>WorkingDirectory</key>
   <string>@ROOT@</string>
@@ -32,15 +27,17 @@
   <true/>
   <key>KeepAlive</key>
   <dict><key>SuccessfulExit</key><false/></dict>
+  <key>AbandonProcessGroup</key>
+  <true/>
   <key>ThrottleInterval</key>
   <integer>2</integer>
   <key>ExitTimeOut</key>
-  <integer>15</integer>
+  <integer>10</integer>
   <key>Umask</key>
   <integer>18</integer>
   <key>StandardOutPath</key>
-  <string>@ROOT@/.local/state/herdr/server.log</string>
+  <string>@ROOT@/.local/state/herdr-mobile/gateway.log</string>
   <key>StandardErrorPath</key>
-  <string>@ROOT@/.local/state/herdr/server.error.log</string>
+  <string>@ROOT@/.local/state/herdr-mobile/gateway.error.log</string>
 </dict>
 </plist>

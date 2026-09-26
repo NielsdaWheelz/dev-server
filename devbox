@@ -47,10 +47,12 @@ usage() {
   cat <<'EOF'
 Usage: ./devbox apply [--restart-codex]
        ./devbox upgrade [--restart-codex]
+       ./devbox gateway {apply|remove} {herdr-mobile|skidbladnir}
        ./devbox help
 
 Create the devbox when absent, or apply its declared state over tailnet SSH.
 apply keeps installed software; upgrade refreshes it before applying configuration.
+gateway operations select one product and leave host tools alone.
 
 An existing host must already have the dev-server-deploy principal, its
 deployment key, and a verified host key. There is no privileged-user or
@@ -594,6 +596,103 @@ devbox_stage_declared_inputs() {
   template="$devbox_declared_stage/cloud-init-devbox.template.yaml"
 }
 
+devbox_gateway_snapshot() {
+  local root="$1" product="$2" operation="$3"
+  local -a paths=(ansible.cfg ansible/inventory/devbox.yml ansible/group_vars/devbox.yml
+    ansible/playbooks/gateway.yml lib/common.sh
+    lib/gateway-ingress.sh "lib/$product.sh" lib/gateway-runtime.sh)
+  if [[ "$operation" == apply ]]; then
+    paths+=("assets/$product")
+  fi
+  if [[ "$product" == skidbladnir && "$operation" == apply ]]; then
+    paths+=(assets/skid-provider assets/agent-instructions.md
+      lib/skid-provider.sh lib/provider-homes.sh)
+  fi
+  dev_server_declared_snapshot "$root" "${paths[@]}"
+}
+
+devbox_stage_gateway_inputs() {
+  local product="$1" operation="$2" desired_snapshot staged_snapshot
+  desired_snapshot="$(devbox_gateway_snapshot "$base_dir" "$product" "$operation")" ||
+    die "could not resolve $product gateway inputs"
+  devbox_declared_stage="$(mktemp -d "${TMPDIR:-/tmp}/devbox-declared.XXXXXX")" ||
+    die 'could not stage gateway inputs'
+  chmod 0700 "$devbox_declared_stage" || die 'could not secure gateway inputs'
+  mkdir -p "$devbox_declared_stage/ansible/inventory" \
+    "$devbox_declared_stage/ansible/group_vars" \
+    "$devbox_declared_stage/ansible/playbooks" \
+    "$devbox_declared_stage/assets" "$devbox_declared_stage/lib" ||
+    die 'could not stage gateway directories'
+  cp -p "$base_dir/ansible.cfg" "$devbox_declared_stage/" || die 'could not stage ansible configuration'
+  cp -p "$base_dir/ansible/inventory/devbox.yml" "$devbox_declared_stage/ansible/inventory/" ||
+    die 'could not stage gateway inventory'
+  cp -p "$base_dir/ansible/group_vars/devbox.yml" "$devbox_declared_stage/ansible/group_vars/" ||
+    die 'could not stage gateway variables'
+  cp -p "$base_dir/ansible/playbooks/gateway.yml" "$devbox_declared_stage/ansible/playbooks/" ||
+    die 'could not stage gateway playbook'
+  if [[ "$operation" == apply ]]; then
+    cp -Rp "$base_dir/assets/$product" "$devbox_declared_stage/assets/$product" ||
+      die "could not stage $product assets"
+  fi
+  cp -p "$base_dir/lib/common.sh" "$base_dir/lib/gateway-ingress.sh" \
+    "$base_dir/lib/gateway-runtime.sh" "$base_dir/lib/$product.sh" \
+    "$devbox_declared_stage/lib/" || die "could not stage $product libraries"
+  if [[ "$product" == skidbladnir && "$operation" == apply ]]; then
+    cp -Rp "$base_dir/assets/skid-provider" "$devbox_declared_stage/assets/skid-provider" ||
+      die 'could not stage skid provider assets'
+    cp -p "$base_dir/assets/agent-instructions.md" "$devbox_declared_stage/assets/" ||
+      die 'could not stage provider instructions'
+    cp -p "$base_dir/lib/skid-provider.sh" "$base_dir/lib/provider-homes.sh" \
+      "$devbox_declared_stage/lib/" || die 'could not stage provider libraries'
+  fi
+  staged_snapshot="$(devbox_gateway_snapshot "$devbox_declared_stage" "$product" "$operation")" ||
+    die 'could not verify staged gateway inputs'
+  [[ "$staged_snapshot" == "$desired_snapshot" ]] || die 'gateway inputs changed while staging; rerun'
+  ansible_config="$devbox_declared_stage/ansible.cfg"
+  ansible_inventory="$devbox_declared_stage/ansible/inventory/devbox.yml"
+  ansible_apply_playbook="$devbox_declared_stage/ansible/playbooks/gateway.yml"
+}
+
+devbox_gateway() {
+  local operation="$1" product="$2" rc line status subject detail
+  trap cleanup_on_exit EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  require_cmd python3 ssh uvx
+  [[ -f "$ssh_include" && ! -L "$ssh_include" ]] ||
+    die "missing verified devbox SSH include: $ssh_include"
+  [[ -f "$deploy_identity" && ! -L "$deploy_identity" ]] ||
+    die "missing devbox deployment key: $deploy_identity"
+  private_key_public "$deploy_identity" >/dev/null ||
+    die 'devbox deployment key is invalid'
+  ssh -T -o BatchMode=yes -o ConnectTimeout=10 -F "$ssh_include" "$deploy_user" true ||
+    die 'verified devbox deployment SSH is unavailable'
+  devbox_stage_gateway_inputs "$product" "$operation"
+  ansible_output="$(mktemp "${TMPDIR:-/tmp}/devbox-ansible.XXXXXX")" ||
+    die 'could not capture gateway result'
+  if ! ANSIBLE_CONFIG="$ansible_config" ANSIBLE_NOCOLOR=1 \
+    uvx --from ansible-core==2.19.2 ansible-playbook \
+    --ssh-common-args "-F $ssh_include" \
+    --extra-vars "{\"gateway_product\":\"$product\",\"gateway_operation\":\"$operation\"}" \
+    -i "$ansible_inventory" "$ansible_apply_playbook" >"$ansible_output" 2>&1; then
+    tail -c 65536 "$ansible_output" >&2 || true
+    die "$product gateway operation failed on devbox"
+  fi
+  while IFS= read -r line; do
+    status="${line%%  *}"
+    detail="${line#*  }"
+    subject="${detail%%: *}"
+    if [[ "$subject" == "$detail" ]]; then
+      render_result "$status" "$detail"
+    else
+      render_result "$status" "$subject" "${detail#*: }"
+    fi
+  done < <(grep -Eo '"msg": "(ACTION|INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  [^"]*"' "$ansible_output" |
+    sed -e 's/^"msg": "//' -e 's/"$//' || true)
+  finish_results devbox
+}
+
 devbox_validate_declared_inputs() {
   local path
 
@@ -780,7 +879,7 @@ apply_new_server() {
 }
 
 run_ansible_apply() {
-  local codex_restart_value=false upgrade_value=false rc skid_action_code herdr_action_lines herdr_action_line herdr_action_subject
+  local codex_restart_value=false upgrade_value=false rc herdr_action_lines herdr_action_line herdr_action_subject
   local jarvis_gate_key
 
   if ((codex_restart_authorized)); then
@@ -835,32 +934,6 @@ run_ansible_apply() {
   if grep -Fq DEV_SERVER_REBOOT_DEFERRED "$ansible_output"; then
     render_result DEFERRED system.reboot 'reboot-required is present'
   fi
-  skid_action_code="$(
-    grep -Eo 'DEV_SERVER_SKID_ACTION_[A-Z_]+' "$ansible_output" |
-      sort -u || true
-  )"
-  case "$skid_action_code" in
-  '') ;;
-  DEV_SERVER_SKID_ACTION_INSTALL_TAILSCALE)
-    render_result ACTION tailscale.serve \
-      'install and sign in to Tailscale, then rerun apply'
-    ;;
-  DEV_SERVER_SKID_ACTION_SIGN_IN_TAILSCALE)
-    render_result ACTION tailscale.serve \
-      'sign in to Tailscale, then rerun apply'
-    ;;
-  DEV_SERVER_SKID_ACTION_CLEAR_STALE_SERVE)
-    render_result ACTION tailscale.serve \
-      "remove the stale HTTPS 8443 mapping with 'tailscale serve --https=8443 off', then rerun apply"
-    ;;
-  *)
-    rm -f -- "$ansible_output"
-    ansible_output=''
-    render_result ERROR 'Skíðblaðnir action' \
-      'Ansible returned an invalid action code'
-    return 1
-    ;;
-  esac
   jarvis_gate_key="$(
     grep -Eo 'DEV_SERVER_JARVIS_ACTION_GATE_KEY ssh-ed25519 [A-Za-z0-9+/]+=*( [A-Za-z0-9@._-]+)?' "$ansible_output" |
       sort -u || true
@@ -965,6 +1038,14 @@ main() {
   local command="${1:-}"
 
   case "$command" in
+  gateway)
+    (($# == 3)) && [[ "$2" == apply || "$2" == remove ]] &&
+      [[ "$3" == herdr-mobile || "$3" == skidbladnir ]] || {
+      usage >&2
+      return 64
+    }
+    devbox_gateway "$2" "$3"
+    ;;
   apply | upgrade)
     [[ "$command" != upgrade ]] || devbox_upgrade=1
     shift

@@ -13,25 +13,24 @@ source "$base_dir/lib/dotfiles.sh"
 source "$base_dir/lib/personal-arch.sh"
 # shellcheck source=lib/personal-macos.sh
 source "$base_dir/lib/personal-macos.sh"
-# shellcheck source=lib/skidbladnir.sh
-source "$base_dir/lib/skidbladnir.sh"
 # shellcheck source=lib/ai-tools.sh
 source "$base_dir/lib/ai-tools.sh"
-# shellcheck source=lib/herdr.sh
-source "$base_dir/lib/herdr.sh"
 
 workstation_platform=''
 workstation_target=''
 workstation_declared_stage=''
 workstation_upgrade=0
+workstation_results_finished=0
 
 usage() {
   printf '%s\n' \
     'Usage: ./workstation apply' \
     '       ./workstation upgrade' \
+    '       ./workstation gateway {apply|remove} {herdr-mobile|skidbladnir}' \
     '       ./workstation help' \
     '' \
-    'apply keeps installed software; upgrade refreshes it before applying configuration.'
+    'apply keeps installed software; upgrade refreshes it before applying configuration.' \
+    'gateway operations select one product and leave host tools alone.'
 }
 
 workstation_select_target() {
@@ -92,6 +91,10 @@ workstation_cleanup_on_exit() {
   local rc=$?
 
   trap - EXIT HUP INT TERM
+  if ((rc == 2 && dev_server_result_actions > 0 && workstation_results_finished == 0)); then
+    workstation_results_finished=1
+    finish_results "$workstation_target" || true
+  fi
   if [[ -n "$workstation_declared_stage" ]]; then
     case "$workstation_declared_stage" in
     "${TMPDIR:-/tmp}"/workstation-declared.??????)
@@ -147,7 +150,67 @@ workstation_stage_declared_inputs() {
   # Read by the platform package library selected at runtime.
   # shellcheck disable=SC2034
   dev_server_root="$workstation_declared_stage"
-  dev_server_render_assets "$workstation_declared_stage/assets"
+  dev_server_render_assets "$workstation_declared_stage/assets" herdr
+}
+
+workstation_gateway_snapshot() {
+  local root="$1" product="$2" operation="$3"
+  local -a paths=(lib/common.sh lib/gateway-ingress.sh
+    lib/gateway-runtime.sh "lib/$product.sh")
+  if [[ "$operation" == apply ]]; then
+    paths+=("assets/$product")
+  fi
+  if [[ "$product" == skidbladnir && "$operation" == apply ]]; then
+    paths+=(assets/skid-provider assets/agent-instructions.md
+      lib/skid-provider.sh lib/provider-homes.sh)
+  fi
+  dev_server_declared_snapshot "$root" "${paths[@]}"
+}
+
+workstation_stage_gateway_inputs() {
+  local product="$1" operation="$2" desired_snapshot staged_snapshot
+  desired_snapshot="$(workstation_gateway_snapshot "$base_dir" "$product" "$operation")" ||
+    die "could not resolve $product declared inputs"
+  workstation_declared_stage="$(mktemp -d "${TMPDIR:-/tmp}/workstation-declared.XXXXXX")" ||
+    die 'could not stage gateway inputs'
+  chmod 0700 "$workstation_declared_stage" || die 'could not secure gateway inputs'
+  install -d -m 0700 "$workstation_declared_stage/assets" "$workstation_declared_stage/lib" ||
+    die 'could not stage gateway input directories'
+  if [[ "$operation" == apply ]]; then
+    cp -Rp "$base_dir/assets/$product" "$workstation_declared_stage/assets/$product" ||
+      die "could not stage $product assets"
+  fi
+  cp -p "$base_dir/lib/common.sh" "$base_dir/lib/gateway-ingress.sh" \
+    "$base_dir/lib/gateway-runtime.sh" \
+    "$base_dir/lib/$product.sh" "$workstation_declared_stage/lib/" ||
+    die "could not stage $product libraries"
+  if [[ "$product" == skidbladnir && "$operation" == apply ]]; then
+    cp -Rp "$base_dir/assets/skid-provider" "$workstation_declared_stage/assets/skid-provider" ||
+      die 'could not stage skid provider assets'
+    cp -p "$base_dir/assets/agent-instructions.md" "$workstation_declared_stage/assets/" ||
+      die 'could not stage provider instructions'
+    cp -p "$base_dir/lib/skid-provider.sh" "$base_dir/lib/provider-homes.sh" \
+      "$workstation_declared_stage/lib/" ||
+      die 'could not stage skid provider library'
+  fi
+  staged_snapshot="$(workstation_gateway_snapshot "$workstation_declared_stage" "$product" "$operation")" ||
+    die 'could not verify staged gateway inputs'
+  [[ "$staged_snapshot" == "$desired_snapshot" ]] || die 'gateway inputs changed while staging; rerun'
+  # shellcheck source=lib/common.sh
+  source "$workstation_declared_stage/lib/common.sh"
+  # shellcheck source=lib/gateway-ingress.sh
+  source "$workstation_declared_stage/lib/gateway-ingress.sh"
+  # shellcheck disable=SC1090
+  source "$workstation_declared_stage/lib/$product.sh"
+  if [[ "$product" == skidbladnir && "$operation" == apply ]]; then
+    # shellcheck source=lib/skid-provider.sh
+    source "$workstation_declared_stage/lib/skid-provider.sh"
+  fi
+  if [[ "$operation" == apply ]]; then
+    dev_server_render_assets "$workstation_declared_stage/assets" "$product"
+  else
+    dev_server_assets_root="$workstation_declared_stage/assets"
+  fi
 }
 
 workstation_prepare_arch_sudo() {
@@ -186,6 +249,8 @@ workstation_preflight() {
   # Consumed by the profile installer and shared helper.
   # shellcheck disable=SC2034
   dev_server_ai_host="$workstation_target"
+  # shellcheck source=lib/herdr.sh
+  source "$base_dir/lib/herdr.sh"
   herdr_preflight "$workstation_platform"
 }
 
@@ -204,11 +269,54 @@ workstation_apply() {
   fi
   ai_install "$workstation_upgrade"
   herdr_apply "$workstation_platform"
-  if skidbladnir_ingress_preflight; then
-    skidbladnir_apply "$workstation_platform"
-    skidbladnir_ingress_apply
-  fi
   workstation_report_deferrals
+  workstation_results_finished=1
+  finish_results "$workstation_target"
+}
+
+workstation_gateway() {
+  local operation="$1" product="$2" ingress_status
+  trap workstation_cleanup_on_exit EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  workstation_select_target
+  workstation_stage_gateway_inputs "$product" "$operation"
+  case "$operation:$product" in
+  apply:skidbladnir)
+    if skidbladnir_ingress_preflight; then
+      skidbladnir_apply "$workstation_platform"
+      if skidbladnir_ingress_apply; then :; else
+        ingress_status=$?
+        ((ingress_status == 2)) || die 'could not apply Skidbladnir ingress'
+      fi
+    fi
+    ;;
+  apply:herdr-mobile)
+    if herdr_mobile_ingress_preflight; then
+      herdr_mobile_apply "$workstation_platform"
+      if herdr_mobile_ingress_apply; then :; else
+        ingress_status=$?
+        ((ingress_status == 2)) || die 'could not apply herdr-mobile ingress'
+      fi
+    fi
+    ;;
+  remove:skidbladnir)
+    skidbladnir_remove "$workstation_platform"
+    if skidbladnir_ingress_remove; then :; else
+      ingress_status=$?
+      ((ingress_status == 2)) || die 'could not remove Skidbladnir ingress'
+    fi
+    ;;
+  remove:herdr-mobile)
+    herdr_mobile_remove "$workstation_platform"
+    if herdr_mobile_ingress_remove; then :; else
+      ingress_status=$?
+      ((ingress_status == 2)) || die 'could not remove herdr-mobile ingress'
+    fi
+    ;;
+  esac
+  workstation_results_finished=1
   finish_results "$workstation_target"
 }
 
@@ -223,6 +331,14 @@ main() {
   shift
 
   case "$operation" in
+  gateway)
+    (($# == 2)) && [[ "$1" == apply || "$1" == remove ]] &&
+      [[ "$2" == herdr-mobile || "$2" == skidbladnir ]] || {
+      usage >&2
+      return 64
+    }
+    workstation_gateway "$1" "$2"
+    ;;
   apply | upgrade)
     [[ "$operation" != upgrade ]] || workstation_upgrade=1
     (($# == 0)) || {

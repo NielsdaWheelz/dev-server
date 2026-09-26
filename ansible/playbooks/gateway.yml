@@ -1,0 +1,121 @@
+---
+- name: Apply one devbox phone gateway
+  hosts: devbox
+  gather_facts: true
+  become: true
+  vars_files:
+    - ../group_vars/devbox.yml
+  pre_tasks:
+    - name: Validate the exact Ubuntu devbox target and selected operation
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] == 'Ubuntu'
+          - ansible_facts['distribution_release'] == 'noble'
+          - ansible_facts['architecture'] == 'x86_64'
+          - ansible_facts['hostname'] == 'dev-server'
+          - gateway_product in ['herdr-mobile', 'skidbladnir']
+          - gateway_operation in ['apply', 'remove']
+        fail_msg: Refusing gateway operation outside its declared boundary
+    - name: Read the gateway user id
+      ansible.builtin.command: "id -u {{ devbox_user }}"
+      register: gateway_user_uid
+      changed_when: false
+  tasks:
+    - name: Ensure selected gateway input directories exist
+      ansible.builtin.file:
+        path: "/home/{{ devbox_user }}/.local/share/dev-server/{{ item }}"
+        state: directory
+        follow: false
+        owner: "{{ devbox_user }}"
+        group: "{{ devbox_user }}"
+        mode: '0755'
+      loop: >-
+        {{ ['', 'lib', 'assets', 'assets/' ~ gateway_product]
+           + (['assets/skid-provider'] if gateway_product == 'skidbladnir' else []) }}
+      when: gateway_operation == 'apply' or item in ['', 'lib']
+
+    - name: Install selected gateway libraries
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../lib/{{ item }}"
+        dest: "/home/{{ devbox_user }}/.local/share/dev-server/lib/{{ item }}"
+        owner: "{{ devbox_user }}"
+        group: "{{ devbox_user }}"
+        mode: '0644'
+      loop: >-
+        {{ ['common.sh', 'gateway-ingress.sh', 'gateway-runtime.sh', gateway_product ~ '.sh']
+           + (['provider-homes.sh', 'skid-provider.sh'] if gateway_product == 'skidbladnir' and gateway_operation == 'apply' else []) }}
+
+    - name: Install selected gateway assets
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../assets/{{ gateway_product }}/"
+        dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/{{ gateway_product }}/"
+        owner: "{{ devbox_user }}"
+        group: "{{ devbox_user }}"
+        mode: preserve
+      when: gateway_operation == 'apply'
+
+    - name: Install original Skidbladnir provider inputs
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../assets/skid-provider/"
+        dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/skid-provider/"
+        owner: "{{ devbox_user }}"
+        group: "{{ devbox_user }}"
+        mode: preserve
+      when: gateway_product == 'skidbladnir' and gateway_operation == 'apply'
+
+    - name: Install shared provider instructions for original Skidbladnir
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../assets/agent-instructions.md"
+        dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/agent-instructions.md"
+        owner: "{{ devbox_user }}"
+        group: "{{ devbox_user }}"
+        mode: '0600'
+      when: gateway_product == 'skidbladnir' and gateway_operation == 'apply'
+
+    - name: Reconcile selected gateway and ingress
+      ansible.builtin.shell: |
+        set -euo pipefail
+        dev_server_home_dir="/home/{{ devbox_user }}"
+        dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
+        source "$dev_server_assets_root/../lib/common.sh"
+        source "$dev_server_assets_root/../lib/gateway-ingress.sh"
+        source "$dev_server_assets_root/../lib/{{ gateway_product }}.sh"
+        if [[ '{{ gateway_product }}' == skidbladnir && '{{ gateway_operation }}' == apply ]]; then
+          source "$dev_server_assets_root/../lib/skid-provider.sh"
+        fi
+        if [[ '{{ gateway_operation }}' == apply ]]; then
+          if {{ gateway_product | replace('-', '_') }}_ingress_preflight; then
+            {{ gateway_product | replace('-', '_') }}_apply devbox
+            if {{ gateway_product | replace('-', '_') }}_ingress_apply; then :; else
+              status=$?
+              ((status == 2)) || exit "$status"
+            fi
+          fi
+        else
+          {{ gateway_product | replace('-', '_') }}_remove devbox
+          if {{ gateway_product | replace('-', '_') }}_ingress_remove; then :; else
+            status=$?
+            ((status == 2)) || exit "$status"
+          fi
+        fi
+        finish_results devbox
+      args:
+        executable: /bin/bash
+      become: true
+      become_user: "{{ devbox_user }}"
+      environment:
+        HOME: "/home/{{ devbox_user }}"
+        PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+        XDG_RUNTIME_DIR: "/run/user/{{ gateway_user_uid.stdout }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ gateway_user_uid.stdout }}/bus"
+      register: gateway_result
+      changed_when: gateway_result.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ')
+      failed_when: >-
+        gateway_result.rc not in [0, 2] or
+        (gateway_result.rc == 2 and
+         not (gateway_result.stdout is regex('(?m)^ACTION  ')))
+
+    - name: Report selected gateway result
+      ansible.builtin.debug:
+        msg: "{{ item }}"
+      loop: "{{ gateway_result.stdout_lines | select('match', '^(ACTION|INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ') | list }}"
