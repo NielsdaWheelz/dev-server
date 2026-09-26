@@ -92,17 +92,17 @@ reload with `cmd+shift+,` or reopen ghostty. running terminals are left alone.
 
 ## ai accounts and services
 
-interactive wrappers in `~/bin` select herdr's private homes under
-`~/.local/share/herdr/providers/`. bare `codex` and `claude` preserve explicit
-profile selection; named account commands select their private home. ordinary
-shells default to herdr. skid shells load product-local functions at the end
-of bash/zsh startup, invoking their own launcher and homes under
-`~/.local/share/skidbladnir/providers/`. skid invokes codex's packaged native
-executable and the shared native claude command directly.
+ordinary and herdr shells keep the established provider binaries and account
+commands: `.codex`, `.codex-work`, `.codex-work2`, `.claude`, `.claude-work`.
+their authentication, configuration, history, memories, plugins and trust stay
+in place. existing environment-override semantics and native herdr integrations
+remain intact; jarvis keeps its existing worker map and cognition services.
 
-these are fresh homes. authenticate normally and inspect/trust each product's
-hooks; do not copy ordinary account directories or discovery sockets. jarvis's
-cognition continues to use its existing ordinary homes and shared services.
+only original skid's forge and marked bash/zsh terminals use its scoped
+launcher and fresh homes under `~/.local/share/skidbladnir/providers/`.
+authenticate normally and inspect/trust skid's hooks there; do not copy account
+trees or discovery sockets. skid invokes codex's packaged native executable
+and the shared native claude command directly.
 [the runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract)
 gives the exact worker map and app environment contract.
 
@@ -115,7 +115,7 @@ accounts follow `latest`: apply enforces that shared policy and removes
 account version floors. claude's native auto-updater handles background updates
 and old-version cleanup. wrappers add no startup update lookup.
 
-interactive herdr zsh aliases add `--yolo` to codex commands and
+interactive zsh aliases add `--yolo` to codex commands and
 `--dangerously-skip-permissions` to claude commands. the defaults live in
 [`assets/dotfiles/zsh_helpers`](assets/dotfiles/zsh_helpers). after applying,
 start a shell or `source ~/.zsh_helpers`. `command codex`, `command claude`, and
@@ -137,8 +137,8 @@ stay intact.
 native discovery links each account's
 `app-server-control/app-server-control.sock` to its supervised socket. a
 conflicting path produces `ACTION`; apply never takes over another daemon.
-cognition clients use these discovered servers. the separated interactive
-provider homes have no copied discovery links; their sessions run embedded. explicit
+normal account clients retain this native discovery behavior. original skid's
+private homes have no copied discovery links; their sessions run embedded. explicit
 `--remote unix://…` requires attachment but has different command, cwd, config,
 and resume semantics. the wrappers do not parse these choices.
 
@@ -178,8 +178,8 @@ loopback `7342` behind private tailscale `8444/v1`; skid uses `7341` and
 upstream herdr remains one pinned server per host from
 [`assets/herdr/release-pin.json`](assets/herdr/release-pin.json), supervised
 independently. changing its runtime while it runs requires an explicit stop
-because stopping ends its terminals and agents. herdr integrations install only
-in its five private provider homes. original skid has its own private homes,
+because stopping ends its terminals and agents. herdr integrations remain in
+the existing normal account homes. original skid has its own private homes,
 hooks and separately pinned native helper. provider binaries and tailscale
 remain shared host tools with separate upgrade operations.
 
@@ -203,8 +203,8 @@ key in each owner account's `authorized_keys`; the gate runs only an allowlist
 of agent and pane commands. it is policy hygiene, not containment: pane ids are
 not scoped to jarvis's panes. the key is generated on devbox and its public
 half is committed as the trust root. the gate's allowed home values must match
-jarvis's worker map. changing the worker environment requires the coordinated
-cutover in the runbook; cognition services and discovery remain unchanged.
+jarvis's existing worker map. provider homes, cognition services and discovery
+remain unchanged during the gateway cutover.
 
 rebuilding devbox changes its host key and its jarvis key: update the `devbox`
 line in [`assets/herdr/jarvis-known_hosts`](assets/herdr/jarvis-known_hosts)

@@ -174,13 +174,18 @@ these settings before installation. the native updater owns background updates
 and old-version cleanup. reject a conflicting canonical path; do not restart
 running claude processes.
 
-interactive account commands are wrappers in `~/bin`, executing the host-owned
-native binaries in `~/.local/bin`. product shell context selects herdr or skid;
-bare commands preserve an explicit profile and otherwise select that product's
-personal home. named work commands select their account within the same
-product. login-shell startup must preserve this choice. the original skid app
-owns environment creation and removal of inherited `HERDR_*`; upstream herdr
-starts with no tmux context. the fixed wrapper contract is recorded in the
+ordinary and herdr commands retain their established implementations:
+`codex-shared.py` renders the three codex account commands from `profiles.json`;
+`ai-profile` supplies only `claude-work`; bare claude resolves to its existing
+native executable. normal homes remain `.codex`, `.codex-work`, `.codex-work2`,
+`.claude` and `.claude-work`, with existing override and account-selection
+semantics. they are shared user state, not herdr-owned or cognition-only state.
+preserve authentication, configuration, history, memories, plugins and trust.
+
+original skid's own forge and marked bash/zsh terminals select its private
+homes through scoped commands. ordinary and genuine herdr terminals do not
+load those functions. the original app owns environment creation and removal
+of inherited `HERDR_*`; upstream herdr starts with no tmux context. the contract is in the
 [runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract).
 
 interactive zsh aliases separately add `--yolo` for all three codex profiles
@@ -314,19 +319,17 @@ unreferenced. an unchanged apply downloads, writes and restarts nothing.
 `herdr_prepare_artifact` stages the verified binary under the lock without
 promotion, for pre-window staging.
 
-herdr's codex and claude integrations are herdr's own. provision five fresh
-private homes below `~/.local/share/herdr/providers/`: `codex-personal`,
-`codex-work`, `codex-work2`, `claude-personal`, `claude-work`. only those homes
-receive the pinned herdr binary's native integration installer. instructions
-and owned claude settings are installed there; credentials, history, trust,
-plugin caches and discovery state are never copied from ordinary accounts.
-normal provider login and inspected hook trust are cutover prerequisites.
+herdr's native codex and claude integrations remain in the existing normal
+account homes. the pinned herdr binary installs its integration only in homes
+that already exist; personal claude keeps its normal unset-variable default.
+herdr provisions no private provider homes and its service sets no provider
+home overrides. gateway maintenance does not migrate or own provider state.
 
-ordinary account homes and project settings are outside recurring product
-integration ownership. remove old product entries once, only after precise
-inventory and successful new setup, while preserving user settings and
-cognition discovery. codex can read `$HOME/.codex/hooks.json` as project config
-when launched at home: private `CODEX_HOME` alone does not prove hook isolation.
+preserve native herdr integrations, user hooks/settings and discovery state.
+only specifically verified obsolete skid registrations may be removed during
+the coordinated cutover. codex can read `$HOME/.codex/hooks.json` as project
+config when launched at home. qualify actual hook interactions there and in a
+shared project at the integration boundary; provider relocation is not a fix.
 
 herdr is never downgraded or stopped to undo a gateway change. recover each
 separated gateway with its own verified inputs. do not restore an old whole
@@ -352,9 +355,10 @@ shell, and admits only the owner's "agents plus pane creation" in herdr 0.9.1's
 spelling: `agent list|get|read|explain|wait|prompt|send-keys`, `agent start
 --kind codex|claude`, `pane list|split|close` and `workspace list|create`, each
 with the flags a client needs, options after positionals, space-separated
-values. `--env` admits only `CODEX_HOME` naming one of the three private herdr codex
-homes or `CLAUDE_CONFIG_DIR` naming either private herdr claude home. personal
-claude has an explicit home. the exact worker map is in the cutover runbook. herdr's global options (`--machine`, `--remote`, `--session`,
+values. `--env` admits only `CODEX_HOME` naming `.codex`, `.codex-work` or
+`.codex-work2`, or `CLAUDE_CONFIG_DIR` naming `.claude-work`, under the owner
+home. personal claude retains its unset-variable default. jarvis's existing
+worker map stays intact. herdr's global options (`--machine`, `--remote`, `--session`,
 `--handoff`) anywhere, `--`, and everything else exit 1 with one content-free
 line before herdr runs. an admitted argv is exec'd as `~/.local/bin/herdr`
 with only `HOME` and `PATH`, so it reaches the default-session socket. the
@@ -426,7 +430,7 @@ release evidence. upstream owns archive/config schemas and release/device
 acceptance; each admitted binary validates its own rendered host config.
 
 herdr-mobile declares the herdr path/socket/tested version and four reduced
-`{key,label,provider,environment}` profiles using herdr's private homes. original
+`{key,label,provider,environment}` profiles using the existing normal homes. original
 skid declares tmux, `nativeControlPath`, absolute native provider commands,
 explicit arguments, environment and foreground signatures. its separately
 pinned helper and integrations belong only to skid. the original app owner's

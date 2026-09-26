@@ -32,13 +32,16 @@ expected = {"path": f"{home}/.local/share/herdr/current/herdr",
             "testedVersion": "herdr 0.9.1"}
 if value["herdr"] != expected:
     raise SystemExit("herdr runtime declaration differs from its pin")
+homes = {"personal": ".codex", "work": ".codex-work",
+         "work2": ".codex-work2", "claude-work": ".claude-work"}
+if [row.get("key") for row in value["profiles"]] != list(homes):
+    raise SystemExit("herdr profile order differs from its published contract")
 for row in value["profiles"]:
     key = row["key"]
-    leaf = f"codex-{key}" if key != "claude-work" else "claude-work"
     name = "CODEX_HOME" if key != "claude-work" else "CLAUDE_CONFIG_DIR"
     if row["environment"] != [{"name": name,
-                               "value": f"{home}/.local/share/herdr/providers/{leaf}"}]:
-        raise SystemExit("herdr provider home is outside its namespace")
+                               "value": f"{home}/{homes[key]}"}]:
+        raise SystemExit("herdr provider home differs from the existing account map")
 Path(stage, "host-config.json").write_text(rendered)
 PY
 }

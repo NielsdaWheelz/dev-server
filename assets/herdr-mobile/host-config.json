@@ -6,25 +6,25 @@
       "key": "personal",
       "label": "Codex · Personal",
       "provider": "Codex",
-      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.local/share/herdr/providers/codex-personal"}]
+      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.codex"}]
     },
     {
       "key": "work",
       "label": "Codex · Work",
       "provider": "Codex",
-      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.local/share/herdr/providers/codex-work"}]
+      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.codex-work"}]
     },
     {
       "key": "work2",
       "label": "Codex · Work 2",
       "provider": "Codex",
-      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.local/share/herdr/providers/codex-work2"}]
+      "environment": [{"name": "CODEX_HOME", "value": "@ROOT@/.codex-work2"}]
     },
     {
       "key": "claude-work",
       "label": "Claude · Work",
       "provider": "Claude",
-      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "@ROOT@/.local/share/herdr/providers/claude-work"}]
+      "environment": [{"name": "CLAUDE_CONFIG_DIR", "value": "@ROOT@/.claude-work"}]
     }
   ]
 }

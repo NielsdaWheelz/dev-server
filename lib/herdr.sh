@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-source "$(dirname "${BASH_SOURCE[0]}")/provider-homes.sh"
-
 # lib/herdr.sh owns the pinned herdr server on each host: the artifact cache and
 # immutable generations under ~/.local/share/herdr, the managed server config at
 # ~/.local/share/herdr/config.toml, the user service unit, and its activation;
@@ -211,11 +209,9 @@ herdr_validate_declared_inputs() {
   # the socket path is the one skid's host config names for the gateway.
   if ! grep -Fqx "HERDR_SOCKET_PATH=$home/.config/herdr/herdr.sock" <<<"$environment" ||
     ! grep -Fqx "HERDR_CONFIG_PATH=$home/.local/share/herdr/config.toml" <<<"$environment" ||
-    ! grep -Fqx "CODEX_HOME=$home/.local/share/herdr/providers/codex-personal" <<<"$environment" ||
-    ! grep -Fqx "CLAUDE_CONFIG_DIR=$home/.local/share/herdr/providers/claude-personal" <<<"$environment" ||
     ! grep -Fqx 'LANG=en_US.UTF-8' <<<"$environment" ||
     ! grep -Fqx "EXEC=$home/.local/share/herdr/current/herdr"$'\t'"server" <<<"$environment" ||
-    grep -Eq '^(HERDR_SESSION|HERDR_ENV|HERDR_PANE_ID|HERDR_CLIENT_SOCKET_PATH|XDG_CONFIG_HOME|XDG_STATE_HOME)=' <<<"$environment"; then
+    grep -Eq '^(HERDR_SESSION|HERDR_ENV|HERDR_PANE_ID|HERDR_CLIENT_SOCKET_PATH|XDG_CONFIG_HOME|XDG_STATE_HOME|CODEX_HOME|CLAUDE_CONFIG_DIR)=' <<<"$environment"; then
     die 'herdr unit environment differs from the managed paths'
   fi
   herdr_desired_identity="$(herdr_identity "$herdr_binary_sha" "$config" "$unit")" ||
@@ -522,19 +518,23 @@ PY
   return "$status"
 }
 
-# herdr's codex and claude integrations, installed only in its private homes.
-# status reads the hook script alone; future sessions read the integration.
-# future sessions read them; nothing restarts.
+# herdr's codex and claude integrations, installed by the pinned binary in each
+# existing account home (CODEX_HOME for the codex homes, CLAUDE_CONFIG_DIR for
+# ~/.claude-work, neither for ~/.claude) wherever herdr's own status does not
+# call the hook current. status reads the hook script alone; the hooks.json and
+# settings.json entries are herdr's. future sessions read them; nothing restarts.
 herdr_install_integrations() {
   local home="$1"
   local binary="$home/.local/share/herdr/current/herdr"
   local account dir target variable status
 
-  for account in codex-personal codex-work codex-work2 claude-personal claude-work; do
-    dir="$home/.local/share/herdr/providers/$account"
+  for account in .codex .codex-work .codex-work2 .claude .claude-work; do
+    dir="$home/$account"
+    [[ -d "$dir" ]] || continue
     case "$account" in
-    codex-*) target=codex variable=CODEX_HOME ;;
-    claude-*) target=claude variable=CLAUDE_CONFIG_DIR ;;
+    .codex*) target=codex variable=CODEX_HOME ;;
+    .claude) target=claude variable='' ;;
+    .claude-work) target=claude variable=CLAUDE_CONFIG_DIR ;;
     esac
     status="$(env -i HOME="$home" ${variable:+"$variable=$dir"} "$binary" integration status)" || return 1
     if grep -q "^$target: current " <<<"$status"; then
@@ -858,7 +858,6 @@ herdr_apply() {
   unit_target="$(herdr_unit_target "$platform" "$home")"
   herdr_prepare_directories "$home" "$platform"
   dev_server_acquire_lock "$share/.apply.lock" 8 herdr
-  provider_homes_prepare "$home" herdr || die 'could not prepare private herdr provider homes'
   herdr_install_gate "$platform" "$home" || die 'could not install the jarvis gate or its authorized key'
   state="$(herdr_service_state)" || die 'could not observe herdr service state'
   if [[ "$state" == active ]]; then

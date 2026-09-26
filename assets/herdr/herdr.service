@@ -8,8 +8,6 @@ Environment="PATH=%h/bin:%h/.local/bin:%h/.local/share/mise/shims:/usr/local/sbi
 Environment=LANG=en_US.UTF-8
 Environment=HERDR_CONFIG_PATH=%h/.local/share/herdr/config.toml
 Environment=HERDR_SOCKET_PATH=%h/.config/herdr/herdr.sock
-Environment=CODEX_HOME=%h/.local/share/herdr/providers/codex-personal
-Environment=CLAUDE_CONFIG_DIR=%h/.local/share/herdr/providers/claude-personal
 WorkingDirectory=%h
 ExecStart=%h/.local/share/herdr/current/herdr server
 Restart=on-failure

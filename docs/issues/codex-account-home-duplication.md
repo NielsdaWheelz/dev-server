@@ -1,24 +1,23 @@
-# cognition account homes still have two declarations
+# codex account homes still have several declarations
 
-problem: `assets/codex/profiles.json` owns cognition account homes, but
-`ai_install_dirs` and `ai_install_instructions` still hardcode ordinary account
-home names. changing the cognition declaration does not change those host-tool
-provisioning paths.
+problem: `assets/codex/profiles.json` drives ordinary codex account wrappers,
+while directories, instructions, herdr integrations, the gate and mobile
+profiles also declare those same normal homes. these are shared user accounts,
+not cognition-only state.
 
-impact: a declaration change can select a cognition home while creating its
-directory/instructions elsewhere.
+impact: a declaration change can route an account to one home while creating
+its directory/instructions elsewhere, and the gate rejects the new home.
 
 evidence (2026-09-25): an in-memory work-home change to `.codex-employer`
-changed the former generated launcher while installer fixtures still selected
-`.codex-work`. separation removes interactive wrappers, gateway profiles,
-integrations and the gate from this declaration: their private product homes
-are an independent fixed contract. the remaining hardcoded ordinary paths
-are in `ai_install_dirs` and `ai_install_instructions` in `lib/ai-tools.sh`.
+changed the generated launcher while installer fixtures selected `.codex-work`.
+the current consumers are `lib/ai-tools.sh`, `lib/herdr.sh`,
+`assets/herdr/herdr-gate`, `assets/herdr-mobile/host-config.json` and its renderer.
 
-follow-up: use the existing cognition declaration for cognition directory and
-instruction provisioning. keep private interactive product homes separate;
-do not route workers back into cognition homes to unify unrelated ownership.
-no new account registry or generic profile framework.
+follow-up: resolve the existing declaration once for the host and use those
+paths consistently, preserving command behavior, account state and the gate's
+explicit command policy. original skid's scoped private homes remain separate.
+do not migrate providers or introduce an account registry to resolve duplication.
 
-resolved when: changing one declared cognition account home produces consistent
-paths in its consumers, with credentials and interactive product homes preserved.
+resolved when: one declared normal-home change produces consistent consumer
+paths without moving or replacing existing credentials/configuration/history,
+and unrelated gate commands remain refused.

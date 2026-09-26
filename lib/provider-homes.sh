@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Shared shape only. Each product owns its five private homes and installations.
+# Original skid's five private provider homes.
 provider_homes_prepare() {
   local home="$1" product="$2" root account directory settings candidate
   local instructions
@@ -9,7 +9,7 @@ provider_homes_prepare() {
   instructions="$(dev_server_assets_dir)/agent-instructions.md"
 
   case "$product" in
-  herdr | skidbladnir) ;;
+  skidbladnir) ;;
   *) die "invalid provider-home owner: $product" ;;
   esac
   [[ -f "$instructions" && ! -L "$instructions" && -s "$instructions" ]] ||

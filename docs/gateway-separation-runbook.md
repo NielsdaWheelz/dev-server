@@ -10,12 +10,14 @@ completed source checks and their limits are recorded in
 
 ## owners and inputs
 
-dev-server owns installation, host configuration, private provider homes,
+dev-server owns installation, host configuration, original skid's private homes,
 service definitions, receipts, ingress and removal. app owners own executable
 interfaces, release certification and phone acceptance. jarvis owns its worker
 mapping and quiescence. the root operator owns repository names, publication,
-the herdr reset and skid namespace handback. no step changes cognition's
-account declarations, discovery sockets, credentials or services.
+the herdr reset and skid namespace handback. ordinary and herdr providers keep
+their existing homes, command behavior, integrations and state. jarvis's existing
+worker map and cognition configuration remain intact; the proposed remap and
+pr 42 are withdrawn. no provider state is moved, copied or reinitialized.
 
 herdr-mobile `v0.9.0` is published from
 `68a652d7ccbeaaf472ef1c5f3a4ea6949808bca4` and pinned in
@@ -38,7 +40,8 @@ the required ids are respectively `1342599607` and `1386409483`. the root
 handoff reports the github name transfer complete on 2026-09-25; local checkout
 directory names remain unchanged. original skid's stale v0.6 pin is
 inadmissible. the former skid v0.8 release belongs to the first repository.
-publication belongs to the root operator. redirects are insufficient;
+publication belongs to the root operator and does not wait for live host
+namespace handback. installation does. redirects are insufficient;
 do not delete or recreate either repository if name reclamation fails.
 
 original skid supplied its source deployment contract at
@@ -97,28 +100,26 @@ uses `tailscale serve --https=8444 --set-path=/v1 off` for herdr-mobile or
 
 the host owner is `/Users/nnandal` on macbook, `/home/nnandal` on arch, and
 `/home/niels` on devbox. join the target owner's home with the following
-relative values in jarvis `src/jarvis/agent_tools.py`:
+existing relative values in jarvis `src/jarvis/agent_tools.py`:
 
 | selection | kind | variable | relative value |
 | --- | --- | --- | --- |
-| personal | codex | `CODEX_HOME` | `.local/share/herdr/providers/codex-personal` |
-| work | codex | `CODEX_HOME` | `.local/share/herdr/providers/codex-work` |
-| work2 | codex | `CODEX_HOME` | `.local/share/herdr/providers/codex-work2` |
-| claude-work | claude | `CLAUDE_CONFIG_DIR` | `.local/share/herdr/providers/claude-work` |
-| manual/native claude default | claude | `CLAUDE_CONFIG_DIR` | `.local/share/herdr/providers/claude-personal` |
+| personal | codex | `CODEX_HOME` | `.codex` |
+| work | codex | `CODEX_HOME` | `.codex-work` |
+| work2 | codex | `CODEX_HOME` | `.codex-work2` |
+| claude-work | claude | `CLAUDE_CONFIG_DIR` | `.claude-work` |
+| manual/native claude default | claude | unset by default | normal `.claude` home |
 
-the gate accepts these exact home values, including explicit personal claude.
-its command allowlist is unchanged. retain the phone's four forge profiles;
-personal claude is a native/manual default. do not change jarvis cognition's
-ordinary `.codex*` homes or discovery paths. this checkout cannot implement
-the jarvis-side map. that owner has prepared the matching map in `bada736`
-([draft pr 42](https://github.com/NielsdaWheelz/jarvis/pull/42)); source inspection
-confirms the four profile values above. local verification passed according to
-its handoff; hosted checks are blocked by the recorded account billing limit.
-merge/deployment and settlement of pending incompatible worker actions remain
-jarvis-owned cutover prerequisites.
+the gate retains its existing four explicit home values and command allowlist.
+personal claude is a native/manual default, not a fifth phone profile. bare
+claude uses its native executable; the existing codex account launcher preserves
+explicit `CODEX_HOME` for bare codex and named work commands retain their account
+selection semantics. ordinary shell aliases and explicit environment overrides
+keep their established behavior. these are shared user homes with existing
+auth, configuration, history, memories, plugins, trust and native herdr hooks.
 
-original skid uses the same five child names beneath
+original skid uses `codex-personal`, `codex-work`, `codex-work2`,
+`claude-personal` and `claude-work` beneath
 `.local/share/skidbladnir/providers/`. its forge profiles invoke absolute
 native providers with explicit arguments, foreground signatures and its
 claude identity plugin. codex must resolve to its packaged native executable,
@@ -141,16 +142,18 @@ and then `.zlogin` for login shells. qualify both startup paths. the launcher
 clears the opposite provider home and shell marker and passes codex `--yolo`
 or claude `--dangerously-skip-permissions --plugin-dir <skid-plugin>`.
 
-herdr service defaults seed both private personal homes; explicit pane profiles
-replace the relevant home. its wrappers retain selected homes and work commands
-stay under herdr. cognition's existing home declaration and operational inputs
-remain unchanged.
+herdr's service adds no provider-home overrides and provisions no private homes.
+its native integrations remain in the existing accounts. an explicit forge
+profile must survive shell startup. before apply, qualify ordinary/herdr
+bare/account commands and marked-skid commands using disposable bash/zsh homes
+and fake executables for the macos and linux entry paths.
 
-homes start fresh. install only the product's instructions/settings and its
-own integrations. login through normal provider setup and trust the inspected
-hooks. never copy credentials, history, discovery sockets, account trees,
-plugin caches or trust records. a missing login/trust is a prerequisite,
-not a successful provider launch.
+only original skid's homes start fresh. install its instructions/settings and
+integrations there; login normally and trust the inspected hooks. never copy
+credentials, history, discovery sockets, account trees, plugin caches or trust
+records. missing skid login/trust is a prerequisite. actual hook interaction
+at home and a shared project must be qualified at the integration boundary;
+moving herdr's providers is not an isolation mechanism.
 
 ## ordered host cutover
 
@@ -171,17 +174,17 @@ never retain terminal bytes, objectives, provider account data or credentials.
    its `8444/v1` ingress. retain the old gateway and `8443` during transition.
    verify tailnet policy permits the new port; an empty local port proves
    nothing about phone reachability. provider launch acceptance follows the
-   coordinated worker-environment change in step 3.
+   coordinated runtime reset in step 3.
 3. jarvis's owner settles pending worker actions and quiesces worker creation.
    the root operator stops only the intended supervised herdr runtime, waits
    for it to stop, and then discards its old session snapshot. restarting
    without removing that stopped runtime's snapshot can restore old shells.
    do not stop cognition, kill unrelated tmux sessions or change the default
-   tmux server's environment. apply the matching herdr provider defaults,
-   gate, worker map and gateway. restart through the supervisor and verify
-   the existing herdr socket/config identity. discarded panes need no recovery.
-   ordinary host apply provisions the five fresh homes and pinned integrations;
-   complete each home's normal login/trust before releasing worker creation.
+   tmux server's environment. activate the new gateway while preserving existing
+   provider homes, defaults, native herdr integrations and jarvis's map/gate.
+   restart through the supervisor and verify the existing herdr socket/config
+   identity. discarded panes need no recovery. no provider-state cleanup or
+   fresh herdr authentication is part of this reset.
 4. the app/phone owner installs the new herdr phone app and proves pairing,
    launch, attachment, input and stop against every host. create a private
    herdr-mobile fleet `client.json`; never reuse the old product's file.
@@ -195,14 +198,14 @@ never retain terminal bytes, objectives, provider account data or credentials.
    unrelated file in `.config/skidbladnir`. do not recursively delete that
    directory or the skid data root. a separated-product remove command must
    reject the old v0.8 namespace; this one-time retirement is operator-owned.
-6. remove only inventoried old product integration entries/scripts from the
+6. remove only verified obsolete skid integration entries/scripts from the
    ordinary `.codex`, `.codex-work`, `.codex-work2`, `.claude` and
    `.claude-work` homes. use parsed hook/settings entries and exact installed
-   script identities; preserve unrelated hooks/settings and all credentials.
+   script identities; preserve native herdr integrations, user hooks/settings
+   and all credentials, histories, plugins and trust.
    inspect codex inline/plugin hook sources too, including `.codex/hooks.json`
    discovered at `cwd=$HOME`. unknown entries are a blocker for the operator,
-   not permission to delete the entire file. recurring product installers
-   never own these ordinary or project hook files.
+   not permission to delete the entire file or relocate providers.
 7. the root operator explicitly records namespace handback. only then admit
    original skid's independently published release and qualified helper,
    provision its fresh homes/credentials, apply its gateway and `8443/v1`
@@ -267,27 +270,23 @@ data or state root is justified by this inventory. old whole-host recovery is
 retired at namespace handback; retain the private old inputs only for the
 pre-handback recovery window.
 
-legacy hook removal uses these exact predicates, confirmed from history and a
-disposable installation of pinned herdr's integrations:
+obsolete skid hook removal uses these exact historical predicates. native herdr
+integration commands/scripts remain in place:
 
 - codex homes: `.codex`, `.codex-work`, `.codex-work2`, and historical
   `.codex-personal`. remove individual `SessionStart[].hooks[]` entries whose
   command exactly equals the rendered old skid command
-  `HOME/.local/bin/skidbladnir agent-hook --host-config=HOME/.local/share/skidbladnir/current/host-config.json Codex SessionStart`
-  or pinned herdr's `bash 'ACCOUNT/herdr-agent-state.sh' session`.
-- claude `.claude` and `.claude-work`: remove only the herdr `SessionStart`
-  hook command `bash 'ACCOUNT/hooks/herdr-agent-state.sh' session`, with matcher
-  `^(startup|resume|clear|compact|fork)$`.
+  `HOME/.local/bin/skidbladnir agent-hook --host-config=HOME/.local/share/skidbladnir/current/host-config.json Codex SessionStart`.
 - from codex `config.toml`, remove only the exact old
   `notify = ["HOME/.local/bin/skid-notify"]` line. leave `[features] hooks = true`
   and all other settings intact.
-- remove an obsolete hook script only after its contents match the script from
-  a disposable installation of the pinned runtime and no retained hook refers
+- remove an obsolete skid hook script only after its contents match the
+  inventoried historical skid installation and no retained hook refers
   to it. write parsed json atomically while retaining unrelated keys, sibling
   hooks and groups. do not reuse the historical group-level removal script:
   a matching group may also contain user hooks.
 
-`HOME` and `ACCOUNT` above mean the inspected absolute owner/account paths;
+`HOME` above means the inspected absolute owner path;
 compare the actual serialized command, not a substring or product-name match.
 inline/project/plugin sources require a separate content-free audit at home
 and the selected shared project. an unknown reference stays in place and
@@ -359,9 +358,9 @@ on each live platform, the root operator and app/jarvis owners must record:
 | both gateways healthy concurrently | NOT_RUN | NOT_RUN | NOT_RUN | root / original skid pin and handback |
 | repeat apply and independent absent-product apply | NOT_RUN | NOT_RUN | NOT_RUN | root / staged releases |
 | restart, reinstall, rollback preserve other workers/attachments | NOT_RUN | NOT_RUN | NOT_RUN | app + root / live window |
-| all forge/manual profiles use correct home/hooks | NOT_RUN | NOT_RUN | NOT_RUN | app + root / fresh login and trust |
+| all forge/manual profiles use correct home/hooks | NOT_RUN | NOT_RUN | NOT_RUN | app + root / existing-home preservation and fresh skid login/trust |
 | launch from opposite runtime, home and shared project | NOT_RUN | NOT_RUN | NOT_RUN | app + root / runtime creation contract |
-| cognition service/history continuity | NOT_RUN | NOT_RUN | NOT_RUN | jarvis / worker-map activation and quiescence |
+| cognition service/history continuity | NOT_RUN | NOT_RUN | NOT_RUN | jarvis / quiescence; existing worker map retained |
 | phone reaches 8444; wrong-product auth rejected | NOT_RUN | NOT_RUN | NOT_RUN | app + phone / releases and tailnet policy |
 | scoped removal preserves other ingress/files | NOT_RUN | NOT_RUN | NOT_RUN | root / disposable native qualification |
 

@@ -28,9 +28,7 @@ alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
 
 # default agent permissions for interactive shells; `command` bypasses aliases.
 alias claude='claude --dangerously-skip-permissions'
-alias claude-personal='claude-personal --dangerously-skip-permissions'
 alias claude-work='claude-work --dangerously-skip-permissions'
 alias codex='codex --yolo'
-alias codex-personal='codex-personal --yolo'
 alias codex-work='codex-work --yolo'
 alias codex-work2='codex-work2 --yolo'

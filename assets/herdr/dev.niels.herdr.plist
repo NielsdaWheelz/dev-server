@@ -21,10 +21,6 @@
     <string>@ROOT@/.local/share/herdr/config.toml</string>
     <key>HERDR_SOCKET_PATH</key>
     <string>@ROOT@/.config/herdr/herdr.sock</string>
-    <key>CODEX_HOME</key>
-    <string>@ROOT@/.local/share/herdr/providers/codex-personal</string>
-    <key>CLAUDE_CONFIG_DIR</key>
-    <string>@ROOT@/.local/share/herdr/providers/claude-personal</string>
   </dict>
   <key>WorkingDirectory</key>
   <string>@ROOT@</string>
