@@ -390,9 +390,8 @@ rollback leaves a distinct previous or no previous; removal preserves the
 other product and unrelated signing/provider/project files. service stand-ins
 qualify installer control flow, not native supervisors or provider behavior.
 
-the root operator's `skidbladnir/docs/separation-qualification.md` (the
-herdr-mobile checkout) and final qualification reports supply live results
-against dev-server `7c4500d`.
+the root operator's [qualification record](https://github.com/NielsdaWheelz/herdr-mobile/blob/0dd92df41090c156b53bc8632c4b34281d3b32ce/docs/separation-qualification.md)
+supplies live results against dev-server `7c4500d`.
 these are operator-reported results, separate from this source task's fixtures:
 
 | boundary | macbook | devbox | arch | owner / blocker |
@@ -408,6 +407,7 @@ these are operator-reported results, separate from this source task's fixtures:
 | cross-product bearer rejected 401; wrong machine header 409 | PASS | PASS | PASS | app / mobile activation and original before plugin correction |
 | both restart directions preserve opposite worker/phone attachment/input | NOT_RUN | NOT_RUN | PASS | root + phone / arch lifecycle probe |
 | original prior-generation rollback and corrected restore | NOT_RUN | NOT_RUN | PASS | root / actual prior generation through current installer |
+| mobile repeat apply preserves opposite original phone attachment/input | NOT_RUN | NOT_RUN | PASS | root + phone / unchanged declaration, no forced reinstall |
 | mobile prior separated-release rollback | UNAVAILABLE | UNAVAILABLE | UNAVAILABLE | first separated release; no prior target |
 | native scoped removal preserves other ingress/files | NOT_RUN | NOT_RUN | NOT_RUN | disposable installer proof only |
 
@@ -431,13 +431,17 @@ conversation.
 
 independent first/repeat apply with the other product absent, failed-upgrade
 recovery and scoped removal passed disposable installer probes. those results
-do not claim native removal or unavailable mobile version rollback. mobile
-repeat apply with the opposite original arch phone attachment and exact probe
-cleanup remain pending in the issue below; the no-change result above does
-not establish that attachment check.
+do not claim native removal or unavailable mobile version rollback. the final
+arch mobile repeat apply returned up to date while original's phone remained
+attached; runtime/worker identities, protected files, cognition and ingress
+were unchanged, and explicitly focused original phone input passed afterward.
+both apps' phone interrupt dispatch and exact-target stop passed. all test-owned
+phone resources were absent from the six final inventories; pre-existing mac
+sessions remained. native probe resources/scripts were removed. both final
+fleet verifiers passed on all three hosts. the coordination issue is closed;
+the unperformed boundaries above retain their stated limits.
 
 during source preparation, tmux probes may mutate only resources they create
 on an isolated `-L` socket.
 no default-server mutations, device changes or live resets were performed as
-part of source preparation. unresolved prerequisites are tracked in
-[gateway separation](issues/gateway-separation.md).
+part of source preparation.

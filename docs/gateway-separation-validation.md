@@ -74,11 +74,9 @@ repository namespace or credential was changed by this source work. the devbox
 codex feature observation used only a disposable empty home.
 
 the separate root operator subsequently performed the authorized live cutover.
-its qualification record is
-`/Users/nnandal/Documents/code/skidbladnir/docs/separation-qualification.md`
-in the herdr-mobile checkout. the following is reported evidence from that
-record and the operator's final qualification reports, not additional live work by
-this source task:
+its [qualification record](https://github.com/NielsdaWheelz/herdr-mobile/blob/0dd92df41090c156b53bc8632c4b34281d3b32ce/docs/separation-qualification.md)
+is committed in herdr-mobile. the following is reported evidence from that
+record, not additional live work by this source task:
 
 - both immutable `v0.9.0` releases run on macbook, devbox and arch; both fleet
   verifiers pass. corrected original generations from `7c4500d` are selected
@@ -116,21 +114,27 @@ this source task:
   existing provider authentication/configuration/history was not relocated.
   the operator separately authorized normal claude-work trust at the selected
   linux shared checkout and arch's first-use acknowledgement.
+- final arch mobile repeat apply returned up to date while original's phone
+  remained attached. gateway/runtime/worker identities, protected files,
+  cognition and both ingress handlers were unchanged. explicitly focused
+  original phone input passed afterward; unfocused automation retries are
+  excluded. both apps' phone interrupt dispatch and exact-target stop passed.
+  all test-owned phone resources were absent from the six final inventories,
+  baseline mac sessions survived, and native probe resources/scripts were
+  removed. both final fleet verifiers passed everywhere.
 
 ## limits and decisions
 
-final mobile repeat apply with the opposite arch phone attachment and exact
-probe cleanup await the operator's final result. phone stop removed the exact
-test-owned original macbook/devbox targets while preserving baseline sessions;
-mobile's work-profile launch, interrupt dispatch and exact-target stop passed.
+the root operator's final continuity and cleanup report closes the coordination
+issue. mobile's work-profile phone launch also passed; interrupt evidence
+establishes successful dispatch, not independently confirmed provider halt.
 mobile has no previous separated release; no artificial generation is created
 to claim version rollback. native removal and macbook/devbox opposite-phone
 restart/rollback continuity remain `NOT_RUN`; disposable recovery/removal and
 live repeat apply are distinct evidence. native background-job stop and
 old-conversation resume remain unperformed. broader phone controls and
 tailscale dns recurrence retain the app owners' issue scope.
-the [runbook](gateway-separation-runbook.md) records the per-host boundaries;
-the [open issue](issues/gateway-separation.md) tracks remaining cutover closure.
+the [runbook](gateway-separation-runbook.md) records the per-host boundaries.
 
 the implementation retains the existing artifact/runtime/unit machinery,
 shared through two explicit product owners. one atomic pair makes recovery
