@@ -1,11 +1,11 @@
 # independent gateway cutover
 
-source preparation, 2026-09-25. this is an operator runbook, not a record of
-live completion. the implementation starts from dev-server `8498933`.
-all live acceptance below is `NOT_RUN` until the responsible operator records
-its result. do not run ordinary host apply during source preparation: it also
-owns upstream herdr and the worker environment.
-completed source checks and their limits are recorded in
+implementation and operator-reported qualification, 2026-09-25/26, from
+dev-server baseline `8498933` through `7c4500d`. the root operator reports both
+products deployed on macbook, devbox and arch after namespace handback.
+the acceptance table distinguishes observed boundaries from unperformed ones.
+ordinary host apply remains a separate operation: it also owns upstream herdr
+and the worker environment. source checks, live evidence and their limits are in
 [validation](gateway-separation-validation.md).
 
 ## owners and inputs
@@ -54,7 +54,11 @@ both products. templates are under `deployment/providers/` and the helper pin un
 `deployment/native-control/pin.json`. the exact helper inputs are `llm-calling@ec97adeb9ddd0f91b141f89cc42cff7cc7efdb8f`, uv `0.11.28`,
 python `3.12.13`, claude sdk `0.2.130`. the owner reports frozen installation, disposable-home/path routing and native
 claude 2.1.282 command availability passing on macbook without authentication.
-live status/history/stop remain `NOT_RUN` on all hosts. provider upgrades require
+subsequent operator qualification passed native claude-work binding, idle
+status and bounded history on all three hosts with the corrected plugin in
+`7c4500d`. stop closed each test terminal but reported agent halt as
+`unconfirmed`; later observation found the exact provider processes gone.
+native background-job stop remains `NOT_RUN`. provider upgrades require
 requalification; an exact install alone cannot prove compatibility.
 
 ## deployment contract
@@ -190,10 +194,15 @@ pins do not change, and rollback restores the prior plugin with its runtime.
 never copy credentials, history, discovery sockets, account trees, plugin
 caches or trust records. existing account state is shared across apps: a
 provider configuration or history change in one is visible in the others.
-actual hooks at home and a shared project remain an integration boundary to
-qualify; separate directories would not establish correct hook targeting.
+actual hooks at home and a shared project require qualification at the
+integration boundary; separate directories would not establish correct hook
+targeting. the acceptance table records the observed scope.
 
 ## ordered host cutover
+
+the root operator completed the namespace transition below on all three hosts.
+these steps describe the one-time transition; do not repeat old-namespace
+retirement on an installed separated product.
 
 perform these stages host by host, recording macbook, devbox and arch separately.
 use an operator control shell independent of the gateways being replaced. keep
@@ -381,20 +390,54 @@ rollback leaves a distinct previous or no previous; removal preserves the
 other product and unrelated signing/provider/project files. service stand-ins
 qualify installer control flow, not native supervisors or provider behavior.
 
-on each live platform, the root operator and app/jarvis owners must record:
+the root operator's `skidbladnir/docs/separation-qualification.md` (the
+herdr-mobile checkout) and final qualification reports supply live results
+against dev-server `7c4500d`.
+these are operator-reported results, separate from this source task's fixtures:
 
 | boundary | macbook | devbox | arch | owner / blocker |
 | --- | --- | --- | --- | --- |
-| both gateways healthy concurrently | NOT_RUN | NOT_RUN | NOT_RUN | root / namespace handback and live qualification |
-| repeat apply and independent absent-product apply | NOT_RUN | NOT_RUN | NOT_RUN | root / staged releases |
-| restart, reinstall, rollback preserve other workers/attachments | NOT_RUN | NOT_RUN | NOT_RUN | app + root / live window |
-| all forge/manual profiles use correct home/hooks | NOT_RUN | NOT_RUN | NOT_RUN | app + root / existing-account and hook coexistence |
-| launch from opposite runtime, home and shared project | NOT_RUN | NOT_RUN | NOT_RUN | app + root / runtime creation contract |
-| cognition service/history continuity | NOT_RUN | NOT_RUN | NOT_RUN | jarvis / existing workers, snapshot and map retained |
-| phone reaches 8444; wrong-product auth rejected | NOT_RUN | NOT_RUN | NOT_RUN | app + phone / releases and tailnet policy |
-| scoped removal preserves other ingress/files | NOT_RUN | NOT_RUN | NOT_RUN | root / disposable native qualification |
+| both gateways healthy; both fleet verifiers | PASS | PASS | PASS | root / independent v0.9.0 releases |
+| selected repeat apply makes no changes | PASS | PASS | PASS | root / corrected generation |
+| four forge + five manual routes at home/shared checkout, each product | PASS | PASS | PASS | app / eighteen routes per product and host |
+| concurrent codex/claude in both products; disjoint inventories | PASS | PASS | PASS | app / existing accounts, isolated runtime context |
+| native claude-work binding, idle status and bounded history | PASS | PASS | PASS | original / deployed binary/plugin; probe scope below |
+| skid hook rejects actual herdr context before reading input | PASS | NOT_RUN | NOT_RUN | original / native mac probe; all-host context checks above |
+| pre-cutover codex/claude-work history files remain accessible | PASS | PASS | PASS | app / read-only access, no conversation resume |
+| both phone apps paired, attached and accepting paced input | PASS | PASS | PASS | phone / production gateways |
+| cross-product bearer rejected 401; wrong machine header 409 | PASS | PASS | PASS | app / mobile activation and original before plugin correction |
+| both restart directions preserve opposite worker/phone attachment/input | NOT_RUN | NOT_RUN | PASS | root + phone / arch lifecycle probe |
+| original prior-generation rollback and corrected restore | NOT_RUN | NOT_RUN | PASS | root / actual prior generation through current installer |
+| mobile prior separated-release rollback | UNAVAILABLE | UNAVAILABLE | UNAVAILABLE | first separated release; no prior target |
+| native scoped removal preserves other ingress/files | NOT_RUN | NOT_RUN | NOT_RUN | disposable installer proof only |
 
-tmux probes may mutate only resources they create on an isolated `-L` socket.
+original's mac provider probes used exact test-owned production sessions;
+linux used isolated runtimes with the deployed binary/plugin. mobile provider
+probes and all phone checks used production gateways. route selection does
+not establish provider readiness or authentication for every account.
+native stop reported truthful closed/unconfirmed results, followed by exact
+provider-process exit observations, on every host.
+
+both apk reinstall directions preserved the opposite app's pairing and phone
+use; the mobile reinstall check retained original's devbox attachment/input.
+arch original rollback selected the actual prior quoted-plugin generation and
+then restored the correction. opposite workers, snapshot, owned files, both
+ingress mappings and subsequent phone input survived. this proves generation
+recovery, not release-version rollback.
+upstream herdr's config, socket, workers and service identity were preserved
+on every host; devbox jarvis and its three cognition services retained their
+identities. this does not establish a new cognition turn or a resumed historical
+conversation.
+
+independent first/repeat apply with the other product absent, failed-upgrade
+recovery and scoped removal passed disposable installer probes. those results
+do not claim native removal or unavailable mobile version rollback. mobile
+repeat apply with the opposite original arch phone attachment and exact probe
+cleanup remain pending in the issue below; the no-change result above does
+not establish that attachment check.
+
+during source preparation, tmux probes may mutate only resources they create
+on an isolated `-L` socket.
 no default-server mutations, device changes or live resets were performed as
 part of source preparation. unresolved prerequisites are tracked in
 [gateway separation](issues/gateway-separation.md).

@@ -495,8 +495,14 @@ must succeed before ingress mutation. this grants no tailscale operator rights
 to the user and changes no workstation elevation policy.
 foreign handlers require operator resolution. scoped removal never stops
 upstream herdr or tmux, and must preserve other products, provider state,
-signing files and unrelated files. native removal/rollback qualification must
-precede live use; source probes alone do not establish coexistence.
+signing files and unrelated files. qualify independent installation, failed
+activation recovery and scoped removal on disposable installations before
+live use. service stand-ins establish installer control flow, not native
+removal or coexistence. qualify native coexistence separately and record
+per-host lifecycle evidence and unperformed boundaries in the runbook.
+exercise recovery against an actual prior separated generation when one
+exists; a first separated release has no version rollback target. do not
+manufacture one or infer rollback from repeat apply.
 
 ## devbox boundary
 

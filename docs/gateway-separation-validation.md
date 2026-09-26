@@ -1,4 +1,4 @@
-# gateway separation source validation
+# gateway separation validation
 
 2026-09-25, against dev-server baseline `8498933`. temporary probes were
 removed; no test framework or ci workflow was added. fixtures and service
@@ -65,7 +65,7 @@ published gateway archive pin. helper
 environments are built at their final immutable paths; moving a built python
 environment would leave broken entry-point paths.
 
-## limits and decisions
+## operator-reported live qualification
 
 both published host pins are recorded and their artifacts verified in
 temporary directories.
@@ -73,11 +73,64 @@ no live service, provider account, tmux session, phone,
 repository namespace or credential was changed by this source work. the devbox
 codex feature observation used only a disposable empty home.
 
-live supervisor behavior, authenticated provider hooks/control, worker and
-attachment continuity, existing-account history/hook coexistence, tailnet reachability and phone
-acceptance are `NOT_RUN`. the [runbook](gateway-separation-runbook.md) names
-their owners, sequence and evidence requirements; the
-[open issue](issues/gateway-separation.md) tracks remaining cutover qualification.
+the separate root operator subsequently performed the authorized live cutover.
+its qualification record is
+`/Users/nnandal/Documents/code/skidbladnir/docs/separation-qualification.md`
+in the herdr-mobile checkout. the following is reported evidence from that
+record and the operator's final qualification reports, not additional live work by
+this source task:
+
+- both immutable `v0.9.0` releases run on macbook, devbox and arch; both fleet
+  verifiers pass. corrected original generations from `7c4500d` are selected
+  everywhere and repeat apply makes no changes. the published binaries/pins
+  are unchanged by the plugin correction.
+- four forge profiles and five manually typed commands at home and the shared
+  checkout passed route selection for each product and host: eighteen routes
+  each. existing homes and declared flags are selected with isolated runtime
+  context; this does not establish every account's readiness/authentication.
+  concurrent codex/claude sessions in both products have disjoint inventories.
+  pre-cutover codex and claude-work history files remain accessible; no old
+  conversation resume was tested.
+- native claude-work binding, idle status and bounded history after one small
+  turn passed on all three hosts. original's mac probes used exact test-owned
+  production sessions; linux used isolated runtimes with deployed binary/plugin
+  inputs. mobile used its production gateway and herdr. the actual herdr-context
+  hook guard passed on macbook without reading input. stop returned
+  closed/unconfirmed on each host, with exact provider pids observed gone
+  afterward; that later observation does not turn the response into confirmed
+  agent halt.
+- both signed android apps are paired with all three production gateways;
+  attached, focused, paced input passed everywhere. mobile activation and
+  original before the plugin correction rejected cross-product bearers with
+  `401` and wrong machine headers with `409`. both apk reinstall directions
+  preserved the opposite app's pairing/use. both arch gateway restart
+  directions preserved the opposite worker, attachment and subsequent input.
+- arch original rollback through the current installer selected its actual
+  prior quoted-plugin generation, then restored the corrected generation.
+  opposite workers, runtime snapshot, owned files, both ingress mappings and
+  subsequent phone input survived. this qualifies generation recovery, not
+  release-version rollback.
+- upstream herdr's config, socket, baseline workers and service identity
+  survived; devbox jarvis and three cognition services retained their
+  identities. the existing map, gate and runtime snapshot remain in place.
+  existing provider authentication/configuration/history was not relocated.
+  the operator separately authorized normal claude-work trust at the selected
+  linux shared checkout and arch's first-use acknowledgement.
+
+## limits and decisions
+
+final mobile repeat apply with the opposite arch phone attachment and exact
+probe cleanup await the operator's final result. phone stop removed the exact
+test-owned original macbook/devbox targets while preserving baseline sessions;
+mobile's work-profile launch, interrupt dispatch and exact-target stop passed.
+mobile has no previous separated release; no artificial generation is created
+to claim version rollback. native removal and macbook/devbox opposite-phone
+restart/rollback continuity remain `NOT_RUN`; disposable recovery/removal and
+live repeat apply are distinct evidence. native background-job stop and
+old-conversation resume remain unperformed. broader phone controls and
+tailscale dns recurrence retain the app owners' issue scope.
+the [runbook](gateway-separation-runbook.md) records the per-host boundaries;
+the [open issue](issues/gateway-separation.md) tracks remaining cutover closure.
 
 the implementation retains the existing artifact/runtime/unit machinery,
 shared through two explicit product owners. one atomic pair makes recovery

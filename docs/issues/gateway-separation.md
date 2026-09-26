@@ -1,48 +1,44 @@
-# separated gateways await live cutover qualification
+# gateway separation awaits final phone continuity and cleanup
 
-problem: live skid namespace handback and native coexistence qualification
-remain pending. both products' `v0.9.0` releases are published and their
-converted host pins are present. github name transfer is complete.
+problem: mobile repeat apply with the opposite arch phone attachment and exact
+probe cleanup await the root operator's final result. publication, namespace
+handback and the all-host cutover are complete.
 
-impact: source preparation cannot establish live coexistence or authorize
-activation of unfinished releases. both products must preserve existing
-accounts, native integrations and provider state; actual hook coexistence
-remains unqualified.
+impact: source and deployed coexistence are qualified at the recorded
+boundaries; final phone closure must not be inferred from repeat apply,
+installer fixtures or successful gateway restart.
 
-evidence: baseline dev-server `8498933` pins herdr-backed skid v0.8.0;
-`skid-v1` source `927c55412eec7fa129a3325fb8f5ebf8051b6ea0` has the original
-tmux host schema. herdr-mobile's release source is
-`68a652d7ccbeaaf472ef1c5f3a4ea6949808bca4`. the owner correction in
-`skidbladnir` handoff `7da90d8` withdraws private herdr homes and global rerouting;
-jarvis's proposed remap is reverted and pr 42 closed. its existing map stays.
-coordinating handoff `2ad2cab` and original source `3bd0ae4` extend existing
-accounts to skid, retire unused codex hooks and scope claude hooks at provider
-exec. the original handoff supplies exact config/provider templates, a helper
-pin qualified without auth on macbook, and the implemented ten-file fleet verifier.
-live provider control is still pending. no live service,
-phone, credential or tmux mutation is part of this source task.
+evidence: both independent `v0.9.0` pins are committed. dev-server `94931a1`
+closes directory-mode/computed-suffix admission and the original ten-file
+receipt contract. `1296309` and `ae70f2b` preserve existing provider accounts,
+native herdr integrations and jarvis's original worker map; no private-home
+plan remains. `1570b60` fixes devbox ingress privilege ownership. `7c4500d`
+installs original's corrected claude plugin in a new generation without
+changing either published binary or pin.
 
-owners and blockers:
+the root operator's herdr-mobile checkout record,
+`/Users/nnandal/Documents/code/skidbladnir/docs/separation-qualification.md`,
+reports both fleet verifiers and repeat apply passing everywhere, existing-home
+routing, concurrent codex/claude isolation, native claude-work binding and
+bounded history, old-history file access, both phone apps' pairing/input, and
+cross-product authentication rejection. both apk reinstall directions and
+both arch gateway restart directions preserve the opposite product. the
+operator's final recovery report also confirms arch original prior-generation
+rollback and corrected restore preserve opposite workers, owned files,
+snapshot, ingress and phone input. upstream herdr workers/runtime and devbox
+jarvis/cognition service identities survive. native stop is truthfully
+closed/unconfirmed; subsequent exact process exit does not strengthen that
+response.
 
-- original app owner: scoped hook interaction at the integration boundary,
-  original helper live compatibility, and native provider/control acceptance.
-- jarvis owner: cognition continuity evidence with existing workers, session
-  snapshot and worker map retained.
-- root operator: published repository identity check, private recovery inventory,
-  exact obsolete-skid hook cleanup while preserving native herdr integrations,
-  host namespace handback and native-platform coexistence qualification.
-- phone/app owners: new-port reachability, both apps' profile journeys and
-  wrong-product authentication rejection.
+owner and closure: the root operator and app owners record the remaining
+phone continuity check and exact probe cleanup, then reconcile this issue with the
+[runbook](../gateway-separation-runbook.md#acceptance-and-evidence).
+no additional live operation is authorized by this source task.
 
-publication is root-owned and does not wait for live namespace handback.
-installation does. the generation directory-mode/digest admission discrepancy
-was corrected in dev-server `94931a1`; the original ten-file contract is agreed.
-gateway replacement does not require a herdr restart or snapshot reset.
-original release source `580e099` is pinned by dev-server `ce6b96b`; release
-publication is no longer a blocker. devbox's privileged ingress correction
-needs native apply/remove qualification by the root operator.
-
-resolved when: real pins are committed, the original helper and both host
-interfaces are qualified, and every live acceptance row in the runbook has
-content-free passing evidence for macbook, devbox and arch. unavailable or
-unexecuted boundaries remain `NOT_RUN`; syntax and stub probes do not close it.
+limits retained even after closure: mobile has no previous separated release;
+do not invent one. independent installation, failed-upgrade recovery and
+scoped removal passed disposable installer probes. native removal and
+macbook/devbox opposite-phone restart/rollback continuity remain `NOT_RUN`.
+old-conversation resume, native background-job stop and a new cognition turn
+are not established by the preservation checks. broader phone usability and
+the external tailscale dns recurrence retain their app-owned issues.
