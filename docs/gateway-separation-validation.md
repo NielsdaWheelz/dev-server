@@ -156,3 +156,28 @@ restoring the established codex launcher also retains its existing coupling to
 the shared-daemon helper. that limitation is recorded again in
 [wrapper/daemon coupling](issues/codex-wrapper-daemon-coupling.md); changing the
 launcher architecture is outside this behavior-preserving correction.
+
+## public cli restoration
+
+after cutover, the owner reported `skid` missing. root read-only checks confirmed
+the missing public command on all three hosts and absent original fleet client
+configs on devbox and arch. history identifies the omission: `5bacd72` retired
+the alias for the phone-only product; separation `94931a1` restored original
+without it. the prior target was
+`~/.local/bin/skid -> ../share/skidbladnir/current/skidbladnir`.
+
+the correction restores that original-only link through existing installation,
+ownership, first-activation recovery and removal paths. it follows `current`
+during rollback; no generation member, receipt or published pin changes.
+peer config provisioning remains owned by the original app's fleet tool.
+disposable before/after checks reproduced the omission, then verified alias-only
+repair reports a command change without changing unit/runtime identity or pair
+receipts; repeat installation reports no changes. real ownership validators
+reject a regular file, foreign link and unmarked legacy alias. real recovery
+with supervisor/health stand-ins preserves the candidate on failed stop,
+restores the prior executable through `current`, and removes the alias after
+confirmed failed-first-activation cleanup. original removal deletes it; mobile
+installation/removal preserves its inode and target. temporary probes were
+removed; bash syntax, shellcheck, document links and diff checks passed.
+live repair and command/config acceptance are tracked in
+[the cli issue](issues/skid-cli-entrypoint.md).

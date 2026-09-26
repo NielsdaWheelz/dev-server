@@ -158,10 +158,10 @@ gateway_validate_namespace() {
     fi
   done
   if [[ "$gateway_name" == skidbladnir ]]; then
-    for path in "$home/.local/bin/skidbladnir-provider-runtime-control" \
+    for path in "$home/.local/bin/skid" "$home/.local/bin/skidbladnir-provider-runtime-control" \
       "$share/claude-agent-identity"; do
       [[ ! -e "$path" && ! -L "$path" ]] ||
-        die 'skid namespace has provider links without separated deployment identity'
+        die 'skid namespace has command or provider links without separated deployment identity'
     done
   fi
   for path in "$share/releases" "$share/artifacts" "$share/units"; do
@@ -288,6 +288,11 @@ gateway_validate_protected_paths() {
       die "protected gateway link is invalid: $link"
   fi
   if [[ "$gateway_name" == skidbladnir ]]; then
+    link="$home/.local/bin/skid"
+    if [[ -e "$link" || -L "$link" ]]; then
+      gateway_validate_link "$link" binary >/dev/null ||
+        die "protected skid command link is invalid: $link"
+    fi
     link="$home/.local/bin/skidbladnir-provider-runtime-control"
     if [[ -e "$link" || -L "$link" ]]; then
       gateway_validate_link "$link" helper >/dev/null ||
@@ -900,6 +905,7 @@ gateway_restore_runtime() {
   if [[ -z "$prior_current" ]]; then
     dev_server_remove_link "$home/.local/bin/${gateway_name}" || return 1
     if [[ "$gateway_name" == skidbladnir ]]; then
+      dev_server_remove_link "$home/.local/bin/skid" || return 1
       dev_server_remove_link "$home/.local/bin/skidbladnir-provider-runtime-control" || return 1
       dev_server_remove_link "$share/claude-agent-identity" || return 1
     fi
@@ -949,6 +955,9 @@ gateway_install_runtime_files() {
   gateway_atomic_symlink "$home/.local/bin/${gateway_name}" \
     "../share/$gateway_name/current/$gateway_name" binary || return 1
   if [[ "$gateway_name" == skidbladnir ]]; then
+    [[ -L "$home/.local/bin/skid" ]] || gateway_command_installed=1
+    gateway_atomic_symlink "$home/.local/bin/skid" \
+      '../share/skidbladnir/current/skidbladnir' binary || return 1
     gateway_atomic_symlink "$home/.local/bin/skidbladnir-provider-runtime-control" \
       '../share/skidbladnir/current/providers/native-control' helper || return 1
     gateway_atomic_symlink "$home/.local/share/skidbladnir/claude-agent-identity" \
@@ -1502,8 +1511,13 @@ gateway_apply() {
   ((pointer_changed == 0)) || render_result UPDATED "${gateway_receipt}.runtime" "$generation_name"
   ((gateway_unit_changed == 0)) ||
     render_result CHANGED "${gateway_receipt}.unit" 'launcher and service definition installed'
-  ((gateway_command_installed == 0)) ||
-    render_result INSTALLED "$gateway_name.command" "$home/.local/bin/${gateway_name}"
+  if ((gateway_command_installed)); then
+    if [[ "$gateway_name" == skidbladnir ]]; then
+      render_result INSTALLED "$gateway_name.command" "commands available: $home/.local/bin/skid and skidbladnir"
+    else
+      render_result INSTALLED "$gateway_name.command" "$home/.local/bin/${gateway_name}"
+    fi
+  fi
   ((gateway_enablement_changed == 0)) ||
     render_result CHANGED "$gateway_name.enablement" 'enabled at login'
   [[ -z "$gateway_activation_status" ]] ||
@@ -1620,6 +1634,7 @@ gateway_remove() {
   dev_server_remove_link "$share/previous" || die "could not remove $gateway_name previous link"
   dev_server_remove_link "$home/.local/bin/$gateway_name" || die "could not remove $gateway_name command link"
   if [[ "$gateway_name" == skidbladnir ]]; then
+    dev_server_remove_link "$home/.local/bin/skid" || die 'could not remove skid command link'
     dev_server_remove_link "$home/.local/bin/skidbladnir-provider-runtime-control" ||
       die 'could not remove skid native helper link'
     dev_server_remove_link "$share/claude-agent-identity" ||

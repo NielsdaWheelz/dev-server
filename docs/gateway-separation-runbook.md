@@ -65,7 +65,7 @@ requalification; an exact install alone cannot prove compatibility.
 
 | surface | herdr-mobile | original skid |
 | --- | --- | --- |
-| command | `herdr-mobile` | `skidbladnir` |
+| command | `herdr-mobile` | `skidbladnir` and required public `skid` |
 | launcher | `herdr-mobile-launch` | `skidbladnir-launch` |
 | linux user unit | `herdr-mobile.service` | `skidbladnir.service` |
 | mac label | `dev.niels.herdr-mobile` | `dev.niels.skidbladnir` |
@@ -80,6 +80,19 @@ operator `client.json`. neither owns the other's resources. android signing
 files remain under their app owner's control and outside gateway validation.
 upstream `herdr`, its service, config, socket and runtime identity remain
 upstream herdr's. stopping/removing a gateway never stops herdr or tmux.
+
+original's required `~/.local/bin/skid` symlink targets
+`../share/skidbladnir/current/skidbladnir`. it follows the selected generation
+without adding a binary, archive member or receipt input. missing-link repair
+alone does not restart the gateway; foreign files/links are refused. original
+scoped removal and failed first activation remove the link. herdr-mobile never
+owns it. each host also needs its private mode-`0600` three-peer
+`~/.config/skidbladnir/client.json` for the no-argument fleet browser. the
+original app's reviewed `scripts/fleet provision-clients` owns this separate
+step after gateways are available; single-host deployment must not mint a
+second peer credential set. qualify login-shell `skid` resolution, `skid --help`
+and client config admission on all three hosts. the app owner qualifies the
+interactive browser; gateway health alone does not prove that public journey.
 
 ordinary `./workstation apply|upgrade` and `./devbox apply|upgrade` provision
 shared host tools and upstream herdr. gateway maintenance is selected:

@@ -432,6 +432,15 @@ not a product registry or plugin deployment framework. ingress lives in
 | private serve | `:8444/v1` | `:8443/v1` |
 | receipt stems | `herdr-mobile.runtime`, `herdr-mobile.unit` | `skid.runtime`, `skid.unit` |
 
+original skid also requires the public `~/.local/bin/skid` command, linked to
+`../share/skidbladnir/current/skidbladnir`, like the canonical binary link.
+only original's installer owns it: reject foreign paths, reconcile it on
+apply, follow the verified generation during recovery, and remove it on failed
+first activation or scoped removal. repairing a missing link does not change
+runtime identity or require a service restart. the app owner's fleet
+provisioning owns each host's private three-peer `client.json`; a working
+local executable alone does not establish a usable fleet browser.
+
 pins under `assets/<product>/release-pin.json` name exact versions, commits,
 platform archives and digests. pending declarations admit no activation.
 repository identity is checked by the publishing/cutover operator before
