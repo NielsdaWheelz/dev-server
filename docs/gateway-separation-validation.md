@@ -39,6 +39,8 @@ private-home probes are historical, not acceptance for the revised routing.
 | skid account preservation | real renderer/provider-apply callback, with only helper installation stubbed, preserves bytes/modes of 21 fake account auth/settings/hooks/history and `.claude.json` sentinels; no private provider homes or codex hook file are created |
 | scoped skid commands | all five rendered account commands select existing homes, leave personal claude's home variable unset, preserve flags/quoted arguments, set the provider-exec marker and scrub inherited runtime context; real callback startup passes bash/zsh interactive/login routing and the herdr guard |
 | skid hook boundary | actual app binary silently skips foreign/herdr hooks before reading missing config; malformed marked input reports a content-free failure without blocking startup; live authenticated hook publication remains unrun |
+| claude plugin exec form | the quoted executable with `args: []` fails before entering the hook; the unquoted correction passes disposable direct-exec probes for plain paths, spaces and literal shell metacharacters; the asset matches original-owner commit `ca9bcf67ddc771368f9d44052a2bdbc775a71ec8` exactly |
+| plugin generation and rollback | changing only `hooks.json` changes the independently verified ten-file digest; both generations pass admission and changed content under the old digest fails; real runtime-file installation makes the stable plugin link follow current; failed stop retains the candidate, and successful restore selects the prior ten files/plugin/launcher/unit with prior receipts intact, using only supervisor/health stand-ins |
 | corrected skid generation | staged ten-file identity matches an independent encoding/hash; config/launcher/shell/plugin assets match the owner templates; source closures no longer include private-home provisioning or codex hook assets |
 | herdr declarations | macos/arch/devbox service validation passes without provider-home overrides and with an unrelated gateway port; the gate admits the existing normal selectors and rejects the withdrawn private selectors |
 | native helper | actual pinned frozen installation and repeat apply passed in a disposable home; final-path entry point and rendered launcher returned the expected invalid-request envelope; exact shim bytes/mode, selected native command/disposable home, quoted environment paths and missing-native/missing-shim refusal passed; these checks establish dispatch, not account behavior |
@@ -56,7 +58,10 @@ duplicate pointers, generation admission omitting directory mode/digest suffix,
 silent remote exit 2 being reported as success, and devbox ingress writes
 running as the unprivileged gateway user. the coordinating operator reported
 that final privilege defect during live apply; the correction places only
-ingress under the existing deployment principal's root authority. helper
+ingress under the existing deployment principal's root authority. a later
+native claude probe exposed literal shell quotes in an exec-form hook command;
+the corrected asset changes its generation identity without changing the
+published gateway archive pin. helper
 environments are built at their final immutable paths; moving a built python
 environment would leave broken entry-point paths.
 

@@ -182,6 +182,11 @@ its explicit claude plugin accepts only `Claude SessionStart` with
 `SKIDBLADNIR_AGENT=1` and no `HERDR_ENV=1`, rejecting foreign launches before
 reading input/config. the app still checks pane, tty, pid and process lifetime.
 gateway, terminal and helper boundaries clear inherited exec markers.
+the plugin uses [exec form](https://code.claude.com/docs/en/hooks#exec-form-and-shell-form):
+`args: []` keeps the executable path literal, so `command` must not contain
+shell quotes. changing this plugin file creates a new ten-file generation;
+apply that generation and qualify a new claude session. gateway binary/archive
+pins do not change, and rollback restores the prior plugin with its runtime.
 never copy credentials, history, discovery sockets, account trees, plugin
 caches or trust records. existing account state is shared across apps: a
 provider configuration or history change in one is visible in the others.
