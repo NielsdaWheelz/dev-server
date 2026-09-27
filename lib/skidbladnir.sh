@@ -15,14 +15,14 @@ skidbladnir_render_configs() {
   native="$(skidbladnir_native_paths "$home")" || return 1
   IFS=$'\t' read -r codex claude native_home <<<"$native"
   [[ "$native_home" == "$home" ]] || return 1
+  # macos redacts the environment of its platform ssh binary from the gateway.
   case "$platform" in
-  macos) tmux_path=/opt/homebrew/bin/tmux; platform=Darwin ;;
-  arch | devbox) tmux_path=/usr/bin/tmux; platform=Linux ;;
+  macos) tmux_path=/opt/homebrew/bin/tmux; ssh_path=/opt/homebrew/opt/openssh/bin/ssh; platform=Darwin ;;
+  arch | devbox) tmux_path=/usr/bin/tmux; ssh_path="$(type -P ssh)" || return 1; platform=Linux ;;
   *) return 1 ;;
   esac
   [[ -x "$tmux_path" ]] || return 1
   zoxide_path="$(type -P zoxide)" || return 1
-  ssh_path="$(type -P ssh)" || return 1
   mosh_path="$(type -P mosh)" || return 1
   [[ "$zoxide_path" == /* && "$ssh_path" == /* && "$mosh_path" == /* && -x "$zoxide_path" && -x "$ssh_path" && -x "$mosh_path" ]] || return 1
   tmux_version="$("$tmux_path" -V)" || return 1
