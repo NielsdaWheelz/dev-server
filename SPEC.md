@@ -461,8 +461,8 @@ archive digest, exact members, manifest and executable version/source. retain
 independent `artifacts`, `releases`, `units`, `current` and `previous` below
 the product's data root. runtime identity covers executable, catalogue,
 manifest and host config. unchanged apply downloads and activates nothing.
-skid generations also include their rendered shell launcher, shell initialization,
-native-helper launcher and claude plugin. the original app's fleet verifier
+skid generations also include their rendered shell launcher, shell and remote
+context initialization, native-helper launcher and claude plugin. the original app's fleet verifier
 implements the same digest contract, recorded in the
 [runbook](docs/gateway-separation-runbook.md#generation-receipt-contract).
 generation admission requires directory mode `0700` and a basename digest
