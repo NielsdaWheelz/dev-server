@@ -505,6 +505,7 @@ install_ssh_config() {
     printf '  ForwardAgent no\n'
     printf '  ServerAliveInterval 30\n'
     printf '  ServerAliveCountMax 4\n'
+    printf '  SendEnv SKIDBLADNIR_CONNECTION\n'
     printf '\n'
     printf 'Host %s\n' "$deploy_user"
     printf '  HostName %s\n' "$tailnet_host"

@@ -37,6 +37,7 @@ write_files:
       PermitRootLogin no
       X11Forwarding no
       AllowUsers __SERVER_USER__ __DEPLOY_USER__
+      AcceptEnv SKIDBLADNIR_CONNECTION
   - path: /root/.devbox-tailscale-auth-key
     owner: root:root
     permissions: "0600"

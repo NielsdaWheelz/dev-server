@@ -125,6 +125,7 @@
       PermitRootLogin no
       X11Forwarding no
       AllowUsers {{ devbox_user }} {{ devbox_deploy_user }}
+      AcceptEnv SKIDBLADNIR_CONNECTION
 
 - name: Read desired SSH input identity
   ansible.builtin.stat:
