@@ -455,9 +455,9 @@ gateway_v09_skid_generation() {
     "$(basename "$path")" == v0.9.0-* &&
     ! -e "$path/providers/terminal-context-init" &&
     ! -L "$path/providers/terminal-context-init" ]] || return 1
-  gateway_release_manifest_matches "$path/release.json" Darwin \
+  gateway_release_manifest_matches "$path/release.json" darwin-arm64 \
     580e0992d1ee0d7334cefc6561e7f55a5836baf5 v0.9.0 ||
-    gateway_release_manifest_matches "$path/release.json" Linux \
+    gateway_release_manifest_matches "$path/release.json" linux-amd64 \
       580e0992d1ee0d7334cefc6561e7f55a5836baf5 v0.9.0
 }
 
