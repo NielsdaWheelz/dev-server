@@ -8,7 +8,7 @@ fi
 : "${dev_server_gateway_port:=7341}"
 
 skidbladnir_render_configs() {
-  local platform="$1" stage="$2" assets home tmux_path tmux_version native codex claude native_home
+  local platform="$1" stage="$2" assets home tmux_path tmux_version native codex claude native_home zoxide_path ssh_path mosh_path
   assets="$(dev_server_assets_dir)"
   home="$(dev_server_home)"
   [[ "$home" =~ ^/[A-Za-z0-9._/-]+$ ]] || die "invalid deployment root: $home"
@@ -21,16 +21,20 @@ skidbladnir_render_configs() {
   *) return 1 ;;
   esac
   [[ -x "$tmux_path" ]] || return 1
+  zoxide_path="$(type -P zoxide)" || return 1
+  ssh_path="$(type -P ssh)" || return 1
+  mosh_path="$(type -P mosh)" || return 1
+  [[ "$zoxide_path" == /* && "$ssh_path" == /* && "$mosh_path" == /* && -x "$zoxide_path" && -x "$ssh_path" && -x "$mosh_path" ]] || return 1
   tmux_version="$("$tmux_path" -V)" || return 1
   [[ "$tmux_version" =~ ^tmux\ [0-9] ]] || return 1
-  python3 - "$assets" "$platform" "$home" "$stage" "$tmux_path" "$tmux_version" "$codex" "$claude" <<'PY'
+  python3 - "$assets" "$platform" "$home" "$stage" "$tmux_path" "$tmux_version" "$codex" "$claude" "$zoxide_path" "$ssh_path" "$mosh_path" <<'PY'
 import json
 from pathlib import Path
 import re
 import shlex
 import sys
 
-assets, platform, home, stage, tmux_path, tmux_version, codex, claude = sys.argv[1:]
+assets, platform, home, stage, tmux_path, tmux_version, codex, claude, zoxide, ssh, mosh = sys.argv[1:]
 assets = Path(assets)
 replacements = {
     "ROOT": home,
@@ -39,6 +43,7 @@ replacements = {
     "TMUX_VERSION": tmux_version,
     "CODEX": codex,
     "CLAUDE": claude,
+    "ZOXIDE": zoxide,
 }
 def render(name):
     value = json.loads((assets / "skidbladnir" / name).read_text())
@@ -56,8 +61,9 @@ def render(name):
     return value
 
 value = render("host-config.json")
-if (set(value) != {"platform", "tmux", "nativeControlPath", "profiles"} or
+if (set(value) != {"platform", "tmux", "nativeControlPath", "zoxidePath", "profiles"} or
         value["nativeControlPath"] != f"{home}/.local/bin/skidbladnir-provider-runtime-control" or
+        value["zoxidePath"] != zoxide or
         value["tmux"] != {"path": tmux_path, "testedVersion": tmux_version} or
         [row.get("key") for row in value["profiles"]] !=
         ["personal", "work", "work2", "claude-work"]):
@@ -80,6 +86,12 @@ if re.search(r"@[A-Z_]+@", command):
     raise SystemExit("unrendered skid provider command")
 (providers / "provider-command").write_text(command)
 (providers / "shell-init").write_bytes((assets / "skid-provider/shell-init").read_bytes())
+context = (assets / "skid-provider/terminal-context-init").read_text()
+for token, value in {"SSH_SHELL": ssh, "MOSH_SHELL": mosh}.items():
+    context = context.replace(f"@{token}@", shlex.quote(value))
+if re.search(r"@[A-Z_]+@", context):
+    raise SystemExit("unrendered terminal context command")
+(providers / "terminal-context-init").write_text(context)
 PY
 }
 

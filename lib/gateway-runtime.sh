@@ -428,7 +428,7 @@ gateway_generation_exact() {
     cmp -s "$host_config" "$installed/host-config.json" || return 1
   if [[ "$gateway_name" == skidbladnir ]]; then
     local name
-    for name in native-control provider-command shell-init \
+    for name in native-control provider-command shell-init terminal-context-init \
       claude-agent-identity/.claude-plugin/plugin.json \
       claude-agent-identity/hooks/hooks.json \
       claude-agent-identity/bin/agent-hook; do
@@ -458,7 +458,7 @@ gateway_runtime_identity() {
     gateway_payload_hashes "$generation" || return 1
     printf 'host-config.json\0%s\n' "$digest"
     if [[ "$gateway_name" == skidbladnir ]]; then
-      for name in native-control provider-command shell-init \
+      for name in native-control provider-command shell-init terminal-context-init \
         claude-agent-identity/.claude-plugin/plugin.json \
         claude-agent-identity/hooks/hooks.json \
         claude-agent-identity/bin/agent-hook; do
@@ -976,9 +976,9 @@ gateway_generation_owned() {
   if [[ "$gateway_name" == skidbladnir ]]; then
     [[ "$entries" == "$(printf 'characters.json\nhost-config.json\nproviders\nrelease.json\n%s\n' "$gateway_name" | LC_ALL=C sort)" ]] || return 1
     [[ -d "$path/providers" && ! -L "$path/providers" &&
-      "$(find "$path/providers" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)" == $'claude-agent-identity\nnative-control\nprovider-command\nshell-init' ]] || return 1
+      "$(find "$path/providers" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)" == $'claude-agent-identity\nnative-control\nprovider-command\nshell-init\nterminal-context-init' ]] || return 1
     local provider_file mode
-    for provider_file in native-control provider-command shell-init \
+    for provider_file in native-control provider-command shell-init terminal-context-init \
       claude-agent-identity/.claude-plugin/plugin.json \
       claude-agent-identity/hooks/hooks.json \
       claude-agent-identity/bin/agent-hook; do
@@ -1244,6 +1244,7 @@ gateway_apply() {
         install -m 0755 "$stage/providers/native-control" "$stage/generation/providers/native-control" &&
         install -m 0755 "$stage/providers/provider-command" "$stage/generation/providers/provider-command" &&
         install -m 0644 "$stage/providers/shell-init" "$stage/generation/providers/shell-init" &&
+        install -m 0644 "$stage/providers/terminal-context-init" "$stage/generation/providers/terminal-context-init" &&
         mkdir -m 0755 "$stage/generation/providers/claude-agent-identity" \
           "$stage/generation/providers/claude-agent-identity/.claude-plugin" \
           "$stage/generation/providers/claude-agent-identity/hooks" \

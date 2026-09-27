@@ -6,7 +6,13 @@ binary="$HOME/.local/share/skidbladnir/current/skidbladnir"
 for name in "${!HERDR_@}"; do
   unset "$name"
 done
-unset TMUX TMUX_PANE TMUX_TMPDIR SKIDBLADNIR_SHELL SKIDBLADNIR_AGENT SKIDBLADNIR_CLAUDE_COMMAND CODEX_HOME CLAUDE_CONFIG_DIR
+unset TMUX TMUX_PANE TMUX_TMPDIR SKIDBLADNIR_SHELL SKIDBLADNIR_AGENT SKIDBLADNIR_CLAUDE_COMMAND SKIDBLADNIR_CONNECTION SKIDBLADNIR_TERMINAL_CONTEXT CODEX_HOME CLAUDE_CONFIG_DIR
+if [[ -z "${_ZO_DATA_DIR:-}" ]]; then
+  case "$(uname -s)" in
+    Darwin) export _ZO_DATA_DIR="$HOME/Library/Application Support" ;;
+    Linux) export _ZO_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}" ;;
+  esac
+fi
 
 [[ -f "$binary" && ! -L "$binary" && -x "$binary" ]] || {
   printf 'Skidbladnir release binary is unavailable; rerun apply\n' >&2
