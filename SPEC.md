@@ -462,11 +462,15 @@ independent `artifacts`, `releases`, `units`, `current` and `previous` below
 the product's data root. runtime identity covers executable, catalogue,
 manifest and host config. unchanged apply downloads and activates nothing.
 skid generations also include their rendered shell launcher, shell and remote
-context initialization, native-helper launcher and claude plugin. the original app's fleet verifier
+context initialization, native-helper launcher and claude plugin. the original
+app's fleet verifier
 implements the same digest contract, recorded in the
 [runbook](docs/gateway-separation-runbook.md#generation-receipt-contract).
 generation admission requires directory mode `0700` and a basename digest
 suffix equal to the computed runtime identity for both products.
+the exact `v0.9.0` skid ten-file generation remains admissible as an upgrade
+rollback target when its original source, files, modes and receipt verify.
+new skid generations use the eleven-file contract.
 the stable helper command follows `current`, so
 gateway rollback selects its matching immutable helper revision. private
 helper environments remain while retained generations reference them. shared

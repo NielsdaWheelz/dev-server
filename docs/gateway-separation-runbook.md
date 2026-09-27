@@ -381,6 +381,12 @@ original skid has eleven, in this exact order:
 10. `providers/claude-agent-identity/hooks/hooks.json` (`0644`)
 11. `providers/claude-agent-identity/bin/agent-hook` (`0755`)
 
+the exact `v0.9.0` skid generation from source
+`580e0992d1ee0d7334cefc6561e7f55a5836baf5` has ten files: it omits
+`providers/terminal-context-init`. deployment admits that old layout only when
+its membership, modes and original ten-file receipt verify. it remains the
+rollback target during the `v0.10.0` upgrade; new generations require eleven.
+
 the helper launcher names a separately pinned immutable environment. its shim,
 entry point, source commit, lock and installed versions are checked before
 activation. the plugin and helper launcher follow the gateway's `current`
