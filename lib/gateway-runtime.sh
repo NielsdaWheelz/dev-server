@@ -428,7 +428,7 @@ gateway_generation_exact() {
     cmp -s "$host_config" "$installed/host-config.json" || return 1
   if [[ "$gateway_name" == skidbladnir ]]; then
     local name
-    for name in native-control provider-command shell-init \
+    for name in native-control provider-command shell-init terminal-context-init \
       claude-agent-identity/.claude-plugin/plugin.json \
       claude-agent-identity/hooks/hooks.json \
       claude-agent-identity/bin/agent-hook; do
@@ -447,21 +447,38 @@ gateway_payload_hashes() {
   done
 }
 
+# The first separated skid release has a ten-file receipt. Keep its verified
+# generation usable as the rollback target while admitting eleven-file releases.
+gateway_v09_skid_generation() {
+  local path="$1"
+  [[ "$gateway_name" == skidbladnir &&
+    "$(basename "$path")" == v0.9.0-* &&
+    ! -e "$path/providers/terminal-context-init" &&
+    ! -L "$path/providers/terminal-context-init" ]] || return 1
+  gateway_release_manifest_matches "$path/release.json" Darwin \
+    580e0992d1ee0d7334cefc6561e7f55a5836baf5 v0.9.0 ||
+    gateway_release_manifest_matches "$path/release.json" Linux \
+      580e0992d1ee0d7334cefc6561e7f55a5836baf5 v0.9.0
+}
+
 gateway_runtime_identity() {
   local generation="$1"
   local host_config="${2:-$generation/host-config.json}"
   local providers="${3:-$generation/providers}"
   local digest name
+  local -a provider_files=(native-control provider-command shell-init)
+
+  gateway_v09_skid_generation "$generation" || provider_files+=(terminal-context-init)
+  provider_files+=(claude-agent-identity/.claude-plugin/plugin.json
+    claude-agent-identity/hooks/hooks.json
+    claude-agent-identity/bin/agent-hook)
 
   digest="$(dev_server_sha256 "$host_config")" || return 1
   {
     gateway_payload_hashes "$generation" || return 1
     printf 'host-config.json\0%s\n' "$digest"
     if [[ "$gateway_name" == skidbladnir ]]; then
-      for name in native-control provider-command shell-init \
-        claude-agent-identity/.claude-plugin/plugin.json \
-        claude-agent-identity/hooks/hooks.json \
-        claude-agent-identity/bin/agent-hook; do
+      for name in "${provider_files[@]}"; do
         digest="$(dev_server_sha256 "$providers/$name")" || return 1
         printf 'providers/%s\0%s\n' "$name" "$digest"
       done
@@ -968,20 +985,27 @@ gateway_install_runtime_files() {
 gateway_generation_owned() {
   local path="$1"
   local name entries
+  local -a provider_files=(native-control provider-command shell-init)
+  local provider_entries=$'claude-agent-identity\nnative-control\nprovider-command\nshell-init\nterminal-context-init'
   name="$(basename "$path")"
   [[ "$name" =~ ^v(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})-[0-9a-f]{64}$ ]] || return 1
   [[ -d "$path" && ! -L "$path" &&
     "$(_dev_server_observed_mode user "$path" 2>/dev/null)" == 700 ]] || return 1
   entries="$(find "$path" -mindepth 1 -maxdepth 1 -print | sed "s#^$path/##" | LC_ALL=C sort)" || return 1
   if [[ "$gateway_name" == skidbladnir ]]; then
+    if gateway_v09_skid_generation "$path"; then
+      provider_entries=$'claude-agent-identity\nnative-control\nprovider-command\nshell-init'
+    else
+      provider_files+=(terminal-context-init)
+    fi
+    provider_files+=(claude-agent-identity/.claude-plugin/plugin.json
+      claude-agent-identity/hooks/hooks.json
+      claude-agent-identity/bin/agent-hook)
     [[ "$entries" == "$(printf 'characters.json\nhost-config.json\nproviders\nrelease.json\n%s\n' "$gateway_name" | LC_ALL=C sort)" ]] || return 1
     [[ -d "$path/providers" && ! -L "$path/providers" &&
-      "$(find "$path/providers" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)" == $'claude-agent-identity\nnative-control\nprovider-command\nshell-init' ]] || return 1
+      "$(find "$path/providers" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)" == "$provider_entries" ]] || return 1
     local provider_file mode
-    for provider_file in native-control provider-command shell-init \
-      claude-agent-identity/.claude-plugin/plugin.json \
-      claude-agent-identity/hooks/hooks.json \
-      claude-agent-identity/bin/agent-hook; do
+    for provider_file in "${provider_files[@]}"; do
       mode=644
       case "$provider_file" in native-control | provider-command | */bin/agent-hook) mode=755 ;; esac
       [[ -f "$path/providers/$provider_file" && ! -L "$path/providers/$provider_file" &&
@@ -1244,6 +1268,7 @@ gateway_apply() {
         install -m 0755 "$stage/providers/native-control" "$stage/generation/providers/native-control" &&
         install -m 0755 "$stage/providers/provider-command" "$stage/generation/providers/provider-command" &&
         install -m 0644 "$stage/providers/shell-init" "$stage/generation/providers/shell-init" &&
+        install -m 0644 "$stage/providers/terminal-context-init" "$stage/generation/providers/terminal-context-init" &&
         mkdir -m 0755 "$stage/generation/providers/claude-agent-identity" \
           "$stage/generation/providers/claude-agent-identity/.claude-plugin" \
           "$stage/generation/providers/claude-agent-identity/hooks" \

@@ -15,7 +15,7 @@ one-user host configuration for `macbook`, `arch`, and the hetzner `devbox`.
 
 `gateway remove <product>` removes only the selected gateway and its owned
 serve handler; provider homes and signing files remain. herdr-mobile `v0.9.0`
-is pinned; original skid's first separated release remains pending. follow
+and original skid `v0.10.0` are pinned. follow
 [the cutover runbook](docs/gateway-separation-runbook.md) before any live
 namespace change.
 

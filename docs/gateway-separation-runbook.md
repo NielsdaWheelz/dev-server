@@ -175,8 +175,9 @@ missing native executable or shim fails without searching account wrappers.
 herdr-mobile uses the reduced herdr/profile schema
 and no helper or skid hooks. each admitted binary validates its own schema.
 
-original skid installs its supplied `provider-command` and `shell-init` under
-`current/providers/`. new terminals set `SKIDBLADNIR_SHELL=1` and
+original skid installs its supplied `provider-command`, `shell-init`, and
+`terminal-context-init` under `current/providers/`. new terminals set
+`SKIDBLADNIR_SHELL=1` and
 `CODEX_HOME=HOME/.codex`, clearing `CLAUDE_CONFIG_DIR` and inherited herdr
 context. source `shell-init` at
 the end of ordinary startup; it replaces shared aliases with absolute product
@@ -209,7 +210,7 @@ reading input/config. the app still checks pane, tty, pid and process lifetime.
 gateway, terminal and helper boundaries clear inherited exec markers.
 the plugin uses [exec form](https://code.claude.com/docs/en/hooks#exec-form-and-shell-form):
 `args: []` keeps the executable path literal, so `command` must not contain
-shell quotes. changing this plugin file creates a new ten-file generation;
+shell quotes. changing this plugin file creates a new eleven-file generation;
 apply that generation and qualify a new claude session. gateway binary/archive
 pins do not change, and rollback restores the prior plugin with its runtime.
 never copy credentials, history, discovery sockets, account trees, plugin
@@ -366,7 +367,7 @@ computed digest and directory suffix. herdr-mobile has four files:
 3. `release.json` (`0644`)
 4. `host-config.json` (`0600`)
 
-original skid has ten, in this exact order:
+original skid has eleven, in this exact order:
 
 1. `skidbladnir` (`0755`)
 2. `characters.json` (`0644`)
@@ -375,9 +376,16 @@ original skid has ten, in this exact order:
 5. `providers/native-control` (`0755`)
 6. `providers/provider-command` (`0755`)
 7. `providers/shell-init` (`0644`)
-8. `providers/claude-agent-identity/.claude-plugin/plugin.json` (`0644`)
-9. `providers/claude-agent-identity/hooks/hooks.json` (`0644`)
-10. `providers/claude-agent-identity/bin/agent-hook` (`0755`)
+8. `providers/terminal-context-init` (`0644`)
+9. `providers/claude-agent-identity/.claude-plugin/plugin.json` (`0644`)
+10. `providers/claude-agent-identity/hooks/hooks.json` (`0644`)
+11. `providers/claude-agent-identity/bin/agent-hook` (`0755`)
+
+the exact `v0.9.0` skid generation from source
+`580e0992d1ee0d7334cefc6561e7f55a5836baf5` has ten files: it omits
+`providers/terminal-context-init`. deployment admits that old layout only when
+its membership, modes and original ten-file receipt verify. it remains the
+rollback target during the `v0.10.0` upgrade; new generations require eleven.
 
 the helper launcher names a separately pinned immutable environment. its shim,
 entry point, source commit, lock and installed versions are checked before
@@ -387,8 +395,7 @@ hashed files and retains private helper environments; it avoids independently
 switching dependencies underneath a verified gateway.
 
 the original app's `docs/dev-server-handoff.md` and `scripts/fleet` implement
-this exact ten-file order, encoding and modes, inspected on 2026-09-25 in
-`/Users/nnandal/Documents/code/skid-v1`. fleet verification requires the computed
+this exact eleven-file order, encoding and modes. fleet verification requires the computed
 digest, directory suffix and active runtime receipt to agree. host archive
 digests and archive contents are unchanged by this deployment-only contract.
 dev-server acknowledges that contract: admission now rejects a wrong directory

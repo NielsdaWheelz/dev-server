@@ -152,7 +152,10 @@ if [[ -o interactive ]]; then
   unset _devbox_syntax_highlighting
 fi
 
-# Original skid marks only shells it creates. Source after shared aliases.
-if [[ "${SKIDBLADNIR_SHELL:-}" == 1 && "${HERDR_ENV:-}" != 1 ]]; then
-  source "$HOME/.local/share/skidbladnir/current/providers/shell-init"
+# dev-server skid shell init begin
+if [ "${SKIDBLADNIR_SHELL:-}" = 1 ] && [ "${HERDR_ENV:-}" != 1 ]; then
+  . "$HOME/.local/share/skidbladnir/current/providers/shell-init"
+elif [ -n "${SKIDBLADNIR_CONNECTION:-}" ] || [ "${SKIDBLADNIR_TERMINAL_CONTEXT:-}" = 1 ]; then
+  . "$HOME/.local/share/skidbladnir/current/providers/terminal-context-init"
 fi
+# dev-server skid shell init end

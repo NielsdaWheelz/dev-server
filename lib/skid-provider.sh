@@ -57,12 +57,12 @@ PY
     render_result ACTION skid.providers 'install the shared native codex and claude before skid'
     return 2
   fi
-  command -v git >/dev/null && command -v python3 >/dev/null || {
+  if ! command -v git >/dev/null || ! command -v python3 >/dev/null; then
     render_result ACTION skid.native 'git and python3 are required for the pinned helper'
     return 2
-  }
+  fi
   skidbladnir_shell_setup "$home" check || return $?
-  for source in native-control-launch native-control-claude provider-command shell-init \
+  for source in native-control-launch native-control-claude provider-command shell-init terminal-context-init \
     claude-agent-identity/.claude-plugin/plugin.json \
     claude-agent-identity/hooks/hooks.json claude-agent-identity/bin/agent-hook; do
     [[ -f "$(dev_server_assets_dir)/skid-provider/$source" &&
@@ -220,8 +220,7 @@ skidbladnir_shell_setup() {
     fi
   done
   login="${login:-.bash_profile}"
-  local -a paths=("$login" .bashrc .zshrc)
-  [[ ! -e "$home/.zlogin" && ! -L "$home/.zlogin" ]] || paths+=(.zlogin)
+  local -a paths=("$login" .bashrc .zshrc .zlogin)
   for path in "${paths[@]}"; do
     target="$(python3 - "$home/$path" <<'PY'
 import os
@@ -259,7 +258,13 @@ end = b"# dev-server skid shell init end"
 block = (begin + b"\n"
          b'if [ "${SKIDBLADNIR_SHELL:-}" = 1 ] && [ "${HERDR_ENV:-}" != 1 ]; then\n'
          b'  . "$HOME/.local/share/skidbladnir/current/providers/shell-init"\n'
+         b'elif [ -n "${SKIDBLADNIR_CONNECTION:-}" ] || [ "${SKIDBLADNIR_TERMINAL_CONTEXT:-}" = 1 ]; then\n'
+         b'  . "$HOME/.local/share/skidbladnir/current/providers/terminal-context-init"\n'
          b'fi\n' + end + b"\n")
+prior_block = (begin + b"\n"
+               b'if [ "${SKIDBLADNIR_SHELL:-}" = 1 ] && [ "${HERDR_ENV:-}" != 1 ]; then\n'
+               b'  . "$HOME/.local/share/skidbladnir/current/providers/shell-init"\n'
+               b'fi\n' + end + b"\n")
 old_block = (begin + b"\n"
              b'if [ "${SKIDBLADNIR_SHELL:-}" = 1 ]; then\n'
              b'  . "$HOME/.local/share/skidbladnir/current/providers/shell-init"\n'
@@ -281,7 +286,7 @@ if len(old) > 1048576:
     raise SystemExit("shell startup file is too large")
 if old.count(begin) > 1 or old.count(end) > 1:
     raise SystemExit("skid shell init marker is duplicated")
-owned = block if block in old else old_block if old_block in old else b""
+owned = block if block in old else prior_block if prior_block in old else old_block if old_block in old else b""
 if (begin in old or end in old) and not owned:
     raise SystemExit("skid shell init marker is incomplete")
 kept = old.replace(owned, b"") if owned else old
@@ -290,7 +295,7 @@ if startup == ".zshrc" and guard_count:
     if guard_count != 1:
         raise SystemExit("skid zsh guard is duplicated")
     kept = kept.replace(old_zsh_guard, b"").replace(zsh_guard, b"")
-    selected = zsh_guard
+    selected = block
 else:
     selected = block
 result = kept + (b"\n" if kept and not kept.endswith(b"\n") else b"") + selected
