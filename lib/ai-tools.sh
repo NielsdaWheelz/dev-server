@@ -100,7 +100,6 @@ ai_codex_matches() {
 }
 
 ai_install_codex() {
-  local upgrade="${1:-0}"
   local binary
   local candidate
   local home
@@ -122,15 +121,9 @@ ai_install_codex() {
 
   # codex 0.156 publishes its app-server socket as a symlink into a private
   # directory, which jarvis cannot reach; devbox holds the last release that binds
-  # the declared path on both apply and upgrade (docs/issues/codex-daemon-socket.md).
+  # the declared path (docs/issues/codex-daemon-socket.md).
   if [[ "${dev_server_ai_host:-devbox}" == devbox ]]; then
     candidate=0.155.1
-  elif ((upgrade == 0)) && [[ -e "$binary" || -L "$binary" ]]; then
-    if ! candidate="$(ai_package_version "$(ai_codex_manifest)" @openai/codex 2>/dev/null)" ||
-      ! ai_codex_matches "$candidate"; then
-      die 'installed Codex is invalid; run ./workstation upgrade or ./devbox upgrade to repair it'
-    fi
-    return 0
   else
     candidate="$(npm view @openai/codex dist-tags.latest)" ||
       die 'could not resolve the latest stable Codex release'
@@ -210,7 +203,6 @@ ai_bootstrap_claude_native() (
 )
 
 ai_install_claude() {
-  local upgrade="${1:-0}"
   local before
   local binary
   local home
@@ -220,7 +212,6 @@ ai_install_claude() {
   home="$(dev_server_home)"
   binary="$(ai_claude_binary)"
   if before="$(ai_claude_native_version)"; then
-    ((upgrade)) || return 0
     HOME="$home" "$binary" install latest ||
       die "Claude native latest-channel reconciliation failed"
     version="$(ai_claude_native_version)" ||
@@ -363,8 +354,8 @@ ai_install() {
   ai_validate_inputs
   ai_install_dirs || return 1
   ai_install_claude_settings || return 1
-  ai_install_codex "${1:-0}" || return 1
-  ai_install_claude "${1:-0}" || return 1
+  ai_install_codex || return 1
+  ai_install_claude || return 1
   ai_install_profiles || return 1
   ai_install_instructions || return 1
 }

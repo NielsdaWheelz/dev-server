@@ -17,6 +17,6 @@ follow-up: package code installs and reports packages. one personal-policy
 function owns docker enablement, start/restart, container and reboot deferrals,
 and activation recording. no shared cross-platform service workflow is needed.
 
-resolved when: ordinary and upgrade paths use that one owner; pending reboot
+resolved when: apply uses that one owner; pending reboot
 defers consistently, running containers survive, and idle activation records
 success only after the service is active.

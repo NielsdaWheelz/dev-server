@@ -19,17 +19,15 @@ source "$base_dir/lib/ai-tools.sh"
 workstation_platform=''
 workstation_target=''
 workstation_declared_stage=''
-workstation_upgrade=0
 workstation_results_finished=0
 
 usage() {
   printf '%s\n' \
     'Usage: ./workstation apply' \
-    '       ./workstation upgrade' \
     '       ./workstation gateway {apply|remove} {herdr-mobile|skidbladnir}' \
     '       ./workstation help' \
     '' \
-    'apply keeps installed software; upgrade refreshes it before applying configuration.' \
+    'apply updates rolling software and reconciles configuration and exact repository pins.' \
     'gateway operations select one product and leave host tools alone.'
 }
 
@@ -256,14 +254,14 @@ workstation_apply() {
   trap 'exit 130' INT
   trap 'exit 143' TERM
   workstation_preflight
-  packages_install "$workstation_upgrade"
+  packages_install
   dotfiles_install
   if [[ "$workstation_platform" == arch ]]; then
     personal_arch_apply
   else
     personal_macos_apply
   fi
-  ai_install "$workstation_upgrade"
+  ai_install
   herdr_apply "$workstation_platform"
   workstation_report_deferrals
   workstation_results_finished=1
@@ -335,8 +333,7 @@ main() {
     }
     workstation_gateway "$1" "$2"
     ;;
-  apply | upgrade)
-    [[ "$operation" != upgrade ]] || workstation_upgrade=1
+  apply)
     (($# == 0)) || {
       usage >&2
       return 64

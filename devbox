@@ -38,7 +38,6 @@ ssh_known_hosts_candidate=''
 ssh_known_hosts_candidate_old=''
 ansible_output=''
 codex_restart_authorized=0
-devbox_upgrade=0
 steady_rules=''
 host_key_enrollment=0
 devbox_declared_stage=''
@@ -46,12 +45,11 @@ devbox_declared_stage=''
 usage() {
   cat <<'EOF'
 Usage: ./devbox apply [--restart-codex]
-       ./devbox upgrade [--restart-codex]
        ./devbox gateway {apply|remove} {herdr-mobile|skidbladnir}
        ./devbox help
 
 Create the devbox when absent, or apply its declared state over tailnet SSH.
-apply keeps installed software; upgrade refreshes it before applying configuration.
+apply updates rolling software and reconciles configuration and exact repository pins.
 gateway operations select one product and leave host tools alone.
 
 An existing host must already have the dev-server-deploy principal, its
@@ -877,14 +875,11 @@ apply_new_server() {
 }
 
 run_ansible_apply() {
-  local codex_restart_value=false upgrade_value=false rc herdr_action_lines herdr_action_line herdr_action_subject
+  local codex_restart_value=false rc herdr_action_lines herdr_action_line herdr_action_subject
   local jarvis_gate_key
 
   if ((codex_restart_authorized)); then
     codex_restart_value=true
-  fi
-  if ((devbox_upgrade)); then
-    upgrade_value=true
   fi
 
   ansible_output="$(mktemp "${TMPDIR:-/tmp}/devbox-ansible.XXXXXX")"
@@ -893,7 +888,7 @@ run_ansible_apply() {
     ANSIBLE_NOCOLOR=1 \
     uvx --from ansible-core==2.19.2 ansible-playbook \
     --ssh-common-args "-F $ssh_include" \
-    --extra-vars "{\"devbox_codex_runtime_restart_authorized\":$codex_restart_value,\"devbox_upgrade_packages\":$upgrade_value}" \
+    --extra-vars "{\"devbox_codex_runtime_restart_authorized\":$codex_restart_value}" \
     -i "$ansible_inventory" "$ansible_apply_playbook" \
     >"$ansible_output" 2>&1
   rc=$?
@@ -1044,8 +1039,7 @@ main() {
     }
     devbox_gateway "$2" "$3"
     ;;
-  apply | upgrade)
-    [[ "$command" != upgrade ]] || devbox_upgrade=1
+  apply)
     shift
     cmd_apply "$@"
     ;;

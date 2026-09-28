@@ -7,45 +7,50 @@ critical result, and report mutations, deferrals, or required actions.
 ## commands and update policy
 
 ```text
-./workstation {apply|upgrade}
-./devbox {apply|upgrade} [--restart-codex]
+./workstation apply
+./devbox apply [--restart-codex]
 ./workstation gateway {apply|remove} {herdr-mobile|skidbladnir}
 ./devbox gateway {apply|remove} {herdr-mobile|skidbladnir}
 ./workstation {help|--help|-h}
 ./devbox {help|--help|-h}
 ```
 
-`apply` reconciles configuration and missing requirements. it does not seek
-newer installed os packages or ai tools. repository pins remain desired state:
-a changed pin is applied deliberately, including on ordinary apply.
-`upgrade` updates rolling software and then applies the same configuration.
+`apply` updates rolling software, reconciles exact repository pins, and applies
+configuration. rolling versions come from upstream on each run; repository pins
+remain exact desired state. there is no configuration-only or offline mode and
+no `upgrade` command or alias.
 `--restart-codex` separately authorizes interruption of the devbox's three codex servers.
 
 gateway operations select one product and leave shared host tools and upstream
-herdr alone. ordinary host apply/upgrade does not install either gateway.
+herdr alone. ordinary host apply does not install either gateway.
 published release pins are prerequisites for gateway apply; neither the old
 herdr-backed v0.8 pin nor original skid's stale v0.6 pin is admissible as a
 separated release. source preparation and live namespace handback are distinct
 operations; see [the cutover runbook](docs/gateway-separation-runbook.md).
 
-| owner | apply | upgrade |
-|---|---|---|
-| homebrew | install missing declarations without auto-update or bundle upgrades | update metadata and upgrade declared packages |
-| pacman/yay | require declared packages; missing ones produce an action | full `pacman -Syu`, then declared aur packages |
-| ubuntu apt | installed packages remain; missing requirements may refresh metadata | reconcile declared packages to repository candidates |
-| codex/claude | reconcile the devbox codex pin; otherwise verify and retain installed versions; bootstrap missing tools | reconcile the devbox codex pin; elsewhere install stable codex npm `latest`; install native claude `latest` |
-| repo pins | install declared exact versions | same |
+| owner | apply |
+|---|---|
+| homebrew | update metadata and upgrade declared formulae and casks |
+| pacman/yay | full `pacman -Syu` with declared packages, then declared aur packages |
+| ubuntu apt | refresh metadata and reconcile declared packages to repository candidates |
+| codex/claude | reconcile the devbox codex pin; elsewhere install stable codex npm `latest`; install native claude `latest` |
+| repo pins | install declared exact versions |
 
-homebrew can upgrade dependencies required by a missing formula. arch partial
-upgrades are forbidden. ubuntu unattended security updates remain independently
-owned by their native service. pgvector stays exactly pinned and held. neither
-command removes packages, upgrades the distribution, recreates a vps, reboots,
-logs out, or kills tmux. repo-owned docker activation defers while containers
+native package managers resolve required dependencies. arch partial upgrades
+are forbidden. ubuntu unattended security updates remain independently owned
+by their native service. pgvector stays exactly pinned and held. apply does not
+prune undeclared packages, upgrade the distribution, recreate a vps, reboot,
+log out, or kill tmux. repo-owned docker activation defers while containers
 run; native package installation/upgrade scripts can still restart their
-services. an upgrade is not a zero-interruption guarantee.
+services. a host apply is not a zero-interruption guarantee. package updates
+are not transactional or automatically rolled back; native package managers
+own partial-install repair.
 
-an unchanged apply must make no managed-state mutation or activation and open
-no ingress. package-manager metadata is not managed state. exit `0` means
+an unchanged checkout can resolve newer rolling software. already-converged
+managed configuration and pinned components must be left alone, except for an
+explicitly requested codex restart. unchanged ingress must stay untouched.
+native package managers and installers
+own metadata and maintenance bookkeeping. exit `0` means
 installed with explicit deferrals; `2` means manual action; `1` means failure;
 `64` means invalid invocation. no operation is implied when omitted.
 
@@ -159,8 +164,8 @@ remain reviewable repository inputs. no generic profile/plugin framework,
 compatibility state reader, or second package manager is introduced.
 
 one codex binary is installed at `$HOME/.local/bin/codex` through npm's user
-prefix. devbox apply and upgrade reconcile its declared pin, including drift
-from a native update; workstation upgrade resolves one stable
+prefix. devbox apply reconciles its declared pin, including drift
+from a native update; workstation apply resolves one stable
 `MAJOR.MINOR.PATCH` from `latest`. installation uses npm integrity with scripts
 disabled. installed manifest and executable must agree; no stale-candidate
 fallback after a failed requested upgrade.
@@ -560,10 +565,9 @@ state. jarvis is independent of developer rootless docker and is not an apply
 postcondition.
 
 a reviewed pgvector pin change authorizes the exact package upgrade or rollback
-on apply or upgrade. refresh package metadata when the installed version differs,
-then install the declared version and keep it held. qualification of application
-and database compatibility remains with jarvis; no other pgvector version is a
-fallback.
+on apply. refresh package metadata, install the declared version and keep it
+held. qualification of application and database compatibility remains with
+jarvis; no other pgvector version is a fallback.
 
 ## verification and development
 

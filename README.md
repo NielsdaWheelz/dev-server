@@ -19,16 +19,15 @@ and original skid `v0.10.0` are pinned. follow
 [the cutover runbook](docs/gateway-separation-runbook.md) before any live
 namespace change.
 
-ordinary `apply` installs shared host configuration and missing requirements without seeking
-newer installed packages or ai tools. use `upgrade` deliberately to update the
-software and then apply the configuration:
+`apply` updates rolling packages and ai tools, reconciles exact repository pins,
+and installs shared host configuration. it replaces the former `upgrade`
+command; there is no separate update mode. each run checks upstream releases,
+so an unchanged checkout can still produce software updates. configuration-only
+and offline applies are not supported.
 
-```sh
-./workstation upgrade
-./devbox upgrade
-```
-
-an unchanged apply makes no managed-state change or service activation. exit
+already-converged configuration and pinned components are left alone, except
+for an explicitly requested codex restart.
+native package managers and installers own update checks and bookkeeping. exit
 `0` means installed, with any deferred activation reported; `2` means an exact
 manual action is required; `1` means failure; `64` means invalid invocation.
 rerun after fixing the reported problem. `--help` lists the public commands.
@@ -55,19 +54,19 @@ is never executed. the environment takes precedence. sudo uses the managed
 askpass helper, and pacman/yay run noninteractively. missing or rejected
 credentials fail before host changes. no passwordless sudo is granted.
 
-`apply` checks that arch's declared packages are installed. missing packages
-require `./workstation upgrade`, which performs a full system upgrade before
+arch `apply` performs a full `pacman -Syu` with the declared packages before
 reconciling the aur manifest. this avoids unsupported partial upgrades.
-macos apply uses homebrew's no-upgrade path; installing a missing formula can
-still update dependencies needed by that formula. neither operation installs,
-upgrades, replaces, or signs in to the app store tailscale app.
+macos `apply` refreshes homebrew metadata and upgrades declared formulae and
+casks. the app store tailscale app remains separately owned: apply verifies
+and optionally starts it, but never installs, updates, replaces, or signs in to it.
 
 host configuration is applied in order: native packages, dotfiles, exact-host
 personal policy, ai tools/shared codex services, then upstream herdr. gateway
 commands stage only their own inputs and reconcile only their own ingress. desktop login, reboot, busy containers, and tmux
 binary activation are reported as `DEFERRED`. repo-owned activation never forces
 them. native package installation/upgrade scripts can still restart their
-services; schedule upgrades accordingly.
+services; schedule host applies accordingly. package changes have no automatic
+rollback; native package managers own repair after a partial failure.
 
 deployment identity uses `dev_server_home_dir` (`$HOME`),
 `dev_server_fleet_label_prefix` (`dev.niels`), `dev_server_gateway_port` (`7341`
@@ -81,8 +80,8 @@ arch touchpad policy lives in
 xorg loads it when the display server starts. apply reports `DEFERRED` on every
 run while an existing xorg process predates the installed policy; restart the
 display server or reboot when convenient. this timestamp check tracks pending
-activation, not device behavior. `xorg-xinput` is no longer required; apply and
-upgrade do not remove an already installed package.
+activation, not device behavior. `xorg-xinput` is no longer required; apply
+does not remove an already installed package.
 
 macos installs ghostty and its meslo font through homebrew. edit
 [`assets/dotfiles/ghostty-macos.config`](assets/dotfiles/ghostty-macos.config);
@@ -106,11 +105,9 @@ installs no codex hooks and never provisions or rewrites account state.
 [the runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract)
 gives the exact worker map and app environment contract.
 
-`apply` retains valid installed versions and bootstraps a missing tool, except
-that devbox codex always reconciles its declared pin.
-`upgrade` keeps that devbox pin; elsewhere it resolves codex's stable npm
-`latest` once. npm installation uses normal integrity checks with scripts
-disabled; claude uses native `install latest`. both claude
+`apply` reconciles the devbox codex pin; elsewhere it resolves codex's stable npm
+`latest` once per run and installs it when needed. npm installation uses normal
+integrity checks with scripts disabled; claude uses native `install latest`. both claude
 accounts follow `latest`: apply enforces that shared policy and removes
 account version floors. claude's native auto-updater handles background updates
 and old-version cleanup. wrappers add no startup update lookup.
@@ -150,7 +147,7 @@ services. after finishing active turns, explicitly restart them with:
 ./devbox apply --restart-codex
 ```
 
-`upgrade` accepts the same flag. without it, healthy running codex services keep
+without the flag, healthy running codex services keep
 their current backend, even after a cli upgrade. changed operational inputs
 produce `ACTION` before replacing the coupled files. the flag restarts all three
 services even when their inputs are unchanged; tmux sessions survive.
@@ -180,8 +177,9 @@ independently. changing its runtime while it runs requires an explicit stop
 because stopping ends its terminals and agents. herdr integrations remain in
 the existing normal account homes. original skid shares those accounts and has
 an explicitly loaded claude plugin and separately pinned native helper.
-provider binaries and tailscale remain shared host tools with separate upgrade
-operations.
+provider binaries remain shared host tools maintained by host `apply`.
+tailscale follows its host package manager, except on macos where the app store
+owns updates.
 
 host templates live under [`assets/herdr-mobile`](assets/herdr-mobile) and
 [`assets/skidbladnir`](assets/skidbladnir). each admitted binary validates its
@@ -252,11 +250,11 @@ verify and enroll that key locally under `dev-server` before rerunning apply;
 there is no automatic trust reset. `dev-server` remains the unprivileged `niels`
 operator alias. missing github enrollment produces one exact manual action.
 
-ansible owns ubuntu configuration. apply retains installed package versions;
-upgrade selects current candidates. pgvector remains exactly pinned and held.
-a reviewed change to the qualified pgvector pin authorizes its upgrade or rollback
-on either command. package metadata refreshes when the installed version differs;
-application and database compatibility qualification belongs to jarvis.
+ansible owns ubuntu configuration. apply refreshes package metadata and selects
+current candidates for declared packages. pgvector remains exactly pinned and
+held. a reviewed change to the qualified pgvector pin authorizes its upgrade or
+rollback on apply; application and database compatibility qualification belongs
+to jarvis.
 rootless docker setup is rebuilt only when its package, unit, or daemon config
 changes and no container is running; otherwise activation is deferred.
 
@@ -289,7 +287,7 @@ work one bounded slice per pr, following the
 [verification workflow](SPEC.md#verification-and-development). keep validation
 and activation with the subsystem that owns the state.
 
-edit declarations, then apply on the intended host. use upgrade for rolling
+edit declarations, then apply on the intended host. apply includes rolling
 software updates; review exact git, extension, herdr, and skid pin
 changes in the repository. use subsystem-native status commands to investigate
 a failure. there is no separate doctor or compatibility layer.
