@@ -19,38 +19,17 @@
       signed-by=/etc/apt/keyrings/postgresql.asc]
       https://apt.postgresql.org/pub/repos/apt
       {{ ansible_facts['distribution_release'] }}-pgdg main
-  register: jarvis_host_apt_repository
-
-- name: Read the current pgvector package version
-  ansible.builtin.command:
-    argv:
-      - dpkg-query
-      - -W
-      - "-f=${Version}"
-      - "postgresql-{{ devbox_postgresql_major }}-pgvector"
-  register: jarvis_host_pgvector_before
-  changed_when: false
-  failed_when: jarvis_host_pgvector_before.rc not in [0, 1]
 
 - name: Install PostgreSQL and the qualified pgvector package # noqa package-latest
-  vars:
-    jarvis_host_packages:
-      - "postgresql-{{ devbox_postgresql_major }}"
-      - "postgresql-client-{{ devbox_postgresql_major }}"
-      - "postgresql-{{ devbox_postgresql_major }}-pgvector"
   ansible.builtin.apt:
     name:
       - "postgresql-{{ devbox_postgresql_major }}"
       - "postgresql-client-{{ devbox_postgresql_major }}"
       - "postgresql-{{ devbox_postgresql_major }}-pgvector={{ devbox_pgvector_package_version }}"
-    state: "{{ devbox_upgrade_packages | bool | ternary('latest', 'present') }}"
+    state: latest
     allow_change_held_packages: true
     allow_downgrade: true
-    update_cache: >-
-      {{ devbox_upgrade_packages | bool or jarvis_host_apt_repository.changed or
-         jarvis_host_pgvector_before.stdout != devbox_pgvector_package_version or
-         (jarvis_host_packages | map('regex_replace', '^', 'installed ')
-          | difference(base_package_state.stdout_lines) | length > 0) }}
+    update_cache: true
 
 - name: Hold the qualified pgvector package until explicit requalification
   ansible.builtin.dpkg_selections:

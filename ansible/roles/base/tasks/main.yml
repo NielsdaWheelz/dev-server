@@ -95,17 +95,10 @@
       content: >-
         deb [signed-by=/etc/apt/keyrings/nodesource.asc]
         https://deb.nodesource.com/node_{{ devbox_node_major }}.x nodistro main
-  register: base_apt_repositories
-
-- name: Read installed apt package state
-  ansible.builtin.command:
-    argv: [dpkg-query, -W, "-f=${db:Status-Status} ${Package}\n"]
-  register: base_package_state
-  changed_when: false
 
 - name: Install declared packages # noqa package-latest
-  vars:
-    base_packages:
+  ansible.builtin.apt:
+    name:
       - bat
       - build-essential
       - ca-certificates
@@ -148,13 +141,8 @@
       - zsh
       - zsh-autosuggestions
       - zsh-syntax-highlighting
-  ansible.builtin.apt:
-    name: "{{ base_packages }}"
-    state: "{{ devbox_upgrade_packages | bool | ternary('latest', 'present') }}"
-    update_cache: >-
-      {{ devbox_upgrade_packages | bool or base_apt_repositories.changed or
-         (base_packages | map('regex_replace', '^', 'installed ')
-          | difference(base_package_state.stdout_lines) | length > 0) }}
+    state: latest
+    update_cache: true
 
 - name: Read current timezone
   ansible.builtin.command: timedatectl show -p Timezone --value
