@@ -240,9 +240,6 @@ workstation_preflight() {
     workstation_prepare_arch_sudo
     exec </dev/null
   fi
-  # Consumed by the profile installer and shared helper.
-  # shellcheck disable=SC2034
-  dev_server_ai_host="$workstation_target"
   # shellcheck source=lib/herdr.sh
   source "$base_dir/lib/herdr.sh"
   herdr_preflight "$workstation_platform"

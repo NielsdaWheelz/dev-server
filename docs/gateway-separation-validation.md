@@ -152,10 +152,10 @@ use the agreed ten-file generation contract.
 separately pinned helper environments remain on disk, preserving all retained
 generation dependencies without adding collection machinery.
 
-restoring the established codex launcher also retains its existing coupling to
-the shared-daemon helper. that limitation is recorded again in
-[wrapper/daemon coupling](issues/codex-wrapper-daemon-coupling.md); changing the
-launcher architecture is outside this behavior-preserving correction.
+restoring the established codex launcher retained its existing coupling to
+the shared-daemon helper; changing that architecture was outside this
+behavior-preserving correction. the separate 2026-09-28 runtime repair
+subsequently retired the shared helper and removed that coupling.
 
 ## public cli restoration
 

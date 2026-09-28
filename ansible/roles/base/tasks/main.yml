@@ -8,14 +8,10 @@
     group: root
     mode: "0755"
 
-- name: Defer package-triggered shared Codex restarts
-  ansible.builtin.copy:
-    dest: /etc/needrestart/conf.d/99-dev-server-codex.conf
-    owner: root
-    group: root
-    mode: "0644"
-    content: |
-      $nrconf{override_rc}->{qr(^codex-shared@(personal|work|work2)\.service$)} = 0;
+- name: Remove obsolete shared Codex restart policy
+  ansible.builtin.file:
+    path: /etc/needrestart/conf.d/99-dev-server-codex.conf
+    state: absent
 
 - name: Validate the existing development account
   ansible.builtin.command:
@@ -143,6 +139,9 @@
       - zsh-syntax-highlighting
     state: latest
     update_cache: true
+
+- name: Configure the AI runtime host prerequisites
+  ansible.builtin.import_tasks: ai-runtime.yml
 
 - name: Read current timezone
   ansible.builtin.command: timedatectl show -p Timezone --value

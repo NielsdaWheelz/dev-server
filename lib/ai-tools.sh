@@ -34,13 +34,6 @@ ai_validate_inputs() {
   statusline="$(dev_server_assets_dir)/claude/statusline.sh"
   [[ -f "$statusline" && ! -L "$statusline" && -s "$statusline" ]] ||
     die "invalid claude status line script: $statusline"
-  ai_codex_host validate || die 'invalid shared Codex declaration'
-}
-
-ai_codex_host() {
-  python3 "$(dev_server_assets_dir)/codex/codex-shared.py" \
-    --config "$(dev_server_assets_dir)/codex/profiles.json" \
-    --host "${dev_server_ai_host:-devbox}" "$@"
 }
 
 ai_install_dirs() {
@@ -119,15 +112,8 @@ ai_install_codex() {
     render_result CHANGED "npm global prefix" "$prefix"
   fi
 
-  # codex 0.156 publishes its app-server socket as a symlink into a private
-  # directory, which jarvis cannot reach; devbox holds the last release that binds
-  # the declared path (docs/issues/codex-daemon-socket.md).
-  if [[ "${dev_server_ai_host:-devbox}" == devbox ]]; then
-    candidate=0.155.1
-  else
-    candidate="$(npm view @openai/codex dist-tags.latest)" ||
-      die 'could not resolve the latest stable Codex release'
-  fi
+  candidate="$(npm view @openai/codex dist-tags.latest)" ||
+    die 'could not resolve the latest stable Codex release'
   [[ "$candidate" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
     die 'npm latest must identify a stable Codex release'
   if ai_codex_matches "$candidate"; then
@@ -248,7 +234,19 @@ ai_install_profiles() {
     die "missing AI profile wrapper: $profile"
 
   codex_profile="$(mktemp "$home/bin/.codex-profile.XXXXXX")" || return 1
-  if ! ai_codex_host launcher >"$codex_profile"; then
+  if ! python3 - "$home" >"$codex_profile" <<'PY'; then
+import shlex
+import sys
+
+home = sys.argv[1]
+print('#!/usr/bin/env bash\ncase "${0##*/}" in')
+print(f'  codex) [[ -n "${{CODEX_HOME:-}}" ]] || CODEX_HOME={shlex.quote(home + "/.codex")}; export CODEX_HOME ;;')
+for command, account in (("codex-work", ".codex-work"),
+                         ("codex-work2", ".codex-work2")):
+    print(f'  {command}) export CODEX_HOME={shlex.quote(home + "/" + account)} ;;')
+print('  *) exit 64 ;;\nesac')
+print(f'exec {shlex.quote(home + "/.local/bin/codex")} "$@"')
+PY
     rm -f -- "$codex_profile"
     return 1
   fi

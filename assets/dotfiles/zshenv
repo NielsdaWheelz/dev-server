@@ -1,7 +1,7 @@
 # Managed by dev-server.
 
 # Remote commands, including Mosh's SSH bootstrap, do not read .zprofile or
-# .zshrc. Shared Codex launchers must precede the raw npm binary even when an
+# .zshrc. Codex account launchers must precede the raw npm binary even when an
 # inherited PATH already contains both directories in the opposite order.
 typeset -U path
 for _dev_server_path_dir in \
