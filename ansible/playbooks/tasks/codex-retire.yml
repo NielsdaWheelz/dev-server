@@ -1,0 +1,87 @@
+---
+- name: Inspect former shared Codex services
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/codex-shared@{{ item }}.service"
+    follow: false
+  loop: [personal, work, work2]
+  register: codex_retire_units
+
+- name: Inspect the deployed Jarvis service
+  ansible.builtin.stat:
+    path: /etc/systemd/system/jarvis.service
+    follow: false
+  register: codex_retire_jarvis_unit
+
+- name: Stop Jarvis while retiring its shared Codex dependency
+  ansible.builtin.systemd_service:
+    name: jarvis.service
+    enabled: false
+    state: stopped
+  when:
+    - codex_retire_jarvis_unit.stat.exists
+    - codex_retire_units.results | selectattr('stat.exists') | list | length > 0
+
+- name: Stop and disable former shared Codex services
+  ansible.builtin.systemd_service:
+    name: "codex-shared@{{ item.item }}.service"
+    enabled: false
+    state: stopped
+  loop: "{{ codex_retire_units.results }}"
+  when: item.stat.exists
+
+- name: Remove only the former shared Codex discovery links
+  ansible.builtin.shell: |
+    python3 - <<'PY'
+    from pathlib import Path
+
+    home = Path('/home/{{ devbox_user }}')
+    for profile, account in (('personal', '.codex'),
+                             ('work', '.codex-work'),
+                             ('work2', '.codex-work2')):
+        link = home / account / 'app-server-control/app-server-control.sock'
+        target = f'/run/codex-shared-{profile}/app-server.sock'
+        if link.is_symlink() and str(link.readlink()) == target:
+            link.unlink()
+            print(link)
+    PY
+  become_user: "{{ devbox_user }}"
+  register: codex_retire_discovery
+  changed_when: codex_retire_discovery.stdout | length > 0
+
+- name: Remove only shared Codex group memberships
+  ansible.builtin.command:
+    argv: [getent, group, codex-clients]
+  register: codex_retire_group
+  changed_when: false
+  failed_when: codex_retire_group.rc not in [0, 2]
+
+- name: Revoke the former shared Codex access grant
+  ansible.builtin.command:
+    argv: [gpasswd, -d, "{{ item }}", codex-clients]
+  loop:
+    - "{{ devbox_user }}"
+    - "{{ jarvis_service_user }}"
+  when:
+    - codex_retire_group.rc == 0
+    - item in codex_retire_group.stdout.split(':')[-1].split(',')
+
+- name: Remove former shared Codex installation files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/codex-shared@personal.service
+    - /etc/systemd/system/codex-shared@work.service
+    - /etc/systemd/system/codex-shared@work2.service
+    - /etc/codex-shared/profiles.json
+    - /usr/local/libexec/codex-shared
+    - /etc/tmpfiles.d/dev-server-codex.conf
+    - /var/lib/dev-server/active/codex.runtime.sha256
+    - "/home/{{ devbox_user }}/.local/share/dev-server/assets/codex/profiles.json"
+    - "/home/{{ devbox_user }}/.local/share/dev-server/assets/codex/codex-shared.py"
+  register: codex_retire_files
+
+- name: Reload systemd after retiring shared Codex units
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: codex_retire_files.changed

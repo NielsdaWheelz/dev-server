@@ -13,7 +13,6 @@
     - assets
     - assets/dotfiles
     - assets/routers
-    - assets/codex
     - assets/claude
     - assets/herdr
 
@@ -62,17 +61,6 @@
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: "0755"
-
-- name: Install exact shared Codex installer inputs
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../assets/codex/{{ item }}"
-    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/codex/{{ item }}"
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    mode: "0644"
-  loop:
-    - profiles.json
-    - codex-shared.py
 
 - name: Install shared AI instructions
   ansible.builtin.copy:
