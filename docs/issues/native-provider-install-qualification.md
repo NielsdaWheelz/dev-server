@@ -23,12 +23,22 @@ record, package symlink or digest; the owner still served its version rpc.
 no update marker existed. the exact owner was stopped through native lifecycle
 control and all fixtures were removed.
 
-remaining live boundaries are NOT_RUN: ubuntu noble x86_64 namespace creation
-from both the source package and native daemon's bundled bubblewrap copy;
-authenticated native
-control; and the coordinated gateway release. the preexisting ubuntu 26.04 arm
-vm was left untouched and does not qualify the devbox boundary. remove this
-record after these accepted boundaries and the coordinated release pass.
+approved devbox noble x86_64 namespace qualification passed using task-owned
+canonical-package and native-daemon-copy paths. both copies matched distro
+bubblewrap digest `e318903862396f96de3df57264e0158682b952fd3fb53ac23d876413e7b30f71`.
+without the proposed policy, the native copy failed with permission denied while
+the system binary passed. a unique temporary profile used the proposed brace
+structure, flags and `userns` rule, narrowing release wildcards to task-owned
+names. both copies then attached to that profile and created isolated user,
+network and pid namespaces with uid 0 inside. the profile was unloaded and
+absence verified; test directories and newly created empty parents were removed.
+no existing profile, service, provider configuration or gateway was changed.
+
+the permanent proposed profile is absent on the host. persistent activation,
+full linux provider startup/control, authenticated native control and coordinated
+gateway acceptance remain NOT_RUN. this namespace mechanism/path probe is not a
+fleet deployment or full linux provider acceptance. remove this record after
+those boundaries and the coordinated release pass.
 
 coordinated release blocker: `assets/skidbladnir/release-pin.json` still selects
 v0.10.3 (`e5906e4`), while the new helper and host declaration use the revised

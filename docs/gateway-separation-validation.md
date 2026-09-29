@@ -234,5 +234,17 @@ same-version upstream owner with a different executable digest. challenger exit
 rpc readiness; no update marker existed. the exact owner was native-stopped and
 fixtures removed.
 
-noble x86_64 bundled-bubblewrap namespaces, authenticated native control and coordinated gateway acceptance remain NOT_RUN.
+approved devbox noble x86_64 scoped namespace checks passed for canonical and
+native-daemon copies matching distro bubblewrap sha256
+`e318903862396f96de3df57264e0158682b952fd3fb53ac23d876413e7b30f71`.
+the native copy initially failed permission denied without the proposed policy;
+the system binary passed. a unique temporary profile preserved the declared
+brace structure/flags/userns rule with release slots restricted to test names.
+both copies attached to it and isolated user/network/pid namespaces as an
+ordinary user. the profile was unloaded and absence verified; all owned files
+and newly created empty parent directories were removed. existing policy,
+services, provider configuration and gateway remained untouched.
+
+persistent profile activation, full linux provider startup/control,
+authenticated native control and coordinated gateway acceptance remain NOT_RUN.
 see [the qualification issue](issues/native-provider-install-qualification.md).

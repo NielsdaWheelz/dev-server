@@ -77,8 +77,14 @@ removed. the debug owner's approximately 188 mib rss is a fixture measurement.
 a focused same-version/different-executable live mismatch check rejected the
 marked challenger with exit 1 while preserving the running owner's identity,
 package selection and version rpc. the exact owner and fixtures were cleaned.
-noble x86_64 bundled-bubblewrap namespaces and coordinated gateway acceptance
-remain NOT_RUN; the repository qualification flag stays false.
+approved devbox noble x86_64 namespace probes passed for byte-identical distro
+bubblewrap copies at both package paths under a task-scoped temporary version
+of the proposed profile. its release wildcards were narrowed to test names;
+both copies attached and isolated user/network/pid namespaces. the profile,
+copies and newly created empty parents were removed without changing existing
+profiles, services or provider configuration. permanent profile activation,
+full linux provider control, authenticated control and coordinated gateway
+acceptance remain NOT_RUN; the repository qualification flag stays false.
 
 
 ## deployment contract
