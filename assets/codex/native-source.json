@@ -1,9 +1,0 @@
-{
-  "repository": "https://github.com/openai/codex.git",
-  "revision": "36650394c5b38c2990ccf2a3457165ca3e9d9726",
-  "version": "0.157.1",
-  "baseLockSha256": "72efa81ed947d07ed4fbb3e10b094715ff00626126d758aaed56733c97887e5f",
-  "patchSha256": "1c0e9e659297069b384f7723828337cef8e6a82f43ff5aedc5ff44e4a74072d0",
-  "lockSha256": "2df4a05419a0e276d952309bd35cd7e6a127b11d95890754cd7e8932b9ec7f7f",
-  "rustVersion": "1.95.0"
-}

@@ -191,73 +191,29 @@ gateway, herdr, provider and cognition process identities and receipts were
 preserved. this closes the command/config gap; broader desktop ux waivers are
 unchanged. no live operation was performed by this source task.
 
-## 2026-09-29 native source integration checks
+## 2026-09-29 stock npm installer checks
 
-remote main's shared-service retirement is preserved. native codex source
-installation now supplies its complete pinned package layout; ansible owns
-ubuntu build and bundled-bubblewrap namespace prerequisites. workstation and
-devbox gateway staging include the exact provider declaration/library closure.
+remote main's shared-service retirement and existing account routing remain.
+the custom codex source pin, patch, build/package path, rust/v8 dependencies and
+custom namespace policy are removed. the direct frozen helper remains, with
+qualification false until the root integrator verifies the coordinated contract.
+previous fork tests are superseded and cannot qualify upstream stock codex.
 
-helper source pins merged `0bbba0a994de7b46645037f0ecc24aeb59fe6e4a` directly,
-with lock `a7771120dd948759c4f0d089382046443a2348a447453e68369400c6a43bc8e9`;
-no helper patch is applied. the lock includes anyio 4.14.2. qualification remains
-false: previous live results do not qualify this changed environment.
+an empty-environment disposable-home probe first confirmed the previous fork
+installer cannot satisfy the npm installation contract. the changed installer
+installed upstream `@openai/codex` 0.159.1 and verified the darwin arm64 native
+executable path and reported version. repeat installation preserved its
+nanosecond modification time and created no source-build generation.
 
-temporary component fixtures passed installed-generation rejection, canonical
-link repair, corrupt patch refusal preserving the installed command, and named
-work/personal override account selection. they were removed. shellcheck passed
-changed provider libraries and workstation; both ansible playbooks passed syntax
-checks; whitespace checks passed. after current-turn approval, a fresh frozen
-helper installation and repeat application passed in an empty-env disposable
-home: exact merged source/lock, python 3.12.13, uv 0.11.28, sdk 0.2.130, anyio
-4.14.2, installed shim bytes/mode and rejected-request launcher dispatch.
-repeat application preserved the marker's nanosecond modification time.
-fixture-only qualification was enabled; the repository flag stayed false.
-no real provider account or authenticated turn was used. the fixture was removed.
+all five scoped provider commands passed argument and named-home routing
+checks, including spaces/newlines and inherited foreign account/herdr values.
+false qualification returned action/2 at gateway preflight. changed shell
+libraries, workstation and launcher syntax/shellcheck and both ansible playbook
+syntax checks passed. diff whitespace and ai-tools formatting passed. devbox
+retains a pre-existing shellcheck SC2119 observation, reproduced on the original
+file. temporary checks and npm fixtures were removed after verification.
 
-an independent source-only checkout probe applied the final codex patch digest
-`1c0e9e659297069b384f7723828337cef8e6a82f43ff5aedc5ff44e4a74072d0`
-to exact upstream `36650394`, verifying both lock hashes and the native package
-pin flag. upstream license/notice accompany the bundled patch and installed
-package. this does not qualify native startup or linux namespaces.
-
-approved disposable mac native checks on provider `49c9f47` passed marked
-no-auth cold startup, second-tui same-owner attachment preserving the first
-view, native read-only observation, spoofed-owner and cross-view rejection,
-and absence of an upstream update marker. all owned sockets/processes/fixtures
-were cleaned. the debug owner's approximately 188 mib rss is not a production
-memory qualification.
-
-a focused disposable mac check rejected a patched marked challenger against a
-same-version upstream owner with a different executable digest. challenger exit
-1 preserved owner pid/kernel lifetime/record/package symlink/digest and version
-rpc readiness; no update marker existed. the exact owner was native-stopped and
-fixtures removed.
-
-approved devbox noble x86_64 scoped namespace checks passed for canonical and
-native-daemon copies matching distro bubblewrap sha256
-`e318903862396f96de3df57264e0158682b952fd3fb53ac23d876413e7b30f71`.
-the native copy initially failed permission denied without the proposed policy;
-the system binary passed. a unique temporary profile preserved the declared
-brace structure/flags/userns rule with release slots restricted to test names.
-both copies attached to it and isolated user/network/pid namespaces as an
-ordinary user. the profile was unloaded and absence verified; all owned files
-and newly created empty parent directories were removed. existing policy,
-services, provider configuration and gateway remained untouched.
-
-subsequent disposable noble x86_64 first-party provider checks pass on genuine
-`49c9f47` locked debug binaries with debug symbols disabled: marked startup,
-second-tui same-owner/distinct-view attachment, selected read, guarded send and
-finalized read with matching reply hash, and spoof/stale rejection. bubblewrap
-is denied/allowed/denied around a unique temporary policy. native stop and
-owned process/policy/socket/source/toolchain/package cleanup pass. no gateway
-is involved; code-mode runtime is disabled.
-
-mac combined acceptance passes with public gateway v0.10.4, the merged frozen
-helper and actual installer release package: native accepted send receipt,
-finalized bounded read with matching output identity/turn/hash, stale-process
-rejection and exact cleanup. package and unchanged-marker repeat checks pass.
-exact linux installer release build, code-mode runtime, persistent policy
-activation and authenticated access remain NOT_RUN. phone/fleet deployment
-is outside these checks; qualification stays false pending readiness review.
-see [the qualification issue](issues/native-provider-install-qualification.md).
+no upstream native daemon/thread/remote-tui combined check, linux native package,
+authenticated access, phone or fleet verification ran in this installer task.
+those boundaries are NOT_RUN; source changes and packaging checks do not prove
+product acceptance. see [the qualification issue](issues/native-provider-install-qualification.md).

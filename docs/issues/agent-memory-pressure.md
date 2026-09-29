@@ -35,8 +35,8 @@ resolved when: representative concurrent development completes with adequate
 memory headroom and no memory-pressure terminations under the selected
 workload or host capacity.
 
-native-control tradeoff (2026-09-29): a skid-marked codex tui starts one native
-owner per used `CODEX_HOME`. that owner persists after the last tui exits until
+native-control tradeoff (2026-09-29): a skid-created codex thread uses the
+upstream native daemon selected by its existing `CODEX_HOME`. that owner persists after the last tui exits until
 an explicit `codex app-server daemon stop` under the selected account. the
 provider's lifecycle implementation has no idle timeout or reference-counted
 shutdown. this removes unconditional startup of three shared services, but

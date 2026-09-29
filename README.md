@@ -97,25 +97,19 @@ in place. existing environment-override semantics and native herdr integrations
 remain intact; jarvis keeps its existing worker account map.
 
 original skid's forge and marked bash/zsh terminals use those same accounts
-through scoped commands. skid invokes codex's pinned native executable and
+through scoped commands. skid invokes codex's upstream npm native executable and
 the shared native claude command directly. personal claude leaves
 `CLAUDE_CONFIG_DIR` unset. skid loads its claude identity plugin explicitly; it
 installs no codex hooks and never provisions or rewrites account state.
 [the runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract)
 gives the exact worker map and app environment contract.
 
-`apply` builds codex from the exact source revision and bundled patch in
-`assets/codex/native-source.json`. it verifies the upstream and patched lock
-hashes, authenticates upstream sandbox v8 artifacts against the pinned tree,
-uses the declared rust toolchain and a locked release build, then
-publishes an immutable generation through `~/.local/bin/codex`. a failed build
-leaves the previous command installed. claude reconciles the exact qualified
-native version declared in `assets/skid-provider/native-control.json`.
-account update settings remain user-owned; apply repairs version drift without
-restarting running provider sessions.
-the bundled codex patch modifies upstream native-control and tui selection;
-upstream [license](assets/codex/LICENSE) and [notice](assets/codex/NOTICE)
-accompany the source patch and installed native package.
+`apply` resolves codex's stable npm `latest` once per run on every host
+and installs it when needed under `~/.local`. npm owns package integrity;
+installation disables scripts and verifies the package and executable versions.
+claude reconciles the exact qualified native version declared in
+`assets/skid-provider/native-control.json`. account update settings remain
+user-owned; apply repairs version drift without restarting provider sessions.
 
 interactive zsh aliases add `--yolo` to codex commands and
 `--dangerously-skip-permissions` to claude commands. the defaults live in
@@ -132,12 +126,13 @@ codex-work2 resume
 codex owns each account's native daemon and discovery socket. `codex` honors
 an existing `CODEX_HOME`, otherwise selecting `.codex`; `codex-work` and
 `codex-work2` always select their named homes. the wrappers pass arguments
-unchanged to the installed cli. skid-marked tuis bootstrap a pinned account
-owner on demand and require its selected-view capability before attachment.
-a foreign or mismatched daemon produces an action without replacing it.
-ordinary unmarked launches retain codex's native discovery and embedded policy.
-use codex's native daemon commands to inspect
-or stop a daemon; `--no-daemon` selects direct execution when needed.
+unchanged to the installed cli. manual marked-shell commands are ordinary
+stock launches; they do not acquire a native thread association. for sessions
+created through skid, the host starts or reuses the selected account's upstream
+daemon, creates a native thread, then launches `codex --remote unix://... resume`
+with that thread id. the socket comes from the selected `CODEX_HOME` at
+`app-server-control/app-server-control.sock`. the installer owns no daemon
+bootstrap, service or package policy.
 
 on the devbox, apply retires the former shared services and their exact
 discovery links before reconciling ai tools. when those services are present,

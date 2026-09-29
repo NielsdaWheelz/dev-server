@@ -31,7 +31,7 @@
         mode: '0755'
       loop: >-
         {{ ['', 'lib', 'assets', 'assets/' ~ gateway_product]
-           + (['assets/skid-provider', 'assets/codex'] if gateway_product == 'skidbladnir' else []) }}
+           + (['assets/skid-provider'] if gateway_product == 'skidbladnir' else []) }}
       when: gateway_operation == 'apply' or item in ['', 'lib']
 
     - name: Install selected gateway libraries
@@ -61,15 +61,6 @@
         owner: "{{ devbox_user }}"
         group: "{{ devbox_user }}"
         mode: preserve
-      when: gateway_product == 'skidbladnir' and gateway_operation == 'apply'
-
-    - name: Install original Skidbladnir native Codex declaration
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../assets/codex/native-source.json"
-        dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/codex/native-source.json"
-        owner: "{{ devbox_user }}"
-        group: "{{ devbox_user }}"
-        mode: '0644'
       when: gateway_product == 'skidbladnir' and gateway_operation == 'apply'
 
     - name: Ensure root-owned gateway ingress library directory exists

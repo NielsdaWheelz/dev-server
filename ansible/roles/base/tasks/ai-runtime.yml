@@ -22,24 +22,6 @@
     argv: [apparmor_parser, -r, /etc/apparmor.d/bwrap-userns-restrict]
   changed_when: false
 
-- name: Permit user namespaces for owned Codex package bubblewrap copies
-  ansible.builtin.copy:
-    dest: /etc/apparmor.d/dev-server-codex-bwrap
-    owner: root
-    group: root
-    mode: "0644"
-    content: |
-      abi <abi/4.0>,
-      include <tunables/global>
-      profile dev-server-codex-bwrap /home/{{ devbox_user }}/{.local/share/codex/releases/*,.codex{,-work,-work2}/packages/app-server-daemon/releases/*}/codex-resources/bwrap flags=(unconfined) {
-        userns,
-      }
-
-- name: Load the owned Codex package bubblewrap namespace profile
-  ansible.builtin.command:
-    argv: [apparmor_parser, -r, /etc/apparmor.d/dev-server-codex-bwrap]
-  changed_when: false
-
 - name: Verify Codex user and network namespace prerequisites
   ansible.builtin.command:
     argv:

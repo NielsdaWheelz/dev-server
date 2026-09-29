@@ -15,7 +15,6 @@
     - assets/routers
     - assets/claude
     - assets/herdr
-    - assets/codex
     - assets/skid-provider
 
 - name: Install exact runtime libraries
@@ -85,17 +84,6 @@
     - herdr.service
     - herdr-gate
     - jarvis-gate.pub
-
-- name: Install exact native Codex source declaration and patch
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../assets/codex/{{ item }}"
-    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/codex/{{ item }}"
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    mode: "0644"
-  loop:
-    - native-source.json
-    - native-agent.patch
 
 - name: Install qualified Claude version declaration
   ansible.builtin.copy:

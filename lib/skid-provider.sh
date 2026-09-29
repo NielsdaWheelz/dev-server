@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
 
-# Shared provider installation owns the managed binary. This consumer obtains
-# the native executable through that module's explicit installed-path contract.
+# The npm launcher selects this packaged native executable. Gateway profiles
+# use the native path so foreground identity remains the provider process.
 skidbladnir_native_paths() {
-  local home="$1" codex claude claude_target expected
-  codex="$(ai_codex_installed_path "$home")" || return 1
+  local home="$1" package triple codex claude claude_target expected
+  case "$(uname -s):$(uname -m)" in
+  Darwin:arm64) package=codex-darwin-arm64 triple=aarch64-apple-darwin ;;
+  Linux:x86_64) package=codex-linux-x64 triple=x86_64-unknown-linux-musl ;;
+  *) return 1 ;;
+  esac
+  codex="$home/.local/lib/node_modules/@openai/codex/node_modules/@openai/$package/vendor/$triple/bin/codex"
+  [[ -x "$codex" && -f "$codex" && ! -L "$codex" ]] || return 1
   expected="$(ai_claude_version_pin)" || return 1
   claude="$home/.local/bin/claude"
   [[ -L "$claude" && -x "$claude" ]] || return 1
   claude_target="$(readlink "$claude")" || return 1
   [[ "$claude_target" == "$home/.local/share/claude/versions/$expected" &&
-     -f "$claude_target" && ! -L "$claude_target" && -x "$claude_target" ]] || return 1
+    -f "$claude_target" && ! -L "$claude_target" && -x "$claude_target" ]] || return 1
   [[ "$(ai_claude_version "$claude")" == "$expected" ]] || return 1
   printf '%s\t%s\t%s\n' "$codex" "$claude" "$home"
 }

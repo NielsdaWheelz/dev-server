@@ -60,49 +60,12 @@ status and bounded history on all three hosts with the corrected plugin in
 `unconfirmed`; later observation found the exact provider processes gone.
 native background-job stop remains `NOT_RUN`. provider upgrades require
 requalification; an exact install alone cannot prove compatibility.
-the current source pin is directly merged `llm-calling@0bbba0a994de7b46645037f0ecc24aeb59fe6e4a`,
-with lock `a7771120dd948759c4f0d089382046443a2348a447453e68369400c6a43bc8e9`
-(anyio 4.14.2), native claude 2.1.284 and the same uv/python/sdk versions.
-no helper patch is applied. `qualified: false` blocks gateway apply pending
-acceptance of this source/environment and the pinned codex native owner.
-the historical results above do not qualify these changes. the gateway release
-pin now selects public v0.10.4 (`8510f2e`) with exact
-artifact hashes. qualification retains the remaining native platform and
-authentication boundaries using these exact inputs.
-a helper-only probe is insufficient to establish gateway protocol compatibility.
-approved isolated mac combined checks pass using the published gateway, merged
-frozen helper and actual `ai_install_codex` release package: selected binding,
-native accepted user-send receipt, finalized native read and stale-process
-rejection. a controlled no-auth model endpoint emits a typed final answer;
-the saved output identity, receipt turn, expected reply hash and utf-8 bound
-match. native owner stop, version-rpc absence and owned process/fixture cleanup
-pass. package version/layout/resources/licenses and unchanged-marker repeat
-installation also pass. authenticated access and linux installer acceptance
-remain separate boundaries.
-approved disposable mac qualification on provider `49c9f47` passed marked
-no-auth cold startup, second-tui attachment preserving the first view, native
-read-only observation, spoofed-owner and cross-view rejection, and absence of
-an upstream update marker. all owned sockets, processes and fixtures were
-removed. the debug owner's approximately 188 mib rss is a fixture measurement.
-a focused same-version/different-executable live mismatch check rejected the
-marked challenger with exit 1 while preserving the running owner's identity,
-package selection and version rpc. the exact owner and fixtures were cleaned.
-approved devbox noble x86_64 namespace probes passed for byte-identical distro
-bubblewrap copies at both package paths under a task-scoped temporary version
-of the proposed profile. its release wildcards were narrowed to test names;
-both copies attached and isolated user/network/pid namespaces. the profile,
-copies and newly created empty parents were removed without changing existing
-profiles, services or provider configuration. subsequent noble x86_64 native
-source checks pass on `49c9f47` with a genuine locked debug build (debug symbols
-disabled): marked startup, second tui sharing the owner with a distinct view,
-selected-view read, guarded send/finalized read with matching reply hash, and
-spoof/stale rejection. package and daemon-copy bubblewrap are denied/allowed/
-denied around the task-scoped temporary policy. native stop and cleanup of
-owned processes, policy, sockets, source/toolchain/packages pass. no gateway is
-involved and code-mode runtime is disabled. the exact linux installer release
-build, code-mode runtime, permanent policy activation and authenticated access
-remain NOT_RUN; phone/fleet deployment is outside these checks. the repository
-qualification flag stays false pending readiness review.
+the current direct helper source, lock and runtime versions are declared in
+`assets/skid-provider/native-control.json`; no helper patch is applied.
+`qualified: false` blocks gateway apply pending the coordinated stock-codex
+contract. codex uses upstream npm stable `latest`, without a custom build or
+package policy. earlier fork/provider checks and public v0.10.4 do not qualify
+this contract. see [the qualification issue](issues/native-provider-install-qualification.md).
 
 
 ## deployment contract
@@ -209,15 +172,14 @@ original skid uses the same four explicit account homes. manual personal
 claude leaves `CLAUDE_CONFIG_DIR` unset; setting it to `~/.claude` is not
 assumed equivalent to native default behavior. its forge profiles invoke absolute
 native providers with explicit arguments, foreground signatures and its
-claude identity plugin. codex must resolve to its pinned native package executable.
-its skid-marked tui bootstraps an account-scoped pinned native daemon on demand
-and attaches directly after selected-view capability verification. mismatched
-existing packages or owners require manual action; no launch replaces or
-restarts them. each used codex account retains its native owner after the last
-tui exits until an explicit account-scoped `codex app-server daemon stop`.
-there is no idle or reference-counted shutdown; using all three accounts can
-retain three owners. skid adds no lifecycle supervisor. see
-[the memory issue](issues/agent-memory-pressure.md).
+claude identity plugin. codex resolves to its upstream npm package executable.
+for skid-created threads the host starts or reuses the account's native daemon,
+creates the thread, and attaches the stock tui with `--remote unix://... resume`
+and that thread id. the control socket is derived from the profile's existing
+`CODEX_HOME`. manual marked-shell codex commands stay ordinary stock calls
+without a native association. upstream owns daemon lifecycle; the installer
+adds no bootstrap or service. retained account-daemon memory remains an
+[open workload question](issues/agent-memory-pressure.md).
 claude keeps basename `claude` for helper
 lookup. its host config includes `nativeControlPath` pointing
 to the skid-owned helper. the gateway supplies its selected absolute claude

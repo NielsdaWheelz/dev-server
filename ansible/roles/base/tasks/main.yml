@@ -97,10 +97,6 @@
     name:
       - bat
       - build-essential
-      - cmake
-      - pkg-config
-      - libssl-dev
-      - rustup
       - ca-certificates
       - curl
       - dbus-user-session

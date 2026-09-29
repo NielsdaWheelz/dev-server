@@ -32,7 +32,7 @@ operations; see [the cutover runbook](docs/gateway-separation-runbook.md).
 | homebrew | update metadata and upgrade declared formulae and casks |
 | pacman/yay | full `pacman -Syu` with declared packages, then declared aur packages |
 | ubuntu apt | refresh metadata and reconcile declared packages to repository candidates |
-| codex/claude | build the exact patched codex source pin; reconcile the qualified native claude version |
+| codex/claude | resolve upstream npm stable latest; reconcile the qualified native claude version |
 | repo pins | install declared exact versions |
 
 native package managers resolve required dependencies. arch partial upgrades
@@ -160,17 +160,12 @@ adopt old in-place clones. cursor extension and other exact tool declarations
 remain reviewable repository inputs. no generic profile/plugin framework,
 compatibility state reader, or second package manager is introduced.
 
-one codex binary is published at `$HOME/.local/bin/codex` from an immutable
-source-build generation. `assets/codex/native-source.json` declares the exact
-revision, patch digest, upstream and patched lock digests, rust version and
-reported executable version. authenticate the upstream sandbox v8 manifest
-against the pinned tree and verify its archive and binding. verify each
-boundary, build with `--locked`, and
-promote only after the lock and executable version match. the package contains
-its code-mode helper, ripgrep and linux bubblewrap, plus native package metadata
-with `skidPinned: true` to disable daemon updates from upstream. build prerequisites
-belong to native package declarations; the shared installer owns the user
-rust toolchain. a failed build preserves the prior generation and command.
+one codex binary is installed at `$HOME/.local/bin/codex` through npm's user
+prefix. apply resolves one stable `MAJOR.MINOR.PATCH` from `latest` on every
+host. installation uses npm integrity with scripts disabled. installed
+manifest and executable must agree; no stale-candidate fallback follows a
+failed requested upgrade. gateway profiles use the npm package's native
+executable so foreground identity remains the provider process.
 
 one claude native binary is published at `$HOME/.local/bin/claude` from its
 versioned native directory. bootstrap downloads anthropic's official https
@@ -221,15 +216,17 @@ instruction updates affect new sessions; status line updates apply live.
 
 ## codex daemon ownership
 
-native codex owns account daemon startup, discovery, reuse, command support,
-and remote semantics. this repository installs no shared codex service or
-discovery link. native daemon lifecycle stays with codex; wrapper and binary
-updates do not restart running agents. preserve all account homes, credentials,
-configuration and history. skid-marked tuis start their account's native
-pinned owner on demand and bind directly to it; no per-pane daemon exists.
-an existing mismatched native package or owner cannot be replaced or restarted
-implicitly. ordinary unmarked tuis retain upstream discovery and embedded
-fallback. selected-view capability is required before marked attachment.
+upstream codex owns account daemon startup, discovery, reuse, command support,
+and remote semantics. this repository installs no codex service, discovery
+link, custom source build or daemon package policy. binary updates do not
+restart running agents. preserve account homes, credentials, configuration and
+history.
+
+skid-created sessions use the upstream daemon selected by `CODEX_HOME`; its
+socket is `app-server-control/app-server-control.sock` below that account home.
+the host ensures the daemon is running, creates the native thread, then attaches
+the stock tui using `--remote unix://... resume THREAD_ID`. manual marked-shell
+commands remain ordinary stock launches without a claimed native association.
 
 ubuntu provisions the distro's bubblewrap apparmor profile and verifies user,
 network and pid namespace creation without disabling the global restriction.
@@ -599,5 +596,6 @@ install that revision without patches into a revision-named generation and
 synchronize its environment with `uv sync --frozen --extra claude-sdk --no-dev`.
 verify source identity, lock hash and runtime versions before publishing the
 launcher. `qualified: false` returns action/2 before gateway mutation. isolated
-installation and rejected-request probes prove packaging only; provider owner
-selection, native control and linux namespace behavior require live qualification.
+installation and rejected-request probes prove packaging only. upstream daemon
+startup, thread creation, remote attachment and native control require combined
+qualification against the installed stock package.
