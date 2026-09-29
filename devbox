@@ -37,14 +37,13 @@ ssh_include_candidate=''
 ssh_known_hosts_candidate=''
 ssh_known_hosts_candidate_old=''
 ansible_output=''
-codex_restart_authorized=0
 steady_rules=''
 host_key_enrollment=0
 devbox_declared_stage=''
 
 usage() {
   cat <<'EOF'
-Usage: ./devbox apply [--restart-codex]
+Usage: ./devbox apply
        ./devbox gateway {apply|remove} {herdr-mobile|skidbladnir}
        ./devbox help
 
@@ -604,7 +603,7 @@ devbox_gateway_snapshot() {
     paths+=("assets/$product")
   fi
   if [[ "$product" == skidbladnir && "$operation" == apply ]]; then
-    paths+=(assets/skid-provider lib/skid-provider.sh)
+    paths+=(assets/skid-provider assets/codex/native-source.json lib/ai-tools.sh lib/skid-provider.sh)
   fi
   dev_server_declared_snapshot "$root" "${paths[@]}"
 }
@@ -638,7 +637,11 @@ devbox_stage_gateway_inputs() {
   if [[ "$product" == skidbladnir && "$operation" == apply ]]; then
     cp -Rp "$base_dir/assets/skid-provider" "$devbox_declared_stage/assets/skid-provider" ||
       die 'could not stage skid provider assets'
-    cp -p "$base_dir/lib/skid-provider.sh" "$devbox_declared_stage/lib/" ||
+    install -d -m 0700 "$devbox_declared_stage/assets/codex" ||
+      die 'could not stage native codex declaration directory'
+    cp -p "$base_dir/assets/codex/native-source.json" "$devbox_declared_stage/assets/codex/" ||
+      die 'could not stage native codex declaration'
+    cp -p "$base_dir/lib/ai-tools.sh" "$base_dir/lib/skid-provider.sh" "$devbox_declared_stage/lib/" ||
       die 'could not stage provider library'
   fi
   staged_snapshot="$(devbox_gateway_snapshot "$devbox_declared_stage" "$product" "$operation")" ||
@@ -875,12 +878,8 @@ apply_new_server() {
 }
 
 run_ansible_apply() {
-  local codex_restart_value=false rc herdr_action_lines herdr_action_line herdr_action_subject
+  local rc herdr_action_lines herdr_action_line herdr_action_subject
   local jarvis_gate_key
-
-  if ((codex_restart_authorized)); then
-    codex_restart_value=true
-  fi
 
   ansible_output="$(mktemp "${TMPDIR:-/tmp}/devbox-ansible.XXXXXX")"
   set +e
@@ -888,26 +887,11 @@ run_ansible_apply() {
     ANSIBLE_NOCOLOR=1 \
     uvx --from ansible-core==2.19.2 ansible-playbook \
     --ssh-common-args "-F $ssh_include" \
-    --extra-vars "{\"devbox_codex_runtime_restart_authorized\":$codex_restart_value}" \
     -i "$ansible_inventory" "$ansible_apply_playbook" \
     >"$ansible_output" 2>&1
   rc=$?
   set -e
   if ((rc != 0)); then
-    if ((rc == 2)) && grep -Fq DEV_SERVER_CODEX_ACTION_NATIVE_DISCOVERY "$ansible_output"; then
-      rm -f -- "$ansible_output"
-      ansible_output=''
-      render_result ACTION codex.runtime \
-        'resolve the conflicting native Codex discovery entry, then rerun ./devbox apply'
-      return 2
-    fi
-    if ((rc == 2)) && grep -Fq DEV_SERVER_CODEX_ACTION_DRAIN_RESTART "$ansible_output"; then
-      rm -f -- "$ansible_output"
-      ansible_output=''
-      render_result ACTION codex.runtime \
-        'rerun ./devbox apply --restart-codex to drain and restart all shared Codex services'
-      return 2
-    fi
     tail -c 65536 "$ansible_output" >&2 || true
     rm -f -- "$ansible_output"
     ansible_output=''
@@ -993,10 +977,6 @@ check_github_enrollment() {
 }
 
 cmd_apply() {
-  if (($# == 1)) && [[ "$1" == --restart-codex ]]; then
-    codex_restart_authorized=1
-    shift
-  fi
   (($# == 0)) || {
     usage >&2
     return 64

@@ -8,7 +8,7 @@ critical result, and report mutations, deferrals, or required actions.
 
 ```text
 ./workstation apply
-./devbox apply [--restart-codex]
+./devbox apply
 ./workstation gateway {apply|remove} {herdr-mobile|skidbladnir}
 ./devbox gateway {apply|remove} {herdr-mobile|skidbladnir}
 ./workstation {help|--help|-h}
@@ -19,7 +19,6 @@ critical result, and report mutations, deferrals, or required actions.
 configuration. rolling versions come from upstream on each run; repository pins
 remain exact desired state. there is no configuration-only or offline mode and
 no `upgrade` command or alias.
-`--restart-codex` separately authorizes interruption of the devbox's three codex servers.
 
 gateway operations select one product and leave shared host tools and upstream
 herdr alone. ordinary host apply does not install either gateway.
@@ -33,7 +32,7 @@ operations; see [the cutover runbook](docs/gateway-separation-runbook.md).
 | homebrew | update metadata and upgrade declared formulae and casks |
 | pacman/yay | full `pacman -Syu` with declared packages, then declared aur packages |
 | ubuntu apt | refresh metadata and reconcile declared packages to repository candidates |
-| codex/claude | reconcile the devbox codex pin; elsewhere install stable codex npm `latest`; install native claude `latest` |
+| codex/claude | build the exact patched codex source pin; reconcile the qualified native claude version |
 | repo pins | install declared exact versions |
 
 native package managers resolve required dependencies. arch partial upgrades
@@ -75,7 +74,7 @@ a later subsystem failure can leave earlier changes applied; rerun after repair.
 there is no whole-host transaction or duplicated all-host admission gate.
 
 workstation host apply orders native packages, dotfiles, exact-host personal
-policy, ai tools/shared codex, herdr, then remaining postconditions. a gateway
+policy, ai tools, herdr, then remaining postconditions. a gateway
 operation stages only its own declaration closure, checks its owned ingress,
 and applies/removes that gateway and handler. neither gateway operation runs
 upstream herdr preflight or host-tool provisioning. linux is supported
@@ -100,8 +99,7 @@ managed files use compare-before-write and same-filesystem atomic promotion.
 verify bytes and mode before rename; preserve credentials and account state.
 a managed file is entirely repo-owned except explicitly named parser-backed
 keys, currently cursor's `remote.SSH.remotePlatform`, claude's `statusLine`,
-`autoUpdatesChannel`, and `minimumVersion`, and jarvis's gate lines in the
-owner's `~/.ssh/authorized_keys`.
+and jarvis's gate lines in the owner's `~/.ssh/authorized_keys`.
 intentional symlinks have explicit owners and targets; do not overwrite
 conflicting foreign paths.
 
@@ -128,7 +126,6 @@ more privileged consumer. interrupted activation must remain retryable.
 | `skid.unit`, `skid.runtime` | activate original skid only, with its own rollback |
 | `herdr-mobile.unit`, `herdr-mobile.runtime` | activate herdr-mobile only, with its own rollback |
 | `herdr.integration` | future agent sessions; nothing restarts |
-| `codex.runtime` | explicit authorized drain/restart of all three services |
 | `tailscale.serve` | reconcile private mapping; no tailscale restart |
 | `system.reboot` | report only |
 
@@ -163,26 +160,30 @@ adopt old in-place clones. cursor extension and other exact tool declarations
 remain reviewable repository inputs. no generic profile/plugin framework,
 compatibility state reader, or second package manager is introduced.
 
-one codex binary is installed at `$HOME/.local/bin/codex` through npm's user
-prefix. devbox apply reconciles its declared pin, including drift
-from a native update; workstation apply resolves one stable
-`MAJOR.MINOR.PATCH` from `latest`. installation uses npm integrity with scripts
-disabled. installed manifest and executable must agree; no stale-candidate
-fallback after a failed requested upgrade.
+one codex binary is published at `$HOME/.local/bin/codex` from an immutable
+source-build generation. `assets/codex/native-source.json` declares the exact
+revision, patch digest, upstream and patched lock digests, rust version and
+reported executable version. verify each boundary, build with `--locked`, and
+promote only after the lock and executable version match. the package contains
+its code-mode helper, ripgrep and linux bubblewrap, plus native package metadata
+with `skidPinned: true` to disable daemon updates from upstream. build prerequisites
+belong to native package declarations; the shared installer owns the user
+rust toolchain. a failed build preserves the prior generation and command.
 
 one claude native binary is published at `$HOME/.local/bin/claude` from its
 versioned native directory. bootstrap downloads anthropic's official https
-installer to a temporary file and syntax-checks it before execution. subsequent
-updates use native `install latest` under the normal host home. both accounts
-share the repo-owned `latest` channel with no account version floor; reconcile
-these settings before installation. the native updater owns background updates
-and old-version cleanup. reject a conflicting canonical path; do not restart
+installer to a temporary file and syntax-checks it before execution. installation
+reconciles the exact qualified version in the native-control declaration under
+the normal host home. account update settings stay user-owned; apply repairs
+drift from native updates. reject a conflicting canonical path; do not restart
 running claude processes.
 
-ordinary and herdr commands retain their established implementations:
-`codex-shared.py` renders the three codex account commands from `profiles.json`;
-`ai-profile` supplies only `claude-work`; bare claude resolves to its existing
-native executable. normal homes remain `.codex`, `.codex-work`, `.codex-work2`,
+ordinary and herdr account commands are installed by `lib/ai-tools.sh`.
+`codex` preserves a nonempty `CODEX_HOME`, defaulting to `.codex`; the named
+work commands force `.codex-work` or `.codex-work2`. each executes the canonical
+cli with unchanged arguments. `ai-profile` supplies only `claude-work`; bare
+claude resolves to its existing native executable. normal homes remain
+`.codex`, `.codex-work`, `.codex-work2`,
 `.claude` and `.claude-work`, with existing override and account-selection
 semantics. they are shared user state, not herdr-owned or cognition-only state.
 preserve authentication, configuration, history, memories, plugins and trust.
@@ -212,50 +213,43 @@ provider/environment profiles and herdr's native integrations.
 `assets/agent-instructions.md` supplies the five account instruction files,
 installed as mode `0600`. `assets/claude/statusline.sh` is installed as
 `~/bin/claude-statusline`, and both claude account `settings.json` files carry a
-repo-owned `statusLine` key pointing at it. apply also sets `autoUpdatesChannel`
-to `latest` and removes `minimumVersion` in both accounts. every other settings
+repo-owned `statusLine` key pointing at it. every other settings
 key, authentication, history, project instructions, and skills remain user-owned.
 instruction updates affect new sessions; status line updates apply live.
 
-## shared codex services
+## codex daemon ownership
 
-`assets/codex/profiles.json`, schema v3, owns account homes, endpoints, binary,
-and devbox principals. workstation paths are projected from that declaration;
-there is no second account map or package version in it.
+native codex owns account daemon startup, discovery, reuse, command support,
+and remote semantics. this repository installs no shared codex service or
+discovery link. native daemon lifecycle stays with codex; wrapper and binary
+updates do not restart running agents. preserve all account homes, credentials,
+configuration and history. skid-marked tuis start their account's native
+pinned owner on demand and bind directly to it; no per-pane daemon exists.
+an existing mismatched native package or owner cannot be replaced or restarted
+implicitly. ordinary unmarked tuis retain upstream discovery and embedded
+fallback. selected-view capability is required before marked attachment.
 
-only the devbox runs them: three system services as `niels`, whose one client
-is jarvis's cognition. it normalizes only the exact parents/sockets to
-`0750`/`0660` for its intended client group; no public socket exists. macbook
-and arch run none: their only consumer was codex's own discovery, and an
-interactive codex without a server runs embedded. workstations keep the account
-wrappers only. the devbox pins codex 0.155.1 because 0.156 publishes the socket
-as a symlink into a private directory jarvis cannot reach
-([issue](docs/issues/codex-daemon-socket.md)); workstations track npm `latest`.
-preserve all account homes and credentials.
+ubuntu provisions the distro's bubblewrap apparmor profile and verifies user,
+network and pid namespace creation without disabling the global restriction.
+earlyoom remains enabled and prefers preserving codex and claude. compare its
+active arguments with the installed policy so interrupted activation is
+repaired on the next apply; unchanged policy does not restart the service.
 
-native discovery links the account's `app-server-control/app-server-control.sock`
-to its managed endpoint. check all three before draining or changing coupled
-inputs. exact links, including dangling ones, are idempotent; foreign links,
-files, or sockets produce an action instead of takeover.
+the devbox retires the former shared runtime before ai-tool reconciliation.
+when any former service unit remains installed, stop and disable its jarvis
+consumer before stopping and disabling the three services. remove only
+discovery symlinks whose targets are the former shared endpoints, the old
+service/helper/configuration files, and the two former client group memberships.
+leave every other discovery path intact. reload systemd only after removal
+changes installed files. subsequent applies do not stop a separately repaired
+jarvis service.
 
-native codex owns reuse, embedded fallback, command support, and remote
-semantics. compatible interactive launches can reuse a server; startup
-overrides and unavailable servers can select embedded execution. explicit
-remote requires attachment and has its own cwd/config/resume behavior. shared
-tools use the server environment, not ambient calling-shell credentials.
-
-missing services start. healthy running services retain operational inputs
-unless `--restart-codex` authorizes drain/restart. changed coupled inputs require
-`ACTION`/exit `2` before replacement. the flag also restarts unchanged services
-to pick up a newer binary. cli-only upgrades do not change the operational
-identity or trigger a restart. record active identity only after all three
-services pass activity, socket permission, and connection checks. a connection
-proves transport readiness, not a provider turn. never kill tmux or native history.
-
-jarvis cognition remains a local client with its own permission policy.
-worker control goes through jarvis's herdr gate on each host
-([herdr gate](#herdr-gate-and-cross-host-use)); no dedicated jarvis worker
-launcher remains.
+the deployed jarvis cognition dependency must be replaced with a private codex
+process under jarvis's ownership before jarvis can be enabled again. this
+migration deliberately sacrifices jarvis availability to restore independently
+usable developer accounts. jarvis owns the private-process migration.
+worker control still goes through jarvis's herdr gate on each host
+([herdr gate](#herdr-gate-and-cross-host-use)).
 
 ## deployment identity
 
@@ -594,3 +588,14 @@ absorbs real complexity or enforces a named invariant. atomicity, credentials,
 host-key continuity, private ingress, and verified skid rollback are retained.
 record unresolved work in `docs/issues/`, one file per issue, and remove resolved
 records. completed deployment plans and cutover instructions belong in git history.
+
+## native helper source qualification
+
+`assets/skid-provider/native-control.json` pins a directly merged helper source
+revision and its exact lock hash, python, uv, claude sdk and native claude versions.
+install that revision without patches into a revision-named generation and
+synchronize its environment with `uv sync --frozen --extra claude-sdk --no-dev`.
+verify source identity, lock hash and runtime versions before publishing the
+launcher. `qualified: false` returns action/2 before gateway mutation. isolated
+installation and rejected-request probes prove packaging only; provider owner
+selection, native control and linux namespace behavior require live qualification.

@@ -25,8 +25,7 @@ command; there is no separate update mode. each run checks upstream releases,
 so an unchanged checkout can still produce software updates. configuration-only
 and offline applies are not supported.
 
-already-converged configuration and pinned components are left alone, except
-for an explicitly requested codex restart.
+already-converged configuration and pinned components are left alone.
 native package managers and installers own update checks and bookkeeping. exit
 `0` means installed, with any deferred activation reported; `2` means an exact
 manual action is required; `1` means failure; `64` means invalid invocation.
@@ -61,7 +60,7 @@ casks. the app store tailscale app remains separately owned: apply verifies
 and optionally starts it, but never installs, updates, replaces, or signs in to it.
 
 host configuration is applied in order: native packages, dotfiles, exact-host
-personal policy, ai tools/shared codex services, then upstream herdr. gateway
+personal policy, ai tools, then upstream herdr. gateway
 commands stage only their own inputs and reconcile only their own ingress. desktop login, reboot, busy containers, and tmux
 binary activation are reported as `DEFERRED`. repo-owned activation never forces
 them. native package installation/upgrade scripts can still restart their
@@ -95,22 +94,24 @@ ordinary and herdr shells keep the established provider binaries and account
 commands: `.codex`, `.codex-work`, `.codex-work2`, `.claude`, `.claude-work`.
 their authentication, configuration, history, memories, plugins and trust stay
 in place. existing environment-override semantics and native herdr integrations
-remain intact; jarvis keeps its existing worker map and cognition services.
+remain intact; jarvis keeps its existing worker account map.
 
 original skid's forge and marked bash/zsh terminals use those same accounts
-through scoped commands. skid invokes codex's packaged native executable and
+through scoped commands. skid invokes codex's pinned native executable and
 the shared native claude command directly. personal claude leaves
 `CLAUDE_CONFIG_DIR` unset. skid loads its claude identity plugin explicitly; it
 installs no codex hooks and never provisions or rewrites account state.
 [the runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract)
 gives the exact worker map and app environment contract.
 
-`apply` reconciles the devbox codex pin; elsewhere it resolves codex's stable npm
-`latest` once per run and installs it when needed. npm installation uses normal
-integrity checks with scripts disabled; claude uses native `install latest`. both claude
-accounts follow `latest`: apply enforces that shared policy and removes
-account version floors. claude's native auto-updater handles background updates
-and old-version cleanup. wrappers add no startup update lookup.
+`apply` builds codex from the exact source revision and bundled patch in
+`assets/codex/native-source.json`. it verifies the upstream and patched lock
+hashes, uses the declared rust toolchain and a locked release build, then
+publishes an immutable generation through `~/.local/bin/codex`. a failed build
+leaves the previous command installed. claude reconciles the exact qualified
+native version declared in `assets/skid-provider/native-control.json`.
+account update settings remain user-owned; apply repairs version drift without
+restarting running provider sessions.
 
 interactive zsh aliases add `--yolo` to codex commands and
 `--dangerously-skip-permissions` to claude commands. the defaults live in
@@ -124,44 +125,37 @@ codex-work login
 codex-work2 resume
 ```
 
-the devbox supervises three codex app servers, one per account, as system
-services running as `niels`, for jarvis's cognition; it grants only the intended
-local client group access and pins codex 0.155.1 (see
-[issue](docs/issues/codex-daemon-socket.md)). macbook and arch run no shared
-server; interactive codex there runs embedded. account homes and credentials
-stay intact.
+codex owns each account's native daemon and discovery socket. `codex` honors
+an existing `CODEX_HOME`, otherwise selecting `.codex`; `codex-work` and
+`codex-work2` always select their named homes. the wrappers pass arguments
+unchanged to the installed cli. skid-marked tuis bootstrap a pinned account
+owner on demand and require its selected-view capability before attachment.
+a foreign or mismatched daemon produces an action without replacing it.
+ordinary unmarked launches retain codex's native discovery and embedded policy.
+use codex's native daemon commands to inspect
+or stop a daemon; `--no-daemon` selects direct execution when needed.
 
-native discovery links each account's
-`app-server-control/app-server-control.sock` to its supervised socket. a
-conflicting path produces `ACTION`; apply never takes over another daemon.
-account clients, including skid's native launches, retain this discovery
-behavior. explicit `--remote unix://…` requires attachment but has different command, cwd, config,
-and resume semantics. the wrappers do not parse these choices.
+on the devbox, apply retires the former shared services and their exact
+discovery links before reconciling ai tools. when those services are present,
+it first stops and disables jarvis, whose deployed cognition depends on them.
+jarvis must gain its own private codex process before it can be enabled again;
+that migration belongs to the jarvis repository.
+subsequent applies leave a separately repaired jarvis service alone. account
+homes, credentials and native daemon sockets are preserved.
 
-shared tools execute in the server environment. calling-shell credentials are
-not inherited, and long-lived-server config reload and full resume/config parity
-are not promised. native daemon stop/restart cannot manage these supervised
-services. after finishing active turns, explicitly restart them with:
+ordinary devbox apply installs ubuntu's bubblewrap apparmor profile and
+configures earlyoom to prefer preserving codex and claude. under severe memory
+pressure, builds and editors can still be killed; the preference does not make
+agents immune.
 
-```sh
-./devbox apply --restart-codex
-```
-
-without the flag, healthy running codex services keep
-their current backend, even after a cli upgrade. changed operational inputs
-produce `ACTION` before replacing the coupled files. the flag restarts all three
-services even when their inputs are unchanged; tmux sessions survive.
-
-[`assets/codex/profiles.json`](assets/codex/profiles.json) owns operational account
-paths and principals. [`assets/agent-instructions.md`](assets/agent-instructions.md)
+[`assets/agent-instructions.md`](assets/agent-instructions.md)
 is installed into the five account homes as `AGENTS.md` or `CLAUDE.md`. edit the
 repo source; apply replaces the installed copies. new sessions load changes.
 [`assets/claude/statusline.sh`](assets/claude/statusline.sh) is installed as
 `~/bin/claude-statusline` and set as the `statusLine` command in both claude
 account `settings.json` files; running sessions pick it up on the next update.
-the repo also owns `autoUpdatesChannel` and removes `minimumVersion` in both
-accounts. project instructions, skills, other settings keys, history, and
-authentication remain separately owned.
+account update settings, project instructions, skills, other settings keys,
+history and authentication remain separately owned.
 
 ## agent fleet
 
@@ -177,6 +171,10 @@ independently. changing its runtime while it runs requires an explicit stop
 because stopping ends its terminals and agents. herdr integrations remain in
 the existing normal account homes. original skid shares those accounts and has
 an explicitly loaded claude plugin and separately pinned native helper.
+the helper comes directly from its merged source revision; its lock hash,
+python, uv and sdk versions define the frozen environment. no helper patch is
+applied. `qualified: false` refuses gateway apply before mutation until the
+new generation passes its live acceptance boundaries.
 provider binaries remain shared host tools maintained by host `apply`.
 tailscale follows its host package manager, except on macos where the app store
 owns updates.
@@ -201,8 +199,8 @@ key in each owner account's `authorized_keys`; the gate runs only an allowlist
 of agent and pane commands. it is policy hygiene, not containment: pane ids are
 not scoped to jarvis's panes. the key is generated on devbox and its public
 half is committed as the trust root. the gate's allowed home values must match
-jarvis's existing worker map. provider homes, cognition services and discovery
-remain unchanged during the gateway cutover.
+jarvis's existing worker map. gateway operations preserve provider homes and
+leave cognition ownership to jarvis.
 
 rebuilding devbox changes its host key and its jarvis key: update the `devbox`
 line in [`assets/herdr/jarvis-known_hosts`](assets/herdr/jarvis-known_hosts)
@@ -266,7 +264,8 @@ python environment, database/roles, migrations, service, credentials, and
 backup/recovery. dev-server never deploys jarvis or touches nexus application
 state. jarvis is independent of developer rootless docker.
 
-jarvis cognition uses the existing shared codex services; its worker tools
+jarvis's shared codex dependency is retired during host apply. its owner must
+provide a private cognition process before restarting it. its worker tools
 reach each host's herdr through the gate (see [agent fleet](#agent-fleet)).
 
 ## development
@@ -276,7 +275,7 @@ reach each host's herdr through the gate (see [agent fleet](#agent-fleet)).
 | command orchestration | `workstation`, `devbox` |
 | file installation and result reporting | `lib/common.sh` |
 | workstation packages, personal policy, dotfiles, tmux activation | `lib/packages-*.sh`, `lib/personal-*.sh`, `lib/dotfiles.sh`, `lib/tmux.sh` |
-| ai binaries, accounts, shared services | `lib/ai-tools.sh`, `assets/codex/`, `assets/routers/ai-profile` |
+| ai binaries and account commands | `lib/ai-tools.sh`, `assets/routers/ai-profile` |
 | devbox github identity and ssh client policy | `ansible/roles/github/`; `devbox` owns account enrollment checks |
 | herdr runtime and integrations, jarvis's gate | `lib/herdr.sh`, `assets/herdr/`, `ansible/roles/jarvis_herdr/` |
 | gateway ownership and shared activation | `lib/herdr-mobile.sh`, `lib/skidbladnir.sh`, `lib/gateway-runtime.sh`, `assets/{herdr-mobile,skidbladnir}/` |

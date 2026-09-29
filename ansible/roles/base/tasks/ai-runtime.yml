@@ -1,0 +1,111 @@
+---
+- name: Install the AI runtime host packages # noqa package-latest
+  ansible.builtin.apt:
+    name: [bubblewrap, apparmor-profiles, apparmor-utils, earlyoom]
+    state: latest
+    update_cache: true
+    cache_valid_time: 3600
+  environment:
+    NEEDRESTART_MODE: l
+
+- name: Install the Ubuntu bubblewrap user namespace profile
+  ansible.builtin.copy:
+    src: /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+    dest: /etc/apparmor.d/bwrap-userns-restrict
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Load the bubblewrap user namespace profile
+  ansible.builtin.command:
+    argv: [apparmor_parser, -r, /etc/apparmor.d/bwrap-userns-restrict]
+  changed_when: false
+
+- name: Permit user namespaces for owned Codex package bubblewrap copies
+  ansible.builtin.copy:
+    dest: /etc/apparmor.d/dev-server-codex-bwrap
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      abi <abi/4.0>,
+      include <tunables/global>
+      profile dev-server-codex-bwrap /home/{{ devbox_user }}/{.local/share/codex/releases/*,.codex{,-work,-work2}/packages/app-server-daemon/releases/*}/codex-resources/bwrap flags=(unconfined) {
+        userns,
+      }
+
+- name: Load the owned Codex package bubblewrap namespace profile
+  ansible.builtin.command:
+    argv: [apparmor_parser, -r, /etc/apparmor.d/dev-server-codex-bwrap]
+  changed_when: false
+
+- name: Verify Codex user and network namespace prerequisites
+  ansible.builtin.command:
+    argv:
+      - bwrap
+      - --ro-bind
+      - /
+      - /
+      - --dev-bind
+      - /dev
+      - /dev
+      - --proc
+      - /proc
+      - --tmpfs
+      - /tmp
+      - --unshare-user
+      - --unshare-net
+      - --unshare-pid
+      - --uid
+      - "0"
+      - --gid
+      - "0"
+      - --
+      - /bin/true
+  become_user: "{{ devbox_user }}"
+  changed_when: false
+
+- name: Prefer preserving interactive agents during memory exhaustion
+  ansible.builtin.copy:
+    dest: /etc/default/earlyoom
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    content: |
+      # Preserve agent sessions and essential host processes; other victims are
+      # ranked by memory use. This is a preference, not immunity from OOM.
+      EARLYOOM_ARGS="-r 60 -m 10 -s 20 --avoid '^(systemd|sshd|tailscaled|tmux|init|caddy|dockerd|containerd|postgres|codex|claude)$'"
+
+- name: Check whether earlyoom is running the installed policy
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        from pathlib import Path
+        import shlex
+        import subprocess
+
+        config = Path('/etc/default/earlyoom').read_text()
+        assignment = next(line for line in config.splitlines()
+                          if line.startswith('EARLYOOM_ARGS='))
+        expected = shlex.split(shlex.split(assignment)[0].split('=', 1)[1])
+        pid = subprocess.check_output(
+            ['systemctl', 'show', 'earlyoom.service', '-p', 'MainPID', '--value'],
+            text=True).strip()
+        try:
+            actual = Path(f'/proc/{int(pid)}/cmdline').read_bytes().split(b'\0')
+        except FileNotFoundError:
+            actual = []
+        print('current' if [arg.decode() for arg in actual[1:-1]] == expected
+              else 'restart')
+  register: base_earlyoom_policy
+  changed_when: false
+
+- name: Activate the memory exhaustion policy
+  ansible.builtin.systemd_service:
+    name: earlyoom.service
+    enabled: true
+    state: "{{ (base_earlyoom_policy.stdout == 'current') | ternary('started', 'restarted') }}"

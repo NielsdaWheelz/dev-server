@@ -51,7 +51,7 @@ original skid supplied its source deployment contract at
 2026-09-25. implementation `3bd0ae468c8feefc1e2eac5ee72085d23ec445e2` adopts
 existing accounts; coordinating handoff `2ad2cab` confirms that contract for
 both products. templates are under `deployment/providers/` and the helper pin under
-`deployment/native-control/pin.json`. the exact helper inputs are `llm-calling@ec97adeb9ddd0f91b141f89cc42cff7cc7efdb8f`, uv `0.11.28`,
+`deployment/native-control/pin.json`. the historical helper inputs were `llm-calling@ec97adeb9ddd0f91b141f89cc42cff7cc7efdb8f`, uv `0.11.28`,
 python `3.12.13`, claude sdk `0.2.130`. the owner reports frozen installation, disposable-home/path routing and native
 claude 2.1.282 command availability passing on macbook without authentication.
 subsequent operator qualification passed native claude-work binding, idle
@@ -60,6 +60,15 @@ status and bounded history on all three hosts with the corrected plugin in
 `unconfirmed`; later observation found the exact provider processes gone.
 native background-job stop remains `NOT_RUN`. provider upgrades require
 requalification; an exact install alone cannot prove compatibility.
+the current source pin is directly merged `llm-calling@0bbba0a994de7b46645037f0ecc24aeb59fe6e4a`,
+with lock `a7771120dd948759c4f0d089382046443a2348a447453e68369400c6a43bc8e9`
+(anyio 4.14.2), native claude 2.1.284 and the same uv/python/sdk versions.
+no helper patch is applied. `qualified: false` blocks gateway apply pending
+acceptance of this source/environment and the pinned codex native owner.
+the historical results above do not qualify these changes. the current gateway
+release pin is still v0.10.3; qualification cannot be enabled until a published
+coordinated skid release is pinned and qualified with these exact native inputs.
+a helper-only probe is insufficient to establish gateway protocol compatibility.
 
 ## deployment contract
 
@@ -165,8 +174,16 @@ original skid uses the same four explicit account homes. manual personal
 claude leaves `CLAUDE_CONFIG_DIR` unset; setting it to `~/.claude` is not
 assumed equivalent to native default behavior. its forge profiles invoke absolute
 native providers with explicit arguments, foreground signatures and its
-claude identity plugin. codex must resolve to its packaged native executable,
-not the npm javascript entry point. claude keeps basename `claude` for helper
+claude identity plugin. codex must resolve to its pinned native package executable.
+its skid-marked tui bootstraps an account-scoped pinned native daemon on demand
+and attaches directly after selected-view capability verification. mismatched
+existing packages or owners require manual action; no launch replaces or
+restarts them. each used codex account retains its native owner after the last
+tui exits until an explicit account-scoped `codex app-server daemon stop`.
+there is no idle or reference-counted shutdown; using all three accounts can
+retain three owners. skid adds no lifecycle supervisor. see
+[the memory issue](issues/agent-memory-pressure.md).
+claude keeps basename `claude` for helper
 lookup. its host config includes `nativeControlPath` pointing
 to the skid-owned helper. the gateway supplies its selected absolute claude
 command through `SKIDBLADNIR_CLAUDE_COMMAND`; the frozen environment's private

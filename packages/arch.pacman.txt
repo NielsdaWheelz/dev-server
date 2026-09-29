@@ -3,6 +3,7 @@ atuin
 base-devel
 bat
 btop
+bubblewrap
 cmake
 curl
 direnv

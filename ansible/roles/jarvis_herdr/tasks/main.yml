@@ -56,8 +56,7 @@
   register: jarvis_herdr_public_key
   changed_when: false
 
-# Not a failure: nothing later in the play depends on the committed key, and a
-# failed play would strand codex services drained by --restart-codex.
+# Not a failure: nothing later in the play depends on the committed key.
 - name: Report a Jarvis herdr gate key that differs from the committed trust root
   ansible.builtin.debug:
     msg: "DEV_SERVER_JARVIS_ACTION_GATE_KEY {{ jarvis_herdr_public_key.stdout }}"

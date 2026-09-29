@@ -26,12 +26,12 @@ import sys
 
 with open(sys.argv[1], encoding="utf-8") as stream:
     value = json.load(stream)
-fields = {"repository", "revision", "lockSha256", "patchSha256", "uvVersion", "pythonVersion", "claudeSdkVersion", "claudeVersion", "entryPoint", "installedCommand", "qualified"}
+fields = {"repository", "revision", "lockSha256", "uvVersion", "pythonVersion", "claudeSdkVersion", "claudeVersion", "entryPoint", "installedCommand", "qualified"}
 if not isinstance(value, dict) or value.keys() != fields or type(value["qualified"]) is not bool:
     raise SystemExit(1)
 if not isinstance(value["repository"], str) or not re.fullmatch(r"https://[a-zA-Z0-9./_-]+\.git", value["repository"]):
     raise SystemExit(1)
-for key, size in (("revision", 40), ("lockSha256", 64), ("patchSha256", 64)):
+for key, size in (("revision", 40), ("lockSha256", 64)):
     if not isinstance(value[key], str) or not re.fullmatch(r"[0-9a-f]{%d}" % size, value[key]):
         raise SystemExit(1)
 for key in ("uvVersion", "pythonVersion", "claudeSdkVersion", "claudeVersion"):
@@ -39,15 +39,14 @@ for key in ("uvVersion", "pythonVersion", "claudeSdkVersion", "claudeVersion"):
         raise SystemExit(1)
 if value["entryPoint"] != "provider-runtime-control" or value["installedCommand"] != "skidbladnir-provider-runtime-control":
     raise SystemExit(1)
-print("\t".join(value[key] for key in ("repository", "revision", "lockSha256", "patchSha256", "uvVersion", "pythonVersion", "claudeSdkVersion", "entryPoint", "installedCommand", "claudeVersion")) + "\t" + ("ready" if value["qualified"] else "pending"))
+print("\t".join(value[key] for key in ("repository", "revision", "lockSha256", "uvVersion", "pythonVersion", "claudeSdkVersion", "entryPoint", "installedCommand", "claudeVersion")) + "\t" + ("ready" if value["qualified"] else "pending"))
 PIN
 }
 
 skidbladnir_provider_preflight() {
-  local home="$1" pin repository revision lock patch uv_version python_version sdk entry _installed _claude qualification source
+  local home="$1" pin repository revision lock uv_version python_version sdk entry _installed _claude qualification source
   pin="$(skidbladnir_native_pin)" || die 'invalid skid native-control pin'
-  IFS=$'\t' read -r repository revision lock patch uv_version python_version sdk entry _installed _claude qualification <<<"$pin"
-  [[ "$(dev_server_sha256 "$(dev_server_assets_dir)/skid-provider/native-control.patch")" == "$patch" ]] || die 'native helper patch checksum differs'
+  IFS=$'\t' read -r repository revision lock uv_version python_version sdk entry _installed _claude qualification <<<"$pin"
   if [[ "$qualification" == pending ]]; then
     render_result ACTION skid.native 'original skid owner has not qualified the pinned native helper'
     return 2
@@ -71,13 +70,13 @@ skidbladnir_provider_preflight() {
 }
 
 skidbladnir_provider_install_helper() {
-  local home="$1" candidate="$2" base release stage source uv wrapper marker pin repository revision lock patch uv_version python_version sdk entry _installed _claude qualification pin_sha
+  local home="$1" candidate="$2" base release stage source uv wrapper marker pin repository revision lock uv_version python_version sdk entry _installed _claude qualification pin_sha
   pin="$(skidbladnir_native_pin)" || return 1
-  IFS=$'\t' read -r repository revision lock patch uv_version python_version sdk entry _installed _claude qualification <<<"$pin"
-  [[ "$qualification" == ready && "$(dev_server_sha256 "$(dev_server_assets_dir)/skid-provider/native-control.patch")" == "$patch" ]] || return 1
+  IFS=$'\t' read -r repository revision lock uv_version python_version sdk entry _installed _claude qualification <<<"$pin"
+  [[ "$qualification" == ready ]] || return 1
   pin_sha="$(dev_server_sha256 "$(dev_server_assets_dir)/skid-provider/native-control.json")" || return 1
   base="$home/.local/share/skidbladnir/provider-runtime-control"
-  release="$base/releases/$revision-$patch"
+  release="$base/releases/$revision"
   uv="$base/bootstrap/bin/uv"
   ensure_directory "$base" 0700 || return 1
   ensure_directory "$base/releases" 0700 || return 1
@@ -100,12 +99,6 @@ skidbladnir_provider_install_helper() {
        ! git -C "$source" fetch --quiet --depth=1 origin "$revision" ||
        ! git -C "$source" checkout --quiet --detach "$revision" ||
        [[ "$(git -C "$source" rev-parse HEAD 2>/dev/null)" != "$revision" ]] ||
-       [[ "$(dev_server_sha256 "$source/uv.lock")" != "$lock" ]]; then
-      rm -R -- "$stage"
-      return 1
-    fi
-    if ! git -C "$source" apply --check "$(dev_server_assets_dir)/skid-provider/native-control.patch" ||
-       ! git -C "$source" apply "$(dev_server_assets_dir)/skid-provider/native-control.patch" ||
        [[ "$(dev_server_sha256 "$source/uv.lock")" != "$lock" ]]; then
       rm -R -- "$stage"
       return 1

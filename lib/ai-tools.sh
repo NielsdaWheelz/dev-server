@@ -61,15 +61,8 @@ ai_validate_inputs() {
   statusline="$(dev_server_assets_dir)/claude/statusline.sh"
   [[ -f "$statusline" && ! -L "$statusline" && -s "$statusline" ]] ||
     die "invalid claude status line script: $statusline"
-  ai_codex_host validate || die 'invalid shared Codex declaration'
   ai_codex_source_pin >/dev/null || die 'invalid native Codex source pin'
   ai_claude_version_pin >/dev/null || die 'invalid qualified Claude version'
-}
-
-ai_codex_host() {
-  python3 "$(dev_server_assets_dir)/codex/codex-shared.py" \
-    --config "$(dev_server_assets_dir)/codex/profiles.json" \
-    --host "${dev_server_ai_host:-devbox}" "$@"
 }
 
 ai_install_dirs() {
@@ -96,8 +89,21 @@ _ai_codex_generation_path() {
   IFS=$'\t' read -r repository revision version base_lock patch lock rust <<<"$pin"
   release="$home/.local/share/codex/releases/$revision-$patch"
   [[ -f "$release/bin/codex" && ! -L "$release/bin/codex" && -x "$release/bin/codex" &&
-     -f "$release/.installed" && ! -L "$release/.installed" &&
-     "$(cat "$release/.installed")" == "$(dev_server_sha256 "$(dev_server_assets_dir)/codex/native-source.json")" ]] || return 1
+    -f "$release/.installed" && ! -L "$release/.installed" &&
+    "$(cat "$release/.installed")" == "$(dev_server_sha256 "$(dev_server_assets_dir)/codex/native-source.json")" ]] || return 1
+  [[ -f "$release/codex-package.json" && ! -L "$release/codex-package.json" &&
+    -x "$release/bin/codex-code-mode-host" && -x "$release/codex-path/rg" ]] || return 1
+  if [[ "$(uname -s)" == Linux ]]; then
+    [[ -x "$release/codex-resources/bwrap" ]] || return 1
+  fi
+  python3 - "$release/codex-package.json" "$version" <<'PACKAGE' || return 1
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as stream:
+    value = json.load(stream)
+if value.get("version") != sys.argv[2] or value.get("skidPinned") is not True:
+    raise SystemExit(1)
+PACKAGE
   [[ "$("$release/bin/codex" --version)" == "codex-cli $version" ]] || return 1
   printf '%s\n' "$release/bin/codex"
 }
@@ -111,7 +117,7 @@ ai_codex_installed_path() {
 }
 
 ai_install_codex() (
-  local home pin repository revision version base_lock patch lock rust base release stage='' source binary status=INSTALLED command generation
+  local home pin repository revision version base_lock patch lock rust base release stage='' source binary status=INSTALLED command generation target
   home="$(dev_server_home)"
   pin="$(ai_codex_source_pin)" || die 'invalid native Codex source pin'
   IFS=$'\t' read -r repository revision version base_lock patch lock rust <<<"$pin"
@@ -125,12 +131,16 @@ ai_install_codex() (
     render_result UPDATED "AI tool" "codex@$version native source"
     return 0
   fi
-  for command in rustup cmake pkg-config cc; do
+  for command in rustup cmake pkg-config cc rg; do
     if ! command -v "$command" >/dev/null; then
       render_result ACTION codex.build "install the declared source-build prerequisite: $command"
       return 2
     fi
   done
+  if [[ "$(uname -s)" == Linux ]] && ! command -v bwrap >/dev/null; then
+    render_result ACTION codex.build 'install the declared source-build prerequisite: bwrap'
+    return 2
+  fi
   base="$home/.local/share/codex"
   release="$base/releases/$revision-$patch"
   binary="$home/.local/bin/codex"
@@ -151,18 +161,36 @@ ai_install_codex() (
   git -C "$source" fetch --quiet --depth=1 origin "$revision" || return 1
   git -C "$source" checkout --quiet --detach "$revision" || return 1
   [[ "$(git -C "$source" rev-parse HEAD)" == "$revision" &&
-     "$(dev_server_sha256 "$source/codex-rs/Cargo.lock")" == "$base_lock" ]] || return 1
+  "$(dev_server_sha256 "$source/codex-rs/Cargo.lock")" == "$base_lock" ]] || return 1
   git -C "$source" apply --check "$(dev_server_assets_dir)/codex/native-agent.patch" || return 1
   git -C "$source" apply "$(dev_server_assets_dir)/codex/native-agent.patch" || return 1
   [[ "$(dev_server_sha256 "$source/codex-rs/Cargo.lock")" == "$lock" ]] || return 1
   rustup toolchain install "$rust" --profile minimal || return 1
   [[ "$(rustup run "$rust" rustc --version)" == "rustc $rust "* ]] || return 1
   CARGO_TARGET_DIR="$stage/target" rustup run "$rust" cargo build \
-    --manifest-path "$source/codex-rs/Cargo.toml" --locked --release --bin codex || return 1
+    --manifest-path "$source/codex-rs/Cargo.toml" --locked --release --bin codex --bin codex-code-mode-host || return 1
   [[ "$(dev_server_sha256 "$source/codex-rs/Cargo.lock")" == "$lock" &&
-     "$("$stage/target/release/codex" --version)" == "codex-cli $version" ]] || return 1
-  mkdir -m 0755 "$stage/release" "$stage/release/bin" || return 1
+  "$("$stage/target/release/codex" --version)" == "codex-cli $version" ]] || return 1
+  target="$(rustup run "$rust" rustc -vV | sed -n 's/^host: //p')" || return 1
+  [[ "$target" == *-apple-darwin || "$target" == *-unknown-linux-gnu ]] || return 1
+  mkdir -m 0755 "$stage/release" "$stage/release/bin" \
+    "$stage/release/codex-path" "$stage/release/codex-resources" || return 1
   install -m 0755 "$stage/target/release/codex" "$stage/release/bin/codex" || return 1
+  install -m 0755 "$stage/target/release/codex-code-mode-host" "$stage/release/bin/codex-code-mode-host" || return 1
+  install -m 0755 "$(command -v rg)" "$stage/release/codex-path/rg" || return 1
+  if [[ "$target" == *-unknown-linux-gnu ]]; then
+    install -m 0755 "$(command -v bwrap)" "$stage/release/codex-resources/bwrap" || return 1
+  fi
+  python3 - "$stage/release/codex-package.json" "$version" "$target" <<'PACKAGE' || return 1
+import json
+import sys
+with open(sys.argv[1], "w", encoding="utf-8") as stream:
+    json.dump({"layoutVersion": 1, "version": sys.argv[2], "target": sys.argv[3],
+               "variant": "codex", "skidPinned": True, "entrypoint": "bin/codex",
+               "resourcesDir": "codex-resources", "pathDir": "codex-path"}, stream)
+    stream.write("\n")
+PACKAGE
+  chmod 0644 "$stage/release/codex-package.json" || return 1
   dev_server_sha256 "$(dev_server_assets_dir)/codex/native-source.json" >"$stage/release/.installed" || return 1
   chmod 0600 "$stage/release/.installed" || return 1
   mv "$stage/release" "$release" || return 1
@@ -278,7 +306,20 @@ ai_install_profiles() {
     die "missing AI profile wrapper: $profile"
 
   codex_profile="$(mktemp "$home/bin/.codex-profile.XXXXXX")" || return 1
-  if ! ai_codex_host launcher >"$codex_profile"; then
+  if ! python3 - "$home" >"$codex_profile" <<'PY'
+import shlex
+import sys
+
+home = sys.argv[1]
+print('#!/usr/bin/env bash\ncase "${0##*/}" in')
+print(f'  codex) [[ -n "${{CODEX_HOME:-}}" ]] || CODEX_HOME={shlex.quote(home + "/.codex")}; export CODEX_HOME ;;')
+for command, account in (("codex-work", ".codex-work"),
+                         ("codex-work2", ".codex-work2")):
+    print(f'  {command}) export CODEX_HOME={shlex.quote(home + "/" + account)} ;;')
+print('  *) exit 64 ;;\nesac')
+print(f'exec {shlex.quote(home + "/.local/bin/codex")} "$@"')
+PY
+  then
     rm -f -- "$codex_profile"
     return 1
   fi

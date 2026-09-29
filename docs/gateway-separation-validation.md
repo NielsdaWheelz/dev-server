@@ -147,15 +147,16 @@ managed zsh template retains one inert guard so ordinary dotfile reinstallation
 cannot erase skid support; no extension framework or once-per-shell flag is
 introduced. shared account settings/history remain visible across products.
 gateway maintenance requires already installed shared host tools and never upgrades
-them. helper/plugin rollback and the original app's implemented fleet verifier
-use the agreed ten-file generation contract.
+them. at that historical cutover, helper/plugin rollback and the original app's
+fleet verifier used the ten-file contract. current generations use eleven
+files, adding `providers/terminal-context-init` as specified in the runbook.
 separately pinned helper environments remain on disk, preserving all retained
 generation dependencies without adding collection machinery.
 
-restoring the established codex launcher also retains its existing coupling to
-the shared-daemon helper. that limitation is recorded again in
-[wrapper/daemon coupling](issues/codex-wrapper-daemon-coupling.md); changing the
-launcher architecture is outside this behavior-preserving correction.
+restoring the established codex launcher retained its existing coupling to
+the shared-daemon helper; changing that architecture was outside this
+behavior-preserving correction. the separate 2026-09-28 runtime repair
+subsequently retired the shared helper and removed that coupling.
 
 ## public cli restoration
 
@@ -189,3 +190,27 @@ up to date and original's tightened fleet verifier passes everywhere.
 gateway, herdr, provider and cognition process identities and receipts were
 preserved. this closes the command/config gap; broader desktop ux waivers are
 unchanged. no live operation was performed by this source task.
+
+## 2026-09-29 native source integration checks
+
+remote main's shared-service retirement is preserved. native codex source
+installation now supplies its complete pinned package layout; ansible owns
+ubuntu build and bundled-bubblewrap namespace prerequisites. workstation and
+devbox gateway staging include the exact provider declaration/library closure.
+
+helper source pins merged `0bbba0a994de7b46645037f0ecc24aeb59fe6e4a` directly,
+with lock `a7771120dd948759c4f0d089382046443a2348a447453e68369400c6a43bc8e9`;
+no helper patch is applied. the lock includes anyio 4.14.2. qualification remains
+false: previous live results do not qualify this changed environment.
+
+temporary component fixtures passed installed-generation rejection, canonical
+link repair, corrupt patch refusal preserving the installed command, and named
+work/personal override account selection. they were removed. shellcheck passed
+changed provider libraries and workstation; both ansible playbooks passed syntax
+checks; whitespace checks passed. an isolated frozen helper installation was
+stopped during dependency synchronization before helper invocation or repeat
+application, and its fixture was removed; it is not a pass.
+
+native marked-tui first-owner startup, multi-tui attachment, selected-view reads,
+owner mismatch refusal and ubuntu bundled-bubblewrap namespace behavior remain
+NOT_RUN. see [the qualification issue](issues/native-provider-install-qualification.md).

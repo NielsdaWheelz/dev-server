@@ -13,9 +13,10 @@
     - assets
     - assets/dotfiles
     - assets/routers
-    - assets/codex
     - assets/claude
     - assets/herdr
+    - assets/codex
+    - assets/skid-provider
 
 - name: Install exact runtime libraries
   ansible.builtin.copy:
@@ -63,17 +64,6 @@
     group: "{{ devbox_user }}"
     mode: "0755"
 
-- name: Install exact shared Codex installer inputs
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../assets/codex/{{ item }}"
-    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/codex/{{ item }}"
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    mode: "0644"
-  loop:
-    - profiles.json
-    - codex-shared.py
-
 - name: Install shared AI instructions
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../assets/agent-instructions.md"
@@ -95,3 +85,22 @@
     - herdr.service
     - herdr-gate
     - jarvis-gate.pub
+
+- name: Install exact native Codex source declaration and patch
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/codex/{{ item }}"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/codex/{{ item }}"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0644"
+  loop:
+    - native-source.json
+    - native-agent.patch
+
+- name: Install qualified Claude version declaration
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/skid-provider/native-control.json"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/skid-provider/native-control.json"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0644"
