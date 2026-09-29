@@ -3,6 +3,7 @@ atuin
 base-devel
 bat
 btop
+cmake
 curl
 direnv
 docker
@@ -33,9 +34,11 @@ nvme-cli
 openssh
 pacman-contrib
 pkgfile
+pkgconf
 rebuild-detector
 reflector
 ripgrep
+rustup
 shellcheck
 shfmt
 smartmontools

@@ -1,0 +1,1868 @@
+diff --git a/src/provider_runtime/agent_runtime/claude_control.py b/src/provider_runtime/agent_runtime/claude_control.py
+index 7624e7b..98819fe 100644
+--- a/src/provider_runtime/agent_runtime/claude_control.py
++++ b/src/provider_runtime/agent_runtime/claude_control.py
+@@ -3,17 +3,25 @@
+ from __future__ import annotations
+ 
+ import asyncio
++import ctypes
+ import importlib.util
+ import json
++import os
+ import re
++import sys
+ from dataclasses import dataclass
+-from typing import Literal
++from pathlib import Path
++from typing import TYPE_CHECKING, Literal
++from uuid import UUID
++
++if TYPE_CHECKING:
++    from claude_agent_sdk import SessionMessage
+ 
+ 
+ class ClaudeControlError(Exception):
+     def __init__(
+         self,
+-        code: Literal["unsupported", "unavailable", "stale", "unknown"],
++        code: Literal["unsupported", "unavailable", "stale", "unknown", "history_changed"],
+         dispatch: Literal["not_sent", "unknown"] = "not_sent",
+     ) -> None:
+         super().__init__(code)
+@@ -28,21 +36,28 @@ class ClaudeSession:
+     pid: int | None
+     job_id: str | None
+     state: str
+-    reason: str | None
++
++
++@dataclass(slots=True)
++class _AssistantReply:
++    text: list[str]
++    stop_reason: str | None
++    anchor: str
+ 
+ 
+ def history_available() -> bool:
+     return importlib.util.find_spec("claude_agent_sdk") is not None
+ 
+ 
+-async def _command(*arguments: str, mutating: bool = False) -> bytes:
++async def _command(executable: str, *arguments: str, mutating: bool = False) -> bytes:
+     try:
+         child = await asyncio.create_subprocess_exec(
+-            "claude",
++            executable,
+             *arguments,
+             stdin=asyncio.subprocess.DEVNULL,
+             stdout=asyncio.subprocess.PIPE,
+             stderr=asyncio.subprocess.DEVNULL,
++            env={**os.environ, "LC_ALL": "C"},
+         )
+     except OSError:
+         raise ClaudeControlError("unavailable") from None
+@@ -69,7 +84,7 @@ async def _command(*arguments: str, mutating: bool = False) -> bytes:
+ 
+ 
+ async def list_sessions() -> tuple[ClaudeSession, ...]:
+-    output = await _command("agents", "--json", "--all")
++    output = await _command("claude", "agents", "--json", "--all")
+     try:
+         rows = json.loads(output)
+         if not isinstance(rows, list):
+@@ -81,7 +96,9 @@ async def list_sessions() -> tuple[ClaudeSession, ...]:
+             pid, session_id, job_id = row.get("pid"), row.get("sessionId"), row.get("id")
+             if pid is not None and (type(pid) is not int or pid <= 0):
+                 raise ValueError
+-            if session_id is not None and not isinstance(session_id, str):
++            if session_id is not None and (
++                not isinstance(session_id, str) or str(UUID(session_id)) != session_id
++            ):
+                 raise ValueError
+             if job_id is not None and (
+                 not isinstance(job_id, str) or not re.fullmatch(r"[a-zA-Z0-9_-]+", job_id)
+@@ -103,16 +120,7 @@ async def list_sessions() -> tuple[ClaudeSession, ...]:
+             state = native_state or {"busy": "working", "waiting": "blocked", "idle": "idle"}.get(
+                 live_status or "", "unknown"
+             )
+-            reason = None
+-            if state == "blocked":
+-                reason = {
+-                    "permission prompt": "permission",
+-                    "sandbox request": "permission",
+-                    "input needed": "input",
+-                    "worker request": "input",
+-                    "dialog open": "dialog",
+-                }.get(row.get("waitingFor") or "", "dialog")
+-            result.append(ClaudeSession(row["kind"], session_id, pid, job_id, state, reason))
++            result.append(ClaudeSession(row["kind"], session_id, pid, job_id, state))
+         return tuple(result)
+     except (ValueError, TypeError, UnicodeError):
+         raise ClaudeControlError("unavailable") from None
+@@ -134,41 +142,179 @@ def match_session(
+     return matches[0]
+ 
+ 
+-def read_messages(session_id: str) -> str:
++def verify_process(pid: int, start_identity: str) -> None:
++    """Compare the exact kernel lifetime encoded by the host, without signals."""
+     try:
+-        from claude_agent_sdk import get_session_messages
++        if sys.platform == "linux":
++            fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
++            actual = fields[19]
++        elif sys.platform == "darwin":
++            # proc_bsdinfo contains 120 bytes before its two start-time uint64s.
++            info = ctypes.create_string_buffer(136)
++            libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
++            count = libproc.proc_pidinfo(pid, 3, 0, info, len(info))
++            if count != len(info):
++                raise ClaudeControlError("stale")
++            seconds = int.from_bytes(info.raw[120:128], sys.byteorder)
++            micros = int.from_bytes(info.raw[128:136], sys.byteorder)
++            actual = str(seconds * 1_000_000 + micros)
++        else:
++            raise ClaudeControlError("unavailable")
++    except (OSError, ValueError, IndexError):
++        raise ClaudeControlError("stale") from None
++    if actual != start_identity:
++        raise ClaudeControlError("stale")
++
++
++def _messages(session_id: str) -> list[SessionMessage]:
++    try:
++        from claude_agent_sdk import get_session_info, get_session_messages
+     except ImportError:
+         raise ClaudeControlError("unsupported") from None
+     try:
++        info = get_session_info(session_id)
++        if info is None:
++            raise ClaudeControlError("unavailable")
+         messages = get_session_messages(session_id)
++        if not messages:
++            raise ClaudeControlError("unavailable")
+     except (OSError, ValueError):
+         raise ClaudeControlError("unavailable") from None
+-    text = []
++    return messages
++
++
++def _assistant_groups(messages: list[SessionMessage]) -> dict[str, _AssistantReply]:
++    groups: dict[str, _AssistantReply] = {}
+     for message in messages:
+-        content = message.message.get("content") if isinstance(message.message, dict) else None
+-        if isinstance(content, str):
+-            text.append(f"{message.type}: {content}")
+-        elif isinstance(content, list):
+-            for block in content:
+-                if not isinstance(block, dict):
+-                    continue
+-                value = block.get("text") if block.get("type") == "text" else block.get("content")
+-                if isinstance(value, str):
+-                    text.append(f"{message.type}: {value}")
+-    if not text:
+-        raise ClaudeControlError("unavailable")
+-    return "\n\n".join(text)
+-
+-
+-async def stop(session_id: str | None, pid: int | None) -> dict[str, str]:
++        if message.type != "assistant":
++            continue
++        value = message.message
++        if not isinstance(value, dict) or not isinstance(value.get("id"), str) or not value["id"]:
++            raise ClaudeControlError("unavailable")
++        content = value.get("content")
++        if not isinstance(content, list) or not isinstance(message.uuid, str) or not message.uuid:
++            raise ClaudeControlError("unavailable")
++        handle = value["id"]
++        reason = value.get("stop_reason")
++        if reason is not None and not isinstance(reason, str):
++            raise ClaudeControlError("unavailable")
++        group = groups.setdefault(handle, _AssistantReply([], reason, message.uuid))
++        if group.stop_reason != reason:
++            raise ClaudeControlError("unavailable")
++        group.anchor = message.uuid
++        for block in content:
++            if not isinstance(block, dict):
++                raise ClaudeControlError("unavailable")
++            if block.get("type") == "text":
++                text = block.get("text")
++                if not isinstance(text, str):
++                    raise ClaudeControlError("unavailable")
++                if text:
++                    group.text.append(text)
++    return groups
++
++
++def read_messages(session_id: str, scope: Literal["latest", "history"], max_bytes: int) -> dict:
++    messages = _messages(session_id)
++    groups = _assistant_groups(messages)
++    latest = next(
++        ((handle, group) for handle, group in reversed(list(groups.items())) if group.text), None
++    )
++    text = []
++    if scope == "history":
++        for message in messages:
++            value = message.message
++            if not isinstance(value, dict):
++                raise ClaudeControlError("unavailable")
++            content = value.get("content")
++            if isinstance(content, str):
++                text.append(f"{message.type}: {content}")
++            elif isinstance(content, list):
++                for block in content:
++                    if (
++                        isinstance(block, dict)
++                        and block.get("type") == "text"
++                        and isinstance(block.get("text"), str)
++                    ):
++                        text.append(f"{message.type}: {block['text']}")
++    elif latest:
++        text = latest[1].text
++    value = "\n\n".join(text)
++    encoded = value.encode()
++    result: dict = {
++        "text": encoded[-max_bytes:].decode(errors="ignore"),
++        "source": "native",
++        "scope": scope,
++        "truncated": len(encoded) > max_bytes,
++        "outputState": "none",
++    }
++    if latest:
++        handle, group = latest
++        result["outputState"] = "finalized" if group.stop_reason == "end_turn" else "unknown"
++        if group.stop_reason == "end_turn":
++            result["outputId"] = handle
++    return result
++
++
++def results(session_id: str, cursor: str | None) -> dict:
++    messages = _messages(session_id)
++    groups = _assistant_groups(messages)
++    start = 0
++    ordered = list(groups.items())
++    if cursor is not None:
++        try:
++            anchor = json.loads(cursor)
++            if (
++                not isinstance(anchor, dict)
++                or set(anchor) != {"sessionId", "messageId", "uuid"}
++                or anchor["sessionId"] != session_id
++            ):
++                raise ValueError
++            matches = [
++                index
++                for index, (handle, group) in enumerate(ordered)
++                if handle == anchor["messageId"] and group.anchor == anchor["uuid"]
++            ]
++            if len(matches) != 1:
++                raise ValueError
++            start = matches[0] + 1
++        except (ValueError, TypeError):
++            raise ClaudeControlError("history_changed") from None
++    ids: list[str] = []
++    for index in range(start, len(ordered)):
++        handle, group = ordered[index]
++        if group.stop_reason == "end_turn" and group.text:
++            ids.append(handle)
++        if len(ids) == 128 and index + 1 < len(ordered):
++            return {
++                "resultIds": ids,
++                "nextCursor": json.dumps(
++                    {"sessionId": session_id, "messageId": handle, "uuid": group.anchor},
++                    separators=(",", ":"),
++                ),
++            }
++    return {"resultIds": ids}
++
++
++async def stop(session_id: str, pid: int, start_identity: str) -> dict[str, str]:
++    verify_process(pid, start_identity)
+     session = match_session(await list_sessions(), session_id, pid)
+     if session.job_id is None:
+         raise ClaudeControlError("unsupported")
+-    await _command("stop", session.job_id, mutating=True)
++    if session.state in ("done", "failed", "stopped"):
++        return {"method": "native", "outcome": "finished"}
++    verify_process(pid, start_identity)
++    await _command("claude", "stop", session.job_id, mutating=True)
+     try:
+-        observed = [row for row in await list_sessions() if row.job_id == session.job_id]
++        observed = [
++            row
++            for row in await list_sessions()
++            if row.job_id == session.job_id and row.session_id == session_id
++        ]
+     except ClaudeControlError:
+-        return {"agent": "unconfirmed", "reason": "unavailable"}
++        return {"method": "native", "outcome": "unknown"}
+     if len(observed) == 1 and observed[0].state == "stopped" and observed[0].pid is None:
+-        return {"agent": "stopped"}
+-    return {"agent": "unconfirmed"}
++        return {"method": "native", "outcome": "stopped"}
++    if len(observed) == 1 and observed[0].state in ("done", "failed") and observed[0].pid is None:
++        return {"method": "native", "outcome": "finished"}
++    return {"method": "native", "outcome": "unknown"}
+diff --git a/src/provider_runtime/agent_runtime/codex_app_server.py b/src/provider_runtime/agent_runtime/codex_app_server.py
+index 1a36c8f..49a973f 100644
+--- a/src/provider_runtime/agent_runtime/codex_app_server.py
++++ b/src/provider_runtime/agent_runtime/codex_app_server.py
+@@ -79,12 +79,15 @@ class CodexAppServerConfig:
+     client_name: str = "provider_runtime"
+     client_title: str = "provider-runtime"
+     client_version: str = "0.1.0"
++    experimental_api: bool = False
+ 
+     def __post_init__(self) -> None:
+         if not self.socket_path.is_absolute():
+             raise ValueError("Codex app-server socket must be absolute")
+         if self.request_policy not in ("deny_owned", "observe_only"):
+             raise ValueError("Codex app-server request policy is invalid")
++        if type(self.experimental_api) is not bool:
++            raise ValueError("Codex app-server experimental capability must be boolean")
+         if any(
+             type(value) is not str or not value or "\0" in value or "\n" in value
+             for value in (
+@@ -172,7 +175,7 @@ class CodexAppServerClient:
+             raise ProtocolDefect("Codex app-server client was started more than once")
+         try:
+             self._connection = await unix_connect(
+-                str(self.config.socket_path),
++                str(self.config.socket_path.resolve(strict=True)),
+                 uri="ws://localhost",
+                 open_timeout=_OPERATION_TIMEOUT_SECONDS,
+                 close_timeout=2,
+@@ -193,7 +196,7 @@ class CodexAppServerClient:
+             initialized = await self.request(
+                 "initialize",
+                 {
+-                    "capabilities": {"experimentalApi": False},
++                    "capabilities": {"experimentalApi": self.config.experimental_api},
+                     "clientInfo": {
+                         "name": self.config.client_name,
+                         "title": self.config.client_title,
+diff --git a/src/provider_runtime/agent_runtime/codex_control.py b/src/provider_runtime/agent_runtime/codex_control.py
+index 2955fe5..05abfc6 100644
+--- a/src/provider_runtime/agent_runtime/codex_control.py
++++ b/src/provider_runtime/agent_runtime/codex_control.py
+@@ -9,8 +9,8 @@ from collections.abc import AsyncIterator, Callable, Mapping
+ from contextlib import asynccontextmanager
+ from dataclasses import asdict, dataclass, field, replace
+ from pathlib import Path
+-from typing import Literal, cast
+-from uuid import UUID
++from typing import Literal, assert_never, cast
++from uuid import UUID, uuid4
+ 
+ from .codex_app_server import (
+     CODEX_THREAD_SOURCES,
+@@ -34,6 +34,7 @@ type CodexErrorCode = Literal[
+     "auth",
+     "quota",
+     "output_limit",
++    "history_changed",
+ ]
+ type CodexNativeStatus = Literal["notLoaded", "idle", "active", "systemError"]
+ type CodexTurnStatus = Literal["inProgress", "completed", "interrupted", "failed"]
+@@ -151,6 +152,7 @@ class CodexThreadSummary:
+     name: str | None
+     cwd: str
+     source: str
++    can_accept_direct_input: bool | None = None
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+@@ -182,6 +184,68 @@ class CodexThreadRead:
+     turn: CodexTurnSnapshot | None
+     last_answer: str | None
+     coverage: CodexComplete | CodexBounded
++    history_available: bool = True
++
++
++@dataclass(frozen=True, slots=True)
++class CodexView:
++    view_id: str
++    revision: int
++
++    def __post_init__(self) -> None:
++        _handle(self.view_id)
++        if type(self.revision) is not int or not 0 <= self.revision < 1 << 64:
++            raise InvalidAgentRequest("Codex view revision must be a uint64")
++
++
++@dataclass(frozen=True, slots=True)
++class CodexSelectedTarget:
++    profile_key: str
++    pid: int
++    start_identity: str
++    thread: CodexThreadTarget | None = None
++    view: CodexView | None = None
++
++    def __post_init__(self) -> None:
++        _profile(self.profile_key)
++        if type(self.pid) is not int or self.pid <= 0:
++            raise InvalidAgentRequest("Codex process pid must be positive")
++        if (
++            type(self.start_identity) is not str
++            or not self.start_identity.isdecimal()
++            or int(self.start_identity) <= 0
++        ):
++            raise InvalidAgentRequest("Codex process start identity must be positive")
++        if self.thread is not None and self.thread.profile_key != self.profile_key:
++            raise InvalidAgentRequest("Codex selected thread must use the process profile")
++
++
++@dataclass(frozen=True, slots=True)
++class CodexSelectedObservation:
++    view: CodexView
++    read: CodexThreadRead
++
++
++@dataclass(frozen=True, slots=True)
++class CodexOutput:
++    text: str
++    scope: Literal["latest", "history"]
++    truncated: bool
++    state: Literal["partial", "finalized", "unknown", "none"]
++    output_id: str | None
++    turn_id: str | None
++
++
++@dataclass(frozen=True, slots=True)
++class CodexSelectedRead:
++    inspection: CodexSelectedObservation
++    output: CodexOutput
++
++
++@dataclass(frozen=True, slots=True)
++class CodexResultPage:
++    result_ids: tuple[str, ...]
++    next_cursor: str | None
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+@@ -226,6 +290,11 @@ class _ItemPagingUnavailable(Exception):
+     """Pinned native history cannot provide an item page for this thread."""
+ 
+ 
++class _HistoryNotMaterialized(CodexControlError):
++    def __init__(self) -> None:
++        super().__init__("unavailable", "NotSent")
++
++
+ class CodexControl:
+     """One native control boundary; it owns connections, never servers or workers."""
+ 
+@@ -233,9 +302,12 @@ class CodexControl:
+         self,
+         endpoints: Mapping[str, Path],
+         is_managed: Callable[[CodexThreadTarget], bool],
++        *,
++        native_owners: bool = False,
+     ) -> None:
+         self._endpoints = endpoints
+         self._is_managed = is_managed
++        self._native_owners = native_owners
+         self._clients: set[CodexAppServerClient] = set()
+         self._closed = False
+ 
+@@ -284,6 +356,300 @@ class CodexControl:
+                     observed.append(error)
+         return tuple(observed)
+ 
++    async def inspect_selected(
++        self, targets: tuple[CodexSelectedTarget, ...]
++    ) -> tuple[CodexSelectedObservation | CodexControlError, ...]:
++        if not targets or any(target.profile_key != targets[0].profile_key for target in targets):
++            raise InvalidAgentRequest("Codex inspection requires targets from one profile")
++        observed: list[CodexSelectedObservation | CodexControlError] = []
++        async with self._client(targets[0].profile_key, experimental_api=True) as client:
++            for target in targets:
++                try:
++                    view, thread = await self._selected(client, target)
++                    read = await self._read(client, thread, include_items=False)
++                    await self._selected(client, replace(target, thread=thread, view=view))
++                    observed.append(CodexSelectedObservation(view, read))
++                except CodexControlError as error:
++                    observed.append(error)
++        return tuple(observed)
++
++    async def read_selected(
++        self, target: CodexSelectedTarget, scope: Literal["latest", "history"], max_bytes: int
++    ) -> CodexSelectedRead:
++        async with self._client(target.profile_key, experimental_api=True) as client:
++            view, thread = await self._selected(client, target)
++            read = await self._read(client, thread, include_items=False)
++            output = await self._history(client, thread, scope, max_bytes)
++            await self._selected(client, replace(target, thread=thread, view=view))
++            return CodexSelectedRead(CodexSelectedObservation(view, read), output)
++
++    async def send_selected(
++        self,
++        target: CodexSelectedTarget,
++        text: str,
++        input_kind: Literal["peer", "user"],
++        delivery: Literal["direct", "queue"],
++    ) -> dict[str, str]:
++        _text(text)
++        if input_kind == "peer" and delivery == "queue":
++            raise InvalidAgentRequest("Codex peer input cannot be queued")
++        async with self._client(target.profile_key, experimental_api=True) as client:
++            view, thread = await self._selected(client, target)
++            self._guard(thread)
++            observed = await self._read(client, thread, include_items=False)
++            if (
++                observed.thread.status not in ("active", "idle")
++                or observed.thread.can_accept_direct_input is not True
++            ):
++                raise CodexControlError("unavailable", "NotSent")
++            params: dict[str, object] = {
++                "threadId": thread.thread_handle,
++                "expectedView": {"viewId": view.view_id, "revision": view.revision},
++                "input": [{"type": "text", "text": text}] if input_kind == "user" else [],
++            }
++            if delivery == "queue":
++                params["clientUserMessageId"] = str(uuid4())
++                method = "thread/queue/add"
++            else:
++                method = "turn/start"
++                if input_kind == "peer":
++                    params["toolOutput"] = {
++                        "name": "send_message",
++                        "namespace": "skid",
++                        "output": text,
++                    }
++            result = _object(
++                await self._request(client, method, params, mutation=True, known_thread=thread)
++            )
++        receipt = {
++            "method": "native",
++            "input": input_kind,
++            "delivery": delivery,
++            "outcome": "accepted",
++        }
++        if delivery == "queue":
++            queued = _object(result.get("queuedSubmission"))
++            queue_id, message_id = queued.get("id"), queued.get("clientUserMessageId")
++            if (
++                not isinstance(queue_id, str)
++                or not queue_id
++                or message_id != params["clientUserMessageId"]
++            ):
++                raise CodexControlError("unavailable", "Unknown", thread)
++            receipt.update(queueItemId=queue_id, clientMessageId=cast(str, message_id))
++        else:
++            receipt["turnId"] = _turn_target(
++                thread, _object(result.get("turn")).get("id")
++            ).turn_handle
++        return receipt
++
++    async def interrupt_selected(
++        self, target: CodexSelectedTarget, turn_handle: str | None
++    ) -> dict[str, str]:
++        async with self._client(target.profile_key, experimental_api=True) as client:
++            view, thread = await self._selected(client, target)
++            self._guard(thread)
++            observed = await self._read(client, thread, include_items=False)
++            if observed.thread.status == "notLoaded":
++                raise CodexControlError("unavailable", "NotSent")
++            if observed.thread.status == "idle":
++                await self._selected(client, replace(target, thread=thread, view=view))
++                return {"method": "native", "outcome": "finished"}
++            if observed.turn is None or observed.turn.status != "inProgress":
++                raise CodexControlError("unavailable", "NotSent")
++            if observed.turn.target.turn_handle != turn_handle:
++                raise CodexControlError("stale", "NotSent")
++            turn = observed.turn.target
++            try:
++                await self._request(
++                    client,
++                    "turn/interrupt",
++                    {
++                        "threadId": thread.thread_handle,
++                        "turnId": turn.turn_handle,
++                        "expectedView": {"viewId": view.view_id, "revision": view.revision},
++                    },
++                    mutation=True,
++                    known_thread=thread,
++                )
++                after = await self._read(client, thread, include_items=False)
++            except CodexControlError as error:
++                if error.dispatch != "Unknown":
++                    raise
++                return {"method": "native", "outcome": "unknown"}
++            settled = _interrupt_outcome(turn, after)
++            outcome = (
++                "interrupted"
++                if isinstance(settled, CodexInterrupted)
++                else "finished"
++                if isinstance(settled, CodexFinished)
++                else "unknown"
++            )
++            return {"method": "native", "outcome": outcome, "turnId": turn.turn_handle}
++
++    async def results(self, target: CodexThreadTarget, cursor: str | None) -> CodexResultPage:
++        try:
++            async with self._client(target.profile_key, experimental_api=True) as client:
++                result = await self._turn_page(client, target, cursor, "asc", 128, "full")
++        except CodexControlError as error:
++            if error.code == "missing":
++                raise CodexControlError(
++                    "history_changed" if cursor else "unavailable", "NotSent"
++                ) from None
++            raise
++        if cursor is not None and not result["data"]:
++            raise CodexControlError("history_changed", "NotSent")
++        ids: list[str] = []
++        for value in cast(list[object], result["data"]):
++            turn = _object(value)
++            if turn.get("itemsView") != "full":
++                raise CodexControlError("unavailable", "NotSent")
++            items = turn.get("items")
++            if not isinstance(items, list):
++                raise ProtocolDefect("Codex turn items were malformed")
++            if _finalized(turn) and any(
++                _object(item).get("type") == "agentMessage"
++                and _object(item).get("phase") == "final_answer"
++                and isinstance(_object(item).get("text"), str)
++                and bool(_object(item).get("text"))
++                for item in items
++            ):
++                handle = cast(str, turn["id"])
++                if handle in ids:
++                    raise ProtocolDefect("Codex result page repeated a turn identity")
++                ids.append(handle)
++        return CodexResultPage(tuple(ids), cast(str | None, result.get("nextCursor")))
++
++    async def _selected(
++        self, client: CodexAppServerClient, target: CodexSelectedTarget
++    ) -> tuple[CodexView, CodexThreadTarget]:
++        result = _object(
++            await self._request(
++                client,
++                "tui/view/read",
++                {"process": {"pid": target.pid, "startIdentity": target.start_identity}},
++            )
++        )
++        if result.get("view") is None:
++            raise CodexControlError(
++                "stale" if target.view is not None else "unavailable", "NotSent"
++            )
++        value = _object(result["view"])
++        try:
++            view = CodexView(cast(str, value.get("viewId")), cast(int, value.get("revision")))
++            if target.view is not None and target.view != view:
++                raise CodexControlError("stale", "NotSent")
++            if value.get("threadId") is None:
++                raise CodexControlError("unavailable", "NotSent")
++            thread = CodexThreadTarget(target.profile_key, cast(str, value["threadId"]))
++        except InvalidAgentRequest:
++            raise ProtocolDefect("Codex selected view was malformed") from None
++        if target.thread is not None and target.thread != thread:
++            raise CodexControlError("stale", "NotSent")
++        return view, thread
++
++    async def _turn_page(
++        self,
++        client: CodexAppServerClient,
++        target: CodexThreadTarget,
++        cursor: str | None,
++        direction: Literal["asc", "desc"],
++        limit: int,
++        items_view: Literal["full", "notLoaded"],
++    ) -> dict[str, object]:
++        result = _object(
++            await self._request(
++                client,
++                "thread/turns/list",
++                {
++                    "threadId": target.thread_handle,
++                    "cursor": cursor,
++                    "limit": limit,
++                    "sortDirection": direction,
++                    "itemsView": items_view,
++                },
++            )
++        )
++        data = result.get("data")
++        if not isinstance(data, list) or len(data) > limit:
++            raise ProtocolDefect("Codex turn list exceeded its page contract")
++        next_cursor = result.get("nextCursor")
++        if next_cursor is not None and (
++            not isinstance(next_cursor, str) or not next_cursor or len(next_cursor.encode()) > 4096
++        ):
++            raise ProtocolDefect("Codex turn cursor was malformed")
++        if next_cursor is not None and (not data or next_cursor == cursor):
++            raise ProtocolDefect("Codex history page made no progress")
++        return result
++
++    async def _history(
++        self,
++        client: CodexAppServerClient,
++        target: CodexThreadTarget,
++        scope: Literal["latest", "history"],
++        max_bytes: int,
++    ) -> CodexOutput:
++        cursor = None
++        text: list[str] = []
++        latest: tuple[str, dict[str, object], dict[str, object]] | None = None
++        truncated = False
++        while True:
++            page = await self._turn_page(client, target, cursor, "desc", 8, "full")
++            for raw in cast(list[object], page["data"]):
++                turn = _object(raw)
++                if turn.get("itemsView") != "full" or not isinstance(turn.get("items"), list):
++                    raise CodexControlError("unavailable", "NotSent")
++                for entry in reversed(cast(list[object], turn["items"])):
++                    item = _object(entry)
++                    if item.get("type") not in ("agentMessage", "userMessage"):
++                        continue
++                    value = item.get("text")
++                    if item.get("type") == "userMessage":
++                        content = item.get("content")
++                        if not isinstance(content, list):
++                            raise ProtocolDefect("Codex user message was malformed")
++                        value = "\n".join(
++                            cast(str, _object(block)["text"])
++                            for block in content
++                            if _object(block).get("type") == "text"
++                            and isinstance(_object(block).get("text"), str)
++                        )
++                    if not isinstance(value, str):
++                        raise ProtocolDefect("Codex message text was malformed")
++                    if value and item.get("type") == "agentMessage" and latest is None:
++                        latest = value, turn, item
++                    if value and scope == "history":
++                        text.append(
++                            ("assistant: " if item.get("type") == "agentMessage" else "user: ")
++                            + value
++                        )
++                if scope == "latest" and latest is not None:
++                    break
++            cursor = cast(str | None, page.get("nextCursor"))
++            if scope == "latest" and latest is not None:
++                break
++            if len("\n\n".join(text).encode()) >= max_bytes and latest is not None:
++                truncated = cursor is not None
++                break
++            if cursor is None:
++                break
++        state: Literal["partial", "finalized", "unknown", "none"] = "none"
++        output_id, turn_id = None, None
++        if latest is not None:
++            value, turn, item = latest
++            turn_id = cast(str, turn.get("id"))
++            if _finalized(turn) and item.get("phase") == "final_answer":
++                state, output_id = "finalized", turn_id
++            elif turn.get("status") == "inProgress":
++                state = "partial"
++            else:
++                state = "unknown"
++        value = latest[0] if scope == "latest" and latest else "\n\n".join(reversed(text))
++        encoded = value.encode()
++        if len(encoded) > max_bytes:
++            value, truncated = encoded[-max_bytes:].decode(errors="ignore"), True
++        return CodexOutput(value, scope, truncated, state, output_id, turn_id)
++
+     async def create(self, request: CodexCreateRequest) -> CodexThreadTarget:
+         # The external server may have a different filesystem view or UID.
+         # CodexCreateRequest validates syntax; the server owns existence checks.
+@@ -389,25 +755,38 @@ class CodexControl:
+             raise CodexControlError("unauthorized", "NotSent", target)
+ 
+     @asynccontextmanager
+-    async def _client(self, profile: str) -> AsyncIterator[CodexAppServerClient]:
++    async def _client(
++        self, profile: str, *, experimental_api: bool = False
++    ) -> AsyncIterator[CodexAppServerClient]:
+         if self._closed:
+             raise CodexControlError("unavailable", "NotSent")
+         endpoint = self._endpoints.get(profile)
+         if endpoint is None:
+             raise CodexControlError("unavailable", "NotSent")
+-        client = CodexAppServerClient(CodexAppServerConfig(endpoint, request_policy="observe_only"))
++        client = CodexAppServerClient(
++            CodexAppServerConfig(
++                endpoint, request_policy="observe_only", experimental_api=experimental_api
++            )
++        )
+         self._clients.add(client)
+         try:
+             try:
+                 await client.__aenter__()
+             except CodexConnectionUnavailable:
+                 raise CodexControlError("unavailable", "NotSent") from None
+-            account = _object(await self._request(client, "account/read", {"refreshToken": False}))
+-            if (
+-                account.get("account") is None
+-                or _object(account["account"]).get("type") != "chatgpt"
+-            ):
+-                raise CodexControlError("auth", "NotSent")
++            except CodexAppServerResponseError:
++                if not self._native_owners:
++                    raise
++                raise CodexControlError("unavailable", "NotSent") from None
++            if not self._native_owners:
++                account = _object(
++                    await self._request(client, "account/read", {"refreshToken": False})
++                )
++                if (
++                    account.get("account") is None
++                    or _object(account["account"]).get("type") != "chatgpt"
++                ):
++                    raise CodexControlError("auth", "NotSent")
+             yield client
+         finally:
+             self._clients.discard(client)
+@@ -435,6 +814,31 @@ class CodexControl:
+                 "unavailable", "Unknown" if mutation else "NotSent", known_thread
+             ) from None
+         except CodexAppServerResponseError as error:
++            if method == "tui/view/read" and error.code == -32601:
++                raise CodexControlError("unavailable", "NotSent") from None
++            if (
++                method == "thread/turns/list"
++                and (not self._native_owners or error.code == -32600)
++                and error.detail.startswith("invalid cursor:")
++            ):
++                raise CodexControlError("history_changed", "NotSent") from None
++            if (
++                self._native_owners
++                and method == "thread/turns/list"
++                and error.code == -32600
++                and error.detail
++                == f"thread {params.get('threadId')} is not materialized yet; "
++                "thread/turns/list is unavailable before first user message"
++            ):
++                raise _HistoryNotMaterialized() from None
++            if mutation and error.code == -32602 and error.detail == "TUI selection changed":
++                raise CodexControlError("stale", "Rejected", known_thread) from None
++            if (
++                method == "turn/interrupt"
++                and error.code == -32600
++                and error.detail == "expected turn is not active"
++            ):
++                raise CodexControlError("stale", "Rejected", known_thread) from None
+             if (
+                 method == "thread/items/list"
+                 and error.code == -32601
+@@ -442,6 +846,17 @@ class CodexControl:
+                 and error.data is None
+             ):
+                 raise _ItemPagingUnavailable() from None
++            if self._native_owners:
++                if (
++                    not mutation
++                    and method in ("thread/read", "thread/turns/list", "thread/items/list")
++                    and error.code == -32600
++                    and error.detail == f"no rollout found for thread id {params.get('threadId')}"
++                ):
++                    raise CodexControlError("missing", "NotSent", known_thread) from None
++                raise CodexControlError(
++                    "unavailable", "Unknown" if mutation else "NotSent", known_thread
++                ) from None
+             raise CodexControlError(
+                 _error_code(error), "Rejected" if mutation else "NotSent", known_thread
+             ) from None
+@@ -467,21 +882,18 @@ class CodexControl:
+             summary = replace(summary, name=None)
+             if _output_size(summary) > 8 * 1024:
+                 raise CodexControlError("output_limit", "NotSent")
+-        result = _object(
+-            await self._request(
+-                client,
+-                "thread/turns/list",
+-                {
+-                    "threadId": target.thread_handle,
+-                    "limit": 1,
+-                    "sortDirection": "desc",
+-                    "itemsView": "notLoaded",
+-                },
++        try:
++            result = await self._turn_page(client, target, None, "desc", 1, "notLoaded")
++        except _HistoryNotMaterialized:
++            return CodexThreadRead(
++                summary,
++                None,
++                None,
++                CodexBounded("native history not materialized"),
++                history_available=False,
+             )
+-        )
+         data = result.get("data")
+-        if not isinstance(data, list) or len(data) > 1:
+-            raise ProtocolDefect("Codex turn list exceeded its page contract")
++        assert isinstance(data, list)
+         if not data:
+             return CodexThreadRead(
+                 summary,
+@@ -568,6 +980,23 @@ def _object(value: object) -> dict[str, object]:
+     return value
+ 
+ 
++def _finalized(turn: dict[str, object]) -> bool:
++    handle = turn.get("id")
++    if not isinstance(handle, str):
++        raise ProtocolDefect("Codex turn identity was malformed")
++    try:
++        identity = UUID(handle)
++    except ValueError:
++        return False
++    return (
++        str(identity) == handle
++        and identity.version == 7
++        and turn.get("status") == "completed"
++        and type(turn.get("startedAt")) is int
++        and type(turn.get("completedAt")) is int
++    )
++
++
+ def _summary(profile: str, value: dict[str, object]) -> CodexThreadSummary:
+     handle = value.get("id")
+     try:
+@@ -592,8 +1021,17 @@ def _summary(profile: str, value: dict[str, object]) -> CodexThreadSummary:
+         source = "subAgent"
+     if not isinstance(source, str) or source not in CODEX_THREAD_SOURCES:
+         raise ProtocolDefect("Codex thread source is malformed")
++    can_accept = value.get("canAcceptDirectInput")
++    if can_accept is not None and type(can_accept) is not bool:
++        raise ProtocolDefect("Codex direct-input acceptance was malformed")
+     return CodexThreadSummary(
+-        target, cast(CodexNativeStatus, kind), tuple(flags), name, cwd, source
++        target,
++        cast(CodexNativeStatus, kind),
++        tuple(flags),
++        name,
++        cwd,
++        source,
++        cast(bool | None, can_accept),
+     )
+ 
+ 
+@@ -625,6 +1063,8 @@ def _interrupt_outcome(
+             return CodexFinished(turn.status)
+         case "inProgress":
+             return None
++        case unreachable:
++            assert_never(unreachable)
+ 
+ 
+ def _error_code(error: CodexAppServerResponseError) -> CodexErrorCode:
+diff --git a/src/provider_runtime/agent_runtime/native_control_cli.py b/src/provider_runtime/agent_runtime/native_control_cli.py
+index a8c4c1b..821044b 100644
+--- a/src/provider_runtime/agent_runtime/native_control_cli.py
++++ b/src/provider_runtime/agent_runtime/native_control_cli.py
+@@ -7,23 +7,19 @@ import json
+ import signal
+ import sys
+ from pathlib import Path
+-from typing import Literal, Never, Self
++from typing import Literal, Never, Self, assert_never
+ from uuid import UUID
+ 
+ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+ 
+ from . import claude_control
+ from .codex_control import (
+-    CodexBounded,
+     CodexControl,
+     CodexControlError,
+-    CodexFinished,
+-    CodexInterrupted,
+-    CodexPromptRequest,
+-    CodexSubmit,
+-    CodexThreadRead,
++    CodexSelectedObservation,
++    CodexSelectedTarget,
+     CodexThreadTarget,
+-    CodexTurnTarget,
++    CodexView,
+ )
+ from .errors import AgentRuntimeError, InvalidAgentRequest, ProtocolDefect
+ 
+@@ -31,10 +27,30 @@ from .errors import AgentRuntimeError, InvalidAgentRequest, ProtocolDefect
+ class _Closed(BaseModel):
+     model_config = ConfigDict(extra="forbid", strict=True, hide_input_in_errors=True)
+ 
++    @model_validator(mode="after")
++    def omit_absent(self) -> Self:
++        if any(getattr(self, name) is None for name in self.model_fields_set):
++            raise ValueError("omit absent fields")
++        return self
++
++
++class _View(_Closed):
++    viewId: str
++    revision: int = Field(ge=0, lt=1 << 64)
++
++    @field_validator("viewId")
++    @classmethod
++    def canonical_uuid(cls, value: str) -> str:
++        if str(UUID(value)) != value:
++            raise ValueError("invalid view identity")
++        return value
++
+ 
+ class _Target(_Closed):
+     sessionId: str | None = None
+     pid: int | None = Field(default=None, gt=0)
++    startIdentity: str | None = Field(default=None, min_length=1, max_length=128)
++    view: _View | None = None
+     turnId: str | None = None
+ 
+     @field_validator("sessionId", "turnId")
+@@ -44,14 +60,25 @@ class _Target(_Closed):
+             raise ValueError("invalid native identity")
+         return value
+ 
++    @field_validator("startIdentity")
++    @classmethod
++    def process_identity(cls, value: str | None) -> str | None:
++        if value is not None and (not value.isdecimal() or int(value) <= 0):
++            raise ValueError("invalid process start identity")
++        return value
++
+ 
+ class _Input(_Closed):
+     text: str | None = None
++    input: Literal["peer", "user"] | None = None
++    delivery: Literal["direct", "queue"] | None = None
++    scope: Literal["latest", "history"] | None = None
+     maxBytes: int = Field(default=16384, ge=1, le=32768)
++    cursor: str | None = Field(default=None, min_length=1, max_length=4096)
+ 
+ 
+ class _Request(_Closed):
+-    operation: Literal["inspect", "read", "send", "interrupt", "stop"]
++    operation: Literal["inspect", "read", "send", "interrupt", "stop", "results"]
+     provider: Literal["Codex", "Claude"]
+     profileKey: str = Field(min_length=1, max_length=128)
+     endpoint: str | None = None
+@@ -60,8 +87,6 @@ class _Request(_Closed):
+ 
+     @model_validator(mode="after")
+     def validate_operation(self) -> Self:
+-        if "input" in self.model_fields_set and self.input is None:
+-            raise ValueError("omit absent input")
+         if self.operation != "inspect" and len(self.targets) != 1:
+             raise ValueError("operation requires exactly one target")
+         if self.provider == "Codex":
+@@ -71,20 +96,34 @@ class _Request(_Closed):
+                 or "\0" in self.endpoint
+             ):
+                 raise ValueError("codex requires an absolute unix endpoint")
+-            if any(target.sessionId is None for target in self.targets):
+-                raise ValueError("codex requires a session identity")
+-        elif self.endpoint is not None:
++        elif self.endpoint is not None or any(target.view is not None for target in self.targets):
+             raise ValueError("claude uses its selected profile environment")
+-        if any(target.sessionId is None and target.pid is None for target in self.targets):
+-            raise ValueError("target requires a native session or process identity")
++        for target in self.targets:
++            if self.operation == "results":
++                if target.model_fields_set != {"sessionId"}:
++                    raise ValueError("results requires only conversation identity")
++            elif target.pid is None or target.startIdentity is None:
++                raise ValueError("current operation requires exact process lifetime")
++            elif self.operation != "inspect":
++                if target.sessionId is None or (self.provider == "Codex" and target.view is None):
++                    raise ValueError("current operation requires captured binding")
+         if self.operation == "send":
+-            if self.input is None or self.input.model_fields_set != {"text"}:
+-                raise ValueError("send requires text")
++            if self.input is None or self.input.model_fields_set != {"text", "input", "delivery"}:
++                raise ValueError("send requires text, input and delivery")
+             if not self.input.text or len(self.input.text.encode("utf-8")) > 32768:
+                 raise ValueError("input exceeds bounds")
++            if self.input.input == "peer" and self.input.delivery == "queue":
++                raise ValueError("peer input cannot be queued")
+         elif self.operation == "read":
+-            if self.input is not None and self.input.model_fields_set - {"maxBytes"}:
+-                raise ValueError("read accepts only maxBytes")
++            if (
++                self.input is None
++                or self.input.scope is None
++                or self.input.model_fields_set - {"scope", "maxBytes"}
++            ):
++                raise ValueError("read requires scope and optional maxBytes")
++        elif self.operation == "results":
++            if self.input is not None and self.input.model_fields_set - {"cursor"}:
++                raise ValueError("results accepts only cursor")
+         elif self.input is not None:
+             raise ValueError("operation accepts no input")
+         return self
+@@ -104,70 +143,99 @@ def _codex_error(error: CodexControlError) -> dict:
+     code = {
+         "missing": "stale",
+         "stale": "stale",
++        "history_changed": "history_changed",
+         "unavailable": "unavailable",
+         "output_limit": "unavailable",
++        "auth": "unavailable",
++        "quota": "unavailable",
+     }.get(error.code, "rejected")
+     return _error(code)
+ 
+ 
+-def _codex_observation(value: CodexThreadRead) -> dict:
+-    status = value.thread.status
+-    state, reason = "unknown", None
+-    if status == "active":
+-        state = "working"
+-        if "waitingOnApproval" in value.thread.active_flags:
+-            state, reason = "blocked", "permission"
+-        elif "waitingOnUserInput" in value.thread.active_flags:
+-            state, reason = "blocked", "input"
+-    elif status == "systemError":
+-        state = "failed"
+-    elif status == "idle":
+-        state = "idle"
+-        if value.turn:
+-            state = {
+-                "completed": "done",
+-                "failed": "failed",
+-                "interrupted": "stopped",
+-                "inProgress": "working",
+-            }[value.turn.status]
++def _codex_observation(value: CodexSelectedObservation) -> dict:
++    read = value.read
++    status = read.thread.status
++    match status:
++        case "active":
++            state = "blocked" if read.thread.active_flags else "working"
++        case "systemError":
++            state = "failed"
++        case "idle":
++            state = "idle"
++        case "notLoaded":
++            state = "unknown"
++        case unreachable:
++            assert_never(unreachable)
++    available = status in ("idle", "active")
++    accepts_input = available and read.thread.can_accept_direct_input is True
+     result: dict = {
+         "status": {"state": state, "source": "unavailable" if status == "notLoaded" else "native"},
+-        "sessionId": value.thread.target.thread_handle,
+-        "methods": dict.fromkeys(("read", "send", "interrupt"), "native"),
++        "sessionId": read.thread.target.thread_handle,
++        "view": {"viewId": value.view.view_id, "revision": value.view.revision},
++        "methods": {
++            "read": "native" if read.history_available else "unavailable",
++            "sendPeer": "native" if accepts_input else "unavailable",
++            "sendUser": "native" if accepts_input else "unavailable",
++            "queueUser": "native" if accepts_input else "unavailable",
++            "stop": "native"
++            if status == "idle"
++            or available
++            and read.turn is not None
++            and read.turn.status == "inProgress"
++            else "unavailable",
++        },
+     }
+-    if status == "notLoaded":
+-        result["methods"].update(send="terminal", interrupt="terminal")
+-    if reason:
+-        result["status"]["reason"] = reason
+-    if value.turn:
+-        result["turnId"] = value.turn.target.turn_handle
++    if read.turn:
++        result["turn"] = {"id": read.turn.target.turn_handle, "state": read.turn.status}
+     return result
+ 
+ 
+-def _read_result(text: str, scope: str, max_bytes: int, truncated: bool = False) -> dict:
+-    encoded = text.encode("utf-8")
+-    if len(encoded) > max_bytes:
+-        text = encoded[-max_bytes:].decode("utf-8", errors="ignore")
+-        truncated = True
+-    result = {"text": text, "source": "native", "scope": scope, "truncated": truncated}
+-    # JSON escaping can exceed the text-byte limit (for example control characters).
++def _bound_read(result: dict) -> dict:
++    # Escaping and observation metadata count toward the same helper envelope bound.
+     while len(json.dumps(_success(result), ensure_ascii=False).encode("utf-8")) >= 65536:
+-        result["text"] = str(result["text"])[len(str(result["text"])) // 4 :]
++        text = result["text"]
++        if not text:
++            return _error("unavailable")
++        result["text"] = text[len(text) // 4 + 1 :]
+         result["truncated"] = True
+-    return result
++    return _success(result)
+ 
+ 
+ async def _codex(request: _Request) -> dict:
+     assert request.endpoint is not None
+-    targets = tuple(
+-        CodexThreadTarget(request.profileKey, target.sessionId or "") for target in request.targets
+-    )
+     control = CodexControl(
+-        {request.profileKey: Path(request.endpoint[7:])}, is_managed=lambda _: False
++        {request.profileKey: Path(request.endpoint[7:])},
++        is_managed=lambda _: False,
++        native_owners=True,
+     )
+     try:
++        if request.operation == "results":
++            target = request.targets[0]
++            assert target.sessionId is not None
++            page = await control.results(
++                CodexThreadTarget(request.profileKey, target.sessionId),
++                request.input.cursor if request.input else None,
++            )
++            return _success(
++                {
++                    "resultIds": list(page.result_ids),
++                    **({"nextCursor": page.next_cursor} if page.next_cursor else {}),
++                }
++            )
++        targets = tuple(
++            CodexSelectedTarget(
++                request.profileKey,
++                target.pid or 0,
++                target.startIdentity or "",
++                CodexThreadTarget(request.profileKey, target.sessionId)
++                if target.sessionId
++                else None,
++                CodexView(target.view.viewId, target.view.revision) if target.view else None,
++            )
++            for target in request.targets
++        )
+         if request.operation == "inspect":
+-            rows = await control.inspect(targets)
++            rows = await control.inspect_selected(targets)
+             return _success(
+                 [
+                     _codex_error(row)
+@@ -178,105 +246,109 @@ async def _codex(request: _Request) -> dict:
+             )
+         target = targets[0]
+         if request.operation == "read":
+-            observed = await control.read(target)
+-            if observed.last_answer is None:
+-                return _error("unavailable")
+-            return _success(
+-                _read_result(
+-                    observed.last_answer,
+-                    "latest_turn",
+-                    request.input.maxBytes if request.input else 16384,
+-                    isinstance(observed.coverage, CodexBounded),
+-                )
++            assert request.input is not None and request.input.scope is not None
++            value = await control.read_selected(target, request.input.scope, request.input.maxBytes)
++            output = value.output
++            return _bound_read(
++                {
++                    "text": output.text,
++                    "source": "native",
++                    "scope": output.scope,
++                    "truncated": output.truncated,
++                    "outputState": output.state,
++                    **({"outputId": output.output_id} if output.output_id else {}),
++                    **({"outputTurnId": output.turn_id} if output.turn_id else {}),
++                    "inspection": _codex_observation(value.inspection),
++                }
+             )
+         if request.operation == "send":
+-            assert request.input is not None and request.input.text is not None
+-            result = await control.prompt(
+-                CodexPromptRequest(target, CodexSubmit(request.input.text))
+-            )
+-            return _success(
+-                {"method": "native", "outcome": "accepted", "turnId": result.turn_handle}
++            assert (
++                request.input is not None
++                and request.input.text is not None
++                and request.input.input is not None
++                and request.input.delivery is not None
+             )
+-        observed = (await control.inspect((target,)))[0]
+-        if isinstance(observed, CodexControlError):
+-            return _codex_error(observed)
+-        if observed.thread.status == "notLoaded":
+-            return _error("unavailable")
+-        expected = request.targets[0].turnId
+-        if (observed.turn.target.turn_handle if observed.turn else None) != expected:
+-            return _error("stale")
+-        if observed.turn is None:
+-            if observed.thread.status != "idle":
+-                return _error("unavailable")
+             return _success(
+-                {"agent": "idle"}
+-                if request.operation == "stop"
+-                else {"method": "native", "outcome": "finished"}
++                await control.send_selected(
++                    target, request.input.text, request.input.input, request.input.delivery
++                )
+             )
+-        turn = CodexTurnTarget(target, observed.turn.target.turn_handle)
+-        result = await control.interrupt(turn)
+-        if isinstance(result, CodexInterrupted):
+-            outcome, agent = "interrupted", "interrupted"
+-        elif isinstance(result, CodexFinished):
+-            outcome, agent = "finished", "idle"
+-        else:
+-            # Stale may be observed after an accepted interrupt; it is not proof of no effect.
+-            outcome, agent = "unknown", "unconfirmed"
+-        return _success(
+-            {"agent": agent}
+-            if request.operation == "stop"
+-            else {"method": "native", "outcome": outcome, "turnId": turn.turn_handle}
+-        )
++        if request.operation in ("interrupt", "stop"):
++            return _success(await control.interrupt_selected(target, request.targets[0].turnId))
++        assert_never(request.operation)
+     except CodexControlError as error:
+         return _codex_error(error)
+     finally:
+         await control.close()
+ 
+ 
++def _claude_observation(session: claude_control.ClaudeSession) -> dict:
++    if session.session_id is None:
++        raise claude_control.ClaudeControlError("unavailable")
++    result: dict = {
++        "status": {"state": session.state, "source": "native"},
++        "methods": {
++            "read": "native" if claude_control.history_available() else "unavailable",
++            "sendPeer": "unavailable",
++            "sendUser": "unavailable",
++            "queueUser": "unavailable",
++            "stop": "native" if session.job_id else "terminal",
++        },
++    }
++    result["sessionId"] = session.session_id
++    if session.kind == "interactive":
++        result["terminalOwnsAgent"] = True
++    return result
++
++
+ async def _claude(request: _Request) -> dict:
+-    if request.operation in ("send", "interrupt"):
+-        return _error("unsupported")
++    target = request.targets[0]
++    if request.operation in ("interrupt", "send"):
++        return _error("unavailable")
++    if request.operation == "results":
++        assert target.sessionId is not None
++        return _success(
++            claude_control.results(
++                target.sessionId, request.input.cursor if request.input else None
++            )
++        )
++    sessions = await claude_control.list_sessions()
+     if request.operation == "inspect":
+-        sessions = await claude_control.list_sessions()
+-        history_available = claude_control.history_available()
+         rows = []
+         for target in request.targets:
++            assert target.pid is not None and target.startIdentity is not None
+             try:
++                claude_control.verify_process(target.pid, target.startIdentity)
+                 session = claude_control.match_session(sessions, target.sessionId, target.pid)
++                rows.append(_success(_claude_observation(session)))
+             except claude_control.ClaudeControlError as error:
+-                rows.append(_error(error.code, error.dispatch))
+-                continue
+-            result: dict = {
+-                "status": {"state": session.state, "source": "native"},
+-                "methods": {
+-                    "read": "native" if session.session_id and history_available else "terminal",
+-                    "send": "terminal",
+-                    "interrupt": "terminal",
+-                },
+-            }
+-            if session.reason:
+-                result["status"]["reason"] = session.reason
+-            if session.session_id:
+-                result["sessionId"] = session.session_id
+-            if (
+-                session.kind == "interactive"
+-                and target.pid is not None
+-                and session.pid == target.pid
+-            ):
+-                result["terminalOwnsAgent"] = True
+-            rows.append(_success(result))
++                rows.append(
++                    _error(
++                        "unavailable" if error.code == "unsupported" else error.code, error.dispatch
++                    )
++                )
+         return _success(rows)
+-    target = request.targets[0]
++    assert (
++        target.pid is not None and target.startIdentity is not None and target.sessionId is not None
++    )
++    claude_control.verify_process(target.pid, target.startIdentity)
++    claude_control.match_session(sessions, target.sessionId, target.pid)
+     if request.operation == "read":
+-        if target.sessionId is None:
+-            return _error("unsupported")
+-        text = claude_control.read_messages(target.sessionId)
++        assert request.input is not None and request.input.scope is not None
++        result = claude_control.read_messages(
++            target.sessionId, request.input.scope, request.input.maxBytes
++        )
++        claude_control.verify_process(target.pid, target.startIdentity)
++        after = claude_control.match_session(
++            await claude_control.list_sessions(), target.sessionId, target.pid
++        )
++        result["inspection"] = _claude_observation(after)
++        return _bound_read(result)
++    if request.operation == "stop":
+         return _success(
+-            _read_result(
+-                text, "recent_messages", request.input.maxBytes if request.input else 16384
+-            )
++            await claude_control.stop(target.sessionId, target.pid, target.startIdentity)
+         )
+-    return _success(await claude_control.stop(target.sessionId, target.pid))
++    assert_never(request.operation)
+ 
+ 
+ async def _run(request: _Request) -> dict:
+@@ -284,20 +356,29 @@ async def _run(request: _Request) -> dict:
+     assert task is not None
+     loop = asyncio.get_running_loop()
+     loop.add_signal_handler(signal.SIGTERM, task.cancel)
++    mutation = request.operation in ("send", "interrupt", "stop")
+     try:
+-        return await (_codex(request) if request.provider == "Codex" else _claude(request))
++        async with asyncio.timeout(2 if request.operation == "inspect" else 10):
++            match request.provider:
++                case "Codex":
++                    return await _codex(request)
++                case "Claude":
++                    return await _claude(request)
++                case unreachable:
++                    assert_never(unreachable)
+     except claude_control.ClaudeControlError as error:
+-        return _error(error.code, error.dispatch)
++        return _error("unavailable" if error.code == "unsupported" else error.code, error.dispatch)
+     except InvalidAgentRequest:
+         return _error("rejected")
+-    except asyncio.CancelledError:
+-        if request.operation in ("send", "interrupt", "stop"):
+-            return _error("unknown", "unknown")
+-        return _error("unavailable")
+-    except (AgentRuntimeError, ProtocolDefect, OSError, ValueError):
+-        if request.operation in ("send", "interrupt", "stop"):
+-            return _error("unknown", "unknown")
+-        return _error("unavailable")
++    except (
++        asyncio.CancelledError,
++        TimeoutError,
++        AgentRuntimeError,
++        ProtocolDefect,
++        OSError,
++        ValueError,
++    ):
++        return _error("unknown", "unknown") if mutation else _error("unavailable")
+     finally:
+         loop.remove_signal_handler(signal.SIGTERM)
+ 
+@@ -316,6 +397,7 @@ def _reject_constant(value: str) -> Never:
+ 
+ 
+ def main() -> None:
++    operation = None
+     try:
+         encoded = sys.stdin.buffer.read(65537)
+         if len(encoded) > 65536:
+@@ -323,13 +405,18 @@ def main() -> None:
+         request = _Request.model_validate(
+             json.loads(encoded, object_pairs_hook=_unique_object, parse_constant=_reject_constant)
+         )
+-    except (ValueError, ValidationError, UnicodeError):
++    except (ValueError, ValidationError, UnicodeError, RecursionError):
+         result = _error("rejected")
+     else:
++        operation = request.operation
+         result = asyncio.run(_run(request))
+     output = json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8") + b"\n"
+     if len(output) > 65536:
+-        result = _error("unavailable")
++        result = (
++            _error("unknown", "unknown")
++            if operation in ("send", "stop", "interrupt")
++            else _error("unavailable")
++        )
+         output = json.dumps(result).encode() + b"\n"
+     sys.stdout.buffer.write(output)
+     sys.exit(0 if result["ok"] else 1)
+diff --git a/tests/test_agent_codex_control.py b/tests/test_agent_codex_control.py
+index a537e0e..3ebf2f8 100644
+--- a/tests/test_agent_codex_control.py
++++ b/tests/test_agent_codex_control.py
+@@ -101,6 +101,7 @@ class ProtocolPeer:
+         self.older_items: list[dict[str, object]] = []
+         self.interrupt_settles = True
+         self.status = "idle"
++        self.selected_view: dict[str, object] | None = None
+         self.intervene = False
+         self.name = "synthetic worker"
+         self.raw_reply: str | None = None
+@@ -162,6 +163,8 @@ class ProtocolPeer:
+                     result = {"thread": self.thread()}
+                 elif method == "thread/read":
+                     result = {"thread": self.thread()}
++                elif method == "tui/view/read":
++                    result = {"view": self.selected_view}
+                 elif method == "thread/turns/list":
+                     view = message["params"].get("itemsView", "summary")
+                     result = {
+@@ -171,6 +174,8 @@ class ProtocolPeer:
+                                 "status": self.turn_status,
+                                 "itemsView": view,
+                                 "items": [] if view == "notLoaded" else self.turn_items(),
++                                "startedAt": 1,
++                                "completedAt": None if self.turn_status == "inProgress" else 2,
+                             }
+                         ],
+                         "nextCursor": None,
+diff --git a/tests/test_native_control_cli.py b/tests/test_native_control_cli.py
+index f84373d..8b90cae 100644
+--- a/tests/test_native_control_cli.py
++++ b/tests/test_native_control_cli.py
+@@ -3,6 +3,7 @@
+ from __future__ import annotations
+ 
+ import asyncio
++import ctypes
+ import json
+ import os
+ import signal
+@@ -16,11 +17,43 @@ from websockets.asyncio.server import unix_serve
+ 
+ from tests.test_agent_codex_control import THREAD, TURN, ProtocolPeer
+ 
++VIEW = {"viewId": "01992818-9222-714c-9c91-e39d3f006e64", "revision": 1}
++
++
++def process_target() -> dict:
++    pid = os.getpid()
++    if sys.platform == "darwin":
++        info = ctypes.create_string_buffer(136)
++        assert ctypes.CDLL("/usr/lib/libproc.dylib").proc_pidinfo(
++            pid, 3, 0, info, len(info)
++        ) == len(info)
++        start = str(
++            int.from_bytes(info.raw[120:128], sys.byteorder) * 1_000_000
++            + int.from_bytes(info.raw[128:136], sys.byteorder)
++        )
++    else:
++        start = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
++    return {"pid": pid, "startIdentity": start}
++
++
++class ControlPeer(ProtocolPeer):
++    def __init__(self, socket: Path) -> None:
++        super().__init__(socket)
++        self.selected_view = {**VIEW, "threadId": THREAD}
++        self.status = "active"
++
++    def thread(self) -> dict[str, object]:
++        result = super().thread()
++        state = "idle" if self.turn_status == "interrupted" else self.status
++        result["status"] = {"type": state, **({"activeFlags": []} if state == "active" else {})}
++        result["canAcceptDirectInput"] = state in ("active", "idle")
++        return result
++
+ 
+ @pytest.fixture
+ async def peer() -> AsyncIterator[ProtocolPeer]:
+     with tempfile.TemporaryDirectory(prefix="native-peer-", dir="/tmp") as directory:
+-        value = ProtocolPeer(Path(directory) / "peer.sock")
++        value = ControlPeer(Path(directory) / "peer.sock")
+         async with await unix_serve(value.handle, str(value.socket)):
+             yield value
+ 
+@@ -63,10 +96,14 @@ def codex_request(peer: ProtocolPeer, operation: str, **fields: object) -> dict:
+         "endpoint": "unix://" + str(peer.socket),
+         "targets": [
+             {
++                "pid": 1234,
++                "startIdentity": "1",
+                 "sessionId": THREAD,
++                "view": VIEW,
+                 **({"turnId": TURN} if operation in ("interrupt", "stop") else {}),
+             }
+         ],
++        **({"input": {"scope": "latest"}} if operation == "read" else {}),
+         **fields,
+     }
+ 
+@@ -75,29 +112,44 @@ async def test_codex_observation_and_multiline_submission_use_same_native_sessio
+     peer: ProtocolPeer,
+ ) -> None:
+     peer.turn_status = "completed"
++    peer.status = "idle"
+     code, value, stderr = await invoke(codex_request(peer, "inspect"))
+     assert (code, stderr) == (0, b"")
+     row = value["result"][0]["result"]
+-    assert row["status"] == {"state": "done", "source": "native"}
+-    assert row["sessionId"] == THREAD and row["turnId"] == TURN
+-    assert row["methods"] == dict.fromkeys(("read", "send", "interrupt"), "native")
++    assert row["status"] == {"state": "idle", "source": "native"}
++    assert row["sessionId"] == THREAD and row["turn"] == {"id": TURN, "state": "completed"}
++    assert row["view"] == VIEW
++    assert row["methods"] == dict.fromkeys(
++        ("read", "sendPeer", "sendUser", "queueUser", "stop"), "native"
++    )
+     text = "first line\nsecond line $(do not execute)"
+-    _, result, _ = await invoke(codex_request(peer, "send", input={"text": text}))
++    _, result, _ = await invoke(
++        codex_request(peer, "send", input={"text": text, "input": "user", "delivery": "direct"})
++    )
+     assert result == {
+         "ok": True,
+-        "result": {"method": "native", "outcome": "accepted", "turnId": TURN},
++        "result": {
++            "method": "native",
++            "input": "user",
++            "delivery": "direct",
++            "outcome": "accepted",
++            "turnId": TURN,
++        },
+     }
+     sent = [row for row in peer.messages if row.get("method") == "turn/start"]
+     assert len(sent) == 1
+     assert sent[0]["params"] == {
+         "threadId": THREAD,
+         "input": [{"type": "text", "text": text}],
++        "expectedView": VIEW,
+     }
+ 
+ 
+ async def test_lost_native_write_is_unknown_and_never_retried(peer: ProtocolPeer) -> None:
+     peer.drop_method = "turn/start"
+-    code, result, stderr = await invoke(codex_request(peer, "send", input={"text": "work"}))
++    code, result, stderr = await invoke(
++        codex_request(peer, "send", input={"text": "work", "input": "user", "delivery": "direct"})
++    )
+     assert (code, stderr) == (1, b"")
+     assert result == {"ok": False, "error": {"code": "unknown", "dispatch": "unknown"}}
+     assert sum(row.get("method") == "turn/start" for row in peer.messages) == 1
+@@ -110,7 +162,13 @@ async def test_unloaded_codex_keeps_history_without_claiming_live_control(
+     _, result, _ = await invoke(codex_request(peer, "inspect"))
+     row = result["result"][0]["result"]
+     assert row["status"] == {"state": "unknown", "source": "unavailable"}
+-    assert row["methods"] == {"read": "native", "send": "terminal", "interrupt": "terminal"}
++    assert row["methods"] == {
++        "read": "native",
++        "sendPeer": "unavailable",
++        "sendUser": "unavailable",
++        "queueUser": "unavailable",
++        "stop": "unavailable",
++    }
+     _, history, _ = await invoke(codex_request(peer, "read"))
+     assert history["result"]["text"] == peer.answer
+ 
+@@ -129,7 +187,9 @@ async def test_unloaded_codex_does_not_confirm_halt_from_historical_turn(
+ async def test_observed_no_turn_does_not_authorize_cancelling_a_new_turn(
+     peer: ProtocolPeer, operation: str
+ ) -> None:
+-    _, result, _ = await invoke(codex_request(peer, operation, targets=[{"sessionId": THREAD}]))
++    target = codex_request(peer, operation)["targets"][0]
++    del target["turnId"]
++    _, result, _ = await invoke(codex_request(peer, operation, targets=[target]))
+     assert result == {"ok": False, "error": {"code": "stale", "dispatch": "not_sent"}}
+     assert not any(row.get("method") == "turn/interrupt" for row in peer.messages)
+ 
+@@ -138,12 +198,17 @@ async def test_read_retains_native_history_outside_viewport_and_bounds_encoded_o
+     peer: ProtocolPeer,
+ ) -> None:
+     peer.answer = "older native result\n" + "\x01é" * 20000
+-    _, result, _ = await invoke(codex_request(peer, "read", input={"maxBytes": 32768}))
+-    assert result == {"ok": False, "error": {"code": "unavailable", "dispatch": "not_sent"}}
++    _, result, _ = await invoke(
++        codex_request(peer, "read", input={"scope": "latest", "maxBytes": 32768})
++    )
++    assert result["result"]["truncated"] is True
++    assert len(result["result"]["text"].encode()) <= 32768
+     peer.answer = "older native result\n" + "\x01é" * 2000
+-    _, result, _ = await invoke(codex_request(peer, "read", input={"maxBytes": 1024}))
++    _, result, _ = await invoke(
++        codex_request(peer, "read", input={"scope": "latest", "maxBytes": 1024})
++    )
+     output = result["result"]
+-    assert output["source"] == "native" and output["scope"] == "latest_turn"
++    assert output["source"] == "native" and output["scope"] == "latest"
+     assert output["truncated"] is True
+     assert len(output["text"].encode()) <= 1024
+     assert output["text"]
+@@ -153,13 +218,17 @@ async def test_stop_interrupts_exact_turn_without_stopping_native_server(
+     peer: ProtocolPeer,
+ ) -> None:
+     code, result, _ = await invoke(codex_request(peer, "stop"))
+-    assert code == 0 and result == {"ok": True, "result": {"agent": "interrupted"}}
++    assert code == 0 and result == {
++        "ok": True,
++        "result": {"method": "native", "outcome": "interrupted", "turnId": TURN},
++    }
+     interrupts = [row for row in peer.messages if row.get("method") == "turn/interrupt"]
+     assert len(interrupts) == 1
+-    assert interrupts[0]["params"] == {"threadId": THREAD, "turnId": TURN}
++    assert interrupts[0]["params"] == {"threadId": THREAD, "turnId": TURN, "expectedView": VIEW}
+     assert not any("stop" in str(row.get("method")) for row in peer.messages)
+     _, result, _ = await invoke(codex_request(peer, "inspect"))
+-    assert result["result"][0]["result"]["status"]["state"] == "stopped"
++    assert result["result"][0]["result"]["status"]["state"] == "idle"
++    assert result["result"][0]["result"]["turn"]["state"] == "interrupted"
+ 
+ 
+ async def test_successor_after_interrupt_preserves_possible_effect(peer: ProtocolPeer) -> None:
+@@ -204,7 +273,7 @@ def claude_fixture(tmp_path: Path) -> tuple[Path, Path]:
+                     "cwd": "/synthetic",
+                     "kind": "background",
+                     "startedAt": 1000,
+-                    "pid": 1234,
++                    "pid": os.getpid(),
+                     "sessionId": THREAD,
+                     "id": "job-one",
+                     "state": "blocked",
+@@ -225,7 +294,7 @@ async def test_claude_matches_pid_exposes_blocker_and_stops_only_matched_job(
+         "provider": "Claude",
+         "profileKey": "claude-personal",
+         "operation": "inspect",
+-        "targets": [{"pid": 1234}, {"pid": 9999}],
++        "targets": [process_target(), {"pid": 9999, "startIdentity": "1"}],
+     }
+     env = {"PATH": str(binary), "CLAUDE_CONFIG_DIR": str(root)}
+     code, result, stderr = await invoke(request, **env)
+@@ -234,32 +303,49 @@ async def test_claude_matches_pid_exposes_blocker_and_stops_only_matched_job(
+     assert found["result"]["status"] == {
+         "state": "blocked",
+         "source": "native",
+-        "reason": "permission",
+     }
+     assert found["result"]["sessionId"] == THREAD
+-    assert found["result"]["methods"]["send"] == "terminal"
++    assert found["result"]["methods"]["sendPeer"] == "unavailable"
++    assert found["result"]["methods"]["stop"] == "native"
+     assert missing == {"ok": False, "error": {"code": "stale", "dispatch": "not_sent"}}
+-    request.update(operation="stop", targets=[{"sessionId": THREAD, "pid": 1234}])
++    request.update(operation="stop", targets=[{"sessionId": THREAD, **process_target()}])
+     _, result, _ = await invoke(request, **env)
+-    assert result == {"ok": True, "result": {"agent": "stopped"}}
++    assert result == {"ok": True, "result": {"method": "native", "outcome": "stopped"}}
+ 
+ 
+ async def test_claude_native_history_is_scoped_to_selected_profile(tmp_path: Path) -> None:
+     pytest.importorskip("claude_agent_sdk")
++    binary, fixture_root = claude_fixture(tmp_path)
+     roots = [tmp_path / "personal", tmp_path / "work"]
+     for root, text in zip(
+         roots, ["personal history beyond viewport", "work history beyond viewport"], strict=True
+     ):
+         project = root / "projects" / "-synthetic"
+         project.mkdir(parents=True)
++        (root / "fixture-state.json").write_text((fixture_root / "fixture-state.json").read_text())
+         (project / f"{THREAD}.jsonl").write_text(
+             json.dumps(
++                {
++                    "type": "user",
++                    "uuid": THREAD,
++                    "parentUuid": None,
++                    "sessionId": THREAD,
++                    "message": {"role": "user", "content": "fixture"},
++                }
++            )
++            + "\n"
++            + json.dumps(
+                 {
+                     "type": "assistant",
+                     "uuid": TURN,
+-                    "parentUuid": None,
++                    "parentUuid": THREAD,
+                     "sessionId": THREAD,
+-                    "message": {"role": "assistant", "content": [{"type": "text", "text": text}]},
++                    "message": {
++                        "id": "native-message",
++                        "role": "assistant",
++                        "stop_reason": "end_turn",
++                        "content": [{"type": "text", "text": text}],
++                    },
+                 }
+             )
+             + "\n"
+@@ -268,22 +354,24 @@ async def test_claude_native_history_is_scoped_to_selected_profile(tmp_path: Pat
+         "provider": "Claude",
+         "profileKey": "claude-personal",
+         "operation": "read",
+-        "targets": [{"sessionId": THREAD}],
+-        "input": {"maxBytes": 16384},
++        "targets": [{"sessionId": THREAD, **process_target()}],
++        "input": {"scope": "latest", "maxBytes": 16384},
+     }
+-    results = [await invoke(request, CLAUDE_CONFIG_DIR=str(root)) for root in roots]
++    results = [
++        await invoke(request, PATH=str(binary), CLAUDE_CONFIG_DIR=str(root)) for root in roots
++    ]
+     assert "personal history" in results[0][1]["result"]["text"]
+     assert "work history" not in results[0][1]["result"]["text"]
+     assert "work history" in results[1][1]["result"]["text"]
+-    assert results[0][1]["result"]["scope"] == "recent_messages"
++    assert results[0][1]["result"]["scope"] == "latest"
+ 
+ 
+ @pytest.mark.parametrize(
+-    "kind,pid,owns",
+-    [("interactive", 1234, True), ("interactive", None, False), ("background", 1234, False)],
++    "kind,has_pid,owns",
++    [("interactive", True, True), ("interactive", False, False), ("background", True, False)],
+ )
+ async def test_only_exact_interactive_claude_pid_owns_its_terminal_lifetime(
+-    tmp_path: Path, kind: str, pid: int | None, owns: bool
++    tmp_path: Path, kind: str, has_pid: bool, owns: bool
+ ) -> None:
+     binary, root = claude_fixture(tmp_path)
+     state_file = root / "fixture-state.json"
+@@ -296,10 +384,13 @@ async def test_only_exact_interactive_claude_pid_owns_its_terminal_lifetime(
+         "provider": "Claude",
+         "profileKey": "personal",
+         "operation": "inspect",
+-        "targets": [{"sessionId": THREAD, **({"pid": pid} if pid else {})}],
++        "targets": [{"sessionId": THREAD, **(process_target() if has_pid else {})}],
+     }
+     _, result, _ = await invoke(request, PATH=str(binary), CLAUDE_CONFIG_DIR=str(root))
+-    assert result["result"][0]["result"].get("terminalOwnsAgent", False) is owns
++    if has_pid:
++        assert result["result"][0]["result"].get("terminalOwnsAgent", False) is owns
++    else:
++        assert result == {"ok": False, "error": {"code": "rejected", "dispatch": "not_sent"}}
+ 
+ 
+ async def test_hung_claude_observation_times_out_and_reaps_only_its_cli(tmp_path: Path) -> None:
+@@ -309,7 +400,7 @@ async def test_hung_claude_observation_times_out_and_reaps_only_its_cli(tmp_path
+         "provider": "Claude",
+         "profileKey": "claude-personal",
+         "operation": "inspect",
+-        "targets": [{"pid": 1234}],
++        "targets": [process_target()],
+     }
+     try:
+         code, result, stderr = await asyncio.wait_for(
+@@ -334,7 +425,7 @@ async def test_helper_termination_reaps_its_claude_child(tmp_path: Path) -> None
+         "provider": "Claude",
+         "profileKey": "claude-personal",
+         "operation": "inspect",
+-        "targets": [{"pid": 1234}],
++        "targets": [process_target()],
+     }
+     try:
+         code, result, stderr = await invoke(
+@@ -366,7 +457,11 @@ async def test_invalid_requests_and_unsupported_claude_send_do_not_launch_a_prov
+     code, result, stderr = await invoke(invalid, PATH="/nonexistent")
+     assert (code, stderr) == (1, b"")
+     assert result == {"ok": False, "error": {"code": "rejected", "dispatch": "not_sent"}}
+-    invalid.update(operation="send", targets=[{"sessionId": THREAD}], input={"text": "hello"})
++    invalid.update(
++        operation="send",
++        targets=[{"sessionId": THREAD, **process_target()}],
++        input={"text": "hello", "input": "user", "delivery": "direct"},
++    )
+     del invalid["endpoint"]
+     _, result, _ = await invoke(invalid, PATH="/nonexistent")
+-    assert result == {"ok": False, "error": {"code": "unsupported", "dispatch": "not_sent"}}
++    assert result == {"ok": False, "error": {"code": "unavailable", "dispatch": "not_sent"}}

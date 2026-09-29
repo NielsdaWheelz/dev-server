@@ -3,6 +3,7 @@
 
 import argparse
 import grp
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -100,51 +101,69 @@ def environment(config, row):
             "PATH": path + "/usr/local/bin:/usr/bin:/bin", "TERM": "dumb"}
 
 
+def socket_paths(config, key):
+    """Accept the pinned provider's exact rendezvous and protected listener."""
+    alias = Path(profile(config, key)["endpoint"][7:])
+    uid = pwd.getpwnam(config["development_user"]).pw_uid
+    gid = grp.getgrnam(config["client_group"]).gr_gid
+    parent = alias.parent.lstat()
+    if not stat.S_ISDIR(parent.st_mode) or (parent.st_uid, parent.st_gid) != (uid, gid):
+        invalid()
+    item = alias.lstat()
+    if not stat.S_ISLNK(item.st_mode) or item.st_uid != uid:
+        invalid()
+    root = Path("/tmp").resolve() / f"codex-daemon-{uid}"
+    parent = root.lstat()
+    if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != uid
+            or stat.S_IMODE(parent.st_mode) not in (0o700, 0o710)
+            or stat.S_IMODE(parent.st_mode) == 0o710 and parent.st_gid != gid):
+        invalid()
+    rendezvous = alias.parent.resolve() / alias.name
+    physical = root / hashlib.sha256(os.fsencode(rendezvous)).hexdigest()
+    if os.readlink(alias) != str(physical):
+        invalid()
+    item = physical.lstat()
+    if (not stat.S_ISSOCK(item.st_mode) or item.st_uid != uid
+            or stat.S_IMODE(item.st_mode) not in (0o600, 0o660)):
+        invalid()
+    return alias, root, physical, gid
+
+
 def grant_socket(config, key):
-    """Native bind ends with 0600. Broaden only after that owned inode exists."""
-    path = Path(profile(config, key)["endpoint"][7:])
-    uid = pwd.getpwnam(config["development_user"]).pw_uid
-    gid = grp.getgrnam(config["client_group"]).gr_gid
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        parent = path.parent.lstat()
-        if not stat.S_ISDIR(parent.st_mode) or (parent.st_uid, parent.st_gid) != (uid, gid):
-            invalid()
-        try:
-            item = path.lstat()
-        except FileNotFoundError:
-            time.sleep(0.05)
-            continue
-        if not stat.S_ISSOCK(item.st_mode) or (item.st_uid, item.st_gid) != (uid, gid):
-            invalid()
-        if stat.S_IMODE(item.st_mode) == 0o600:
-            os.chmod(path, 0o660, follow_symlinks=False)
-            os.chmod(path.parent, 0o750, follow_symlinks=False)
-            return
-        time.sleep(0.05)
-    raise TimeoutError
-
-
-def verify_socket(config, key):
-    path = Path(profile(config, key)["endpoint"][7:])
-    uid = pwd.getpwnam(config["development_user"]).pw_uid
-    gid = grp.getgrnam(config["client_group"]).gr_gid
+    """Grant traversal and this listener only; sibling sockets stay private."""
     deadline = time.monotonic() + 10
     while True:
         try:
-            item = path.lstat()
-            if (not stat.S_ISSOCK(item.st_mode) or item.st_uid != uid
+            _, root, physical, gid = socket_paths(config, key)
+            os.chown(root, -1, gid, follow_symlinks=False)
+            os.chmod(root, 0o710, follow_symlinks=False)
+            os.chown(physical, -1, gid, follow_symlinks=False)
+            os.chmod(physical, 0o660, follow_symlinks=False)
+            return
+        except FileNotFoundError:
+            if time.monotonic() >= deadline:
+                raise TimeoutError from None
+            time.sleep(0.05)
+
+
+def verify_socket(config, key):
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            _, root, physical, gid = socket_paths(config, key)
+            parent = root.lstat()
+            item = physical.lstat()
+            if (parent.st_gid != gid or stat.S_IMODE(parent.st_mode) != 0o710
                     or item.st_gid != gid or stat.S_IMODE(item.st_mode) != 0o660):
-                raise SystemExit("ERROR  shared Codex socket ownership or permissions differ")
+                invalid()
             with socket.socket(socket.AF_UNIX) as client:
                 client.settimeout(1)
-                client.connect(str(path))
+                client.connect(str(physical))
             return
         except (FileNotFoundError, ConnectionRefusedError, TimeoutError):
-            pass
-        if time.monotonic() >= deadline:
-            raise SystemExit("ERROR  shared Codex socket did not become available")
-        time.sleep(0.1)
+            if time.monotonic() >= deadline:
+                raise TimeoutError from None
+            time.sleep(0.1)
 
 
 def discovery_links(config, *, allow_missing_accounts):

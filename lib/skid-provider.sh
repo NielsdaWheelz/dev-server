@@ -1,54 +1,53 @@
 #!/usr/bin/env bash
 
-# The npm javascript launcher selects this same packaged executable. Skid's
-# config and product-local command require the native path, not that launcher.
+# Shared provider installation owns the managed binary. This consumer obtains
+# the native executable through that module's explicit installed-path contract.
 skidbladnir_native_paths() {
-  local home="$1" package triple codex claude claude_target
-  case "$(uname -s):$(uname -m)" in
-  Darwin:arm64) package=codex-darwin-arm64 triple=aarch64-apple-darwin ;;
-  Linux:x86_64) package=codex-linux-x64 triple=x86_64-unknown-linux-musl ;;
-  *) return 1 ;;
-  esac
-  codex="$home/.local/lib/node_modules/@openai/codex/node_modules/@openai/$package/vendor/$triple/bin/codex"
+  local home="$1" codex claude claude_target expected
+  codex="$(ai_codex_installed_path "$home")" || return 1
+  expected="$(ai_claude_version_pin)" || return 1
   claude="$home/.local/bin/claude"
-  [[ -x "$codex" && -f "$codex" && ! -L "$codex" && -L "$claude" && -x "$claude" ]] || return 1
+  [[ -L "$claude" && -x "$claude" ]] || return 1
   claude_target="$(readlink "$claude")" || return 1
-  [[ "$claude_target" == "$home/.local/share/claude/versions/"* &&
+  [[ "$claude_target" == "$home/.local/share/claude/versions/$expected" &&
      -f "$claude_target" && ! -L "$claude_target" && -x "$claude_target" ]] || return 1
+  [[ "$(ai_claude_version "$claude")" == "$expected" ]] || return 1
   printf '%s\t%s\t%s\n' "$codex" "$claude" "$home"
 }
 
-skidbladnir_provider_preflight() {
-  local home="$1" pin
-  local qualification
+skidbladnir_native_pin() {
+  local pin
   pin="$(dev_server_assets_dir)/skid-provider/native-control.json"
-
-  dev_server_strict_json_file "$pin" 4096 || die 'skid native-control pin is invalid'
-  qualification="$(python3 - "$pin" <<'PY'
+  dev_server_strict_json_file "$pin" 4096 || return 1
+  python3 - "$pin" <<'PIN'
 import json
+import re
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as stream:
     value = json.load(stream)
-expected = {
-    "repository": "https://github.com/NielsdaWheelz/llm-calling.git",
-    "revision": "ec97adeb9ddd0f91b141f89cc42cff7cc7efdb8f",
-    "lockSha256": "7566d8859aead7cfa6ae9477f5ea2406d00c860335cbe954cbb320ea330783f5",
-    "uvVersion": "0.11.28",
-    "pythonVersion": "3.12.13",
-    "claudeSdkVersion": "0.2.130",
-    "entryPoint": "provider-runtime-control",
-    "installedCommand": "skidbladnir-provider-runtime-control",
+fields = {"repository", "revision", "lockSha256", "patchSha256", "uvVersion", "pythonVersion", "claudeSdkVersion", "claudeVersion", "entryPoint", "installedCommand", "qualified"}
+if not isinstance(value, dict) or value.keys() != fields or type(value["qualified"]) is not bool:
+    raise SystemExit(1)
+if not isinstance(value["repository"], str) or not re.fullmatch(r"https://[a-zA-Z0-9./_-]+\.git", value["repository"]):
+    raise SystemExit(1)
+for key, size in (("revision", 40), ("lockSha256", 64), ("patchSha256", 64)):
+    if not isinstance(value[key], str) or not re.fullmatch(r"[0-9a-f]{%d}" % size, value[key]):
+        raise SystemExit(1)
+for key in ("uvVersion", "pythonVersion", "claudeSdkVersion", "claudeVersion"):
+    if not isinstance(value[key], str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", value[key]):
+        raise SystemExit(1)
+if value["entryPoint"] != "provider-runtime-control" or value["installedCommand"] != "skidbladnir-provider-runtime-control":
+    raise SystemExit(1)
+print("\t".join(value[key] for key in ("repository", "revision", "lockSha256", "patchSha256", "uvVersion", "pythonVersion", "claudeSdkVersion", "entryPoint", "installedCommand", "claudeVersion")) + "\t" + ("ready" if value["qualified"] else "pending"))
+PIN
 }
-if value.keys() != expected.keys() | {"qualified"}:
-    raise SystemExit(1)
-if any(value[key] != wanted for key, wanted in expected.items()):
-    raise SystemExit(1)
-if type(value["qualified"]) is not bool:
-    raise SystemExit(1)
-print("ready" if value["qualified"] else "pending")
-PY
-)" || die 'skid native-control pin differs from the historical inputs'
+
+skidbladnir_provider_preflight() {
+  local home="$1" pin repository revision lock patch uv_version python_version sdk entry _installed _claude qualification source
+  pin="$(skidbladnir_native_pin)" || die 'invalid skid native-control pin'
+  IFS=$'\t' read -r repository revision lock patch uv_version python_version sdk entry _installed _claude qualification <<<"$pin"
+  [[ "$(dev_server_sha256 "$(dev_server_assets_dir)/skid-provider/native-control.patch")" == "$patch" ]] || die 'native helper patch checksum differs'
   if [[ "$qualification" == pending ]]; then
     render_result ACTION skid.native 'original skid owner has not qualified the pinned native helper'
     return 2
@@ -72,45 +71,55 @@ PY
 }
 
 skidbladnir_provider_install_helper() {
-  local home="$1" candidate="$2" base release stage source uv wrapper marker
-  local revision=ec97adeb9ddd0f91b141f89cc42cff7cc7efdb8f
+  local home="$1" candidate="$2" base release stage source uv wrapper marker pin repository revision lock patch uv_version python_version sdk entry _installed _claude qualification pin_sha
+  pin="$(skidbladnir_native_pin)" || return 1
+  IFS=$'\t' read -r repository revision lock patch uv_version python_version sdk entry _installed _claude qualification <<<"$pin"
+  [[ "$qualification" == ready && "$(dev_server_sha256 "$(dev_server_assets_dir)/skid-provider/native-control.patch")" == "$patch" ]] || return 1
+  pin_sha="$(dev_server_sha256 "$(dev_server_assets_dir)/skid-provider/native-control.json")" || return 1
   base="$home/.local/share/skidbladnir/provider-runtime-control"
-  release="$base/releases/$revision"
+  release="$base/releases/$revision-$patch"
   uv="$base/bootstrap/bin/uv"
   ensure_directory "$base" 0700 || return 1
   ensure_directory "$base/releases" 0700 || return 1
-  if [[ ! -x "$uv" || "$("$uv" --version 2>/dev/null)" != 'uv 0.11.28'* ]]; then
+  if [[ ! -x "$uv" || "$("$uv" --version 2>/dev/null)" != "uv $uv_version"* ]]; then
     python3 -m venv "$base/bootstrap" || return 1
     PIP_NO_CACHE_DIR=1 "$base/bootstrap/bin/python" -m pip --disable-pip-version-check \
-      install --quiet --upgrade 'uv==0.11.28' || return 1
-    [[ "$("$uv" --version)" == 'uv 0.11.28'* ]] || return 1
+      install --quiet --upgrade "uv==$uv_version" || return 1
+    [[ "$("$uv" --version)" == "uv $uv_version"* ]] || return 1
   fi
   marker="$release/.installed"
-  if [[ ! -f "$marker" || ! -x "$release/.venv/bin/provider-runtime-control" ]]; then
+  if [[ ! -f "$marker" || ! -x "$release/.venv/bin/$entry" ]]; then
     [[ ! -e "$release" && ! -L "$release" ]] || {
       render_result ACTION skid.native "incomplete pinned helper at $release; inspect and remove only that generation, then rerun"
       return 2
     }
     stage="$(mktemp -d "$base/.stage.XXXXXX")" || return 1
     source="$stage/source"
-    if ! git clone --quiet --no-checkout https://github.com/NielsdaWheelz/llm-calling.git "$source" ||
+    if ! git init --quiet "$source" ||
+       ! git -C "$source" remote add origin "$repository" ||
        ! git -C "$source" fetch --quiet --depth=1 origin "$revision" ||
        ! git -C "$source" checkout --quiet --detach "$revision" ||
        [[ "$(git -C "$source" rev-parse HEAD 2>/dev/null)" != "$revision" ]] ||
-       [[ "$(dev_server_sha256 "$source/uv.lock")" != 7566d8859aead7cfa6ae9477f5ea2406d00c860335cbe954cbb320ea330783f5 ]]; then
+       [[ "$(dev_server_sha256 "$source/uv.lock")" != "$lock" ]]; then
+      rm -R -- "$stage"
+      return 1
+    fi
+    if ! git -C "$source" apply --check "$(dev_server_assets_dir)/skid-provider/native-control.patch" ||
+       ! git -C "$source" apply "$(dev_server_assets_dir)/skid-provider/native-control.patch" ||
+       [[ "$(dev_server_sha256 "$source/uv.lock")" != "$lock" ]]; then
       rm -R -- "$stage"
       return 1
     fi
     mv -- "$source" "$release" || { rm -R -- "$stage"; return 1; }
     rmdir -- "$stage" || return 1
     if ! UV_CACHE_DIR="$base/cache" UV_PYTHON_INSTALL_DIR="$base/python" \
-       "$uv" sync --project "$release" --python 3.12.13 --frozen --extra claude-sdk --no-dev ||
-       ! "$release/.venv/bin/python" - <<'PY'
+       "$uv" sync --project "$release" --python "$python_version" --frozen --extra claude-sdk --no-dev ||
+       ! "$release/.venv/bin/python" - "$python_version" "$sdk" <<'PY'
 from importlib.metadata import version
 import sys
 
-assert sys.version_info[:3] == (3, 12, 13)
-assert version("claude-agent-sdk") == "0.2.130"
+assert sys.version_info[:3] == tuple(map(int, sys.argv[1].split(".")))
+assert version("claude-agent-sdk") == sys.argv[2]
 PY
     then
       rm -R -- "$release"
@@ -125,30 +134,30 @@ PY
       rm -R -- "$release"
       return 1
     fi
-    if ! printf '%s\n' "$revision uv=0.11.28 python=3.12.13 claude-sdk=0.2.130 frozen" >"$release/.installed" ||
+    if ! printf '%s\n' "$pin_sha" >"$release/.installed" ||
        ! chmod 0600 "$release/.installed"; then
       rm -R -- "$release"
       return 1
     fi
     render_result INSTALLED skid.native 'pinned provider helper and frozen sdk environment'
   fi
-  [[ "$(cat "$marker")" == "$revision uv=0.11.28 python=3.12.13 claude-sdk=0.2.130 frozen" &&
+  [[ "$(cat "$marker")" == "$pin_sha" &&
      "$(git -C "$release" rev-parse HEAD 2>/dev/null)" == "$revision" &&
-     "$(dev_server_sha256 "$release/uv.lock")" == 7566d8859aead7cfa6ae9477f5ea2406d00c860335cbe954cbb320ea330783f5 &&
+     "$(dev_server_sha256 "$release/uv.lock")" == "$lock" &&
      -f "$release/.venv/bin/claude" && ! -L "$release/.venv/bin/claude" &&
      "$(file_mode "$release/.venv/bin/claude" 2>/dev/null)" == 755 ]] || return 1
   cmp -s "$(dev_server_assets_dir)/skid-provider/native-control-claude" "$release/.venv/bin/claude" || return 1
-  "$release/.venv/bin/python" - <<'PY' || return 1
+  "$release/.venv/bin/python" - "$python_version" "$sdk" <<'PY' || return 1
 from importlib.metadata import version
 import sys
 
-assert sys.version_info[:3] == (3, 12, 13)
-assert version("claude-agent-sdk") == "0.2.130"
+assert sys.version_info[:3] == tuple(map(int, sys.argv[1].split(".")))
+assert version("claude-agent-sdk") == sys.argv[2]
 PY
   local probe
   probe="$(mktemp "$base/.probe.XXXXXX")" || return 1
   if printf '{}\n' | env -i HOME="$home" CODEX_HOME="$home/.codex" \
-      PATH="$home/.local/bin:/usr/bin:/bin" "$release/.venv/bin/provider-runtime-control" >"$probe" 2>/dev/null; then
+      PATH="$home/.local/bin:/usr/bin:/bin" "$release/.venv/bin/$entry" >"$probe" 2>/dev/null; then
     rm -f -- "$probe"
     return 1
   fi
