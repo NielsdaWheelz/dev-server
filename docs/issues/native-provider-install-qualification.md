@@ -46,7 +46,8 @@ archive digest and release manifest match that declaration. combined isolated
 gateway/helper/provider finalized-result probe passes with the exact installer
 release package. retain `qualified: false` until the remaining accepted
 boundaries and final evidence review pass. the source deployment pin also
-records false; only the installer's own declaration gates apply. qualification status is not
+records false; only the installer's own declaration gates apply. qualification
+status is not
 an embedded runtime compatibility check or a replacement for combined evidence.
 
 host apply limit: ordinary ansible apply has no gateway role and does not run
@@ -77,7 +78,8 @@ idle output with a saved output identity, matching receipt turn and expected
 reply hash within the requested utf-8 bound. altered process identity returns
 `AgentTargetStale` before dispatch. native stop exits zero and its version rpc
 is unavailable afterward; owned gateway, isolated tmux and model endpoint stop.
-all task fixtures, binaries and saved fixture history are removed. real accounts
+all combined-fixture files, binaries and saved fixture history are removed.
+real accounts
 remain untouched. this no-auth controlled endpoint does not qualify authenticated
 provider access or fleet deployment.
 
