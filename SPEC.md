@@ -32,7 +32,7 @@ operations; see [the cutover runbook](docs/gateway-separation-runbook.md).
 | homebrew | update metadata and upgrade declared formulae and casks |
 | pacman/yay | full `pacman -Syu` with declared packages, then declared aur packages |
 | ubuntu apt | refresh metadata and reconcile declared packages to repository candidates |
-| codex/claude | install stable codex npm `latest`; install native claude `latest` |
+| codex/claude | resolve upstream npm stable latest; reconcile the qualified native claude version |
 | repo pins | install declared exact versions |
 
 native package managers resolve required dependencies. arch partial upgrades
@@ -99,8 +99,7 @@ managed files use compare-before-write and same-filesystem atomic promotion.
 verify bytes and mode before rename; preserve credentials and account state.
 a managed file is entirely repo-owned except explicitly named parser-backed
 keys, currently cursor's `remote.SSH.remotePlatform`, claude's `statusLine`,
-`autoUpdatesChannel`, and `minimumVersion`, and jarvis's gate lines in the
-owner's `~/.ssh/authorized_keys`.
+and jarvis's gate lines in the owner's `~/.ssh/authorized_keys`.
 intentional symlinks have explicit owners and targets; do not overwrite
 conflicting foreign paths.
 
@@ -164,16 +163,16 @@ compatibility state reader, or second package manager is introduced.
 one codex binary is installed at `$HOME/.local/bin/codex` through npm's user
 prefix. apply resolves one stable `MAJOR.MINOR.PATCH` from `latest` on every
 host. installation uses npm integrity with scripts disabled. installed
-manifest and executable must agree; no stale-candidate
-fallback after a failed requested upgrade.
+manifest and executable must agree; no stale-candidate fallback follows a
+failed requested upgrade. gateway profiles use the npm package's native
+executable so foreground identity remains the provider process.
 
 one claude native binary is published at `$HOME/.local/bin/claude` from its
 versioned native directory. bootstrap downloads anthropic's official https
-installer to a temporary file and syntax-checks it before execution. subsequent
-updates use native `install latest` under the normal host home. both accounts
-share the repo-owned `latest` channel with no account version floor; reconcile
-these settings before installation. the native updater owns background updates
-and old-version cleanup. reject a conflicting canonical path; do not restart
+installer to a temporary file and syntax-checks it before execution. installation
+reconciles the exact qualified version in the native-control declaration under
+the normal host home. account update settings stay user-owned; apply repairs
+drift from native updates. reject a conflicting canonical path; do not restart
 running claude processes.
 
 ordinary and herdr account commands are installed by `lib/ai-tools.sh`.
@@ -211,18 +210,23 @@ provider/environment profiles and herdr's native integrations.
 `assets/agent-instructions.md` supplies the five account instruction files,
 installed as mode `0600`. `assets/claude/statusline.sh` is installed as
 `~/bin/claude-statusline`, and both claude account `settings.json` files carry a
-repo-owned `statusLine` key pointing at it. apply also sets `autoUpdatesChannel`
-to `latest` and removes `minimumVersion` in both accounts. every other settings
+repo-owned `statusLine` key pointing at it. every other settings
 key, authentication, history, project instructions, and skills remain user-owned.
 instruction updates affect new sessions; status line updates apply live.
 
 ## codex daemon ownership
 
-native codex owns account daemon startup, discovery, reuse, command support,
-and remote semantics. this repository installs no shared codex service or
-discovery link. native daemon lifecycle stays with codex; wrapper and binary
-updates do not restart running agents. preserve all account homes, credentials,
-configuration and history.
+upstream codex owns account daemon startup, discovery, reuse, command support,
+and remote semantics. this repository installs no codex service, discovery
+link, custom source build or daemon package policy. binary updates do not
+restart running agents. preserve account homes, credentials, configuration and
+history.
+
+skid-created sessions use the upstream daemon selected by `CODEX_HOME`; its
+socket is `app-server-control/app-server-control.sock` below that account home.
+the host ensures the daemon is running, creates the native thread, then attaches
+the stock tui using `--remote unix://... resume THREAD_ID`. manual marked-shell
+commands remain ordinary stock launches without a claimed native association.
 
 ubuntu provisions the distro's bubblewrap apparmor profile and verifies user,
 network and pid namespace creation without disabling the global restriction.
@@ -583,3 +587,15 @@ absorbs real complexity or enforces a named invariant. atomicity, credentials,
 host-key continuity, private ingress, and verified skid rollback are retained.
 record unresolved work in `docs/issues/`, one file per issue, and remove resolved
 records. completed deployment plans and cutover instructions belong in git history.
+
+## native helper source qualification
+
+`assets/skid-provider/native-control.json` pins a directly merged helper source
+revision and its exact lock hash, python, uv, claude sdk and native claude versions.
+install that revision without patches into a revision-named generation and
+synchronize its environment with `uv sync --frozen --extra claude-sdk --no-dev`.
+verify source identity, lock hash and runtime versions before publishing the
+launcher. `qualified: false` returns action/2 before gateway mutation. isolated
+installation and rejected-request probes prove packaging only. upstream daemon
+startup, thread creation, remote attachment and native control require combined
+qualification against the installed stock package.

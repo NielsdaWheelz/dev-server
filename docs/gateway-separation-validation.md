@@ -147,8 +147,9 @@ managed zsh template retains one inert guard so ordinary dotfile reinstallation
 cannot erase skid support; no extension framework or once-per-shell flag is
 introduced. shared account settings/history remain visible across products.
 gateway maintenance requires already installed shared host tools and never upgrades
-them. helper/plugin rollback and the original app's implemented fleet verifier
-use the agreed ten-file generation contract.
+them. at that historical cutover, helper/plugin rollback and the original app's
+fleet verifier used the ten-file contract. current generations use eleven
+files, adding `providers/terminal-context-init` as specified in the runbook.
 separately pinned helper environments remain on disk, preserving all retained
 generation dependencies without adding collection machinery.
 
@@ -189,3 +190,43 @@ up to date and original's tightened fleet verifier passes everywhere.
 gateway, herdr, provider and cognition process identities and receipts were
 preserved. this closes the command/config gap; broader desktop ux waivers are
 unchanged. no live operation was performed by this source task.
+
+## 2026-09-29 stock npm installer checks
+
+remote main's shared-service retirement and existing account routing remain.
+the custom codex source pin, patch, build/package path, rust/v8 dependencies and
+custom namespace policy are removed. the direct frozen helper remains; readiness
+requires the coordinated release and qualified helper pins.
+previous fork tests are superseded and cannot qualify upstream stock codex.
+
+an empty-environment disposable-home probe first confirmed the previous fork
+installer cannot satisfy the npm installation contract. the changed installer
+installed upstream `@openai/codex` 0.159.1 and verified Darwin arm64 and Linux amd64 native
+executable path and reported version. repeat installation preserved its
+nanosecond modification time and created no source-build generation.
+
+all five scoped provider commands passed argument and named-home routing
+checks, including spaces/newlines and inherited foreign account/herdr values.
+false qualification returned action/2 at gateway preflight. changed shell
+libraries, workstation and launcher syntax/shellcheck and both ansible playbook
+syntax checks passed. diff whitespace and ai-tools formatting passed. devbox's
+zero-argument tailscale helper now documents its shellcheck contract; scoped
+shellcheck passes. temporary checks and npm fixtures were removed after verification.
+
+the final pinned helper passed actual installer/repeat checks on both platforms:
+exact merged source and lock, frozen dependencies/protocol, unchanged installed
+entrypoint and marker. combined gateway/cli/native journeys passed on Darwin
+(30.98 seconds) and Linux (42.81 seconds), including empty-thread first terminal
+input, same-tui a→b→a with captured native targeting, exact interruption, close
+races and unread acknowledgement. actual older-tui/newer-daemon skew passed.
+Claude 2.1.284 passed native background stop and SDK saved history/results.
+[upstream qualification](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/native-agent-qualification.md)
+owns those boundaries; controlled local model responses supplied execution without
+real accounts. authenticated access, phone and fleet remain NOT_RUN. all owned
+fixtures/processes and temporary tests were removed.
+
+the coordinated v0.10.5 release is public and immutable. the release pin matches
+its exact source and both host-archive digests; the qualified helper source/lock
+matches upstream. signed-artifact verification and both host-binary byte
+reproductions passed separately from the source journeys above. gateway readiness
+is enabled; no gateway apply, fleet deployment or phone operation occurred.

@@ -43,7 +43,7 @@
         mode: '0644'
       loop: >-
         {{ ['common.sh', 'gateway-runtime.sh', gateway_product ~ '.sh']
-           + (['skid-provider.sh'] if gateway_product == 'skidbladnir' and gateway_operation == 'apply' else []) }}
+           + (['ai-tools.sh', 'skid-provider.sh'] if gateway_product == 'skidbladnir' and gateway_operation == 'apply' else []) }}
 
     - name: Install selected gateway assets
       ansible.builtin.copy:
@@ -111,6 +111,7 @@
         source "$dev_server_assets_root/../lib/common.sh"
         source "$dev_server_assets_root/../lib/{{ gateway_product }}.sh"
         if [[ '{{ gateway_product }}' == skidbladnir && '{{ gateway_operation }}' == apply ]]; then
+          source "$dev_server_assets_root/../lib/ai-tools.sh"
           source "$dev_server_assets_root/../lib/skid-provider.sh"
         fi
         if [[ '{{ gateway_operation }}' == apply ]]; then

@@ -20,6 +20,23 @@ for (let index = 0; index < minimum.length; index += 1) {
 NODE
 }
 
+ai_claude_version_pin() {
+  local pin
+  pin="$(dev_server_assets_dir)/skid-provider/native-control.json"
+  dev_server_strict_json_file "$pin" 4096 || return 1
+  python3 - "$pin" <<'PIN'
+import json
+import re
+import sys
+with open(sys.argv[1], encoding="utf-8") as stream:
+    value = json.load(stream)
+version = value.get("claudeVersion") if isinstance(value, dict) else None
+if not isinstance(version, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+    raise SystemExit(1)
+print(version)
+PIN
+}
+
 ai_validate_inputs() {
   local instructions
   local profile
@@ -34,6 +51,7 @@ ai_validate_inputs() {
   statusline="$(dev_server_assets_dir)/claude/statusline.sh"
   [[ -f "$statusline" && ! -L "$statusline" && -s "$statusline" ]] ||
     die "invalid claude status line script: $statusline"
+  ai_claude_version_pin >/dev/null || die 'invalid qualified Claude version'
 }
 
 ai_install_dirs() {
@@ -167,7 +185,7 @@ ai_bootstrap_claude_native() (
 
   local bytes
   local home
-  local installer
+  local installer expected
 
   require_cmd bash
   require_cmd curl
@@ -184,7 +202,8 @@ ai_bootstrap_claude_native() (
   [[ "$bytes" =~ ^[0-9]+$ && "$bytes" -gt 0 && "$bytes" -le 1048576 ]] ||
     die "invalid Claude installer candidate size"
   bash -n "$installer" || die "invalid Claude installer syntax"
-  HOME="$home" bash "$installer" latest ||
+  expected="$(ai_claude_version_pin)" || die "invalid qualified Claude version"
+  HOME="$home" bash "$installer" "$expected" ||
     die "Claude native installation failed"
 )
 
@@ -193,15 +212,18 @@ ai_install_claude() {
   local binary
   local home
   local status
-  local version
+  local version expected
 
+  expected="$(ai_claude_version_pin)" || die "invalid qualified Claude version"
   home="$(dev_server_home)"
   binary="$(ai_claude_binary)"
   if before="$(ai_claude_native_version)"; then
-    HOME="$home" "$binary" install latest ||
-      die "Claude native latest-channel reconciliation failed"
+    [[ "$before" != "$expected" ]] || return 0
+    HOME="$home" "$binary" install "$expected" ||
+      die "Claude qualified native version reconciliation failed"
     version="$(ai_claude_native_version)" ||
       die "Claude native reconciliation produced an invalid installation"
+    [[ "$version" == "$expected" ]] || die "Claude installation differs from qualified version"
     if [[ "$version" != "$before" ]]; then
       render_result UPDATED "AI tool" "claude@$version"
     fi
@@ -219,6 +241,7 @@ ai_install_claude() {
   ai_bootstrap_claude_native || return 1
   version="$(ai_claude_native_version)" ||
     die "Claude native installer produced an invalid installation"
+  [[ "$version" == "$expected" ]] || die "Claude installation differs from qualified version"
   render_result "$status" "AI tool" "claude@$version"
 }
 
@@ -234,7 +257,7 @@ ai_install_profiles() {
     die "missing AI profile wrapper: $profile"
 
   codex_profile="$(mktemp "$home/bin/.codex-profile.XXXXXX")" || return 1
-  if ! python3 - "$home" >"$codex_profile" <<'PY'; then
+  if ! python3 - "$home" >"$codex_profile" <<'PY'
 import shlex
 import sys
 
@@ -247,6 +270,7 @@ for command, account in (("codex-work", ".codex-work"),
 print('  *) exit 64 ;;\nesac')
 print(f'exec {shlex.quote(home + "/.local/bin/codex")} "$@"')
 PY
+  then
     rm -f -- "$codex_profile"
     return 1
   fi
@@ -277,8 +301,8 @@ ai_install_instructions() {
   done
 }
 
-# Both accounts share one binary and therefore one update policy: latest.
-# Preserve unrelated settings; a missing or empty file starts from {}.
+# Install the status line while preserving user settings and update policy.
+# A missing or empty file starts from {}.
 ai_claude_settings() {
   require_cmd python3
   python3 - "$1" "$2" <<'PY'
@@ -318,8 +342,6 @@ else:
 if not isinstance(value, dict):
     raise SystemExit(f"claude settings must be an object: {settings}")
 value["statusLine"] = {"type": "command", "command": script}
-value["autoUpdatesChannel"] = "latest"
-value.pop("minimumVersion", None)
 json.dump(value, sys.stdout, indent=2, ensure_ascii=False)
 sys.stdout.write("\n")
 PY
@@ -348,11 +370,11 @@ ai_install_claude_settings() {
 }
 
 ai_install() {
-  ai_require_codex_runtime
+  ai_require_codex_runtime || return $?
   ai_validate_inputs
   ai_install_dirs || return 1
   ai_install_claude_settings || return 1
-  ai_install_codex || return 1
+  ai_install_codex || return $?
   ai_install_claude || return 1
   ai_install_profiles || return 1
   ai_install_instructions || return 1

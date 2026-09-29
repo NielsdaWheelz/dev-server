@@ -34,3 +34,16 @@ build heaps or remove the host's recovery mechanism.
 resolved when: representative concurrent development completes with adequate
 memory headroom and no memory-pressure terminations under the selected
 workload or host capacity.
+
+native-control tradeoff (2026-09-29): a skid-created codex thread uses the
+upstream native daemon selected by its existing `CODEX_HOME`. that owner persists after the last tui exits until
+an explicit `codex app-server daemon stop` under the selected account. the
+provider's lifecycle implementation has no idle timeout or reference-counted
+shutdown. this removes unconditional startup of three shared services, but
+using all three accounts can retain three owners and their loaded threads.
+skid adds no daemon supervisor or automatic stop; stopping can interrupt work.
+
+acceptance still requires observing retained memory and headroom with the
+intended simultaneous account workload. measure that boundary during approved
+live qualification; it is NOT_RUN here. automatic idle eviction would require
+a separately accepted first-party lifecycle change.

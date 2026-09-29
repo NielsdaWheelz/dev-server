@@ -15,6 +15,7 @@
     - assets/routers
     - assets/claude
     - assets/herdr
+    - assets/skid-provider
 
 - name: Install exact runtime libraries
   ansible.builtin.copy:
@@ -83,3 +84,11 @@
     - herdr.service
     - herdr-gate
     - jarvis-gate.pub
+
+- name: Install qualified Claude version declaration
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/skid-provider/native-control.json"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/skid-provider/native-control.json"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: "0644"

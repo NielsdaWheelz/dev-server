@@ -97,7 +97,7 @@ in place. existing environment-override semantics and native herdr integrations
 remain intact; jarvis keeps its existing worker account map.
 
 original skid's forge and marked bash/zsh terminals use those same accounts
-through scoped commands. skid invokes codex's packaged native executable and
+through scoped commands. skid invokes codex's upstream npm native executable and
 the shared native claude command directly. personal claude leaves
 `CLAUDE_CONFIG_DIR` unset. skid loads its claude identity plugin explicitly; it
 installs no codex hooks and never provisions or rewrites account state.
@@ -105,11 +105,11 @@ installs no codex hooks and never provisions or rewrites account state.
 gives the exact worker map and app environment contract.
 
 `apply` resolves codex's stable npm `latest` once per run on every host
-and installs it when needed. npm installation uses normal integrity checks
-with scripts disabled; claude uses native `install latest`. both claude
-accounts follow `latest`: apply enforces that shared policy and removes
-account version floors. claude's native auto-updater handles background updates
-and old-version cleanup. wrappers add no startup update lookup.
+and installs it when needed under `~/.local`. npm owns package integrity;
+installation disables scripts and verifies the package and executable versions.
+claude reconciles the exact qualified native version declared in
+`assets/skid-provider/native-control.json`. account update settings remain
+user-owned; apply repairs version drift without restarting provider sessions.
 
 interactive zsh aliases add `--yolo` to codex commands and
 `--dangerously-skip-permissions` to claude commands. the defaults live in
@@ -126,8 +126,13 @@ codex-work2 resume
 codex owns each account's native daemon and discovery socket. `codex` honors
 an existing `CODEX_HOME`, otherwise selecting `.codex`; `codex-work` and
 `codex-work2` always select their named homes. the wrappers pass arguments
-unchanged to the installed cli. use codex's native daemon commands to inspect
-or stop a daemon; `--no-daemon` selects direct execution when needed.
+unchanged to the installed cli. manual marked-shell commands are ordinary
+stock launches; they do not acquire a native thread association. for sessions
+created through skid, the host starts or reuses the selected account's upstream
+daemon, creates a native thread, then launches `codex --remote unix://... resume`
+with that thread id. the socket comes from the selected `CODEX_HOME` at
+`app-server-control/app-server-control.sock`. the installer owns no daemon
+bootstrap, service or package policy.
 
 on the devbox, apply retires the former shared services and their exact
 discovery links before reconciling ai tools. when those services are present,
@@ -148,9 +153,8 @@ repo source; apply replaces the installed copies. new sessions load changes.
 [`assets/claude/statusline.sh`](assets/claude/statusline.sh) is installed as
 `~/bin/claude-statusline` and set as the `statusLine` command in both claude
 account `settings.json` files; running sessions pick it up on the next update.
-the repo also owns `autoUpdatesChannel` and removes `minimumVersion` in both
-accounts. project instructions, skills, other settings keys, history, and
-authentication remain separately owned.
+account update settings, project instructions, skills, other settings keys,
+history and authentication remain separately owned.
 
 ## agent fleet
 
@@ -166,6 +170,10 @@ independently. changing its runtime while it runs requires an explicit stop
 because stopping ends its terminals and agents. herdr integrations remain in
 the existing normal account homes. original skid shares those accounts and has
 an explicitly loaded claude plugin and separately pinned native helper.
+the helper comes directly from its merged source revision; its lock hash,
+python, uv and sdk versions define the frozen environment. no helper patch is
+applied. helper source qualification and release verification must agree;
+`qualified: false` refuses gateway apply before mutation.
 provider binaries remain shared host tools maintained by host `apply`.
 tailscale follows its host package manager, except on macos where the app store
 owns updates.

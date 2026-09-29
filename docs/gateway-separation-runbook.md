@@ -51,7 +51,7 @@ original skid supplied its source deployment contract at
 2026-09-25. implementation `3bd0ae468c8feefc1e2eac5ee72085d23ec445e2` adopts
 existing accounts; coordinating handoff `2ad2cab` confirms that contract for
 both products. templates are under `deployment/providers/` and the helper pin under
-`deployment/native-control/pin.json`. the exact helper inputs are `llm-calling@ec97adeb9ddd0f91b141f89cc42cff7cc7efdb8f`, uv `0.11.28`,
+`deployment/native-control/pin.json`. the historical helper inputs were `llm-calling@ec97adeb9ddd0f91b141f89cc42cff7cc7efdb8f`, uv `0.11.28`,
 python `3.12.13`, claude sdk `0.2.130`. the owner reports frozen installation, disposable-home/path routing and native
 claude 2.1.282 command availability passing on macbook without authentication.
 subsequent operator qualification passed native claude-work binding, idle
@@ -60,6 +60,16 @@ status and bounded history on all three hosts with the corrected plugin in
 `unconfirmed`; later observation found the exact provider processes gone.
 native background-job stop remains `NOT_RUN`. provider upgrades require
 requalification; an exact install alone cannot prove compatibility.
+the current direct helper source, lock and runtime versions are declared in
+`assets/skid-provider/native-control.json`; no helper patch is applied.
+the coordinated stock-native generation is pinned at v0.10.5. codex uses
+upstream npm stable `latest`, without a custom build or package policy.
+`qualified: false` refuses gateway apply before mutation; source qualification
+does not establish installed-fleet acceptance. earlier fork/provider checks and
+public v0.10.4 do not qualify this contract.
+[current upstream qualification](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/native-agent-qualification.md)
+owns the accepted isolated boundaries and remaining deployment work.
+
 
 ## deployment contract
 
@@ -165,8 +175,15 @@ original skid uses the same four explicit account homes. manual personal
 claude leaves `CLAUDE_CONFIG_DIR` unset; setting it to `~/.claude` is not
 assumed equivalent to native default behavior. its forge profiles invoke absolute
 native providers with explicit arguments, foreground signatures and its
-claude identity plugin. codex must resolve to its packaged native executable,
-not the npm javascript entry point. claude keeps basename `claude` for helper
+claude identity plugin. codex resolves to its upstream npm package executable.
+for skid-created threads the host starts or reuses the account's native daemon,
+creates the thread, and attaches the stock tui with `--remote unix://... resume`
+and that thread id. the control socket is derived from the profile's existing
+`CODEX_HOME`. manual marked-shell codex commands stay ordinary stock calls
+without a native association. upstream owns daemon lifecycle; the installer
+adds no bootstrap or service. retained account-daemon memory remains an
+[open workload question](issues/agent-memory-pressure.md).
+claude keeps basename `claude` for helper
 lookup. its host config includes `nativeControlPath` pointing
 to the skid-owned helper. the gateway supplies its selected absolute claude
 command through `SKIDBLADNIR_CLAUDE_COMMAND`; the frozen environment's private
