@@ -69,6 +69,14 @@ the historical results above do not qualify these changes. the current gateway
 release pin is still v0.10.3; qualification cannot be enabled until a published
 coordinated skid release is pinned and qualified with these exact native inputs.
 a helper-only probe is insufficient to establish gateway protocol compatibility.
+approved disposable mac qualification on provider `49c9f47` passed marked
+no-auth cold startup, second-tui attachment preserving the first view, native
+read-only observation, spoofed-owner and cross-view rejection, and absence of
+an upstream update marker. all owned sockets, processes and fixtures were
+removed. the debug owner's approximately 188 mib rss is a fixture measurement.
+noble x86_64 bundled-bubblewrap namespaces and coordinated gateway acceptance
+remain NOT_RUN; the repository qualification flag stays false.
+
 
 ## deployment contract
 

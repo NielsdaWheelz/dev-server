@@ -221,6 +221,13 @@ to exact upstream `36650394`, verifying both lock hashes and the native package
 pin flag. upstream license/notice accompany the bundled patch and installed
 package. this does not qualify native startup or linux namespaces.
 
-native marked-tui first-owner startup, multi-tui attachment, selected-view reads,
-owner mismatch refusal and ubuntu bundled-bubblewrap namespace behavior remain
-NOT_RUN. see [the qualification issue](issues/native-provider-install-qualification.md).
+approved disposable mac native checks on provider `49c9f47` passed marked
+no-auth cold startup, second-tui same-owner attachment preserving the first
+view, native read-only observation, spoofed-owner and cross-view rejection,
+and absence of an upstream update marker. all owned sockets/processes/fixtures
+were cleaned. the debug owner's approximately 188 mib rss is not a production
+memory qualification.
+
+noble x86_64 bundled-bubblewrap namespaces, live mismatched-package refusal,
+authenticated native control and coordinated gateway acceptance remain NOT_RUN.
+see [the qualification issue](issues/native-provider-install-qualification.md).

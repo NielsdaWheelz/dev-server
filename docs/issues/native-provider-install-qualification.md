@@ -6,21 +6,22 @@ blocks gateway application. the final approved disposable frozen install and
 repeat application passed, including exact runtime versions and rejected-request
 launcher/shim probes. these checks do not qualify provider behavior.
 
-source installation now publishes a complete pinned codex package for native
-account daemon bootstrap. installer checks cover generation rejection, wrapper
-account selection and declared input staging. these do not prove provider
-startup, selected-view publication or ubuntu namespace policy.
+approved disposable mac native qualification passed on provider source `49c9f47`
+and patch `1c0e9e659297069b384f7723828337cef8e6a82f43ff5aedc5ff44e4a74072d0`:
+marked no-auth cold startup created the pinned account owner; a second tui
+attached without restarting it or replacing the first selected view; read-only
+native observation passed; spoofed-owner registration and cross-view guarded
+control were rejected. no upstream update marker was created. the debug daemon
+used approximately 188 mib rss; this is one fixture measurement, not production
+capacity acceptance. all owned tmux sockets, provider processes and fixtures
+were removed. real accounts and fleet hosts were untouched.
 
-live qualification must use a disposable home and the final bundled codex
-patch plus directly pinned merged helper source. prove first marked tui startup
-creates its account owner, a second tui joins it, native reads resolve each
-selected view, and mismatched existing owner packages produce an action without
-restart. on ubuntu noble, run the bundled bubblewrap from the source generation
-and native daemon copy to prove both apparmor attachments permit namespaces.
-
-no provider daemon or ubuntu host was available to this installer integration
-check. these boundaries are NOT_RUN. remove this record after the final package
-and deployed linux paths pass their owners' disposable qualification.
+remaining live boundaries are NOT_RUN: ubuntu noble x86_64 namespace creation
+from both the source package and native daemon's bundled bubblewrap copy;
+existing mismatched package refusal on a live owner; authenticated native
+control; and the coordinated gateway release. the preexisting ubuntu 26.04 arm
+vm was left untouched and does not qualify the devbox boundary. remove this
+record after these accepted boundaries and the coordinated release pass.
 
 coordinated release blocker: `assets/skidbladnir/release-pin.json` still selects
 v0.10.3 (`e5906e4`), while the new helper and host declaration use the revised
