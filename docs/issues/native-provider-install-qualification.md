@@ -1,8 +1,8 @@
 # native provider installation qualification
 
 helper source is pinned directly to merged `0bbba0a`; its updated anyio lock
-and new generation have not passed live qualification. `qualified: false`
-blocks gateway application. the final approved disposable frozen install and
+and generation pass the disposable mac combined checks below. `qualified: false`
+blocks gateway application pending remaining boundaries and review. frozen install and
 repeat application passed, including exact runtime versions and rejected-request
 launcher/shim probes. these checks do not qualify provider behavior.
 
@@ -35,17 +35,18 @@ absence verified; test directories and newly created empty parents were removed.
 no existing profile, service, provider configuration or gateway was changed.
 
 the permanent proposed profile is absent on the host. persistent activation,
-full linux provider startup/control, authenticated native control and coordinated
-gateway acceptance remain NOT_RUN. this namespace mechanism/path probe is not a
-fleet deployment or full linux provider acceptance. remove this record after
+full linux provider startup/control and authenticated native control remain
+NOT_RUN. this namespace mechanism/path probe is not a fleet deployment or
+full linux provider acceptance. remove this record after
 those boundaries and the coordinated release pass.
 
 coordinated release status: `assets/skidbladnir/release-pin.json` now selects
 public v0.10.4 from `8510f2e`, with exact mac/linux artifact hashes. the mac
 archive digest and release manifest match that declaration. combined isolated
-gateway/helper/provider acceptance is still pending; retain `qualified: false`
-until the accepted boundaries pass. the source deployment pin also records false;
-only the installer's own declaration gates apply. qualification status is not
+gateway/helper/provider finalized-result probe passes with the exact installer
+release package. retain `qualified: false` until the remaining accepted
+boundaries and final evidence review pass. the source deployment pin also
+records false; only the installer's own declaration gates apply. qualification status is not
 an embedded runtime compatibility check or a replacement for combined evidence.
 
 host apply limit: ordinary ansible apply has no gateway role and does not run
@@ -62,14 +63,33 @@ v8 artifacts. installation authenticates the target manifest against the pinned
 source tree, then verifies the archive and binding before locked cargo builds.
 temporary component checks reject unavailable/tampered manifests, either payload
 tamper and wrong/missing/extra entries; verified artifacts pass. the exact
-installer release build remains NOT_RUN. a genuine debug host was built from
-unchanged provider `49c9f47` using that upstream setup.
+`ai_install_codex` locked release build passes in a disposable home. package
+version, code-mode host, ripgrep, manifest, license/notice and installed-path
+checks pass; repeat installation preserves the marker timestamp.
 
-combined fixture status: published gateway readiness and agent session creation
-pass. the first launch omitted fixture machine initialization; correcting that
-setup error restores readiness. no selected native binding/listener is observed
-yet; investigation is at the login-shell startup handoff. this is not combined
-acceptance, and no native read/control success is claimed.
+combined disposable mac qualification passes with published gateway v0.10.4,
+direct merged helper `0bbba0a` and the actual installer release package from
+provider `49c9f47`. marked bash 3.2 startup creates the native listener and
+exposes its selected binding. native user send returns an accepted native
+receipt with a turn id. a test-owned loopback responses endpoint emits an
+assistant item with `phase: final_answer`; bounded native read returns finalized,
+idle output with a saved output identity, matching receipt turn and expected
+reply hash within the requested utf-8 bound. altered process identity returns
+`AgentTargetStale` before dispatch. native stop exits zero and its version rpc
+is unavailable afterward; owned gateway, isolated tmux and model endpoint stop.
+all task fixtures, binaries and saved fixture history are removed. real accounts
+remain untouched. this no-auth controlled endpoint does not qualify authenticated
+provider access or fleet deployment.
+
+initial fixture machine initialization and canonical helper activation were
+missing; correcting those setup steps required no product changes. an unmarked
+assistant SSE item was correctly classified as unknown; the finalized check
+requires its typed phase rather than inferring completion from transport success.
+
+release executable sha256: codex
+`ddd2b6f7ba7153288b01f7ab14a7fdbbea69ef0bb8179cb503b57c45a0fb04be`;
+code-mode host
+`bee01b7e788748f8352935545646912174d9286576bd257dea03d7302b2eefc6`.
 
 login-shell correction: mac bash 3.2 has no `BASHPID`; the startup hook
 therefore remained pending. the guard now uses the original `$$` together with

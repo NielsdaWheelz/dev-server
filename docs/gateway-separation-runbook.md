@@ -67,9 +67,18 @@ no helper patch is applied. `qualified: false` blocks gateway apply pending
 acceptance of this source/environment and the pinned codex native owner.
 the historical results above do not qualify these changes. the gateway release
 pin now selects public v0.10.4 (`8510f2e`) with exact
-artifact hashes. qualification still requires combined gateway/helper/provider
-acceptance using these exact inputs.
+artifact hashes. qualification retains the remaining native platform and
+authentication boundaries using these exact inputs.
 a helper-only probe is insufficient to establish gateway protocol compatibility.
+approved isolated mac combined checks pass using the published gateway, merged
+frozen helper and actual `ai_install_codex` release package: selected binding,
+native accepted user-send receipt, finalized native read and stale-process
+rejection. a controlled no-auth model endpoint emits a typed final answer;
+the saved output identity, receipt turn, expected reply hash and utf-8 bound
+match. native owner stop, version-rpc absence and owned process/fixture cleanup
+pass. package version/layout/resources/licenses and unchanged-marker repeat
+installation also pass. authenticated access and linux provider acceptance
+remain separate boundaries.
 approved disposable mac qualification on provider `49c9f47` passed marked
 no-auth cold startup, second-tui attachment preserving the first view, native
 read-only observation, spoofed-owner and cross-view rejection, and absence of

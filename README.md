@@ -106,7 +106,8 @@ gives the exact worker map and app environment contract.
 
 `apply` builds codex from the exact source revision and bundled patch in
 `assets/codex/native-source.json`. it verifies the upstream and patched lock
-hashes, uses the declared rust toolchain and a locked release build, then
+hashes, authenticates upstream sandbox v8 artifacts against the pinned tree,
+uses the declared rust toolchain and a locked release build, then
 publishes an immutable generation through `~/.local/bin/codex`. a failed build
 leaves the previous command installed. claude reconciles the exact qualified
 native version declared in `assets/skid-provider/native-control.json`.

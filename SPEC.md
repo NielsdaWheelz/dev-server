@@ -163,7 +163,9 @@ compatibility state reader, or second package manager is introduced.
 one codex binary is published at `$HOME/.local/bin/codex` from an immutable
 source-build generation. `assets/codex/native-source.json` declares the exact
 revision, patch digest, upstream and patched lock digests, rust version and
-reported executable version. verify each boundary, build with `--locked`, and
+reported executable version. authenticate the upstream sandbox v8 manifest
+against the pinned tree and verify its archive and binding. verify each
+boundary, build with `--locked`, and
 promote only after the lock and executable version match. the package contains
 its code-mode helper, ripgrep and linux bubblewrap, plus native package metadata
 with `skidPinned: true` to disable daemon updates from upstream. build prerequisites
