@@ -74,6 +74,9 @@ no-auth cold startup, second-tui attachment preserving the first view, native
 read-only observation, spoofed-owner and cross-view rejection, and absence of
 an upstream update marker. all owned sockets, processes and fixtures were
 removed. the debug owner's approximately 188 mib rss is a fixture measurement.
+a focused same-version/different-executable live mismatch check rejected the
+marked challenger with exit 1 while preserving the running owner's identity,
+package selection and version rpc. the exact owner and fixtures were cleaned.
 noble x86_64 bundled-bubblewrap namespaces and coordinated gateway acceptance
 remain NOT_RUN; the repository qualification flag stays false.
 

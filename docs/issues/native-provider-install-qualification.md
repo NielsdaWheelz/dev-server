@@ -16,9 +16,16 @@ used approximately 188 mib rss; this is one fixture measurement, not production
 capacity acceptance. all owned tmux sockets, provider processes and fixtures
 were removed. real accounts and fleet hosts were untouched.
 
+a focused disposable mac mismatch check also passed: an upstream owner and
+patched challenger both reported 0.157.1 but had different executable digests.
+the marked challenger exited 1 without changing the owner's pid, kernel lifetime,
+record, package symlink or digest; the owner still served its version rpc.
+no update marker existed. the exact owner was stopped through native lifecycle
+control and all fixtures were removed.
+
 remaining live boundaries are NOT_RUN: ubuntu noble x86_64 namespace creation
 from both the source package and native daemon's bundled bubblewrap copy;
-existing mismatched package refusal on a live owner; authenticated native
+authenticated native
 control; and the coordinated gateway release. the preexisting ubuntu 26.04 arm
 vm was left untouched and does not qualify the devbox boundary. remove this
 record after these accepted boundaries and the coordinated release pass.

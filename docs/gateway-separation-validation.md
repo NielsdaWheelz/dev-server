@@ -228,6 +228,11 @@ and absence of an upstream update marker. all owned sockets/processes/fixtures
 were cleaned. the debug owner's approximately 188 mib rss is not a production
 memory qualification.
 
-noble x86_64 bundled-bubblewrap namespaces, live mismatched-package refusal,
-authenticated native control and coordinated gateway acceptance remain NOT_RUN.
+a focused disposable mac check rejected a patched marked challenger against a
+same-version upstream owner with a different executable digest. challenger exit
+1 preserved owner pid/kernel lifetime/record/package symlink/digest and version
+rpc readiness; no update marker existed. the exact owner was native-stopped and
+fixtures removed.
+
+noble x86_64 bundled-bubblewrap namespaces, authenticated native control and coordinated gateway acceptance remain NOT_RUN.
 see [the qualification issue](issues/native-provider-install-qualification.md).
