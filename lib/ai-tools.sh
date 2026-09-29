@@ -92,7 +92,8 @@ _ai_codex_generation_path() {
     -f "$release/.installed" && ! -L "$release/.installed" &&
     "$(cat "$release/.installed")" == "$(dev_server_sha256 "$(dev_server_assets_dir)/codex/native-source.json")" ]] || return 1
   [[ -f "$release/codex-package.json" && ! -L "$release/codex-package.json" &&
-    -x "$release/bin/codex-code-mode-host" && -x "$release/codex-path/rg" ]] || return 1
+    -x "$release/bin/codex-code-mode-host" && -x "$release/codex-path/rg" &&
+    -f "$release/LICENSE" && -f "$release/NOTICE" ]] || return 1
   if [[ "$(uname -s)" == Linux ]]; then
     [[ -x "$release/codex-resources/bwrap" ]] || return 1
   fi
@@ -175,6 +176,8 @@ ai_install_codex() (
   [[ "$target" == *-apple-darwin || "$target" == *-unknown-linux-gnu ]] || return 1
   mkdir -m 0755 "$stage/release" "$stage/release/bin" \
     "$stage/release/codex-path" "$stage/release/codex-resources" || return 1
+  install -m 0644 "$source/LICENSE" "$stage/release/LICENSE" || return 1
+  install -m 0644 "$source/NOTICE" "$stage/release/NOTICE" || return 1
   install -m 0755 "$stage/target/release/codex" "$stage/release/bin/codex" || return 1
   install -m 0755 "$stage/target/release/codex-code-mode-host" "$stage/release/bin/codex-code-mode-host" || return 1
   install -m 0755 "$(command -v rg)" "$stage/release/codex-path/rg" || return 1

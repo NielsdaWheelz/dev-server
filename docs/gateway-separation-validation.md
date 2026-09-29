@@ -207,9 +207,19 @@ temporary component fixtures passed installed-generation rejection, canonical
 link repair, corrupt patch refusal preserving the installed command, and named
 work/personal override account selection. they were removed. shellcheck passed
 changed provider libraries and workstation; both ansible playbooks passed syntax
-checks; whitespace checks passed. an isolated frozen helper installation was
-stopped during dependency synchronization before helper invocation or repeat
-application, and its fixture was removed; it is not a pass.
+checks; whitespace checks passed. after current-turn approval, a fresh frozen
+helper installation and repeat application passed in an empty-env disposable
+home: exact merged source/lock, python 3.12.13, uv 0.11.28, sdk 0.2.130, anyio
+4.14.2, installed shim bytes/mode and rejected-request launcher dispatch.
+repeat application preserved the marker's nanosecond modification time.
+fixture-only qualification was enabled; the repository flag stayed false.
+no real provider account or authenticated turn was used. the fixture was removed.
+
+an independent source-only checkout probe applied the final codex patch digest
+`1c0e9e659297069b384f7723828337cef8e6a82f43ff5aedc5ff44e4a74072d0`
+to exact upstream `36650394`, verifying both lock hashes and the native package
+pin flag. upstream license/notice accompany the bundled patch and installed
+package. this does not qualify native startup or linux namespaces.
 
 native marked-tui first-owner startup, multi-tui attachment, selected-view reads,
 owner mismatch refusal and ubuntu bundled-bubblewrap namespace behavior remain

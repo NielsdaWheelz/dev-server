@@ -2,8 +2,9 @@
 
 helper source is pinned directly to merged `0bbba0a`; its updated anyio lock
 and new generation have not passed live qualification. `qualified: false`
-blocks gateway application. a disposable frozen-install probe reached source
-checkout and dependency synchronization, then was stopped before invocation.
+blocks gateway application. the final approved disposable frozen install and
+repeat application passed, including exact runtime versions and rejected-request
+launcher/shim probes. these checks do not qualify provider behavior.
 
 source installation now publishes a complete pinned codex package for native
 account daemon bootstrap. installer checks cover generation rejection, wrapper

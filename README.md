@@ -112,6 +112,9 @@ leaves the previous command installed. claude reconciles the exact qualified
 native version declared in `assets/skid-provider/native-control.json`.
 account update settings remain user-owned; apply repairs version drift without
 restarting running provider sessions.
+the bundled codex patch modifies upstream native-control and tui selection;
+upstream [license](assets/codex/LICENSE) and [notice](assets/codex/NOTICE)
+accompany the source patch and installed native package.
 
 interactive zsh aliases add `--yolo` to codex commands and
 `--dangerously-skip-permissions` to claude commands. the defaults live in
