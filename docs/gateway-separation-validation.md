@@ -195,13 +195,13 @@ unchanged. no live operation was performed by this source task.
 
 remote main's shared-service retirement and existing account routing remain.
 the custom codex source pin, patch, build/package path, rust/v8 dependencies and
-custom namespace policy are removed. the direct frozen helper remains, with
-qualification false until the root integrator verifies the coordinated contract.
+custom namespace policy are removed. the direct frozen helper remains; readiness
+awaits the coordinated release pin after isolated source qualification.
 previous fork tests are superseded and cannot qualify upstream stock codex.
 
 an empty-environment disposable-home probe first confirmed the previous fork
 installer cannot satisfy the npm installation contract. the changed installer
-installed upstream `@openai/codex` 0.159.1 and verified the darwin arm64 native
+installed upstream `@openai/codex` 0.159.1 and verified Darwin arm64 and Linux amd64 native
 executable path and reported version. repeat installation preserved its
 nanosecond modification time and created no source-build generation.
 
@@ -209,11 +209,18 @@ all five scoped provider commands passed argument and named-home routing
 checks, including spaces/newlines and inherited foreign account/herdr values.
 false qualification returned action/2 at gateway preflight. changed shell
 libraries, workstation and launcher syntax/shellcheck and both ansible playbook
-syntax checks passed. diff whitespace and ai-tools formatting passed. devbox
-retains a pre-existing shellcheck SC2119 observation, reproduced on the original
-file. temporary checks and npm fixtures were removed after verification.
+syntax checks passed. diff whitespace and ai-tools formatting passed. devbox's
+zero-argument tailscale helper now documents its shellcheck contract; scoped
+shellcheck passes. temporary checks and npm fixtures were removed after verification.
 
-no upstream native daemon/thread/remote-tui combined check, linux native package,
-authenticated access, phone or fleet verification ran in this installer task.
-those boundaries are NOT_RUN; source changes and packaging checks do not prove
-product acceptance. see [the qualification issue](issues/native-provider-install-qualification.md).
+the final pinned helper passed actual installer/repeat checks on both platforms:
+exact merged source and lock, frozen dependencies/protocol, unchanged installed
+entrypoint and marker. combined gateway/cli/native journeys passed on Darwin
+(30.98 seconds) and Linux (42.81 seconds), including empty-thread first terminal
+input, same-tui a→b→a with captured native targeting, exact interruption, close
+races and unread acknowledgement. actual older-tui/newer-daemon skew passed.
+Claude 2.1.284 passed native background stop and SDK saved history/results.
+[upstream qualification](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/native-agent-qualification.md)
+owns those boundaries; controlled local model responses supplied execution without
+real accounts. authenticated access, phone and fleet remain NOT_RUN. all owned
+fixtures/processes and temporary tests were removed.
