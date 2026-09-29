@@ -245,6 +245,19 @@ ordinary user. the profile was unloaded and absence verified; all owned files
 and newly created empty parent directories were removed. existing policy,
 services, provider configuration and gateway remained untouched.
 
-persistent profile activation, full linux provider startup/control,
-authenticated native control and coordinated gateway acceptance remain NOT_RUN.
+subsequent disposable noble x86_64 first-party provider checks pass on genuine
+`49c9f47` locked debug binaries with debug symbols disabled: marked startup,
+second-tui same-owner/distinct-view attachment, selected read, guarded send and
+finalized read with matching reply hash, and spoof/stale rejection. bubblewrap
+is denied/allowed/denied around a unique temporary policy. native stop and
+owned process/policy/socket/source/toolchain/package cleanup pass. no gateway
+is involved; code-mode runtime is disabled.
+
+mac combined acceptance passes with public gateway v0.10.4, the merged frozen
+helper and actual installer release package: native accepted send receipt,
+finalized bounded read with matching output identity/turn/hash, stale-process
+rejection and exact cleanup. package and unchanged-marker repeat checks pass.
+exact linux installer release build, code-mode runtime, persistent policy
+activation and authenticated access remain NOT_RUN. phone/fleet deployment
+is outside these checks; qualification stays false pending readiness review.
 see [the qualification issue](issues/native-provider-install-qualification.md).

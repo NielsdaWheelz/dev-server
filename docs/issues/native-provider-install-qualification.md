@@ -44,7 +44,7 @@ is denied before and after the unique temporary apparmor policy, and allowed
 while it is loaded. native stop exits zero; owned processes, policy, socket,
 source, toolchain and packages are removed. no deployed configuration changes.
 
-this linux check exercises first-party provider APIs, without a gateway, and
+this linux check exercises first-party provider apis, without a gateway, and
 code-mode runtime is disabled. the exact linux installer release build,
 code-mode runtime, permanent policy activation and authenticated native control
 remain NOT_RUN. phone/fleet deployment is outside the checks. the permanent
@@ -65,8 +65,8 @@ provider preflight. it retires former shared services in pre-tasks, reconciles
 base/jarvis/workspace/security/shell/github, then installs pinned ai binaries.
 `qualified: false` guards only selected gateway apply; it is not an early host
 admission gate and cannot prevent partial host mutation or binary upgrades.
-keep this installer cutover unmerged until coordinated gateway release/pin and
-combined provider acceptance are ready. existing host apply remains explicitly
+keep this installer cutover unmerged until readiness review accepts the
+remaining linux installer, persistent-policy and authenticated-access limits. existing host apply remains explicitly
 nontransactional; an optional gateway flag must not become a global host gate.
 
 source-build correction: the required code-mode host uses upstream's sandbox
@@ -89,8 +89,7 @@ reply hash within the requested utf-8 bound. altered process identity returns
 `AgentTargetStale` before dispatch. native stop exits zero and its version rpc
 is unavailable afterward; owned gateway, isolated tmux and model endpoint stop.
 all combined-fixture files, binaries and saved fixture history are removed.
-real accounts
-remain untouched. this no-auth controlled endpoint does not qualify authenticated
+real accounts remain untouched. this no-auth controlled endpoint does not qualify authenticated
 provider access or fleet deployment.
 
 initial fixture machine initialization and canonical helper activation were
