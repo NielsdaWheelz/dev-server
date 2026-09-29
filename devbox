@@ -711,6 +711,7 @@ preflight() {
   local peer_rc
 
   require_cmd gh hcloud python3 ssh ssh-keygen uvx
+  # shellcheck disable=SC2119 # this helper deliberately rejects all arguments.
   tailscale_cli="$(dev_server_tailscale_cli)" ||
     die 'could not resolve the local Tailscale CLI'
   [[ -d "$HOME" && ! -L "$HOME" && -d "$HOME/.ssh" && ! -L "$HOME/.ssh" ]] ||
