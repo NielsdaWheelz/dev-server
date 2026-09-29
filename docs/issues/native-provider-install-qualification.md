@@ -70,3 +70,8 @@ pass. the first launch omitted fixture machine initialization; correcting that
 setup error restores readiness. no selected native binding/listener is observed
 yet; investigation is at the login-shell startup handoff. this is not combined
 acceptance, and no native read/control success is claimed.
+
+login-shell correction: mac bash 3.2 has no `BASHPID`; the startup hook
+therefore remained pending. the guard now uses the original `$$` together with
+`BASH_SUBSHELL == 0`. temporary red/green checks reproduce the old failure on
+mac bash 3.2 and pass both bash versions with subshell startup rejected.
