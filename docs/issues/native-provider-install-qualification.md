@@ -34,11 +34,22 @@ network and pid namespaces with uid 0 inside. the profile was unloaded and
 absence verified; test directories and newly created empty parents were removed.
 no existing profile, service, provider configuration or gateway was changed.
 
-the permanent proposed profile is absent on the host. persistent activation,
-full linux provider startup/control and authenticated native control remain
-NOT_RUN. this namespace mechanism/path probe is not a fleet deployment or
-full linux provider acceptance. remove this record after
-those boundaries and the coordinated release pass.
+subsequent disposable noble x86_64 provider source qualification passes on
+unchanged `49c9f47`: a locked debug build with debug symbols disabled supplies
+the genuine cli and code-mode host. ordinary marked startup creates the owner;
+a second tui shares that owner with a distinct view. native selected-view read,
+guarded send and finalized assistant read with expected reply hash pass;
+spoofed and stale controls are rejected. copied package/native-daemon bubblewrap
+is denied before and after the unique temporary apparmor policy, and allowed
+while it is loaded. native stop exits zero; owned processes, policy, socket,
+source, toolchain and packages are removed. no deployed configuration changes.
+
+this linux check exercises first-party provider APIs, without a gateway, and
+code-mode runtime is disabled. the exact linux installer release build,
+code-mode runtime, permanent policy activation and authenticated native control
+remain NOT_RUN. phone/fleet deployment is outside the checks. the permanent
+proposed profile remains absent. remove this record after the remaining
+boundaries and readiness review pass.
 
 coordinated release status: `assets/skidbladnir/release-pin.json` now selects
 public v0.10.4 from `8510f2e`, with exact mac/linux artifact hashes. the mac
@@ -47,8 +58,7 @@ gateway/helper/provider finalized-result probe passes with the exact installer
 release package. retain `qualified: false` until the remaining accepted
 boundaries and final evidence review pass. the source deployment pin also
 records false; only the installer's own declaration gates apply. qualification
-status is not
-an embedded runtime compatibility check or a replacement for combined evidence.
+status is not an embedded runtime compatibility check or a replacement for combined evidence.
 
 host apply limit: ordinary ansible apply has no gateway role and does not run
 provider preflight. it retires former shared services in pre-tasks, reconciles

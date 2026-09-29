@@ -77,7 +77,7 @@ rejection. a controlled no-auth model endpoint emits a typed final answer;
 the saved output identity, receipt turn, expected reply hash and utf-8 bound
 match. native owner stop, version-rpc absence and owned process/fixture cleanup
 pass. package version/layout/resources/licenses and unchanged-marker repeat
-installation also pass. authenticated access and linux provider acceptance
+installation also pass. authenticated access and linux installer acceptance
 remain separate boundaries.
 approved disposable mac qualification on provider `49c9f47` passed marked
 no-auth cold startup, second-tui attachment preserving the first view, native
@@ -92,9 +92,17 @@ bubblewrap copies at both package paths under a task-scoped temporary version
 of the proposed profile. its release wildcards were narrowed to test names;
 both copies attached and isolated user/network/pid namespaces. the profile,
 copies and newly created empty parents were removed without changing existing
-profiles, services or provider configuration. permanent profile activation,
-full linux provider control, authenticated control and coordinated gateway
-acceptance remain NOT_RUN; the repository qualification flag stays false.
+profiles, services or provider configuration. subsequent noble x86_64 native
+source checks pass on `49c9f47` with a genuine locked debug build (debug symbols
+disabled): marked startup, second tui sharing the owner with a distinct view,
+selected-view read, guarded send/finalized read with matching reply hash, and
+spoof/stale rejection. package and daemon-copy bubblewrap are denied/allowed/
+denied around the task-scoped temporary policy. native stop and cleanup of
+owned processes, policy, sockets, source/toolchain/packages pass. no gateway is
+involved and code-mode runtime is disabled. the exact linux installer release
+build, code-mode runtime, permanent policy activation and authenticated access
+remain NOT_RUN; phone/fleet deployment is outside these checks. the repository
+qualification flag stays false pending readiness review.
 
 
 ## deployment contract
