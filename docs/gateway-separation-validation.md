@@ -196,7 +196,7 @@ unchanged. no live operation was performed by this source task.
 remote main's shared-service retirement and existing account routing remain.
 the custom codex source pin, patch, build/package path, rust/v8 dependencies and
 custom namespace policy are removed. the direct frozen helper remains; readiness
-awaits the coordinated release pin after isolated source qualification.
+requires the coordinated release and qualified helper pins.
 previous fork tests are superseded and cannot qualify upstream stock codex.
 
 an empty-environment disposable-home probe first confirmed the previous fork
@@ -224,3 +224,9 @@ Claude 2.1.284 passed native background stop and SDK saved history/results.
 owns those boundaries; controlled local model responses supplied execution without
 real accounts. authenticated access, phone and fleet remain NOT_RUN. all owned
 fixtures/processes and temporary tests were removed.
+
+the coordinated v0.10.5 release is public and immutable. the release pin matches
+its exact source and both host-archive digests; the qualified helper source/lock
+matches upstream. signed-artifact verification and both host-binary byte
+reproductions passed separately from the source journeys above. gateway readiness
+is enabled; no gateway apply, fleet deployment or phone operation occurred.

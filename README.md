@@ -172,8 +172,8 @@ the existing normal account homes. original skid shares those accounts and has
 an explicitly loaded claude plugin and separately pinned native helper.
 the helper comes directly from its merged source revision; its lock hash,
 python, uv and sdk versions define the frozen environment. no helper patch is
-applied. `qualified: false` refuses gateway apply before mutation until the
-new generation passes its live acceptance boundaries.
+applied. helper source qualification and release verification must agree;
+`qualified: false` refuses gateway apply before mutation.
 provider binaries remain shared host tools maintained by host `apply`.
 tailscale follows its host package manager, except on macos where the app store
 owns updates.

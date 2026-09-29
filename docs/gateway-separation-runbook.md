@@ -62,10 +62,13 @@ native background-job stop remains `NOT_RUN`. provider upgrades require
 requalification; an exact install alone cannot prove compatibility.
 the current direct helper source, lock and runtime versions are declared in
 `assets/skid-provider/native-control.json`; no helper patch is applied.
-`qualified: false` blocks gateway apply pending the coordinated stock-codex
-contract. codex uses upstream npm stable `latest`, without a custom build or
-package policy. earlier fork/provider checks and public v0.10.4 do not qualify
-this contract. see [the qualification issue](issues/native-provider-install-qualification.md).
+the coordinated stock-native generation is pinned at v0.10.5. codex uses
+upstream npm stable `latest`, without a custom build or package policy.
+`qualified: false` refuses gateway apply before mutation; source qualification
+does not establish installed-fleet acceptance. earlier fork/provider checks and
+public v0.10.4 do not qualify this contract.
+[current upstream qualification](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/native-agent-qualification.md)
+owns the accepted isolated boundaries and remaining deployment work.
 
 
 ## deployment contract
