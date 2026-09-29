@@ -118,7 +118,7 @@ ai_codex_installed_path() {
 }
 
 ai_install_codex() (
-  local home pin repository revision version base_lock patch lock rust base release stage='' source binary status=INSTALLED command generation target
+  local home pin repository revision version base_lock patch lock rust base release stage='' source binary status=INSTALLED command generation target v8 archive binding checksums expected
   home="$(dev_server_home)"
   pin="$(ai_codex_source_pin)" || die 'invalid native Codex source pin'
   IFS=$'\t' read -r repository revision version base_lock patch lock rust <<<"$pin"
@@ -132,7 +132,7 @@ ai_install_codex() (
     render_result UPDATED "AI tool" "codex@$version native source"
     return 0
   fi
-  for command in rustup cmake pkg-config cc rg; do
+  for command in rustup cmake pkg-config cc rg curl; do
     if ! command -v "$command" >/dev/null; then
       render_result ACTION codex.build "install the declared source-build prerequisite: $command"
       return 2
@@ -168,12 +168,34 @@ ai_install_codex() (
   [[ "$(dev_server_sha256 "$source/codex-rs/Cargo.lock")" == "$lock" ]] || return 1
   rustup toolchain install "$rust" --profile minimal || return 1
   [[ "$(rustup run "$rust" rustc --version)" == "rustc $rust "* ]] || return 1
-  CARGO_TARGET_DIR="$stage/target" rustup run "$rust" cargo build \
+  target="$(rustup run "$rust" rustc -vV | sed -n 's/^host: //p')" || return 1
+  [[ "$target" == *-apple-darwin || "$target" == *-unknown-linux-gnu ]] || return 1
+  # Use upstream's sandbox-enabled V8 artifacts, authenticated by the pinned tree.
+  v8="$(python3 "$source/.github/scripts/rusty_v8_bazel.py" resolved-v8-crate-version)" || return 1
+  archive="librusty_v8_ptrcomp_sandbox_release_${target}.a.gz"
+  binding="src_binding_ptrcomp_sandbox_release_${target}.rs"
+  checksums="rusty_v8_ptrcomp_sandbox_release_${target}.sha256"
+  mkdir "$stage/v8" || return 1
+  curl --proto '=https' --tlsv1.2 -fsSL "https://github.com/openai/codex/releases/download/rusty-v8-v$v8/$checksums" -o "$stage/v8/$checksums" || return 1
+  expected="$(awk -v name="$checksums" '$2 == name {print $1}' "$source/third_party/v8/rusty_v8_${v8//./_}_release_manifests.sha256")" || return 1
+  [[ "$expected" =~ ^[0-9a-f]{64}$ && "$(dev_server_sha256 "$stage/v8/$checksums")" == "$expected" ]] || return 1
+  curl --proto '=https' --tlsv1.2 -fsSL "https://github.com/openai/codex/releases/download/rusty-v8-v$v8/$archive" -o "$stage/v8/$archive" || return 1
+  curl --proto '=https' --tlsv1.2 -fsSL "https://github.com/openai/codex/releases/download/rusty-v8-v$v8/$binding" -o "$stage/v8/$binding" || return 1
+  python3 - "$stage/v8" "$checksums" "$archive" "$binding" <<'V8_CHECK' || return 1
+import hashlib, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+entries = [line.split() for line in (root / sys.argv[2]).read_text().splitlines()]
+if len(entries) != 2 or {entry[1] for entry in entries if len(entry) == 2} != set(sys.argv[3:]):
+    raise SystemExit("invalid V8 artifact manifest")
+for digest, name in entries:
+    if hashlib.sha256((root / name).read_bytes()).hexdigest() != digest:
+        raise SystemExit("V8 artifact checksum differs")
+V8_CHECK
+  RUSTY_V8_ARCHIVE="$stage/v8/$archive" RUSTY_V8_SRC_BINDING_PATH="$stage/v8/$binding" \
+    CARGO_TARGET_DIR="$stage/target" rustup run "$rust" cargo build \
     --manifest-path "$source/codex-rs/Cargo.toml" --locked --release --bin codex --bin codex-code-mode-host || return 1
   [[ "$(dev_server_sha256 "$source/codex-rs/Cargo.lock")" == "$lock" &&
   "$("$stage/target/release/codex" --version)" == "codex-cli $version" ]] || return 1
-  target="$(rustup run "$rust" rustc -vV | sed -n 's/^host: //p')" || return 1
-  [[ "$target" == *-apple-darwin || "$target" == *-unknown-linux-gnu ]] || return 1
   mkdir -m 0755 "$stage/release" "$stage/release/bin" \
     "$stage/release/codex-path" "$stage/release/codex-resources" || return 1
   install -m 0644 "$source/LICENSE" "$stage/release/LICENSE" || return 1

@@ -65,9 +65,10 @@ with lock `a7771120dd948759c4f0d089382046443a2348a447453e68369400c6a43bc8e9`
 (anyio 4.14.2), native claude 2.1.284 and the same uv/python/sdk versions.
 no helper patch is applied. `qualified: false` blocks gateway apply pending
 acceptance of this source/environment and the pinned codex native owner.
-the historical results above do not qualify these changes. the current gateway
-release pin is still v0.10.3; qualification cannot be enabled until a published
-coordinated skid release is pinned and qualified with these exact native inputs.
+the historical results above do not qualify these changes. the gateway release
+pin now selects public v0.10.4 (`8510f2e`) with exact
+artifact hashes. qualification still requires combined gateway/helper/provider
+acceptance using these exact inputs.
 a helper-only probe is insufficient to establish gateway protocol compatibility.
 approved disposable mac qualification on provider `49c9f47` passed marked
 no-auth cold startup, second-tui attachment preserving the first view, native

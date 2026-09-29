@@ -40,16 +40,13 @@ gateway acceptance remain NOT_RUN. this namespace mechanism/path probe is not a
 fleet deployment or full linux provider acceptance. remove this record after
 those boundaries and the coordinated release pass.
 
-coordinated release blocker: `assets/skidbladnir/release-pin.json` still selects
-v0.10.3 (`e5906e4`), while the new helper and host declaration use the revised
-native-control contract. provider preflight checks `qualified` before gateway
-staging; it does not bind helper protocol compatibility to a gateway release.
-the admitted binary validates host config later, which cannot prove the helper
-protocol agrees. do not enable qualification merely after isolated helper tests.
-first publish the coordinated skid release, update its immutable artifact/source
-pin, and qualify that gateway with these exact provider/helper inputs. retain
-`qualified: false` until all three conditions hold; release publication is
-outside this integration assignment.
+coordinated release status: `assets/skidbladnir/release-pin.json` now selects
+public v0.10.4 from `8510f2e`, with exact mac/linux artifact hashes. the mac
+archive digest and release manifest match that declaration. combined isolated
+gateway/helper/provider acceptance is still pending; retain `qualified: false`
+until the accepted boundaries pass. the source deployment pin also records false;
+only the installer's own declaration gates apply. qualification status is not
+an embedded runtime compatibility check or a replacement for combined evidence.
 
 host apply limit: ordinary ansible apply has no gateway role and does not run
 provider preflight. it retires former shared services in pre-tasks, reconciles
@@ -59,3 +56,17 @@ admission gate and cannot prevent partial host mutation or binary upgrades.
 keep this installer cutover unmerged until coordinated gateway release/pin and
 combined provider acceptance are ready. existing host apply remains explicitly
 nontransactional; an optional gateway flag must not become a global host gate.
+
+source-build correction: the required code-mode host uses upstream's sandbox
+v8 artifacts. installation authenticates the target manifest against the pinned
+source tree, then verifies the archive and binding before locked cargo builds.
+temporary component checks reject unavailable/tampered manifests, either payload
+tamper and wrong/missing/extra entries; verified artifacts pass. the exact
+installer release build remains NOT_RUN. a genuine debug host was built from
+unchanged provider `49c9f47` using that upstream setup.
+
+combined fixture status: published gateway readiness and agent session creation
+pass. the first launch omitted fixture machine initialization; correcting that
+setup error restores readiness. no selected native binding/listener is observed
+yet; investigation is at the login-shell startup handoff. this is not combined
+acceptance, and no native read/control success is claimed.
