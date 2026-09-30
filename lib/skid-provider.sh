@@ -221,6 +221,10 @@ PY
 # Skid checks them before staging, then installs its own guarded source.
 skidbladnir_shell_setup() {
   local home="$1" operation="$2" login='' path target
+  case "$operation" in
+  check | install | restore-instant-prompt) ;;
+  *) return 64 ;;
+  esac
   for path in .bash_profile .bash_login .profile; do
     if [[ -e "$home/$path" || -L "$home/$path" ]]; then
       login="$path"
@@ -229,6 +233,7 @@ skidbladnir_shell_setup() {
   done
   login="${login:-.bash_profile}"
   local -a paths=("$login" .bashrc .zshrc .zlogin)
+  [[ "$operation" != restore-instant-prompt ]] || paths=(.zshrc)
   for path in "${paths[@]}"; do
     target="$(python3 - "$home/$path" <<'PY'
 import os
@@ -245,22 +250,40 @@ PY
       render_result ACTION skid.shell "startup target is not a regular file: $home/$path"
       return 2
     }
-    if [[ "$operation" == install ]]; then
-      skidbladnir_shell_source "$target" "$path" || return $?
+    if [[ "$operation" == restore-instant-prompt && ! -e "$target" ]]; then
+      continue
     fi
+    skidbladnir_shell_source "$target" "$path" "$operation" || return $?
   done
 }
 
 skidbladnir_shell_source() {
-  local target="$1" startup="$2" candidate mode=0644
+  local target="$1" startup="$2" operation="${3:-install}" candidate mode=0644
   if [[ -e "$target" ]]; then
     mode="$(file_mode "$target")" || return 1
   fi
   candidate="$(mktemp "$(dirname "$target")/.skid-shell-init.XXXXXX")" || return 1
-  if ! python3 - "$target" "$startup" >"$candidate" <<'PY'; then
+  if ! python3 - "$target" "$startup" "$operation" >"$candidate" <<'PY'; then
 import sys
 
-path, startup = sys.argv[1:]
+path, startup, operation = sys.argv[1:]
+instant_begin = b"# dev-server skid instant prompt begin"
+instant_end = b"# dev-server skid instant prompt end"
+instant_block = (instant_begin + b"\n"
+                 b"# the first skid prompt runs a foreground startup action that needs the terminal.\n"
+                 b'if [[ ( "${SKIDBLADNIR_SHELL:-}" != 1 || "${SKIDBLADNIR_STARTUP_PID:-}" != "$$" ||\n'
+                 b'        "${ZSH_SUBSHELL:-0}" != 0 ) &&\n'
+                 b'      -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then\n'
+                 b'  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"\n'
+                 b'fi\n' + instant_end + b"\n")
+instant_original = (b'if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then\n'
+                    b'  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"\n'
+                    b'fi\n')
+zsh_header = (b"# Managed by dev-server bootstrap.\n\n"
+              b'if [ -z "${ZSH_VERSION:-}" ]; then\n'
+              b'  echo "This file is for zsh. Run \'exec zsh\' or open a new SSH session instead."\n'
+              b'  return 0 2>/dev/null || exit 0\n'
+              b'fi\n\n')
 begin = b"# dev-server skid shell init begin"
 end = b"# dev-server skid shell init end"
 block = (begin + b"\n"
@@ -284,6 +307,34 @@ except FileNotFoundError:
     old = b""
 if len(old) > 1048576:
     raise SystemExit("shell startup file is too large")
+if old.count(instant_begin) > 1 or old.count(instant_end) > 1:
+    raise SystemExit("skid instant prompt marker is duplicated")
+if (instant_begin in old or instant_end in old) and instant_block not in old:
+    raise SystemExit("skid instant prompt block was changed or is incomplete")
+if startup == ".zshrc":
+    for preamble in (instant_block, instant_original):
+        if preamble not in old:
+            continue
+        head = old.split(preamble, 1)[0]
+        if head.startswith(zsh_header):
+            head = head[len(zsh_header):]
+        if any(line.strip() and not line.lstrip().startswith(b"#") for line in head.splitlines()):
+            raise SystemExit("instant prompt preamble must precede startup code after the managed zsh guard")
+if operation == "restore-instant-prompt":
+    sys.stdout.buffer.write(old.replace(instant_block, instant_original))
+    raise SystemExit(0)
+if operation not in ("check", "install"):
+    raise SystemExit("invalid skid shell installation operation")
+if startup == ".zshrc":
+    unguarded = old.replace(instant_block, b"")
+    if unguarded.count(instant_original) > 1:
+        raise SystemExit("instant prompt preamble is duplicated")
+    remainder = unguarded.replace(instant_original, b"")
+    if b"p10k-instant-prompt-" in remainder:
+        raise SystemExit("instant prompt preamble is unsupported; use the managed zsh preamble")
+    if instant_block in old and instant_original in unguarded:
+        raise SystemExit("instant prompt preamble is duplicated")
+    old = old.replace(instant_original, instant_block)
 if old.count(begin) > 1 or old.count(end) > 1:
     raise SystemExit("skid shell init marker is duplicated")
 owned = next((item for item in (block, old_block) if item in old), b"")
@@ -300,6 +351,10 @@ sys.stdout.buffer.write(result)
 PY
     rm -f -- "$candidate"
     return 1
+  fi
+  if [[ "$operation" == check ]]; then
+    rm -f -- "$candidate"
+    return 0
   fi
   install_managed_file "$candidate" "$target" "$mode" skid.shell || {
     rm -f -- "$candidate"

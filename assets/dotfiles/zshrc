@@ -5,9 +5,14 @@ if [ -z "${ZSH_VERSION:-}" ]; then
   return 0 2>/dev/null || exit 0
 fi
 
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+# dev-server skid instant prompt begin
+# the first skid prompt runs a foreground startup action that needs the terminal.
+if [[ ( "${SKIDBLADNIR_SHELL:-}" != 1 || "${SKIDBLADNIR_STARTUP_PID:-}" != "$$" ||
+        "${ZSH_SUBSHELL:-0}" != 0 ) &&
+      -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
+# dev-server skid instant prompt end
 
 export EDITOR="${EDITOR:-vim}"
 export PAGER="${PAGER:-less}"

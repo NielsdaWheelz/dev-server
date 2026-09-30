@@ -191,6 +191,16 @@ startup symlinks retain their identity; skid edits their regular targets while
 preserving unrelated content and modes. the app owns its terminal environment and provider account isolation. skid sets `SKIDBLADNIR_AGENT=1` only at provider exec; its explicitly
 loaded claude plugin rejects unmarked contexts before reading input or
 config and still verifies process identity. skid installs no codex hooks.
+
+the cached zsh instant-prompt preamble is skipped only for the exact intended
+skid shell with a pending startup action, excluding subshells. the
+installer updates the recognized preamble in place and validates its owned
+markers during preflight. unknown or duplicated instant-prompt snippets require
+correction before apply. custom files without a preamble keep that policy.
+ordinary dotfile apply retains the same guard; theme configuration is unchanged.
+powerlevel10k may invalidate its shared cache after the skipped preamble, so a
+later ordinary shell may need to warm it again. startup-file edits are outside
+gateway generation rollback; the runbook owns their explicit reversal.
 the contract is in the
 [runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract).
 
