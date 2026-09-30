@@ -40,6 +40,32 @@ leaves `CLAUDE_CONFIG_DIR` unset. no codex hooks or private account homes are
 installed. exact already-owned startup snippets are replaced while unrelated
 content, modes and startup symlink identities remain intact.
 
+
+the managed instant-prompt preamble excludes only the intended shell's pending
+skid startup action. skid gateway apply also replaces the recognized existing
+preamble in place; a gateway operation need not replace all dotfiles. unfamiliar,
+duplicated or changed owned preambles fail preflight. keep the product's
+`shell-init` and `assets/skid-provider/shell-init` synchronized.
+the early preview is unavailable for new skid startup actions. the theme can
+invalidate its shared cache, delaying later ordinary previews until regeneration.
+
+startup edits are not part of gateway runtime rollback. to reverse just this
+guard, run from this checkout on the target host before restoring a prior
+declaration:
+
+```sh
+bash <<'BASH'
+source lib/common.sh
+source lib/skid-provider.sh
+skidbladnir_shell_setup "$HOME" restore-instant-prompt
+BASH
+```
+
+this restores the original cached preamble, retaining integration, unrelated
+bytes, symlinks and modes. repeated reversal is inert. reapplying this
+declaration installs the guard again. reversal restores the original launch
+conflict too; it is recovery, not the corrected configuration.
+
 on devbox, both gateway and root cli use the same admitted artifact and pin.
 `/usr/local/libexec/skidbladnir` is a regular root:root `0755` file. before
 switching either executable, compare candidate bytes with the root cli and the
