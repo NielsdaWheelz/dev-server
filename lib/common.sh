@@ -8,7 +8,6 @@ dev_server_root="$(cd "$dev_server_lib_dir/.." && pwd -P)"
 dev_server_home_dir="${dev_server_home_dir:-$HOME}"
 dev_server_fleet_label_prefix="${dev_server_fleet_label_prefix:-dev.niels}"
 dev_server_gateway_port="${dev_server_gateway_port:-7341}"
-dev_server_mobile_gateway_port="${dev_server_mobile_gateway_port:-7342}"
 dev_server_assets_root="${dev_server_assets_root:-$dev_server_root/assets}"
 
 dev_server_result_mutations=0
@@ -95,14 +94,12 @@ dev_server_home() {
 }
 
 # the macbook assets name the deployment identity as @ROOT@, @FLEET_LABEL_PREFIX@
-# and @GATEWAY_PORT@. DIR is a private copy of assets/: the two plists are
-# rendered in place. each gateway renders its config in its own stage. the
-# optional second argument selects one product and does not inspect the others.
+# and @GATEWAY_PORT@. DIR is a private copy of assets/: skid's plist is
+# rendered in place; its host config is rendered in the gateway stage.
 dev_server_render_assets() {
-  (($# == 1 || $# == 2)) || die 'dev_server_render_assets needs an assets directory and optional product'
-  local assets="$1"
-  local product="${2:-all}" path rendered
-  local -a paths=() sed_args=()
+  (($# == 1)) || die 'dev_server_render_assets needs an assets directory'
+  local assets="$1" path rendered
+  local -a sed_args=()
 
   [[ "$dev_server_home_dir" =~ ^/[A-Za-z0-9._/-]+$ ]] ||
     die "invalid deployment root: $dev_server_home_dir"
@@ -113,42 +110,19 @@ dev_server_render_assets() {
     -e "s|@ROOT@|$dev_server_home_dir|g"
     -e "s|@FLEET_LABEL_PREFIX@|$dev_server_fleet_label_prefix|g"
   )
-  case "$product" in
-  all) paths=(herdr/dev.niels.herdr.plist skidbladnir/dev.niels.skidbladnir.plist herdr-mobile/dev.niels.herdr-mobile.plist) ;;
-  herdr) paths=(herdr/dev.niels.herdr.plist) ;;
-  skidbladnir) paths=(skidbladnir/dev.niels.skidbladnir.plist) ;;
-  herdr-mobile) paths=(herdr-mobile/dev.niels.herdr-mobile.plist) ;;
-  *) die "invalid asset renderer product: $product" ;;
-  esac
-  if [[ "$product" == all || "$product" == skidbladnir ]]; then
-    [[ "$dev_server_gateway_port" =~ ^[1-9][0-9]{0,4}$ ]] || die "invalid gateway port: $dev_server_gateway_port"
-    ((dev_server_gateway_port <= 65535)) || die "invalid gateway port: $dev_server_gateway_port"
-    sed_args+=(-e "s|@GATEWAY_PORT@|$dev_server_gateway_port|g")
-  fi
-  if [[ "$product" == all || "$product" == herdr-mobile ]]; then
-    [[ "$dev_server_mobile_gateway_port" =~ ^[1-9][0-9]{0,4}$ ]] || die "invalid mobile gateway port: $dev_server_mobile_gateway_port"
-    ((dev_server_mobile_gateway_port <= 65535)) || die "invalid mobile gateway port: $dev_server_mobile_gateway_port"
-    sed_args+=(-e "s|@MOBILE_GATEWAY_PORT@|$dev_server_mobile_gateway_port|g")
-  fi
-  for path in "${paths[@]}"; do
-    path="$assets/$path"
-    [[ -f "$path" && ! -L "$path" ]] || die "invalid asset template: $path"
-    rendered="$(LC_ALL=C sed "${sed_args[@]}" "$path" && printf .)" ||
-      die "could not render asset template: $path"
-    printf '%s' "${rendered%.}" >"$path" || die "could not write rendered asset: $path"
-    ! LC_ALL=C grep -Eq '@[A-Z_]+@' "$path" || die "unrendered placeholder in asset: $path"
-  done
+  [[ "$dev_server_gateway_port" =~ ^[1-9][0-9]{0,4}$ ]] || die "invalid gateway port: $dev_server_gateway_port"
+  ((dev_server_gateway_port <= 65535)) || die "invalid gateway port: $dev_server_gateway_port"
+  sed_args+=(-e "s|@GATEWAY_PORT@|$dev_server_gateway_port|g")
+  path="$assets/skidbladnir/dev.niels.skidbladnir.plist"
+  [[ -f "$path" && ! -L "$path" ]] || die "invalid asset template: $path"
+  rendered="$(LC_ALL=C sed "${sed_args[@]}" "$path" && printf .)" ||
+    die "could not render asset template: $path"
+  printf '%s' "${rendered%.}" >"$path" || die "could not write rendered asset: $path"
+  ! LC_ALL=C grep -Eq '@[A-Z_]+@' "$path" || die "unrendered placeholder in asset: $path"
   dev_server_assets_root="$assets"
   # Read dynamically by the already-sourced Skidbladnir library.
   # shellcheck disable=SC2034
-  if [[ "$product" == all || "$product" == skidbladnir ]]; then
-    skidbladnir_release_pin_file="$assets/skidbladnir/release-pin.json"
-  fi
-  if [[ "$product" == all || "$product" == herdr-mobile ]]; then
-    # Read dynamically by the already-sourced herdr-mobile library.
-    # shellcheck disable=SC2034
-    herdr_mobile_release_pin_file="$assets/herdr-mobile/release-pin.json"
-  fi
+  skidbladnir_release_pin_file="$assets/skidbladnir/release-pin.json"
 }
 
 dev_server_declared_snapshot() {

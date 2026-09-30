@@ -153,7 +153,7 @@ if [[ -o interactive ]]; then
 fi
 
 # dev-server skid shell init begin
-if [ "${SKIDBLADNIR_SHELL:-}" = 1 ] && [ "${HERDR_ENV:-}" != 1 ]; then
+if [ "${SKIDBLADNIR_SHELL:-}" = 1 ]; then
   . "$HOME/.local/share/skidbladnir/current/providers/shell-init"
 elif [ -n "${SKIDBLADNIR_CONNECTION:-}" ] || [ "${SKIDBLADNIR_TERMINAL_CONTEXT:-}" = 1 ]; then
   . "$HOME/.local/share/skidbladnir/current/providers/terminal-context-init"

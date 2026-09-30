@@ -1,4 +1,38 @@
-# gateway separation validation
+# gateway qualification
+
+current maintenance follows [the skid runbook](gateway-separation-runbook.md).
+root owns the live observations below; source checks alone do not establish them.
+
+## 2026-09-29 installed fleet
+
+normal host apply and gateway apply completed on macbook, devbox and arch with
+skid `v0.10.6` and stock codex `0.159.2`.
+
+- one personal codex conversation per host passed creation, captured inspection,
+  native send, exact-turn finalized nonempty history, stop retaining the terminal,
+  confirmed agent/terminal close, and original identity inspection after untrack
+  and close.
+- fleet tls verification and the production three-peer client under the actual
+  jarvis uid passed for all three hosts. the owner confirmed phone attachment on
+  each host after the coordinated phone update and client reopen. the herdr
+  package is absent.
+- herdr public shutdown, native integration uninstall and owned namespace purge
+  completed everywhere; the retired `8444 /v1` ingress is absent on all three
+  hosts. shared pre-existing codex app-server process lifetimes were preserved.
+
+arch's initial package-signature mirror timeout installed no packages. the
+native installer retry passed; no signature verification was bypassed.
+devbox and arch reported `system.reboot` deferred. neither was rebooted; this
+pending host activation is outside retirement.
+
+jarvis remains disabled, inactive and paused. its activation and shared
+app-server cognition require separate acceptance. these observations qualify the
+installed personal codex lifecycle and named client/device boundaries; they do
+not qualify every provider account or jarvis activation.
+
+## historical coexistence and source checks
+
+older results below qualify their recorded revisions, not the current cutover.
 
 2026-09-25, against dev-server baseline `8498933`. temporary probes were
 removed; no test framework or ci workflow was added. fixtures and service

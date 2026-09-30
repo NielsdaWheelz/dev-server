@@ -264,15 +264,11 @@ path, startup = sys.argv[1:]
 begin = b"# dev-server skid shell init begin"
 end = b"# dev-server skid shell init end"
 block = (begin + b"\n"
-         b'if [ "${SKIDBLADNIR_SHELL:-}" = 1 ] && [ "${HERDR_ENV:-}" != 1 ]; then\n'
+         b'if [ "${SKIDBLADNIR_SHELL:-}" = 1 ]; then\n'
          b'  . "$HOME/.local/share/skidbladnir/current/providers/shell-init"\n'
          b'elif [ -n "${SKIDBLADNIR_CONNECTION:-}" ] || [ "${SKIDBLADNIR_TERMINAL_CONTEXT:-}" = 1 ]; then\n'
          b'  . "$HOME/.local/share/skidbladnir/current/providers/terminal-context-init"\n'
          b'fi\n' + end + b"\n")
-prior_block = (begin + b"\n"
-               b'if [ "${SKIDBLADNIR_SHELL:-}" = 1 ] && [ "${HERDR_ENV:-}" != 1 ]; then\n'
-               b'  . "$HOME/.local/share/skidbladnir/current/providers/shell-init"\n'
-               b'fi\n' + end + b"\n")
 old_block = (begin + b"\n"
              b'if [ "${SKIDBLADNIR_SHELL:-}" = 1 ]; then\n'
              b'  . "$HOME/.local/share/skidbladnir/current/providers/shell-init"\n'
@@ -281,10 +277,6 @@ old_zsh_guard = (b"# Original skid marks only shells it creates. Source after sh
                  b'if [[ "${SKIDBLADNIR_SHELL:-}" == 1 ]]; then\n'
                  b'  source "$HOME/.local/share/skidbladnir/current/providers/shell-init"\n'
                  b'fi\n')
-zsh_guard = (b"# Original skid marks only shells it creates. Source after shared aliases.\n"
-             b'if [[ "${SKIDBLADNIR_SHELL:-}" == 1 && "${HERDR_ENV:-}" != 1 ]]; then\n'
-             b'  source "$HOME/.local/share/skidbladnir/current/providers/shell-init"\n'
-             b'fi\n')
 try:
     with open(path, "rb") as stream:
         old = stream.read(1048577)
@@ -294,19 +286,16 @@ if len(old) > 1048576:
     raise SystemExit("shell startup file is too large")
 if old.count(begin) > 1 or old.count(end) > 1:
     raise SystemExit("skid shell init marker is duplicated")
-owned = block if block in old else prior_block if prior_block in old else old_block if old_block in old else b""
+owned = next((item for item in (block, old_block) if item in old), b"")
 if (begin in old or end in old) and not owned:
     raise SystemExit("skid shell init marker is incomplete")
 kept = old.replace(owned, b"") if owned else old
-guard_count = old.count(old_zsh_guard) + old.count(zsh_guard)
+guard_count = old.count(old_zsh_guard)
 if startup == ".zshrc" and guard_count:
     if guard_count != 1:
         raise SystemExit("skid zsh guard is duplicated")
-    kept = kept.replace(old_zsh_guard, b"").replace(zsh_guard, b"")
-    selected = block
-else:
-    selected = block
-result = kept + (b"\n" if kept and not kept.endswith(b"\n") else b"") + selected
+    kept = kept.replace(old_zsh_guard, b"")
+result = kept + (b"\n" if kept and not kept.endswith(b"\n") else b"") + block
 sys.stdout.buffer.write(result)
 PY
     rm -f -- "$candidate"

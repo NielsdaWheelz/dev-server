@@ -7,17 +7,15 @@ one-user host configuration for `macbook`, `arch`, and the hetzner `devbox`.
 ./devbox apply
 
 # gateway maintenance is independent of shared host tools
-./workstation gateway apply herdr-mobile
 ./workstation gateway apply skidbladnir
-./devbox gateway apply herdr-mobile
 ./devbox gateway apply skidbladnir
 ```
 
-`gateway remove <product>` removes only the selected gateway and its owned
-serve handler; provider homes and signing files remain. herdr-mobile `v0.9.0`
-and original skid `v0.10.0` are pinned. follow
-[the cutover runbook](docs/gateway-separation-runbook.md) before any live
-namespace change.
+`gateway remove skidbladnir` removes skid's gateway and owned serve handler;
+provider homes and signing files remain. herdr and herdr-mobile installation and
+removal commands are retired. ordinary apply installs no herdr runtime, hook or gate and
+never discards workers. [the maintenance runbook](docs/gateway-separation-runbook.md)
+separates source changes from live acceptance.
 
 `apply` updates rolling packages and ai tools, reconciles exact repository pins,
 and installs shared host configuration. it replaces the former `upgrade`
@@ -60,7 +58,7 @@ casks. the app store tailscale app remains separately owned: apply verifies
 and optionally starts it, but never installs, updates, replaces, or signs in to it.
 
 host configuration is applied in order: native packages, dotfiles, exact-host
-personal policy, ai tools, then upstream herdr. gateway
+personal policy, ai tools. gateway
 commands stage only their own inputs and reconcile only their own ingress. desktop login, reboot, busy containers, and tmux
 binary activation are reported as `DEFERRED`. repo-owned activation never forces
 them. native package installation/upgrade scripts can still restart their
@@ -68,10 +66,9 @@ services; schedule host applies accordingly. package changes have no automatic
 rollback; native package managers own repair after a partial failure.
 
 deployment identity uses `dev_server_home_dir` (`$HOME`),
-`dev_server_fleet_label_prefix` (`dev.niels`), `dev_server_gateway_port` (`7341`
-for original skid) and `dev_server_mobile_gateway_port` (`7342`). mac plists
-are rendered only for the selected owner. linux identity is the user account
-and product's distinct systemd unit. [the specification](SPEC.md#deployment-identity)
+`dev_server_fleet_label_prefix` (`dev.niels`) and `dev_server_gateway_port`
+(`7341`). skid's mac plist is rendered in its private stage. linux identity is
+the user account and skid's systemd unit. [the specification](SPEC.md#deployment-identity)
 defines disposable qualification and isolation requirements.
 
 arch touchpad policy lives in
@@ -90,11 +87,10 @@ reload with `cmd+shift+,` or reopen ghostty. running terminals are left alone.
 
 ## ai accounts and services
 
-ordinary and herdr shells keep the established provider binaries and account
+ordinary shells keep the established provider binaries and account
 commands: `.codex`, `.codex-work`, `.codex-work2`, `.claude`, `.claude-work`.
 their authentication, configuration, history, memories, plugins and trust stay
-in place. existing environment-override semantics and native herdr integrations
-remain intact; jarvis keeps its existing worker account map.
+in place. existing environment-override semantics remain intact.
 
 original skid's forge and marked bash/zsh terminals use those same accounts
 through scoped commands. skid invokes codex's upstream npm native executable and
@@ -137,8 +133,8 @@ bootstrap, service or package policy.
 on the devbox, apply retires the former shared services and their exact
 discovery links before reconciling ai tools. when those services are present,
 it first stops and disables jarvis, whose deployed cognition depends on them.
-jarvis must gain its own private codex process before it can be enabled again;
-that migration belongs to the jarvis repository.
+jarvis cognition recovery through the shared app-server belongs to its owner;
+worker deployment can proceed while jarvis remains stopped.
 subsequent applies leave a separately repaired jarvis service alone. account
 homes, credentials and native daemon sockets are preserved.
 
@@ -158,57 +154,35 @@ history and authentication remain separately owned.
 
 ## agent fleet
 
-herdr-mobile is the phone gateway to upstream herdr. original skidbladnir is
-an independent tmux product. each has its own unit, launcher, config, bearer,
-machine handle, operator client and rollback chain. herdr-mobile listens on
-loopback `7342` behind private tailscale `8444/v1`; skid uses `7341` and
-`8443/v1`. removing either gateway preserves the other and both worker runtimes.
+skid owns the tmux gateway and native provider helper on each host: loopback
+`7341`, private tailscale `8443 /v1`, existing account homes and pairings.
+its unit, launcher, config, bearer, machine handle and rollback generations are
+independent of provider history. gateway maintenance never kills tmux workers.
 
-upstream herdr remains one pinned server per host from
-[`assets/herdr/release-pin.json`](assets/herdr/release-pin.json), supervised
-independently. changing its runtime while it runs requires an explicit stop
-because stopping ends its terminals and agents. herdr integrations remain in
-the existing normal account homes. original skid shares those accounts and has
-an explicitly loaded claude plugin and separately pinned native helper.
-the helper comes directly from its merged source revision; its lock hash,
-python, uv and sdk versions define the frozen environment. no helper patch is
-applied. helper source qualification and release verification must agree;
-`qualified: false` refuses gateway apply before mutation.
-provider binaries remain shared host tools maintained by host `apply`.
-tailscale follows its host package manager, except on macos where the app store
-owns updates.
+jarvis uses `/usr/local/libexec/skidbladnir`, a regular root:root `0755` copy of
+the same admitted devbox gateway artifact. gateway apply compares both installed
+cli and running gateway bytes before activation. a changed executable requires
+jarvis paused and cleanly stopped; identical apply is inert. jarvis deploy owns
+the explicitly supplied private `/etc/jarvis/agent-client.json`, its settings and
+service containment. bearer rotation requires private-client redistribution.
 
-host templates live under [`assets/herdr-mobile`](assets/herdr-mobile) and
-[`assets/skidbladnir`](assets/skidbladnir). each admitted binary validates its
-own config. verified artifacts are reused and failed activation restores only
-that product's verified prior release. the old herdr-backed v0.8 gateway is
-never an original skid rollback target. no gateway installer reads android
-signing material.
+[`assets/skidbladnir`](assets/skidbladnir) owns the release pin and host template;
+[`assets/skid-provider`](assets/skid-provider) owns scoped provider commands and
+the separately pinned stock native helper. the admitted binary validates config.
+failed activation restores only skid's verified prior generation. provider
+binaries remain shared host tools, and signing material stays outside installer
+validation. phone enrollment and device acceptance belong to the app owner.
 
-to reach another host's herdr, attach with `herdr --remote niels@dev-server`
-(or `nnandal@arch`, `nnandal@niels-eriks-macbook-pro`) or run one command with
-`ssh dev-server herdr agent list`. `--remote` starts a server on the target if
-none is listening, so do not use it while that host's herdr is stopped for a
-pin change. dev-server saves no herdr machines
-([issue](docs/issues/herdr-saved-machines.md)); these ssh keys and known hosts
-are yours to set up.
-
-jarvis reaches every host through `~/.local/libexec/herdr-gate`, bound to its
-key in each owner account's `authorized_keys`; the gate runs only an allowlist
-of agent and pane commands. it is policy hygiene, not containment: pane ids are
-not scoped to jarvis's panes. the key is generated on devbox and its public
-half is committed as the trust root. the gate's allowed home values must match
-jarvis's existing worker map. gateway operations preserve provider homes and
-leave cognition ownership to jarvis.
-
-rebuilding devbox changes its host key and its jarvis key: update the `devbox`
-line in [`assets/herdr/jarvis-known_hosts`](assets/herdr/jarvis-known_hosts)
-and the workstations' `known_hosts`, recommit `jarvis-gate.pub` from the
-reported line, and apply every host. apply removes the old key's gate line.
-
-phone enrollment, release acceptance and device recovery belong to each app
-owner. the cutover operator verifies repository ids before using the final
-`herdr-mobile` and `skidbladnir` names; github redirects do not establish identity.
+the root operator completed herdr and herdr-mobile retirement on all three hosts:
+owned runtimes, integrations, ssh gates, credentials and `8444 /v1` are removed.
+cleanup-only code is deleted. preserve unrelated settings and serve handlers,
+provider history, skid workers and permanent signing backups. normal host apply,
+gateway apply and installed native lifecycle passed on all three hosts with
+skid `v0.10.6` and stock codex `0.159.2`. fleet tls, the production client under
+the actual jarvis uid, and owner phone attachment also passed on all three.
+jarvis remains disabled, inactive and paused; activation and cognition are
+separate. [qualification](docs/gateway-separation-validation.md#2026-09-29-installed-fleet)
+records the evidence and deferred reboots.
 
 ## devbox
 
@@ -236,9 +210,7 @@ for tailscale enrollment, and establishes its openssh host key over the tailnet.
 initial trust relies on the unique named peer authenticated by tailscale; the
 peer name is not a cryptographic binding to the hetzner server id. only after
 cloud-init succeeds, native openssh is confirmed, and both principals authenticate
-does apply save that key. public ssh is never opened. a new server also has a
-new jarvis gate key and host key; recommit both as described under
-[agent fleet](#agent-fleet).
+does apply save that key. public ssh is never opened.
 
 an existing server uses strict tailnet openssh as `dev-server-deploy` and never
 resets host keys. if creation stops before key enrollment, inspect cloud-init,
@@ -263,9 +235,10 @@ python environment, database/roles, migrations, service, credentials, and
 backup/recovery. dev-server never deploys jarvis or touches nexus application
 state. jarvis is independent of developer rootless docker.
 
-jarvis's shared codex dependency is retired during host apply. its owner must
-provide a private cognition process before restarting it. its worker tools
-reach each host's herdr through the gate (see [agent fleet](#agent-fleet)).
+the former codex service installation is retired during host apply. cognition
+recovery using the shared app-server remains separately owned; worker deployment
+can proceed with jarvis stopped. its worker tools
+reach each host through the fixed skid cli (see [agent fleet](#agent-fleet)).
 
 ## development
 
@@ -276,8 +249,7 @@ reach each host's herdr through the gate (see [agent fleet](#agent-fleet)).
 | workstation packages, personal policy, dotfiles, tmux activation | `lib/packages-*.sh`, `lib/personal-*.sh`, `lib/dotfiles.sh`, `lib/tmux.sh` |
 | ai binaries and account commands | `lib/ai-tools.sh`, `assets/routers/ai-profile` |
 | devbox github identity and ssh client policy | `ansible/roles/github/`; `devbox` owns account enrollment checks |
-| herdr runtime and integrations, jarvis's gate | `lib/herdr.sh`, `assets/herdr/`, `ansible/roles/jarvis_herdr/` |
-| gateway ownership and shared activation | `lib/herdr-mobile.sh`, `lib/skidbladnir.sh`, `lib/gateway-runtime.sh`, `assets/{herdr-mobile,skidbladnir}/` |
+| gateway ownership and shared activation | `lib/skidbladnir.sh`, `lib/gateway-runtime.sh`, `assets/skidbladnir/` |
 | scoped skid commands and helper | `lib/skid-provider.sh`, `assets/skid-provider/` |
 | devbox host configuration | `ansible/roles/`, `cloud-init-devbox.template.yaml` |
 
@@ -286,7 +258,7 @@ work one bounded slice per pr, following the
 and activation with the subsystem that owns the state.
 
 edit declarations, then apply on the intended host. apply includes rolling
-software updates; review exact git, extension, herdr, and skid pin
+software updates; review exact git, extension and skid pin
 changes in the repository. use subsystem-native status commands to investigate
 a failure. there is no separate doctor or compatibility layer.
 

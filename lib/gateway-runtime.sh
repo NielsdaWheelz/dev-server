@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2154,SC2015,SC2329 # product wrappers supply context; grouped install chains fail together.
+# shellcheck disable=SC2154,SC2015,SC2329 # skid wrapper supplies context; grouped install chains fail together.
 
 : "${dev_server_root:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)}"
 : "${dev_server_install_status:=UP TO DATE}"
@@ -31,8 +31,7 @@ import sys
 with open(sys.argv[1], "r", encoding="utf-8") as stream:
     value = json.load(stream)
 artifact = sys.argv[2]
-if value == {"schemaVersion": 1, "status": "awaiting-original-skid-release"} or value == {
-        "schemaVersion": 1, "status": "awaiting-herdr-mobile-release"}:
+if value == {"schemaVersion": 1, "status": "awaiting-original-skid-release"}:
     raise SystemExit("separated gateway release is pending its app owner's published pin")
 if not isinstance(value, dict) or sorted(value) != [
         "artifacts", "schemaVersion", "sourceSha", "version"]:
@@ -64,14 +63,13 @@ PY
 
 gateway_pin_pending() {
   dev_server_strict_json_file "$gateway_release_pin_file" 4096 || return 1
-  python3 - "$gateway_release_pin_file" "$gateway_name" <<'PY'
+  python3 - "$gateway_release_pin_file" <<'PY'
 import json
 import sys
 with open(sys.argv[1], encoding="utf-8") as stream:
     value = json.load(stream)
 raise SystemExit(0 if value == {"schemaVersion": 1,
-    "status": "awaiting-" + ("original-skid" if sys.argv[2] == "skidbladnir"
-                            else "herdr-mobile") + "-release"} else 1)
+    "status": "awaiting-original-skid-release"} else 1)
 PY
 }
 
@@ -157,13 +155,11 @@ gateway_validate_namespace() {
       die "$gateway_name namespace has credentials or runtime state without separated deployment identity"
     fi
   done
-  if [[ "$gateway_name" == skidbladnir ]]; then
-    for path in "$home/.local/bin/skid" "$home/.local/bin/skidbladnir-provider-runtime-control" \
-      "$share/claude-agent-identity"; do
-      [[ ! -e "$path" && ! -L "$path" ]] ||
-        die 'skid namespace has command or provider links without separated deployment identity'
-    done
-  fi
+  for path in "$home/.local/bin/skid" "$home/.local/bin/skidbladnir-provider-runtime-control" \
+    "$share/claude-agent-identity"; do
+    [[ ! -e "$path" && ! -L "$path" ]] ||
+      die 'skid namespace has command or provider links without separated deployment identity'
+  done
   for path in "$share/releases" "$share/artifacts" "$share/units"; do
     if [[ -d "$path" && -n "$(find "$path" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
       die "$gateway_name has generations without separated deployment identity"
@@ -287,22 +283,20 @@ gateway_validate_protected_paths() {
     gateway_validate_link "$link" binary >/dev/null ||
       die "protected gateway link is invalid: $link"
   fi
-  if [[ "$gateway_name" == skidbladnir ]]; then
-    link="$home/.local/bin/skid"
-    if [[ -e "$link" || -L "$link" ]]; then
-      gateway_validate_link "$link" binary >/dev/null ||
-        die "protected skid command link is invalid: $link"
-    fi
-    link="$home/.local/bin/skidbladnir-provider-runtime-control"
-    if [[ -e "$link" || -L "$link" ]]; then
-      gateway_validate_link "$link" helper >/dev/null ||
-        die "protected skid helper link is invalid: $link"
-    fi
-    link="$share/claude-agent-identity"
-    if [[ -e "$link" || -L "$link" ]]; then
-      gateway_validate_link "$link" plugin >/dev/null ||
-        die "protected skid plugin link is invalid: $link"
-    fi
+  link="$home/.local/bin/skid"
+  if [[ -e "$link" || -L "$link" ]]; then
+    gateway_validate_link "$link" binary >/dev/null ||
+      die "protected skid command link is invalid: $link"
+  fi
+  link="$home/.local/bin/skidbladnir-provider-runtime-control"
+  if [[ -e "$link" || -L "$link" ]]; then
+    gateway_validate_link "$link" helper >/dev/null ||
+      die "protected skid helper link is invalid: $link"
+  fi
+  link="$share/claude-agent-identity"
+  if [[ -e "$link" || -L "$link" ]]; then
+    gateway_validate_link "$link" plugin >/dev/null ||
+      die "protected skid plugin link is invalid: $link"
   fi
   for path in \
     "$config/bearer" \
@@ -419,22 +413,20 @@ gateway_generation_exact() {
   local desired="$1"
   local installed="$2"
   local host_config="$3"
-  local staged_providers="${4:-}"
+  local staged_providers="$4"
 
   gateway_generation_owned "$installed" || return 1
   cmp -s "$desired/${gateway_name}" "$installed/${gateway_name}" &&
     cmp -s "$desired/characters.json" "$installed/characters.json" &&
     cmp -s "$desired/release.json" "$installed/release.json" &&
     cmp -s "$host_config" "$installed/host-config.json" || return 1
-  if [[ "$gateway_name" == skidbladnir ]]; then
-    local name
-    for name in native-control provider-command shell-init terminal-context-init \
-      claude-agent-identity/.claude-plugin/plugin.json \
-      claude-agent-identity/hooks/hooks.json \
-      claude-agent-identity/bin/agent-hook; do
-      cmp -s "$staged_providers/$name" "$installed/providers/$name" || return 1
-    done
-  fi
+  local name
+  for name in native-control provider-command shell-init terminal-context-init \
+    claude-agent-identity/.claude-plugin/plugin.json \
+    claude-agent-identity/hooks/hooks.json \
+    claude-agent-identity/bin/agent-hook; do
+    cmp -s "$staged_providers/$name" "$installed/providers/$name" || return 1
+  done
 }
 
 gateway_payload_hashes() {
@@ -451,8 +443,7 @@ gateway_payload_hashes() {
 # generation usable as the rollback target while admitting eleven-file releases.
 gateway_v09_skid_generation() {
   local path="$1"
-  [[ "$gateway_name" == skidbladnir &&
-    "$(basename "$path")" == v0.9.0-* &&
+  [[ "$(basename "$path")" == v0.9.0-* &&
     ! -e "$path/providers/terminal-context-init" &&
     ! -L "$path/providers/terminal-context-init" ]] || return 1
   gateway_release_manifest_matches "$path/release.json" darwin-arm64 \
@@ -477,12 +468,10 @@ gateway_runtime_identity() {
   {
     gateway_payload_hashes "$generation" || return 1
     printf 'host-config.json\0%s\n' "$digest"
-    if [[ "$gateway_name" == skidbladnir ]]; then
-      for name in "${provider_files[@]}"; do
-        digest="$(dev_server_sha256 "$providers/$name")" || return 1
-        printf 'providers/%s\0%s\n' "$name" "$digest"
-      done
-    fi
+    for name in "${provider_files[@]}"; do
+      digest="$(dev_server_sha256 "$providers/$name")" || return 1
+      printf 'providers/%s\0%s\n' "$name" "$digest"
+    done
   } | dev_server_sha256_stream
 }
 
@@ -921,11 +910,9 @@ gateway_restore_runtime() {
   fi
   if [[ -z "$prior_current" ]]; then
     dev_server_remove_link "$home/.local/bin/${gateway_name}" || return 1
-    if [[ "$gateway_name" == skidbladnir ]]; then
-      dev_server_remove_link "$home/.local/bin/skid" || return 1
-      dev_server_remove_link "$home/.local/bin/skidbladnir-provider-runtime-control" || return 1
-      dev_server_remove_link "$share/claude-agent-identity" || return 1
-    fi
+    dev_server_remove_link "$home/.local/bin/skid" || return 1
+    dev_server_remove_link "$home/.local/bin/skidbladnir-provider-runtime-control" || return 1
+    dev_server_remove_link "$share/claude-agent-identity" || return 1
   fi
 
   if [[ -z "$prior_current" ]]; then
@@ -971,15 +958,13 @@ gateway_install_runtime_files() {
   [[ -L "$home/.local/bin/${gateway_name}" ]] || gateway_command_installed=1
   gateway_atomic_symlink "$home/.local/bin/${gateway_name}" \
     "../share/$gateway_name/current/$gateway_name" binary || return 1
-  if [[ "$gateway_name" == skidbladnir ]]; then
-    [[ -L "$home/.local/bin/skid" ]] || gateway_command_installed=1
-    gateway_atomic_symlink "$home/.local/bin/skid" \
-      '../share/skidbladnir/current/skidbladnir' binary || return 1
-    gateway_atomic_symlink "$home/.local/bin/skidbladnir-provider-runtime-control" \
-      '../share/skidbladnir/current/providers/native-control' helper || return 1
-    gateway_atomic_symlink "$home/.local/share/skidbladnir/claude-agent-identity" \
-      'current/providers/claude-agent-identity' plugin || return 1
-  fi
+  [[ -L "$home/.local/bin/skid" ]] || gateway_command_installed=1
+  gateway_atomic_symlink "$home/.local/bin/skid" \
+    '../share/skidbladnir/current/skidbladnir' binary || return 1
+  gateway_atomic_symlink "$home/.local/bin/skidbladnir-provider-runtime-control" \
+    '../share/skidbladnir/current/providers/native-control' helper || return 1
+  gateway_atomic_symlink "$home/.local/share/skidbladnir/claude-agent-identity" \
+    'current/providers/claude-agent-identity' plugin || return 1
 }
 
 gateway_generation_owned() {
@@ -992,38 +977,34 @@ gateway_generation_owned() {
   [[ -d "$path" && ! -L "$path" &&
     "$(_dev_server_observed_mode user "$path" 2>/dev/null)" == 700 ]] || return 1
   entries="$(find "$path" -mindepth 1 -maxdepth 1 -print | sed "s#^$path/##" | LC_ALL=C sort)" || return 1
-  if [[ "$gateway_name" == skidbladnir ]]; then
-    if gateway_v09_skid_generation "$path"; then
-      provider_entries=$'claude-agent-identity\nnative-control\nprovider-command\nshell-init'
-    else
-      provider_files+=(terminal-context-init)
-    fi
-    provider_files+=(claude-agent-identity/.claude-plugin/plugin.json
-      claude-agent-identity/hooks/hooks.json
-      claude-agent-identity/bin/agent-hook)
-    [[ "$entries" == "$(printf 'characters.json\nhost-config.json\nproviders\nrelease.json\n%s\n' "$gateway_name" | LC_ALL=C sort)" ]] || return 1
-    [[ -d "$path/providers" && ! -L "$path/providers" &&
-      "$(find "$path/providers" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)" == "$provider_entries" ]] || return 1
-    local provider_file mode
-    for provider_file in "${provider_files[@]}"; do
-      mode=644
-      case "$provider_file" in native-control | provider-command | */bin/agent-hook) mode=755 ;; esac
-      [[ -f "$path/providers/$provider_file" && ! -L "$path/providers/$provider_file" &&
-        "$(file_mode "$path/providers/$provider_file" 2>/dev/null)" == "$mode" ]] || return 1
-    done
-    for provider_file in claude-agent-identity \
-      claude-agent-identity/.claude-plugin \
-      claude-agent-identity/hooks \
-      claude-agent-identity/bin; do
-      [[ -d "$path/providers/$provider_file" && ! -L "$path/providers/$provider_file" &&
-        "$(stat -c '%a' "$path/providers/$provider_file" 2>/dev/null ||
-          stat -f '%Lp' "$path/providers/$provider_file" 2>/dev/null)" == 755 ]] || return 1
-    done
-    [[ "$(find "$path/providers/claude-agent-identity" -mindepth 1 -maxdepth 3 -print | sed "s#^$path/providers/claude-agent-identity/##" | LC_ALL=C sort)" == \
-      $'.claude-plugin\n.claude-plugin/plugin.json\nbin\nbin/agent-hook\nhooks\nhooks/hooks.json' ]] || return 1
+  if gateway_v09_skid_generation "$path"; then
+    provider_entries=$'claude-agent-identity\nnative-control\nprovider-command\nshell-init'
   else
-    [[ "$entries" == "$(printf 'characters.json\nhost-config.json\nrelease.json\n%s\n' "$gateway_name" | LC_ALL=C sort)" ]] || return 1
+    provider_files+=(terminal-context-init)
   fi
+  provider_files+=(claude-agent-identity/.claude-plugin/plugin.json
+    claude-agent-identity/hooks/hooks.json
+    claude-agent-identity/bin/agent-hook)
+  [[ "$entries" == "$(printf 'characters.json\nhost-config.json\nproviders\nrelease.json\n%s\n' "$gateway_name" | LC_ALL=C sort)" ]] || return 1
+  [[ -d "$path/providers" && ! -L "$path/providers" &&
+    "$(find "$path/providers" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)" == "$provider_entries" ]] || return 1
+  local provider_file mode
+  for provider_file in "${provider_files[@]}"; do
+    mode=644
+    case "$provider_file" in native-control | provider-command | */bin/agent-hook) mode=755 ;; esac
+    [[ -f "$path/providers/$provider_file" && ! -L "$path/providers/$provider_file" &&
+      "$(file_mode "$path/providers/$provider_file" 2>/dev/null)" == "$mode" ]] || return 1
+  done
+  for provider_file in claude-agent-identity \
+    claude-agent-identity/.claude-plugin \
+    claude-agent-identity/hooks \
+    claude-agent-identity/bin; do
+    [[ -d "$path/providers/$provider_file" && ! -L "$path/providers/$provider_file" &&
+      "$(stat -c '%a' "$path/providers/$provider_file" 2>/dev/null ||
+        stat -f '%Lp' "$path/providers/$provider_file" 2>/dev/null)" == 755 ]] || return 1
+  done
+  [[ "$(find "$path/providers/claude-agent-identity" -mindepth 1 -maxdepth 3 -print | sed "s#^$path/providers/claude-agent-identity/##" | LC_ALL=C sort)" == \
+    $'.claude-plugin\n.claude-plugin/plugin.json\nbin\nbin/agent-hook\nhooks\nhooks/hooks.json' ]] || return 1
   [[ -f "$path/${gateway_name}" && ! -L "$path/${gateway_name}" &&
     -f "$path/characters.json" && ! -L "$path/characters.json" &&
     -f "$path/release.json" && ! -L "$path/release.json" &&
@@ -1119,7 +1100,7 @@ gateway_retain_artifact() {
 }
 
 gateway_apply() {
-  local platform="$1"
+  local platform="$1" admitted_artifact="${2:-}"
   local home share releases units config host_config pin_line version source_sha url archive_sha manifest_platform
   local stage artifact generation_name generation prior_current='' prior_previous='' prior_version=''
   local rollback_current='' rollback_previous='' rollback_version=''
@@ -1150,9 +1131,7 @@ gateway_apply() {
   IFS=$'\t' read -r version source_sha url archive_sha manifest_platform <<<"$pin_line"
 
   home="$(dev_server_home)"
-  if [[ -n "$gateway_provider_preflight" ]]; then
-    "$gateway_provider_preflight" "$home" || return $?
-  fi
+  "$gateway_provider_preflight" "$home" || return $?
   share="$home/.local/share/${gateway_name}"
   releases="$share/releases"
   units="$share/units"
@@ -1204,6 +1183,14 @@ gateway_apply() {
   }
   host_config="$stage/host-config.json"
   artifact="$share/artifacts/$archive_sha"
+  if [[ -n "$admitted_artifact" && ! -e "$artifact" && ! -L "$artifact" ]]; then
+    [[ -d "$admitted_artifact" && ! -L "$admitted_artifact" ]] &&
+      cp -Rp "$admitted_artifact" "$stage/admitted-artifact" &&
+      mv "$stage/admitted-artifact" "$artifact" || {
+      gateway_discard_stage "$share" "$stage"
+      die 'could not copy the staged gateway artifact'
+    }
+  fi
   if gateway_prepare_artifact "$stage" "$version" "$source_sha" \
     "$url" "$archive_sha" "$manifest_platform" "$artifact"; then
     preparation_status=0
@@ -1227,21 +1214,19 @@ gateway_apply() {
     gateway_discard_stage "$share" "$stage"
     die 'gateway host config is invalid'
   }
-  if [[ -n "$gateway_provider_apply" ]]; then
-    if "$gateway_provider_apply" "$home" "$stage"; then
-      :
-    else
-      preparation_status=$?
-      gateway_discard_stage "$share" "$stage"
-      if ((preparation_status == 2)); then
-        dev_server_restore_signal_trap HUP "$saved_hup"
-        dev_server_restore_signal_trap INT "$saved_int"
-        dev_server_restore_signal_trap TERM "$saved_term"
-        exec 9>&-
-        return 2
-      fi
-      die 'skid provider installation is incomplete'
+  if "$gateway_provider_apply" "$home" "$stage"; then
+    :
+  else
+    preparation_status=$?
+    gateway_discard_stage "$share" "$stage"
+    if ((preparation_status == 2)); then
+      dev_server_restore_signal_trap HUP "$saved_hup"
+      dev_server_restore_signal_trap INT "$saved_int"
+      dev_server_restore_signal_trap TERM "$saved_term"
+      exec 9>&-
+      return 2
     fi
+    die 'skid provider installation is incomplete'
   fi
 
   runtime_identity="$(gateway_runtime_identity "$artifact" "$host_config" "$stage/providers")" || {
@@ -1263,26 +1248,24 @@ gateway_apply() {
       gateway_discard_stage "$share" "$stage"
       die 'could not stage the gateway generation'
     }
-    if [[ "$gateway_name" == skidbladnir ]]; then
-      mkdir -m 0700 "$stage/generation/providers" &&
-        install -m 0755 "$stage/providers/native-control" "$stage/generation/providers/native-control" &&
-        install -m 0755 "$stage/providers/provider-command" "$stage/generation/providers/provider-command" &&
-        install -m 0644 "$stage/providers/shell-init" "$stage/generation/providers/shell-init" &&
-        install -m 0644 "$stage/providers/terminal-context-init" "$stage/generation/providers/terminal-context-init" &&
-        mkdir -m 0755 "$stage/generation/providers/claude-agent-identity" \
-          "$stage/generation/providers/claude-agent-identity/.claude-plugin" \
-          "$stage/generation/providers/claude-agent-identity/hooks" \
-          "$stage/generation/providers/claude-agent-identity/bin" &&
-        install -m 0644 "$stage/providers/claude-agent-identity/.claude-plugin/plugin.json" \
-          "$stage/generation/providers/claude-agent-identity/.claude-plugin/plugin.json" &&
-        install -m 0644 "$stage/providers/claude-agent-identity/hooks/hooks.json" \
-          "$stage/generation/providers/claude-agent-identity/hooks/hooks.json" &&
-        install -m 0755 "$stage/providers/claude-agent-identity/bin/agent-hook" \
-          "$stage/generation/providers/claude-agent-identity/bin/agent-hook" || {
-        gateway_discard_stage "$share" "$stage"
-        die 'could not stage skid provider commands'
-      }
-    fi
+    mkdir -m 0700 "$stage/generation/providers" &&
+      install -m 0755 "$stage/providers/native-control" "$stage/generation/providers/native-control" &&
+      install -m 0755 "$stage/providers/provider-command" "$stage/generation/providers/provider-command" &&
+      install -m 0644 "$stage/providers/shell-init" "$stage/generation/providers/shell-init" &&
+      install -m 0644 "$stage/providers/terminal-context-init" "$stage/generation/providers/terminal-context-init" &&
+      mkdir -m 0755 "$stage/generation/providers/claude-agent-identity" \
+        "$stage/generation/providers/claude-agent-identity/.claude-plugin" \
+        "$stage/generation/providers/claude-agent-identity/hooks" \
+        "$stage/generation/providers/claude-agent-identity/bin" &&
+      install -m 0644 "$stage/providers/claude-agent-identity/.claude-plugin/plugin.json" \
+        "$stage/generation/providers/claude-agent-identity/.claude-plugin/plugin.json" &&
+      install -m 0644 "$stage/providers/claude-agent-identity/hooks/hooks.json" \
+        "$stage/generation/providers/claude-agent-identity/hooks/hooks.json" &&
+      install -m 0755 "$stage/providers/claude-agent-identity/bin/agent-hook" \
+        "$stage/generation/providers/claude-agent-identity/bin/agent-hook" || {
+      gateway_discard_stage "$share" "$stage"
+      die 'could not stage skid provider commands'
+    }
     mv "$stage/generation" "$generation" || {
       gateway_discard_stage "$share" "$stage"
       die 'could not promote the gateway generation'
@@ -1537,11 +1520,7 @@ gateway_apply() {
   ((gateway_unit_changed == 0)) ||
     render_result CHANGED "${gateway_receipt}.unit" 'launcher and service definition installed'
   if ((gateway_command_installed)); then
-    if [[ "$gateway_name" == skidbladnir ]]; then
-      render_result INSTALLED "$gateway_name.command" "commands available: $home/.local/bin/skid and skidbladnir"
-    else
-      render_result INSTALLED "$gateway_name.command" "$home/.local/bin/${gateway_name}"
-    fi
+    render_result INSTALLED "$gateway_name.command" "commands available: $home/.local/bin/skid and skidbladnir"
   fi
   ((gateway_enablement_changed == 0)) ||
     render_result CHANGED "$gateway_name.enablement" 'enabled at login'
@@ -1580,8 +1559,7 @@ gateway_apply() {
   exec 9>&-
 }
 
-# Remove only a separated gateway. The old herdr-backed skid installation has
-# no deployment marker and needs the explicit one-time handback procedure.
+# Remove only the admitted skid gateway; preserve unrelated installed state.
 gateway_remove() {
   local platform="$1" home share config unit marker state enabled path name entries identity
   case "$platform" in
@@ -1658,13 +1636,11 @@ gateway_remove() {
   dev_server_remove_link "$share/current" || die "could not remove $gateway_name current link"
   dev_server_remove_link "$share/previous" || die "could not remove $gateway_name previous link"
   dev_server_remove_link "$home/.local/bin/$gateway_name" || die "could not remove $gateway_name command link"
-  if [[ "$gateway_name" == skidbladnir ]]; then
-    dev_server_remove_link "$home/.local/bin/skid" || die 'could not remove skid command link'
-    dev_server_remove_link "$home/.local/bin/skidbladnir-provider-runtime-control" ||
-      die 'could not remove skid native helper link'
-    dev_server_remove_link "$share/claude-agent-identity" ||
-      die 'could not remove skid claude plugin link'
-  fi
+  dev_server_remove_link "$home/.local/bin/skid" || die 'could not remove skid command link'
+  dev_server_remove_link "$home/.local/bin/skidbladnir-provider-runtime-control" ||
+    die 'could not remove skid native helper link'
+  dev_server_remove_link "$share/claude-agent-identity" ||
+    die 'could not remove skid claude plugin link'
   for path in "$home/.local/bin/$gateway_name-launch" "$unit" \
     "$config/bearer" "$config/machine-handle" "$config/client.json" \
     "$home/.local/state/dev-server/active/${gateway_receipt}.pair" \
