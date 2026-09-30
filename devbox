@@ -44,12 +44,12 @@ devbox_declared_stage=''
 usage() {
   cat <<'EOF'
 Usage: ./devbox apply
-       ./devbox gateway {apply|remove} {herdr-mobile|skidbladnir}
+       ./devbox gateway {apply|remove} skidbladnir
        ./devbox help
 
 Create the devbox when absent, or apply its declared state over tailnet SSH.
 apply updates rolling software and reconciles configuration and exact repository pins.
-gateway operations select one product and leave host tools alone.
+gateway operations maintain skid and leave host tools alone.
 
 An existing host must already have the dev-server-deploy principal, its
 deployment key, and a verified host key. There is no privileged-user or
@@ -595,23 +595,20 @@ devbox_stage_declared_inputs() {
 }
 
 devbox_gateway_snapshot() {
-  local root="$1" product="$2" operation="$3"
+  local root="$1" operation="$2"
   local -a paths=(ansible.cfg ansible/inventory/devbox.yml ansible/group_vars/devbox.yml
     ansible/playbooks/gateway.yml lib/common.sh
-    lib/gateway-ingress.sh "lib/$product.sh" lib/gateway-runtime.sh)
+    lib/gateway-ingress.sh lib/skidbladnir.sh lib/gateway-runtime.sh)
   if [[ "$operation" == apply ]]; then
-    paths+=("assets/$product")
-  fi
-  if [[ "$product" == skidbladnir && "$operation" == apply ]]; then
-    paths+=(assets/skid-provider lib/ai-tools.sh lib/skid-provider.sh)
+    paths+=(assets/skidbladnir assets/skid-provider lib/ai-tools.sh lib/skid-provider.sh)
   fi
   dev_server_declared_snapshot "$root" "${paths[@]}"
 }
 
 devbox_stage_gateway_inputs() {
-  local product="$1" operation="$2" desired_snapshot staged_snapshot
-  desired_snapshot="$(devbox_gateway_snapshot "$base_dir" "$product" "$operation")" ||
-    die "could not resolve $product gateway inputs"
+  local operation="$1" desired_snapshot staged_snapshot
+  desired_snapshot="$(devbox_gateway_snapshot "$base_dir" "$operation")" ||
+    die "could not resolve skidbladnir gateway inputs"
   devbox_declared_stage="$(mktemp -d "${TMPDIR:-/tmp}/devbox-declared.XXXXXX")" ||
     die 'could not stage gateway inputs'
   chmod 0700 "$devbox_declared_stage" || die 'could not secure gateway inputs'
@@ -628,19 +625,19 @@ devbox_stage_gateway_inputs() {
   cp -p "$base_dir/ansible/playbooks/gateway.yml" "$devbox_declared_stage/ansible/playbooks/" ||
     die 'could not stage gateway playbook'
   if [[ "$operation" == apply ]]; then
-    cp -Rp "$base_dir/assets/$product" "$devbox_declared_stage/assets/$product" ||
-      die "could not stage $product assets"
+    cp -Rp "$base_dir/assets/skidbladnir" "$devbox_declared_stage/assets/skidbladnir" ||
+      die "could not stage skidbladnir assets"
   fi
   cp -p "$base_dir/lib/common.sh" "$base_dir/lib/gateway-ingress.sh" \
-    "$base_dir/lib/gateway-runtime.sh" "$base_dir/lib/$product.sh" \
-    "$devbox_declared_stage/lib/" || die "could not stage $product libraries"
-  if [[ "$product" == skidbladnir && "$operation" == apply ]]; then
+    "$base_dir/lib/gateway-runtime.sh" "$base_dir/lib/skidbladnir.sh" \
+    "$devbox_declared_stage/lib/" || die "could not stage skidbladnir libraries"
+  if [[ "$operation" == apply ]]; then
     cp -Rp "$base_dir/assets/skid-provider" "$devbox_declared_stage/assets/skid-provider" ||
       die 'could not stage skid provider assets'
     cp -p "$base_dir/lib/ai-tools.sh" "$base_dir/lib/skid-provider.sh" "$devbox_declared_stage/lib/" ||
       die 'could not stage provider library'
   fi
-  staged_snapshot="$(devbox_gateway_snapshot "$devbox_declared_stage" "$product" "$operation")" ||
+  staged_snapshot="$(devbox_gateway_snapshot "$devbox_declared_stage" "$operation")" ||
     die 'could not verify staged gateway inputs'
   [[ "$staged_snapshot" == "$desired_snapshot" ]] || die 'gateway inputs changed while staging; rerun'
   ansible_config="$devbox_declared_stage/ansible.cfg"
@@ -649,7 +646,7 @@ devbox_stage_gateway_inputs() {
 }
 
 devbox_gateway() {
-  local operation="$1" product="$2" rc line status subject detail
+  local operation="$1" rc line status subject detail
   trap cleanup_on_exit EXIT
   trap 'exit 129' HUP
   trap 'exit 130' INT
@@ -663,16 +660,16 @@ devbox_gateway() {
     die 'devbox deployment key is invalid'
   ssh -T -o BatchMode=yes -o ConnectTimeout=10 -F "$ssh_include" "$deploy_user" true ||
     die 'verified devbox deployment SSH is unavailable'
-  devbox_stage_gateway_inputs "$product" "$operation"
+  devbox_stage_gateway_inputs "$operation"
   ansible_output="$(mktemp "${TMPDIR:-/tmp}/devbox-ansible.XXXXXX")" ||
     die 'could not capture gateway result'
   if ! ANSIBLE_CONFIG="$ansible_config" ANSIBLE_NOCOLOR=1 \
     uvx --from ansible-core==2.19.2 ansible-playbook \
     --ssh-common-args "-F $ssh_include" \
-    --extra-vars "{\"gateway_product\":\"$product\",\"gateway_operation\":\"$operation\"}" \
+    --extra-vars "{\"gateway_product\":\"skidbladnir\",\"gateway_operation\":\"$operation\"}" \
     -i "$ansible_inventory" "$ansible_apply_playbook" >"$ansible_output" 2>&1; then
     tail -c 65536 "$ansible_output" >&2 || true
-    die "$product gateway operation failed on devbox"
+    die "skidbladnir gateway operation failed on devbox"
   fi
   while IFS= read -r line; do
     status="${line%%  *}"
@@ -875,8 +872,7 @@ apply_new_server() {
 }
 
 run_ansible_apply() {
-  local rc herdr_action_lines herdr_action_line herdr_action_subject
-  local jarvis_gate_key
+  local rc
 
   ansible_output="$(mktemp "${TMPDIR:-/tmp}/devbox-ansible.XXXXXX")"
   set +e
@@ -907,34 +903,6 @@ run_ansible_apply() {
   fi
   if grep -Fq DEV_SERVER_REBOOT_DEFERRED "$ansible_output"; then
     render_result DEFERRED system.reboot 'reboot-required is present'
-  fi
-  jarvis_gate_key="$(
-    grep -Eo 'DEV_SERVER_JARVIS_ACTION_GATE_KEY ssh-ed25519 [A-Za-z0-9+/]+=*( [A-Za-z0-9@._-]+)?' "$ansible_output" |
-      sort -u || true
-  )"
-  # the jarvis_herdr role reports the devbox key when it differs from the committed one.
-  if [[ -n "$jarvis_gate_key" ]]; then
-    render_result ACTION jarvis.gate \
-      "commit this line as assets/herdr/jarvis-gate.pub, then apply every host: ${jarvis_gate_key#DEV_SERVER_JARVIS_ACTION_GATE_KEY }"
-  fi
-  # the role prints each herdr ACTION line through debug; relay them verbatim.
-  # the DEV_SERVER_HERDR_ACTION_* code is only the witness that the host exited 2.
-  herdr_action_lines="$(
-    grep -Eo '"msg": "ACTION  herdr\.[a-z]+: [^"]*"' "$ansible_output" |
-      sed -e 's/^"msg": "//' -e 's/"$//' | sort -u || true
-  )"
-  if grep -Eq 'DEV_SERVER_HERDR_ACTION_[A-Z_]+' "$ansible_output"; then
-    if [[ -z "$herdr_action_lines" ]]; then
-      rm -f -- "$ansible_output"
-      ansible_output=''
-      render_result ERROR 'herdr action' 'Ansible returned an action code without its line'
-      return 1
-    fi
-    while IFS= read -r herdr_action_line; do
-      herdr_action_subject="${herdr_action_line#ACTION  }"
-      herdr_action_subject="${herdr_action_subject%%: *}"
-      render_result ACTION "$herdr_action_subject" "${herdr_action_line#ACTION  "$herdr_action_subject": }"
-    done <<<"$herdr_action_lines"
   fi
   rm -f -- "$ansible_output"
   ansible_output=''
@@ -1010,11 +978,11 @@ main() {
   case "$command" in
   gateway)
     (($# == 3)) && [[ "$2" == apply || "$2" == remove ]] &&
-      [[ "$3" == herdr-mobile || "$3" == skidbladnir ]] || {
+      [[ "$3" == skidbladnir ]] || {
       usage >&2
       return 64
     }
-    devbox_gateway "$2" "$3"
+    devbox_gateway "$2"
     ;;
   apply)
     shift

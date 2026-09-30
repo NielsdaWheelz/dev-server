@@ -14,7 +14,6 @@
     - assets/dotfiles
     - assets/routers
     - assets/claude
-    - assets/herdr
     - assets/skid-provider
 
 - name: Install exact runtime libraries
@@ -29,7 +28,6 @@
     - tmux.sh
     - dotfiles.sh
     - ai-tools.sh
-    - herdr.sh
 
 - name: Install exact dotfile assets
   ansible.builtin.copy:
@@ -70,20 +68,6 @@
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: "0600"
-
-- name: Install exact herdr installer inputs
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../assets/herdr/{{ item }}"
-    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/herdr/{{ item }}"
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    mode: "0644"
-  loop:
-    - release-pin.json
-    - config.toml
-    - herdr.service
-    - herdr-gate
-    - jarvis-gate.pub
 
 - name: Install qualified Claude version declaration
   ansible.builtin.copy:

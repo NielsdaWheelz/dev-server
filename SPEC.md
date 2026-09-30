@@ -9,8 +9,8 @@ critical result, and report mutations, deferrals, or required actions.
 ```text
 ./workstation apply
 ./devbox apply
-./workstation gateway {apply|remove} {herdr-mobile|skidbladnir}
-./devbox gateway {apply|remove} {herdr-mobile|skidbladnir}
+./workstation gateway {apply|remove} skidbladnir
+./devbox gateway {apply|remove} skidbladnir
 ./workstation {help|--help|-h}
 ./devbox {help|--help|-h}
 ```
@@ -20,12 +20,12 @@ configuration. rolling versions come from upstream on each run; repository pins
 remain exact desired state. there is no configuration-only or offline mode and
 no `upgrade` command or alias.
 
-gateway operations select one product and leave shared host tools and upstream
-herdr alone. ordinary host apply does not install either gateway.
-published release pins are prerequisites for gateway apply; neither the old
-herdr-backed v0.8 pin nor original skid's stale v0.6 pin is admissible as a
-separated release. source preparation and live namespace handback are distinct
-operations; see [the cutover runbook](docs/gateway-separation-runbook.md).
+gateway operations install or remove skid without updating shared host tools.
+ordinary host apply installs no gateway, herdr runtime, worker hook or ssh gate.
+herdr and herdr-mobile installation and removal commands are retired. ordinary
+apply never discards workers.
+[the maintenance runbook](docs/gateway-separation-runbook.md) describes skid
+maintenance and the root-owned retirement evidence.
 
 | owner | apply |
 |---|---|
@@ -74,10 +74,10 @@ a later subsystem failure can leave earlier changes applied; rerun after repair.
 there is no whole-host transaction or duplicated all-host admission gate.
 
 workstation host apply orders native packages, dotfiles, exact-host personal
-policy, ai tools, herdr, then remaining postconditions. a gateway
+policy, ai tools, then remaining postconditions. a gateway
 operation stages only its own declaration closure, checks its owned ingress,
 and applies/removes that gateway and handler. neither gateway operation runs
-upstream herdr preflight or host-tool provisioning. linux is supported
+retired runtime preflight or host-tool provisioning. linux is supported
 only on the exact owned arch host. arch elevation uses `ARCH_PASS` through
 askpass, including yay; values come from the environment or literal ignored
 repo `.env`, never evaluation. validate credentials before host changes.
@@ -98,8 +98,7 @@ deployment declarations own host paths, pins, identities, and launch arguments.
 managed files use compare-before-write and same-filesystem atomic promotion.
 verify bytes and mode before rename; preserve credentials and account state.
 a managed file is entirely repo-owned except explicitly named parser-backed
-keys, currently cursor's `remote.SSH.remotePlatform`, claude's `statusLine`,
-and jarvis's gate lines in the owner's `~/.ssh/authorized_keys`.
+keys, currently cursor's `remote.SSH.remotePlatform` and claude's `statusLine`.
 intentional symlinks have explicit owners and targets; do not overwrite
 conflicting foreign paths.
 
@@ -121,11 +120,7 @@ more privileged consumer. interrupted activation must remain retryable.
 | `desktop.session` | defer to login or manual ghostty reload |
 | `ssh.config` | validate, then reload ssh |
 | `docker.config` | rebuild/restart only with no running containers; otherwise defer |
-| `herdr.runtime` | start once when absent; changed binary/config/unit on a running server is an operator stop, then reapply; never a restart |
-| `herdr.gate`, `jarvis.gate` | the next ssh connection; nothing restarts |
 | `skid.unit`, `skid.runtime` | activate original skid only, with its own rollback |
-| `herdr-mobile.unit`, `herdr-mobile.runtime` | activate herdr-mobile only, with its own rollback |
-| `herdr.integration` | future agent sessions; nothing restarts |
 | `tailscale.serve` | reconcile private mapping; no tailscale restart |
 | `system.reboot` | report only |
 
@@ -175,28 +170,26 @@ the normal host home. account update settings stay user-owned; apply repairs
 drift from native updates. reject a conflicting canonical path; do not restart
 running claude processes.
 
-ordinary and herdr account commands are installed by `lib/ai-tools.sh`.
+ordinary account commands are installed by `lib/ai-tools.sh`.
 `codex` preserves a nonempty `CODEX_HOME`, defaulting to `.codex`; the named
 work commands force `.codex-work` or `.codex-work2`. each executes the canonical
 cli with unchanged arguments. `ai-profile` supplies only `claude-work`; bare
 claude resolves to its existing native executable. normal homes remain
 `.codex`, `.codex-work`, `.codex-work2`,
 `.claude` and `.claude-work`, with existing override and account-selection
-semantics. they are shared user state, not herdr-owned or cognition-only state.
+semantics. they are shared user state.
 preserve authentication, configuration, history, memories, plugins and trust.
 
 original skid's own forge and marked bash/zsh terminals select those same
 accounts through scoped native commands. manual personal claude leaves
 `CLAUDE_CONFIG_DIR` unset, preserving its native default state including
-`~/.claude.json`. neither gateway provisions or rewrites provider homes.
-ordinary and genuine herdr terminals do not load those functions.
+`~/.claude.json`. skid never provisions or rewrites provider homes.
+ordinary terminals do not load those functions.
 skid apply owns startup-file validation and guarded
 source installation; shared provider maintenance has no skid prerequisite.
 startup symlinks retain their identity; skid edits their regular targets while
-preserving unrelated content and modes. the original app owns environment
-creation and removal of inherited `HERDR_*`; upstream herdr starts with no tmux
-context. skid sets `SKIDBLADNIR_AGENT=1` only at provider exec; its explicitly
-loaded claude plugin rejects foreign/herdr contexts before reading input or
+preserving unrelated content and modes. the app owns its terminal environment and provider account isolation. skid sets `SKIDBLADNIR_AGENT=1` only at provider exec; its explicitly
+loaded claude plugin rejects unmarked contexts before reading input or
 config and still verifies process identity. skid installs no codex hooks.
 the contract is in the
 [runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract).
@@ -204,8 +197,7 @@ the contract is in the
 interactive zsh aliases separately add `--yolo` for all three codex profiles
 and `--dangerously-skip-permissions` for both claude profiles. `command
 <profile>` bypasses an alias. original skid's forge profiles carry their own
-explicit arguments and claude identity plugin; herdr-mobile keeps its reduced
-provider/environment profiles and herdr's native integrations.
+explicit arguments and claude identity plugin.
 
 `assets/agent-instructions.md` supplies the five account instruction files,
 installed as mode `0600`. `assets/claude/statusline.sh` is installed as
@@ -243,27 +235,23 @@ leave every other discovery path intact. reload systemd only after removal
 changes installed files. subsequent applies do not stop a separately repaired
 jarvis service.
 
-the deployed jarvis cognition dependency must be replaced with a private codex
-process under jarvis's ownership before jarvis can be enabled again. this
-migration deliberately sacrifices jarvis availability to restore independently
-usable developer accounts. jarvis owns the private-process migration.
-worker control still goes through jarvis's herdr gate on each host
-([herdr gate](#herdr-gate-and-cross-host-use)).
+jarvis cognition recovery is a separate owner task, using the existing shared
+codex app-server process. worker deployment and herdr retirement can proceed
+with jarvis stopped. this change supplies no cognition implementation or
+readiness claim; jarvis activation and resume require their own acceptance.
+worker control uses the fixed skid cli and private fleet configuration described below.
 
 ## deployment identity
 
 `dev_server_home_dir` defaults to `$HOME` and owns every deployment path.
 `dev_server_fleet_label_prefix` defaults to `dev.niels` for mac launchagents.
-`dev_server_gateway_port` defaults to `7341` for original skid;
-`dev_server_mobile_gateway_port` defaults to `7342` for herdr-mobile. each is
-fixed for a deployment's lifetime. linux service identity is the user account
-and product unit; each product has its own port on every platform.
+`dev_server_gateway_port` defaults to skid's `7341`, fixed for a deployment's
+lifetime. linux service identity is the user account and skid unit.
 
-`dev_server_render_assets DIR OWNER` renders only the selected owner's plist
+`dev_server_render_assets DIR` renders only skid's plist
 inside its private staged closure. the source names remain `dev.niels.*`;
 installed mac labels use the configured prefix. source declaration bytes and
-modes are checked before consumption. no gateway operation reads the other
-product's pin, config, credentials or installed state.
+modes are checked before consumption. gateway operations consume only skid's pin, config, credentials and installed state.
 
 for disposable qualification, use a temporary home, unique mac label prefix,
 free loopback ports and stand-in provider executables. run with an empty
@@ -280,155 +268,61 @@ native service is available. those results do not qualify launchd/systemd,
 provider turns, phone behavior or live coexistence. report each missing
 boundary as `NOT_RUN` with its owner and blocker.
 
-## herdr runtime
+## jarvis worker executable and retirement
 
-`assets/herdr/release-pin.json` is the herdr trust root: exact version, source
-commit, platform urls and executable sha256 for the raw release binaries. one
-server per host runs the pinned binary as `herdr server` under the development
-user: a user systemd unit on arch and devbox, a launchagent `<prefix>.herdr` on
-macbook whose paths hang off the deployment root. it is
-login-scoped on macbook and arch; only devbox's user manager lingers. the unit
-sets `HERDR_CONFIG_PATH` to the managed `~/.local/share/herdr/config.toml`
-(automatic agent resume and every self-update check disabled) and
-`HERDR_SOCKET_PATH` to the default-session socket `~/.config/herdr/herdr.sock`,
-so a bare `herdr` in a shell attaches to the same instance. the user's own
-`~/.config/herdr/config.toml`, snapshots and detection state stay upstream's.
-the unit clears inherited herdr and xdg variables, sets `LANG`, and shares no
-lifetime with either gateway. herdr-mobile orders after it; neither gateway
-requires, binds or stops it. original skid has no herdr dependency.
+skid gateway apply on devbox admits one artifact using the existing skid pin,
+archive verifier and cache. both the gateway and `/usr/local/libexec/skidbladnir`
+consume that artifact. the root cli is a regular root:root `0755` file, never a
+link into the development user's home. no independent jarvis executable pin
+exists.
 
-`herdr_preflight` runs before any mutation and returns `ACTION`/exit `2`
-without changing state for: a running server whose binary, config or unit
-differs; an unmanaged default-session snapshot before the first managed
-activation; agent-detection overrides or remote update state; named-session
-sockets; a listener on the socket whose pid is not the service's; a loaded
-service whose socket does not answer within a few seconds (launchd parks a job
-whose program cannot be executed and does not retry when the file is repaired);
-herdr or xdg variables in the launchd environment. the changed-inputs line names the
-consequence (stopping ends every herdr terminal and its agents), the exact
-supervisor stop, and says not to run bare `herdr` in between; an unmanaged
-listener names its pid and `kill -TERM`; residue lines name the path to move
-aside or remove. the changed-inputs case stages and verifies the new binary
-before it reports, so the rerun after the stop cannot fail on a download.
-`herdr_apply` stages the artifact and immutable generation first and promotes
-`current`, the `~/.local/bin/herdr` link, config, unit and enablement only when
-the service is absent or inactive; it records `herdr.runtime` (binary, config
-and unit digests) only after the socket answers `ping` with the tested version
-and the bundled codex and claude detection manifests are active. a failed
-upgrade first stops the candidate and waits for the supervisor to finish
-tearing it down; only then do the unit, config, pointers, snapshot and observed
-enablement go back and the prior herdr restarts and verifies against the prior
-generation's version. a candidate that cannot be stopped keeps its inputs; the
-stage with the prior's backups is kept as `.apply.failed.*` in the share and
-apply reports both. the prior's own failure to verify is reported as such,
-never as a restart to retry. a failed first activation stops its own candidate, removes
-the unit and only the snapshot it created, and leaves the generation
-unreferenced. an unchanged apply downloads, writes and restarts nothing.
-`herdr_prepare_artifact` stages the verified binary under the lock without
-promotion, for pre-window staging.
+before either executable changes, compare candidate bytes with the installed
+root cli and the running gateway's `/proc/PID/exe` (or selected generation when
+inactive). changed bytes, ownership or mode require `jarvis.service` to report
+`ActiveState=inactive`, `Result=success`, `MainPID=0`, and exact
+`/var/lib/jarvis/runtime/paused.json` state
+`{"paused":true,"schema_version":"jarvis-paused.v1"}`. check this before gateway
+reconciliation. the operator keeps jarvis stopped through apply; no new lock or
+service lifecycle manager is introduced. identical executable apply is inert.
 
-herdr's native codex and claude integrations remain in the existing normal
-account homes. the pinned herdr binary installs its integration only in homes
-that already exist; personal claude keeps its normal unset-variable default.
-herdr provisions no private provider homes and its service sets no provider
-home overrides. gateway maintenance does not migrate or own provider state.
+jarvis deployment separately installs `/etc/jarvis/agent-client.json` as a
+regular jarvis:jarvis `0600` file from the existing human-provisioned fleet
+configuration, with all three peers. it owns the same stopped/paused admission
+for configuration changes and retains its existing service restrictions.
+settings are `JARVIS_AGENT_CLI_PATH` and `JARVIS_AGENT_CLIENT_CONFIG_PATH`.
+credentials are never minted for jarvis automatically. bearer rotation requires
+explicit private-client redistribution before resume. gateway config changes
+with unchanged executables do not pause jarvis by themselves.
 
-preserve native herdr integrations, user hooks/settings and discovery state.
-only specifically verified obsolete skid registrations may be removed during
-the coordinated cutover. codex can read `$HOME/.codex/hooks.json` as project
-config when launched at home. qualify actual hook interactions there and in a
-shared project at the integration boundary; provider relocation is not a fix.
+the root operator completed herdr and herdr-mobile retirement on all three hosts.
+owned supervisors and native servers were stopped, provider integrations and
+exact ssh gate entries removed, and owned configuration, runtime, credentials,
+units, commands, gates, receipts and `8444 /v1` purged and validated absent.
+cleanup-only deployment code and selectors are deleted. ordinary apply neither
+recreates retired products nor performs destructive retirement. preserve unrelated
+settings, ssh access, serve handlers, provider accounts/history, skid workers and
+permanent signing backups. there is no legacy resurrection path.
 
-herdr is never downgraded or stopped to undo a gateway change. recover each
-separated gateway with its own verified inputs. do not restore an old whole
-dev-server revision or adopt herdr-backed v0.8 as original skid. the first
-separated release may need stop-and-repair because no prior separated release
-exists. handback and recovery limits are in the cutover runbook.
+the root operator completed normal host apply and gateway apply on macbook,
+devbox and arch with skid `v0.10.6` and stock codex `0.159.2`. installed personal
+codex lifecycle, fleet tls, the production client under the actual jarvis uid,
+and owner phone attachment passed on all three. pre-existing shared codex
+app-server process lifetimes were preserved. jarvis remains disabled, inactive
+and paused; activation and cognition remain separate.
+[qualification](docs/gateway-separation-validation.md#2026-09-29-installed-fleet)
+records the native boundaries, arch retry and deferred reboots.
 
-## herdr gate and cross-host use
-
-humans use herdr's own ssh transports: `herdr --remote <ssh-target>` attaches
-a desktop client to another host's server, and `ssh <host> herdr <command>`
-runs one api command there. api commands never start a server; the
-`--remote` bridge starts `herdr server` itself when none listens, so it is
-not for a window in which the supervised server is stopped. dev-server saves
-no herdr machines ([issue](docs/issues/herdr-saved-machines.md)); ssh keys and
-known hosts for these human edges stay the owner's.
-
-jarvis reaches each host's herdr through an ssh forced command, never
-`--machine`, whose `sh` probes and bridge a forced command would break.
-`assets/herdr/herdr-gate` is installed as `~/.local/libexec/herdr-gate` (0755)
-on all three hosts. it splits `SSH_ORIGINAL_COMMAND` with posix `shlex`, no
-shell, and admits only the owner's "agents plus pane creation" in herdr 0.9.1's
-spelling: `agent list|get|read|explain|wait|prompt|send-keys`, `agent start
---kind codex|claude`, `pane list|split|close` and `workspace list|create`, each
-with the flags a client needs, options after positionals, space-separated
-values. `--env` admits only `CODEX_HOME` naming `.codex`, `.codex-work` or
-`.codex-work2`, or `CLAUDE_CONFIG_DIR` naming `.claude-work`, under the owner
-home. personal claude retains its unset-variable default. jarvis's existing
-worker map stays intact. herdr's global options (`--machine`, `--remote`, `--session`,
-`--handoff`) anywhere, `--`, and everything else exit 1 with one content-free
-line before herdr runs. an admitted argv is exec'd as `~/.local/bin/herdr`
-with only `HOME` and `PATH`, so it reaches the default-session socket. the
-gate's docstring lists what it leaves out and why. jarvis owns the
-allowlist's content through its adr; a herdr pin change requalifies it.
-
-the gate is policy hygiene, not containment. `agent start --pane`, `pane split`
-and `pane close` accept any pane id, the owner's included, and prompts and
-keys reach any agent; jarvis's codec starts agents only in panes it has just
-created. whatever the gate admits runs with the owner account's authority.
-
-`herdr_apply`, under the herdr apply lock, installs the gate and ensures
-exactly one line in the owner's `~/.ssh/authorized_keys`:
-`restrict,command="<python3> <home>/.local/libexec/herdr-gate" <jarvis-gate.pub>`,
-where `<python3>` is `/opt/homebrew/bin/python3` on the macbook and
-`/usr/bin/python3` on linux, never the shebang and the login shell's `PATH`.
-the merge works on bytes and splits lines at `\n` only: every other line keeps
-its bytes and line ending (a last line without one gains a `\n` before the
-appended line), except lines whose options carry exactly this `command=` for
-another key, which it removes (the old jarvis key after a devbox rebuild). the
-result is written through a temporary file and rename at mode `0600`. the
-committed key under other options, or an uncommitted key, is an `ACTION
-herdr.gate` that leaves `authorized_keys` untouched. the lock serializes applies, not hand
-edits; an edit racing an apply can be lost. on devbox that action, like any
-herdr action, withholds the run's skid apply.
-
-jarvis's side is devbox-only (`ansible/roles/jarvis_herdr`). `/etc/jarvis-herdr/`
-(root:jarvis `0750`) holds `id_ed25519` (jarvis `0600`, generated once on
-devbox under a temporary name and renamed, never copied off), and root:jarvis
-`0640` copies of `assets/herdr/jarvis-ssh_config` and
-`assets/herdr/jarvis-known_hosts`: the labels `devbox` (`niels@localhost`,
-through its own gate), `macbook` and `arch` (`nnandal` over the tailnet), each
-with `HostKeyAlias` its label, `IdentitiesOnly`, `BatchMode` and
-`StrictHostKeyChecking yes`, and their committed ed25519 host keys. jarvis
-runs `ssh -F /etc/jarvis-herdr/ssh_config <label> <shlex-joined herdr args>`;
-`ProtectSystem=strict` leaves `/etc` readable. `assets/herdr/jarvis-gate.pub`
-is the trust root. each apply derives the public half from the private key
-(`ssh-keygen -y`) and, when it differs, `./devbox` reports `ACTION jarvis.gate`
-with the line to commit; nothing later in the play depends on it, so the play
-continues. an empty file means not yet committed.
-
-a rebuilt devbox has a new host key and a new jarvis key. update the `devbox`
-line of `assets/herdr/jarvis-known_hosts` and the workstations' own
-`known_hosts`, recommit `jarvis-gate.pub` from the reported line, and apply
-every host; the merge then revokes the old key's gate line.
+installation, retirement and service containment require their own live
+observations; engineering checks do not establish those boundaries.
 
 ## independent gateway installation
 
-`lib/herdr-mobile.sh` and `lib/skidbladnir.sh` own their respective fixed
-identities and host configuration. `lib/gateway-runtime.sh` shares the existing
-artifact and activation mechanics. this is a finite two-product contract,
-not a product registry or plugin deployment framework. ingress lives in
-`lib/gateway-ingress.sh` and is invoked by the host entrypoints.
-
-| identity | herdr-mobile | original skid |
-| --- | --- | --- |
-| repository id | `1342599607` | `1386409483` |
-| final repository | `NielsdaWheelz/herdr-mobile` | `NielsdaWheelz/skidbladnir` |
-| owned leaf / binary | `herdr-mobile` | `skidbladnir` |
-| loopback | `127.0.0.1:7342` | `127.0.0.1:7341` |
-| private serve | `:8444/v1` | `:8443/v1` |
-| receipt stems | `herdr-mobile.runtime`, `herdr-mobile.unit` | `skid.runtime`, `skid.unit` |
+`lib/skidbladnir.sh` owns the fixed skid identity and host configuration;
+`lib/gateway-runtime.sh` owns artifact and activation mechanics;
+`lib/gateway-ingress.sh` owns only `8443 /v1`. skid's repository is
+`NielsdaWheelz/skidbladnir` (repository id `1386409483`), installed leaf/binary
+`skidbladnir`, loopback `127.0.0.1:7341`, receipt stems `skid.runtime` and
+`skid.unit`. no retired-product configuration or cleanup code remains.
 
 original skid also requires the public `~/.local/bin/skid` command, linked to
 `../share/skidbladnir/current/skidbladnir`, like the canonical binary link.
@@ -439,25 +333,23 @@ runtime identity or require a service restart. the app owner's fleet
 provisioning owns each host's private three-peer `client.json`; a working
 local executable alone does not establish a usable fleet browser.
 
-pins under `assets/<product>/release-pin.json` name exact versions, commits,
+the pin under `assets/skidbladnir/release-pin.json` names exact versions, commits,
 platform archives and digests. pending declarations admit no activation.
 repository identity is checked by the publishing/cutover operator before
 selecting pins. existing name redirects and planned version numbers are not
 release evidence. upstream owns archive/config schemas and release/device
 acceptance; each admitted binary validates its own rendered host config.
 
-herdr-mobile declares the herdr path/socket/tested version and four reduced
-`{key,label,provider,environment}` profiles using the existing normal homes. original
 skid declares tmux, `nativeControlPath`, absolute native provider commands,
 explicit arguments, environment and foreground signatures. its separately
 pinned helper and integrations belong only to skid. the original app owner's
 source-qualified handoff supplies the config and native-helper contract;
 authenticated native behavior remains a live qualification prerequisite.
 
-under a per-product lock, reuse a verified artifact or download and verify its
+under skid's lock, reuse a verified artifact or download and verify its
 archive digest, exact members, manifest and executable version/source. retain
 independent `artifacts`, `releases`, `units`, `current` and `previous` below
-the product's data root. runtime identity covers executable, catalogue,
+skid's data root. runtime identity covers executable, catalogue,
 manifest and host config. unchanged apply downloads and activates nothing.
 skid generations also include their rendered shell launcher, shell and remote
 context initialization, native-helper launcher and claude plugin. the original
@@ -465,7 +357,7 @@ app's fleet verifier
 implements the same digest contract, recorded in the
 [runbook](docs/gateway-separation-runbook.md#generation-receipt-contract).
 generation admission requires directory mode `0700` and a basename digest
-suffix equal to the computed runtime identity for both products.
+suffix equal to the computed runtime identity for skid.
 the exact `v0.9.0` skid ten-file generation remains admissible as an upgrade
 rollback target when its original source, files, modes and receipt verify.
 new skid generations use the eleven-file contract.
@@ -484,7 +376,7 @@ failed activation first confirms the candidate stopped, restores
 the verified prior inputs and observed enablement, then verifies the restored
 service. an unconfirmed stop preserves candidate inputs and recovery stage.
 a failed first activation leaves its candidate inactive and unreferenced.
-retention stays within the selected product's admitted generations; provider
+retention stays within skid's admitted generations; provider
 homes and android signing material are outside it.
 
 mint a fresh private regular mode-0600 bearer and random `mh-` handle for each
@@ -492,9 +384,8 @@ new separated installation. a private `deployment-identity` marker is created
 before the first mint, allowing interrupted first installation to retry. an
 unmarked namespace with old credentials or runtime state is refused; signing
 files do not block a fresh separated install. preserve credentials on updates.
-old herdr-backed skid
-state is an operator handback prerequisite, never an original skid recovery
-source. each product's operator `client.json` is private and independent.
+unadmitted prior namespace state is never a recovery source. skid's operator
+`client.json` remains private.
 gateway validation never inspects android signing files.
 
 serve operations own only `/v1` on the selected port and preserve all unrelated
@@ -504,13 +395,11 @@ root with a system command path; gateway reconciliation remains under `niels`.
 preflight must pass before runtime apply/remove, and runtime reconciliation
 must succeed before ingress mutation. this grants no tailscale operator rights
 to the user and changes no workstation elevation policy.
-foreign handlers require operator resolution. scoped removal never stops
-upstream herdr or tmux, and must preserve other products, provider state,
-signing files and unrelated files. qualify independent installation, failed
+foreign handlers require operator resolution. scoped removal never stops tmux
+and must preserve provider state, signing files and unrelated files. qualify independent installation, failed
 activation recovery and scoped removal on disposable installations before
 live use. service stand-ins establish installer control flow, not native
-removal or coexistence. qualify native coexistence separately and record
-per-host lifecycle evidence and unperformed boundaries in the runbook.
+removal. record per-host lifecycle evidence and unperformed boundaries in the runbook.
 exercise recovery against an actual prior separated generation when one
 exists; a first separated release has no version rollback target. do not
 manufacture one or infer rollback from repeat apply.
@@ -524,8 +413,7 @@ tailnet into a private candidate. all subsequent connections check that key
 strictly. promote it only after cloud-init succeeds, tailscale ssh is confirmed
 disabled, and the operator key authenticates. then run ansible. neither the
 cloud firewall nor ufw opens public ssh, including on failed creation. a new
-server also brings a new jarvis gate key and host key; recommit both as in
-[herdr gate](#herdr-gate-and-cross-host-use).
+server brings a new host key; explicitly enroll its verified identity.
 
 initial enrollment trusts the peer name authenticated by tailscale's control
 plane; it does not cryptographically bind the peer to a hetzner server id.

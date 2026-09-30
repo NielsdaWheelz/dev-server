@@ -20,13 +20,11 @@
   roles:
     - role: base
     - role: jarvis_host
-    - role: jarvis_herdr
     - role: workspace_assets
     - role: security
     - role: shell
     - role: github
     - role: ai_tools
-    - role: herdr
     - role: rootless_docker
   post_tasks:
     - name: Activate notified consumers before verification

@@ -102,8 +102,93 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as stream:
     value = json.load(stream)
 raise SystemExit(0 if isinstance(value, dict) and "tmux" in value and
-                 "nativeControlPath" in value and "herdr" not in value else 1)
+                 "nativeControlPath" in value else 1)
 PY
+}
+
+# Stage the devbox cli using the gateway's existing pin and artifact admission.
+# The caller owns this temporary directory and removes it after reconciliation.
+skidbladnir_prepare_cli_artifact() {
+  local stage="$1" pin_line version source_sha url archive_sha platform artifact
+  gateway_name=skidbladnir
+  gateway_repository=NielsdaWheelz/skidbladnir
+  gateway_release_pin_file="$(dev_server_assets_dir)/skidbladnir/release-pin.json"
+  pin_line="$(gateway_release_values devbox)" || die 'skid release pin is invalid'
+  IFS=$'\t' read -r version source_sha url archive_sha platform <<<"$pin_line"
+  artifact="$(dev_server_home)/.local/share/skidbladnir/artifacts/$archive_sha"
+  if [[ ! -e "$artifact" && ! -L "$artifact" ]]; then
+    artifact="$stage/admitted-artifact"
+  fi
+  gateway_prepare_artifact "$stage" "$version" "$source_sha" "$url" \
+    "$archive_sha" "$platform" "$artifact" || die 'could not admit the devbox cli artifact'
+  printf '%s\n' "$artifact"
+}
+
+# A fixed cli and the gateway it speaks to change only while jarvis is paused
+# and cleanly stopped. Identical executables require no service operation.
+skidbladnir_jarvis_preflight() {
+  local candidate="$1" installed="$2" gateway_binary="$3" paused="$4"
+  [[ -f "$candidate" && ! -L "$candidate" ]] || die 'invalid admitted cli executable'
+  [[ ! -L "$installed" && ( ! -e "$installed" || -f "$installed" ) ]] ||
+    die 'jarvis cli target is not a regular file'
+  if python3 - "$candidate" "$installed" "$gateway_binary" <<'PYTHON'
+from pathlib import Path
+import stat
+import sys
+candidate, installed, gateway = map(Path, sys.argv[1:])
+if not candidate.is_file() or candidate.is_symlink():
+    raise SystemExit("invalid admitted cli executable")
+try:
+    info = installed.lstat()
+    same = (stat.S_ISREG(info.st_mode) and info.st_uid == 0 and info.st_gid == 0
+            and stat.S_IMODE(info.st_mode) == 0o755
+            and installed.read_bytes() == candidate.read_bytes()
+            and gateway.is_file() and gateway.read_bytes() == candidate.read_bytes())
+except OSError:
+    same = False
+raise SystemExit(0 if same else 1)
+PYTHON
+  then
+    return 0
+  fi
+  if [[ "$(systemctl show --property=ActiveState --value jarvis.service)" != inactive ||
+    "$(systemctl show --property=Result --value jarvis.service)" != success ||
+    "$(systemctl show --property=MainPID --value jarvis.service)" != 0 ]]; then
+    render_result ACTION jarvis.agent-cli 'executable change requires jarvis paused and cleanly stopped before gateway activation'
+    return 2
+  fi
+  if ! python3 - "$paused" <<'PYTHON'
+import json
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+try:
+    value = json.loads(path.read_text()) if path.is_file() and not path.is_symlink() else None
+except (OSError, ValueError):
+    value = None
+raise SystemExit(0 if isinstance(value, dict) and set(value) == {"paused", "schema_version"}
+                 and value["paused"] is True and value["schema_version"] == "jarvis-paused.v1" else 1)
+PYTHON
+  then
+    render_result ACTION jarvis.agent-cli 'prepare jarvis paused state before executable activation'
+    return 2
+  fi
+}
+
+skidbladnir_install_jarvis_cli() {
+  local candidate="$1" installed="$2"
+  [[ "$(id -u)" == 0 ]] || die 'jarvis cli installation requires root'
+  [[ ! -L "$installed" && ( ! -e "$installed" || -f "$installed" ) ]] ||
+    die 'jarvis cli target is not a regular file'
+  atomic_install_file "$candidate" "$installed" 0755 || return 1
+  if [[ "$(stat -c '%u|%g' "$installed")" != '0|0' ]]; then
+    chown root:root "$installed" || return 1
+    dev_server_install_status=CHANGED
+  fi
+  [[ "$(stat -c '%u|%g|%a' "$installed")" == '0|0|755' ]] || return 1
+  if [[ "${dev_server_install_status:-UP TO DATE}" != 'UP TO DATE' ]]; then
+    render_result "$dev_server_install_status" jarvis.agent-cli 'admitted skid executable installed'
+  fi
 }
 
 skidbladnir_apply() {

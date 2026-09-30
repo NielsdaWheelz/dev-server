@@ -13,7 +13,7 @@
           - ansible_facts['distribution_release'] == 'noble'
           - ansible_facts['architecture'] == 'x86_64'
           - ansible_facts['hostname'] == 'dev-server'
-          - gateway_product in ['herdr-mobile', 'skidbladnir']
+          - gateway_product == 'skidbladnir'
           - gateway_operation in ['apply', 'remove']
         fail_msg: Refusing gateway operation outside its declared boundary
     - name: Read the gateway user id
@@ -29,9 +29,7 @@
         owner: "{{ devbox_user }}"
         group: "{{ devbox_user }}"
         mode: '0755'
-      loop: >-
-        {{ ['', 'lib', 'assets', 'assets/' ~ gateway_product]
-           + (['assets/skid-provider'] if gateway_product == 'skidbladnir' else []) }}
+      loop: ['', 'lib', 'assets', 'assets/skidbladnir', 'assets/skid-provider']
       when: gateway_operation == 'apply' or item in ['', 'lib']
 
     - name: Install selected gateway libraries
@@ -42,13 +40,13 @@
         group: "{{ devbox_user }}"
         mode: '0644'
       loop: >-
-        {{ ['common.sh', 'gateway-runtime.sh', gateway_product ~ '.sh']
-           + (['ai-tools.sh', 'skid-provider.sh'] if gateway_product == 'skidbladnir' and gateway_operation == 'apply' else []) }}
+        {{ ['common.sh', 'gateway-runtime.sh', 'skidbladnir.sh']
+           + (['ai-tools.sh', 'skid-provider.sh'] if gateway_operation == 'apply' else []) }}
 
     - name: Install selected gateway assets
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../assets/{{ gateway_product }}/"
-        dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/{{ gateway_product }}/"
+        src: "{{ playbook_dir }}/../../assets/skidbladnir/"
+        dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/skidbladnir/"
         owner: "{{ devbox_user }}"
         group: "{{ devbox_user }}"
         mode: preserve
@@ -61,7 +59,7 @@
         owner: "{{ devbox_user }}"
         group: "{{ devbox_user }}"
         mode: preserve
-      when: gateway_product == 'skidbladnir' and gateway_operation == 'apply'
+      when: gateway_operation == 'apply'
 
     - name: Ensure root-owned gateway ingress library directory exists
       ansible.builtin.file:
@@ -79,16 +77,16 @@
         owner: root
         group: root
         mode: '0644'
-      loop:
-        - common.sh
-        - gateway-ingress.sh
+      loop: >-
+        {{ ['common.sh', 'gateway-ingress.sh']
+           + (['gateway-runtime.sh', 'skidbladnir.sh'] if gateway_operation == 'apply' else []) }}
 
     - name: Preflight selected gateway ingress
       ansible.builtin.shell: |
         set -euo pipefail
         source /usr/local/libexec/dev-server-gateway/common.sh
         source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
-        {{ gateway_product | replace('-', '_') }}_ingress_preflight
+        skidbladnir_ingress_preflight
         finish_results devbox
       args:
         executable: /bin/bash
@@ -103,60 +101,134 @@
         (ingress_preflight_result.rc == 2 and
          not (ingress_preflight_result.stdout is regex('(?m)^ACTION  ')))
 
-    - name: Reconcile selected gateway runtime
-      ansible.builtin.shell: |
-        set -euo pipefail
-        dev_server_home_dir="/home/{{ devbox_user }}"
-        dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
-        source "$dev_server_assets_root/../lib/common.sh"
-        source "$dev_server_assets_root/../lib/{{ gateway_product }}.sh"
-        if [[ '{{ gateway_product }}' == skidbladnir && '{{ gateway_operation }}' == apply ]]; then
-          source "$dev_server_assets_root/../lib/ai-tools.sh"
-          source "$dev_server_assets_root/../lib/skid-provider.sh"
-        fi
-        if [[ '{{ gateway_operation }}' == apply ]]; then
-          {{ gateway_product | replace('-', '_') }}_apply devbox
-        else
-          {{ gateway_product | replace('-', '_') }}_remove devbox
-        fi
-        finish_results devbox
-      args:
-        executable: /bin/bash
-      become: true
-      become_user: "{{ devbox_user }}"
-      environment:
-        HOME: "/home/{{ devbox_user }}"
-        PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
-        XDG_RUNTIME_DIR: "/run/user/{{ gateway_user_uid.stdout }}"
-        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ gateway_user_uid.stdout }}/bus"
-      when: ingress_preflight_result.rc == 0
-      register: gateway_result
-      changed_when: gateway_result.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ')
-      failed_when: >-
-        gateway_result.rc not in [0, 2] or
-        (gateway_result.rc == 2 and
-         not (gateway_result.stdout is regex('(?m)^ACTION  ')))
+    - name: Reconcile admitted devbox gateway and root cli
+      block:
+        - name: Allocate temporary user cli admission directory
+          ansible.builtin.tempfile:
+            state: directory
+            prefix: dev-server-cli.
+          become_user: "{{ devbox_user }}"
+          register: cli_admission_stage
+          when: gateway_operation == 'apply' and ingress_preflight_result.rc == 0
 
-    - name: Reconcile selected gateway ingress
-      ansible.builtin.shell: |
-        set -euo pipefail
-        source /usr/local/libexec/dev-server-gateway/common.sh
-        source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
-        {{ gateway_product | replace('-', '_') }}_ingress_{{ gateway_operation }}
-        finish_results devbox
-      args:
-        executable: /bin/bash
-      become: true
-      become_user: root
-      environment:
-        PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      when: ingress_preflight_result.rc == 0 and gateway_result.rc | default(1) == 0
-      register: ingress_result
-      changed_when: ingress_result.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ')
-      failed_when: >-
-        ingress_result.rc not in [0, 2] or
-        (ingress_result.rc == 2 and
-         not (ingress_result.stdout is regex('(?m)^ACTION  ')))
+        - name: Admit the same artifact for the devbox gateway and Jarvis cli
+          ansible.builtin.shell: |
+            set -euo pipefail
+            dev_server_home_dir="/home/{{ devbox_user }}"
+            dev_server_assets_root="$dev_server_home_dir/.local/share/dev-server/assets"
+            source "$dev_server_assets_root/../lib/common.sh"
+            source "$dev_server_assets_root/../lib/skidbladnir.sh"
+            gateway_name=skidbladnir
+            artifact="$(skidbladnir_prepare_cli_artifact '{{ cli_admission_stage.path }}')"
+            gateway_binary="$dev_server_home_dir/.local/share/skidbladnir/current/skidbladnir"
+            if gateway_service_active devbox; then
+              pid="$(dev_server_service_main_pid devbox skidbladnir.service)"
+              gateway_binary="$(readlink "/proc/$pid/exe")"
+            else
+              status=$?
+              ((status == 1)) || die 'could not observe the running devbox gateway'
+            fi
+            printf '%s\n%s\n' "$artifact" "$gateway_binary"
+          args:
+            executable: /bin/bash
+          become_user: "{{ devbox_user }}"
+          environment:
+            HOME: "/home/{{ devbox_user }}"
+            PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+            XDG_RUNTIME_DIR: "/run/user/{{ gateway_user_uid.stdout }}"
+            DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ gateway_user_uid.stdout }}/bus"
+          register: cli_artifact
+          changed_when: false
+          when: cli_admission_stage.path is defined
+
+        - name: Check Jarvis before switching either executable
+          ansible.builtin.shell: |
+            set -euo pipefail
+            source /usr/local/libexec/dev-server-gateway/common.sh
+            source /usr/local/libexec/dev-server-gateway/skidbladnir.sh
+            skidbladnir_jarvis_preflight '{{ cli_artifact.stdout_lines[0] }}/skidbladnir' \
+              /usr/local/libexec/skidbladnir '{{ cli_artifact.stdout_lines[1] }}' \
+              /var/lib/jarvis/runtime/paused.json
+            finish_results devbox
+          args:
+            executable: /bin/bash
+          register: cli_preflight_result
+          changed_when: false
+          failed_when: cli_preflight_result.rc not in [0, 2]
+          when: cli_artifact.stdout_lines is defined
+
+        - name: Reconcile selected gateway runtime
+          ansible.builtin.shell: |
+            set -euo pipefail
+            dev_server_home_dir="/home/{{ devbox_user }}"
+            dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
+            source "$dev_server_assets_root/../lib/common.sh"
+            source "$dev_server_assets_root/../lib/skidbladnir.sh"
+            if [[ '{{ gateway_operation }}' == apply ]]; then
+              source "$dev_server_assets_root/../lib/ai-tools.sh"
+              source "$dev_server_assets_root/../lib/skid-provider.sh"
+              skidbladnir_apply devbox "{{ cli_artifact.stdout_lines[0] if gateway_operation == 'apply' else '' }}"
+            else
+              skidbladnir_remove devbox
+            fi
+            finish_results devbox
+          args:
+            executable: /bin/bash
+          become: true
+          become_user: "{{ devbox_user }}"
+          environment:
+            HOME: "/home/{{ devbox_user }}"
+            PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+            XDG_RUNTIME_DIR: "/run/user/{{ gateway_user_uid.stdout }}"
+            DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ gateway_user_uid.stdout }}/bus"
+          when: ingress_preflight_result.rc == 0 and cli_preflight_result.rc | default(0) == 0
+          register: gateway_result
+          changed_when: gateway_result.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ')
+          failed_when: >-
+            gateway_result.rc not in [0, 2] or
+            (gateway_result.rc == 2 and
+             not (gateway_result.stdout is regex('(?m)^ACTION  ')))
+
+        - name: Reconcile selected gateway ingress
+          ansible.builtin.shell: |
+            set -euo pipefail
+            source /usr/local/libexec/dev-server-gateway/common.sh
+            source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
+            skidbladnir_ingress_{{ gateway_operation }}
+            finish_results devbox
+          args:
+            executable: /bin/bash
+          become: true
+          become_user: root
+          environment:
+            PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          when: ingress_preflight_result.rc == 0 and gateway_result.rc | default(1) == 0
+          register: ingress_result
+          changed_when: ingress_result.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ')
+          failed_when: >-
+            ingress_result.rc not in [0, 2] or
+            (ingress_result.rc == 2 and
+             not (ingress_result.stdout is regex('(?m)^ACTION  ')))
+
+        - name: Install the admitted root Jarvis cli after gateway verification
+          ansible.builtin.shell: |
+            set -euo pipefail
+            source /usr/local/libexec/dev-server-gateway/common.sh
+            source /usr/local/libexec/dev-server-gateway/skidbladnir.sh
+            skidbladnir_install_jarvis_cli '{{ cli_artifact.stdout_lines[0] }}/skidbladnir' /usr/local/libexec/skidbladnir
+            finish_results devbox
+          args:
+            executable: /bin/bash
+          register: cli_install_result
+          changed_when: cli_install_result.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED)  ')
+          when: cli_artifact.stdout_lines is defined and cli_preflight_result.rc == 0 and gateway_result.rc | default(1) == 0
+      always:
+        - name: Remove temporary admitted cli staging
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: absent
+          loop: "{{ [cli_admission_stage.path | default('')] | reject('equalto', '') | list }}"
+          changed_when: false
 
     - name: Report selected gateway result
       ansible.builtin.debug:
@@ -164,6 +236,8 @@
       loop: >-
         {{ ((ingress_preflight_result.stdout_lines | default([]))
             + (gateway_result.stdout_lines | default([]))
-            + (ingress_result.stdout_lines | default([])))
+            + (ingress_result.stdout_lines | default([]))
+            + (cli_preflight_result.stdout_lines | default([]))
+            + (cli_install_result.stdout_lines | default([])))
            | select('match', '^(ACTION|INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ')
            | list }}

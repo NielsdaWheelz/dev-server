@@ -1,28 +1,22 @@
 # codex account homes still have several declarations
 
 problem: `lib/ai-tools.sh` declares normal codex homes for wrappers,
-directories and instructions, while herdr integrations, the gate and gateway
-profiles also declare those same homes. these are shared user accounts.
+directories and instructions. skid's host template, renderer validation and
+scoped provider commands repeat those same homes. these are shared user accounts.
 
 impact: a declaration change can route an account to one home while creating
-its directory/instructions elsewhere, and the gate rejects the new home.
+its directory/instructions elsewhere, or fail skid's configuration admission.
 
-evidence (2026-09-25): before shared-runtime retirement, an in-memory
-`profiles.json` work-home change to `.codex-employer`
-changed the generated launcher while installer fixtures selected `.codex-work`.
-the current consumers are `lib/ai-tools.sh`, `lib/herdr.sh`,
-`assets/herdr/herdr-gate`, both gateway host configs/renderers and skid's
-scoped provider launcher.
-
-status (2026-09-28): retirement removes `profiles.json` and renders wrappers
-directly in the ai installer. the remaining consumers still repeat the same
-normal homes; retirement does not resolve this consistency issue.
+evidence (2026-09-29): `lib/ai-tools.sh` repeats `.codex`, `.codex-work` and
+`.codex-work2` across directory, wrapper and instruction installation.
+`assets/skidbladnir/host-config.json`, `lib/skidbladnir.sh` and
+`assets/skid-provider/provider-command` also encode those paths. retirement
+does not resolve this remaining consistency issue.
 
 follow-up: declare the normal account paths once for the host and use those
-paths consistently, preserving command behavior, account state and the gate's
-explicit command policy. original skid now uses the same accounts.
+paths consistently, preserving command behavior and existing account state.
 do not migrate providers or introduce an account registry to resolve duplication.
 
 resolved when: one declared normal-home change produces consistent consumer
 paths without moving or replacing existing credentials/configuration/history,
-and unrelated gate commands remain refused.
+and explicit account selection remains unchanged.
