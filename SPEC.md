@@ -32,7 +32,7 @@ maintenance and the root-owned retirement evidence.
 | homebrew | update metadata and upgrade declared formulae and casks |
 | pacman/yay | full `pacman -Syu` with declared packages, then declared aur packages |
 | ubuntu apt | refresh metadata and reconcile declared packages to repository candidates |
-| codex/claude | resolve upstream npm stable latest; install native claude only when absent, never pinning or downgrading it |
+| codex/claude | upgrade to the latest stable release (npm `latest` for codex, claude's `stable` channel); never downgrade a newer manual installation |
 | repo pins | install declared exact versions |
 
 native package managers resolve required dependencies. arch partial upgrades
@@ -165,10 +165,9 @@ executable so foreground identity remains the provider process.
 one claude native binary is published at `$HOME/.local/bin/claude` from its
 versioned native directory. bootstrap downloads anthropic's official https
 installer to a temporary file and syntax-checks it before execution. apply
-installs the latest version only when no native installation exists under the
-normal host home; an existing installation keeps its version, and upgrades
-(native updates or manual) are the user's. reject a conflicting canonical path;
-do not restart running claude processes.
+upgrades the native installation under the normal host home to claude's latest
+`stable` release and keeps a newer one (native or manual updates). reject a
+conflicting canonical path; do not restart running claude processes.
 
 ordinary account commands are installed by `lib/ai-tools.sh`.
 `codex` preserves a nonempty `CODEX_HOME`, defaulting to `.codex`; the named
