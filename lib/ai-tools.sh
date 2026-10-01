@@ -53,6 +53,11 @@ ai_install_dirs() {
   ensure_directory "$home/.claude-work" 0700 || return 1
 }
 
+# True when version $1 is at least $2; a newer manual installation is kept.
+ai_version_at_least() {
+  [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n 1)" == "$2" ]]
+}
+
 ai_package_version() {
   local manifest="$1"
   local package="$2"
@@ -95,6 +100,7 @@ ai_codex_matches() {
 ai_install_codex() {
   local binary
   local candidate
+  local installed
   local home
   local npm_prefix
   local prefix
@@ -119,6 +125,8 @@ ai_install_codex() {
   if ai_codex_matches "$candidate"; then
     return 0
   fi
+  installed="$(ai_package_version "$(ai_codex_manifest)" @openai/codex 2>/dev/null)" &&
+    ai_version_at_least "$installed" "$candidate" && return 0
   if [[ -e "$(ai_codex_manifest)" || -L "$(ai_codex_manifest)" ||
   -e "$binary" || -L "$binary" ]]; then
     status=UPDATED
@@ -165,6 +173,7 @@ ai_claude_native_version() {
 ai_bootstrap_claude_native() (
   set -euo pipefail
 
+  local version="$1"
   local bytes
   local home
   local installer
@@ -184,21 +193,33 @@ ai_bootstrap_claude_native() (
   [[ "$bytes" =~ ^[0-9]+$ && "$bytes" -gt 0 && "$bytes" -le 1048576 ]] ||
     die "invalid Claude installer candidate size"
   bash -n "$installer" || die "invalid Claude installer syntax"
-  HOME="$home" bash "$installer" ||
+  HOME="$home" bash "$installer" "$version" ||
     die "Claude native installation failed"
 )
 
 ai_install_claude() {
+  local before
   local binary
+  local candidate
   local home
   local status
   local version
 
+  require_cmd npm
   home="$(dev_server_home)"
   binary="$(ai_claude_binary)"
-  # Any native installation is kept as is: claude's version and its upgrades
-  # belong to the user. Apply only bootstraps an absent installation.
-  if ai_claude_native_version >/dev/null; then
+  candidate="$(npm view @anthropic-ai/claude-code dist-tags.stable)" ||
+    die 'could not resolve the latest stable Claude release'
+  [[ "$candidate" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    die 'npm stable must identify a Claude release'
+  if before="$(ai_claude_native_version)"; then
+    ai_version_at_least "$before" "$candidate" && return 0
+    HOME="$home" "$binary" install "$candidate" ||
+      die "Claude native upgrade failed"
+    version="$(ai_claude_native_version)" ||
+      die "Claude native upgrade produced an invalid installation"
+    [[ "$version" == "$candidate" ]] || die "Claude installation differs from the stable release"
+    render_result UPDATED "AI tool" "claude@$version"
     return 0
   fi
 
@@ -210,7 +231,7 @@ ai_install_claude() {
   else
     status=INSTALLED
   fi
-  ai_bootstrap_claude_native || return 1
+  ai_bootstrap_claude_native "$candidate" || return 1
   version="$(ai_claude_native_version)" ||
     die "Claude native installer produced an invalid installation"
   render_result "$status" "AI tool" "claude@$version"

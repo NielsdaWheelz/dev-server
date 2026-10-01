@@ -79,9 +79,11 @@ skidbladnir_provider_install_helper() {
   pin="$(skidbladnir_native_pin)" || return 1
   IFS=$'\t' read -r repository revision lock uv_version python_version sdk entry _installed qualification <<<"$pin"
   [[ "$qualification" == ready ]] || return 1
-  pin_sha="$(dev_server_sha256 "$(dev_server_assets_dir)/skid-provider/native-control.json")" || return 1
+  # A generation is keyed by the declared fields that build it, so unrelated
+  # declaration edits never strand an installed generation.
+  pin_sha="$(printf '%s' "$pin" | dev_server_sha256_stream)" || return 1
   base="$home/.local/share/skidbladnir/provider-runtime-control"
-  release="$base/releases/$revision"
+  release="$base/releases/$revision-${pin_sha:0:16}"
   uv="$base/bootstrap/bin/uv"
   ensure_directory "$base" 0700 || return 1
   ensure_directory "$base/releases" 0700 || return 1
