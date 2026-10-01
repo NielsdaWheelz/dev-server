@@ -20,23 +20,6 @@ for (let index = 0; index < minimum.length; index += 1) {
 NODE
 }
 
-ai_claude_version_pin() {
-  local pin
-  pin="$(dev_server_assets_dir)/skid-provider/native-control.json"
-  dev_server_strict_json_file "$pin" 4096 || return 1
-  python3 - "$pin" <<'PIN'
-import json
-import re
-import sys
-with open(sys.argv[1], encoding="utf-8") as stream:
-    value = json.load(stream)
-version = value.get("claudeVersion") if isinstance(value, dict) else None
-if not isinstance(version, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
-    raise SystemExit(1)
-print(version)
-PIN
-}
-
 ai_validate_inputs() {
   local instructions
   local profile
@@ -51,7 +34,6 @@ ai_validate_inputs() {
   statusline="$(dev_server_assets_dir)/claude/statusline.sh"
   [[ -f "$statusline" && ! -L "$statusline" && -s "$statusline" ]] ||
     die "invalid claude status line script: $statusline"
-  ai_claude_version_pin >/dev/null || die 'invalid qualified Claude version'
 }
 
 ai_install_dirs() {
@@ -185,7 +167,7 @@ ai_bootstrap_claude_native() (
 
   local bytes
   local home
-  local installer expected
+  local installer
 
   require_cmd bash
   require_cmd curl
@@ -202,31 +184,21 @@ ai_bootstrap_claude_native() (
   [[ "$bytes" =~ ^[0-9]+$ && "$bytes" -gt 0 && "$bytes" -le 1048576 ]] ||
     die "invalid Claude installer candidate size"
   bash -n "$installer" || die "invalid Claude installer syntax"
-  expected="$(ai_claude_version_pin)" || die "invalid qualified Claude version"
-  HOME="$home" bash "$installer" "$expected" ||
+  HOME="$home" bash "$installer" ||
     die "Claude native installation failed"
 )
 
 ai_install_claude() {
-  local before
   local binary
   local home
   local status
-  local version expected
+  local version
 
-  expected="$(ai_claude_version_pin)" || die "invalid qualified Claude version"
   home="$(dev_server_home)"
   binary="$(ai_claude_binary)"
-  if before="$(ai_claude_native_version)"; then
-    [[ "$before" != "$expected" ]] || return 0
-    HOME="$home" "$binary" install "$expected" ||
-      die "Claude qualified native version reconciliation failed"
-    version="$(ai_claude_native_version)" ||
-      die "Claude native reconciliation produced an invalid installation"
-    [[ "$version" == "$expected" ]] || die "Claude installation differs from qualified version"
-    if [[ "$version" != "$before" ]]; then
-      render_result UPDATED "AI tool" "claude@$version"
-    fi
+  # Any native installation is kept as is: claude's version and its upgrades
+  # belong to the user. Apply only bootstraps an absent installation.
+  if ai_claude_native_version >/dev/null; then
     return 0
   fi
 
@@ -241,7 +213,6 @@ ai_install_claude() {
   ai_bootstrap_claude_native || return 1
   version="$(ai_claude_native_version)" ||
     die "Claude native installer produced an invalid installation"
-  [[ "$version" == "$expected" ]] || die "Claude installation differs from qualified version"
   render_result "$status" "AI tool" "claude@$version"
 }
 
