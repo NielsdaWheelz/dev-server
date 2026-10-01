@@ -350,8 +350,8 @@ release evidence. upstream owns archive/config schemas and release/device
 acceptance; each admitted binary validates its own rendered host config.
 
 skid declares tmux, `nativeControlPath`, absolute native provider commands,
-explicit arguments, environment and foreground signatures. its separately
-pinned helper and integrations belong only to skid. the original app owner's
+explicit arguments, environment and foreground signatures. its native
+helper and integrations belong only to skid. the original app owner's
 source-qualified handoff supplies the config and native-helper contract;
 authenticated native behavior remains a live qualification prerequisite.
 
@@ -485,14 +485,14 @@ host-key continuity, private ingress, and verified skid rollback are retained.
 record unresolved work in `docs/issues/`, one file per issue, and remove resolved
 records. completed deployment plans and cutover instructions belong in git history.
 
-## native helper source qualification
+## native helper source
 
-`assets/skid-provider/native-control.json` pins a directly merged helper source
-revision and its exact lock hash, python, uv, claude sdk and native claude versions.
-install that revision without patches into a revision-named generation and
-synchronize its environment with `uv sync --frozen --extra claude-sdk --no-dev`.
-verify source identity, lock hash and runtime versions before publishing the
-launcher. `qualified: false` returns action/2 before gateway mutation. isolated
-installation and rejected-request probes prove packaging only. upstream daemon
-startup, thread creation, remote attachment and native control require combined
-qualification against the installed stock package.
+`assets/skid-provider/native-control.json` names the helper repository and its
+entry point; nothing about it is pinned. apply installs the repository's current
+default-branch revision into a revision-named generation and synchronizes its
+environment with `uv sync --upgrade --extra claude-sdk --no-dev`, upgrading uv
+first, so the helper takes the latest dependencies its project admits. it
+verifies the revision and the claude shim, then probes the entry point and the
+launcher before publishing it. isolated installation and rejected-request
+probes prove packaging only; native behavior needs live qualification against
+the installed stock providers.

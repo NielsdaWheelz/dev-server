@@ -103,9 +103,9 @@ gives the exact worker map and app environment contract.
 `apply` resolves codex's stable npm `latest` once per run on every host
 and installs it when needed under `~/.local`. npm owns package integrity;
 installation disables scripts and verifies the package and executable versions.
-claude reconciles the exact qualified native version declared in
-`assets/skid-provider/native-control.json`. account update settings remain
-user-owned; apply repairs version drift without restarting provider sessions.
+claude upgrades its native installation to the latest `stable` release and
+keeps a newer one. account update settings remain user-owned; apply never
+restarts provider sessions.
 
 interactive zsh aliases add `--yolo` to codex commands and
 `--dangerously-skip-permissions` to claude commands. the defaults live in

@@ -31,37 +31,25 @@ import sys
 
 with open(sys.argv[1], encoding="utf-8") as stream:
     value = json.load(stream)
-fields = {"repository", "revision", "lockSha256", "uvVersion", "pythonVersion", "claudeSdkVersion", "entryPoint", "installedCommand", "qualified"}
-if not isinstance(value, dict) or value.keys() != fields or type(value["qualified"]) is not bool:
+if not isinstance(value, dict) or value.keys() != {"repository", "entryPoint", "installedCommand"}:
     raise SystemExit(1)
 if not isinstance(value["repository"], str) or not re.fullmatch(r"https://[a-zA-Z0-9./_-]+\.git", value["repository"]):
     raise SystemExit(1)
-for key, size in (("revision", 40), ("lockSha256", 64)):
-    if not isinstance(value[key], str) or not re.fullmatch(r"[0-9a-f]{%d}" % size, value[key]):
-        raise SystemExit(1)
-for key in ("uvVersion", "pythonVersion", "claudeSdkVersion"):
-    if not isinstance(value[key], str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", value[key]):
-        raise SystemExit(1)
 if value["entryPoint"] != "provider-runtime-control" or value["installedCommand"] != "skidbladnir-provider-runtime-control":
     raise SystemExit(1)
-print("\t".join(value[key] for key in ("repository", "revision", "lockSha256", "uvVersion", "pythonVersion", "claudeSdkVersion", "entryPoint", "installedCommand")) + "\t" + ("ready" if value["qualified"] else "pending"))
+print("\t".join(value[key] for key in ("repository", "entryPoint", "installedCommand")))
 PIN
 }
 
 skidbladnir_provider_preflight() {
-  local home="$1" pin repository revision lock uv_version python_version sdk entry _installed qualification source
-  pin="$(skidbladnir_native_pin)" || die 'invalid skid native-control pin'
-  IFS=$'\t' read -r repository revision lock uv_version python_version sdk entry _installed qualification <<<"$pin"
-  if [[ "$qualification" == pending ]]; then
-    render_result ACTION skid.native 'original skid owner has not qualified the pinned native helper'
-    return 2
-  fi
+  local home="$1" source
+  skidbladnir_native_pin >/dev/null || die 'invalid skid native-control declaration'
   if ! skidbladnir_native_paths "$home" >/dev/null; then
     render_result ACTION skid.providers 'install the shared native codex and claude before skid'
     return 2
   fi
   if ! command -v git >/dev/null || ! command -v python3 >/dev/null; then
-    render_result ACTION skid.native 'git and python3 are required for the pinned helper'
+    render_result ACTION skid.native 'git and python3 are required for the native helper'
     return 2
   fi
   skidbladnir_shell_setup "$home" check || return $?
@@ -75,28 +63,28 @@ skidbladnir_provider_preflight() {
 }
 
 skidbladnir_provider_install_helper() {
-  local home="$1" candidate="$2" base release stage source uv wrapper marker pin repository revision lock uv_version python_version sdk entry _installed qualification pin_sha
+  local home="$1" candidate="$2" base release stage source uv wrapper marker pin repository revision entry _installed
   pin="$(skidbladnir_native_pin)" || return 1
-  IFS=$'\t' read -r repository revision lock uv_version python_version sdk entry _installed qualification <<<"$pin"
-  [[ "$qualification" == ready ]] || return 1
-  # A generation is keyed by the declared fields that build it, so unrelated
-  # declaration edits never strand an installed generation.
-  pin_sha="$(printf '%s' "$pin" | dev_server_sha256_stream)" || return 1
+  IFS=$'\t' read -r repository entry _installed <<<"$pin"
+  # The helper follows its repository's default branch and the latest
+  # dependencies its project admits; each revision gets its own generation.
+  revision="$(git ls-remote "$repository" HEAD | awk '{print $1}')" || return 1
+  [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || return 1
   base="$home/.local/share/skidbladnir/provider-runtime-control"
-  release="$base/releases/$revision-${pin_sha:0:16}"
+  release="$base/releases/$revision"
   uv="$base/bootstrap/bin/uv"
   ensure_directory "$base" 0700 || return 1
   ensure_directory "$base/releases" 0700 || return 1
-  if [[ ! -x "$uv" || "$("$uv" --version 2>/dev/null)" != "uv $uv_version"* ]]; then
+  if [[ ! -x "$base/bootstrap/bin/python" ]]; then
     python3 -m venv "$base/bootstrap" || return 1
-    PIP_NO_CACHE_DIR=1 "$base/bootstrap/bin/python" -m pip --disable-pip-version-check \
-      install --quiet --upgrade "uv==$uv_version" || return 1
-    [[ "$("$uv" --version)" == "uv $uv_version"* ]] || return 1
   fi
+  PIP_NO_CACHE_DIR=1 "$base/bootstrap/bin/python" -m pip --disable-pip-version-check \
+    install --quiet --upgrade uv || return 1
+  [[ -x "$uv" ]] || return 1
   marker="$release/.installed"
   if [[ ! -f "$marker" || ! -x "$release/.venv/bin/$entry" ]]; then
     [[ ! -e "$release" && ! -L "$release" ]] || {
-      render_result ACTION skid.native "incomplete pinned helper at $release; inspect and remove only that generation, then rerun"
+      render_result ACTION skid.native "incomplete helper at $release; inspect and remove only that generation, then rerun"
       return 2
     }
     stage="$(mktemp -d "$base/.stage.XXXXXX")" || return 1
@@ -105,23 +93,14 @@ skidbladnir_provider_install_helper() {
        ! git -C "$source" remote add origin "$repository" ||
        ! git -C "$source" fetch --quiet --depth=1 origin "$revision" ||
        ! git -C "$source" checkout --quiet --detach "$revision" ||
-       [[ "$(git -C "$source" rev-parse HEAD 2>/dev/null)" != "$revision" ]] ||
-       [[ "$(dev_server_sha256 "$source/uv.lock")" != "$lock" ]]; then
+       [[ "$(git -C "$source" rev-parse HEAD 2>/dev/null)" != "$revision" ]]; then
       rm -R -- "$stage"
       return 1
     fi
     mv -- "$source" "$release" || { rm -R -- "$stage"; return 1; }
     rmdir -- "$stage" || return 1
     if ! UV_CACHE_DIR="$base/cache" UV_PYTHON_INSTALL_DIR="$base/python" \
-       "$uv" sync --project "$release" --python "$python_version" --frozen --extra claude-sdk --no-dev ||
-       ! "$release/.venv/bin/python" - "$python_version" "$sdk" <<'PY'
-from importlib.metadata import version
-import sys
-
-assert sys.version_info[:3] == tuple(map(int, sys.argv[1].split(".")))
-assert version("claude-agent-sdk") == sys.argv[2]
-PY
-    then
+       "$uv" sync --project "$release" --upgrade --extra claude-sdk --no-dev; then
       rm -R -- "$release"
       return 1
     fi
@@ -134,26 +113,18 @@ PY
       rm -R -- "$release"
       return 1
     fi
-    if ! printf '%s\n' "$pin_sha" >"$release/.installed" ||
+    if ! printf '%s\n' "$revision" >"$release/.installed" ||
        ! chmod 0600 "$release/.installed"; then
       rm -R -- "$release"
       return 1
     fi
-    render_result INSTALLED skid.native 'pinned provider helper and frozen sdk environment'
+    render_result INSTALLED skid.native 'provider helper at its latest revision and dependencies'
   fi
-  [[ "$(cat "$marker")" == "$pin_sha" &&
+  [[ "$(cat "$marker")" == "$revision" &&
      "$(git -C "$release" rev-parse HEAD 2>/dev/null)" == "$revision" &&
-     "$(dev_server_sha256 "$release/uv.lock")" == "$lock" &&
      -f "$release/.venv/bin/claude" && ! -L "$release/.venv/bin/claude" &&
      "$(file_mode "$release/.venv/bin/claude" 2>/dev/null)" == 755 ]] || return 1
   cmp -s "$(dev_server_assets_dir)/skid-provider/native-control-claude" "$release/.venv/bin/claude" || return 1
-  "$release/.venv/bin/python" - "$python_version" "$sdk" <<'PY' || return 1
-from importlib.metadata import version
-import sys
-
-assert sys.version_info[:3] == tuple(map(int, sys.argv[1].split(".")))
-assert version("claude-agent-sdk") == sys.argv[2]
-PY
   local probe
   probe="$(mktemp "$base/.probe.XXXXXX")" || return 1
   if printf '{}\n' | env -i HOME="$home" CODEX_HOME="$home/.codex" \
