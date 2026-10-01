@@ -71,10 +71,12 @@ skidbladnir_provider_install_helper() {
   revision="$(git ls-remote "$repository" HEAD | awk '{print $1}')" || return 1
   [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || return 1
   base="$home/.local/share/skidbladnir/provider-runtime-control"
-  release="$base/releases/$revision"
+  # releases/ holds generations from the retired pinned scheme; retained skid
+  # generations may still reference them, so new ones never share that space.
+  release="$base/generations/$revision"
   uv="$base/bootstrap/bin/uv"
   ensure_directory "$base" 0700 || return 1
-  ensure_directory "$base/releases" 0700 || return 1
+  ensure_directory "$base/generations" 0700 || return 1
   if [[ ! -x "$base/bootstrap/bin/python" ]]; then
     python3 -m venv "$base/bootstrap" || return 1
   fi
