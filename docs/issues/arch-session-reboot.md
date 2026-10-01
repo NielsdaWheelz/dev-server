@@ -1,16 +1,18 @@
-# arch session and reboot activation
+# arch reboot activation
 
-problem: the unattended arch apply completed, but desktop-session and boot-time
-changes still require activation.
+problem: arch's installed kernel is newer than the running one, so the kernel
+upgrade still requires a reboot.
 
-impact: the current desktop and kernel can retain their prior state until logout
-and reboot. new shells can load the installed agent aliases immediately.
+impact: arch runs its prior kernel without the matching installed module
+directory until reboot; loading a module it has not already loaded can fail.
+deploy deliberately does not reboot a running workstation, so this recurs after
+each kernel upgrade.
 
-evidence: the 2026-09-17 live `./workstation apply` over ssh without a tty exited
-0 and reported `DEFERRED desktop session` and `DEFERRED reboot`.
-the running kernel is `7.2.3-arch1-2`; its directory under `/usr/lib/modules`
-is absent. skid and all three codex services were active after apply.
+evidence: arch last booted 2026-09-24 19:00 into `7.2.6-arch2-1`, clearing the
+earlier `7.2.3` deferral. pacman upgraded `linux` to `7.2.7.arch1-1` on
+2026-09-29. on 2026-10-01 the running kernel was still `7.2.6-arch2-1`, and
+`/usr/lib/modules` held only `7.2.7-arch1-1` and `6.18.54-1-lts`. the earlier
+desktop-session deferral has not been reported since 2026-09-17.
 
-resolution: at a suitable stopping point, reboot arch and start a new desktop
-session. rerun apply and verify those deferrals are gone. deploy deliberately
-does not log out the user or reboot a running workstation.
+resolution: at a suitable stopping point, reboot arch. rerun apply and verify
+the reboot deferral is gone.
