@@ -7,6 +7,5 @@
   "claudeSdkVersion": "0.2.130",
   "entryPoint": "provider-runtime-control",
   "installedCommand": "skidbladnir-provider-runtime-control",
-  "claudeVersion": "2.1.284",
   "qualified": true
 }

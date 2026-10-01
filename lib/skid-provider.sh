@@ -3,7 +3,7 @@
 # The npm launcher selects this packaged native executable. Gateway profiles
 # use the native path so foreground identity remains the provider process.
 skidbladnir_native_paths() {
-  local home="$1" package triple codex claude claude_target expected
+  local home="$1" package triple codex claude claude_target
   case "$(uname -s):$(uname -m)" in
   Darwin:arm64) package=codex-darwin-arm64 triple=aarch64-apple-darwin ;;
   Linux:x86_64) package=codex-linux-x64 triple=x86_64-unknown-linux-musl ;;
@@ -11,13 +11,12 @@ skidbladnir_native_paths() {
   esac
   codex="$home/.local/lib/node_modules/@openai/codex/node_modules/@openai/$package/vendor/$triple/bin/codex"
   [[ -x "$codex" && -f "$codex" && ! -L "$codex" ]] || return 1
-  expected="$(ai_claude_version_pin)" || return 1
+  # Any installed native claude version serves; upgrades are the user's.
   claude="$home/.local/bin/claude"
   [[ -L "$claude" && -x "$claude" ]] || return 1
   claude_target="$(readlink "$claude")" || return 1
-  [[ "$claude_target" == "$home/.local/share/claude/versions/$expected" &&
+  [[ "$claude_target" == "$home/.local/share/claude/versions/"* &&
     -f "$claude_target" && ! -L "$claude_target" && -x "$claude_target" ]] || return 1
-  [[ "$(ai_claude_version "$claude")" == "$expected" ]] || return 1
   printf '%s\t%s\t%s\n' "$codex" "$claude" "$home"
 }
 
@@ -32,7 +31,7 @@ import sys
 
 with open(sys.argv[1], encoding="utf-8") as stream:
     value = json.load(stream)
-fields = {"repository", "revision", "lockSha256", "uvVersion", "pythonVersion", "claudeSdkVersion", "claudeVersion", "entryPoint", "installedCommand", "qualified"}
+fields = {"repository", "revision", "lockSha256", "uvVersion", "pythonVersion", "claudeSdkVersion", "entryPoint", "installedCommand", "qualified"}
 if not isinstance(value, dict) or value.keys() != fields or type(value["qualified"]) is not bool:
     raise SystemExit(1)
 if not isinstance(value["repository"], str) or not re.fullmatch(r"https://[a-zA-Z0-9./_-]+\.git", value["repository"]):
@@ -40,19 +39,19 @@ if not isinstance(value["repository"], str) or not re.fullmatch(r"https://[a-zA-
 for key, size in (("revision", 40), ("lockSha256", 64)):
     if not isinstance(value[key], str) or not re.fullmatch(r"[0-9a-f]{%d}" % size, value[key]):
         raise SystemExit(1)
-for key in ("uvVersion", "pythonVersion", "claudeSdkVersion", "claudeVersion"):
+for key in ("uvVersion", "pythonVersion", "claudeSdkVersion"):
     if not isinstance(value[key], str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", value[key]):
         raise SystemExit(1)
 if value["entryPoint"] != "provider-runtime-control" or value["installedCommand"] != "skidbladnir-provider-runtime-control":
     raise SystemExit(1)
-print("\t".join(value[key] for key in ("repository", "revision", "lockSha256", "uvVersion", "pythonVersion", "claudeSdkVersion", "entryPoint", "installedCommand", "claudeVersion")) + "\t" + ("ready" if value["qualified"] else "pending"))
+print("\t".join(value[key] for key in ("repository", "revision", "lockSha256", "uvVersion", "pythonVersion", "claudeSdkVersion", "entryPoint", "installedCommand")) + "\t" + ("ready" if value["qualified"] else "pending"))
 PIN
 }
 
 skidbladnir_provider_preflight() {
-  local home="$1" pin repository revision lock uv_version python_version sdk entry _installed _claude qualification source
+  local home="$1" pin repository revision lock uv_version python_version sdk entry _installed qualification source
   pin="$(skidbladnir_native_pin)" || die 'invalid skid native-control pin'
-  IFS=$'\t' read -r repository revision lock uv_version python_version sdk entry _installed _claude qualification <<<"$pin"
+  IFS=$'\t' read -r repository revision lock uv_version python_version sdk entry _installed qualification <<<"$pin"
   if [[ "$qualification" == pending ]]; then
     render_result ACTION skid.native 'original skid owner has not qualified the pinned native helper'
     return 2
@@ -76,9 +75,9 @@ skidbladnir_provider_preflight() {
 }
 
 skidbladnir_provider_install_helper() {
-  local home="$1" candidate="$2" base release stage source uv wrapper marker pin repository revision lock uv_version python_version sdk entry _installed _claude qualification pin_sha
+  local home="$1" candidate="$2" base release stage source uv wrapper marker pin repository revision lock uv_version python_version sdk entry _installed qualification pin_sha
   pin="$(skidbladnir_native_pin)" || return 1
-  IFS=$'\t' read -r repository revision lock uv_version python_version sdk entry _installed _claude qualification <<<"$pin"
+  IFS=$'\t' read -r repository revision lock uv_version python_version sdk entry _installed qualification <<<"$pin"
   [[ "$qualification" == ready ]] || return 1
   pin_sha="$(dev_server_sha256 "$(dev_server_assets_dir)/skid-provider/native-control.json")" || return 1
   base="$home/.local/share/skidbladnir/provider-runtime-control"
