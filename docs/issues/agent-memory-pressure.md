@@ -46,6 +46,31 @@ playbook passes its syntax check. skid was restarted and lists six reachable
 terminals: five shells restored from the 00:22 layout and a recovery shell.
 the layout restore does not resume the agent conversations.
 
+second recurrence (2026-10-02, 16:35–16:38 utc): the corrected tmux regex was
+active. earlyoom killed buildkit workers and rootless docker, two `MainThread`
+processes at 2566/2647 mib rss, then skid (11 mib), shells (3–6 mib), dbus and
+gpg-agent. swap was exhausted. systemd still reported tmux running after skid
+exited; no earlyoom kill of tmux or kernel oom kill appears in this interval.
+tmux was absent afterward; its precise exit cause is not logged.
+
+the user manager had `OOMScoreAdjust=100`, and systemd's user-service default
+added another 100. tiny service-tree processes consequently scored about 800
+before avoidance, ahead of many much larger login-shell workloads with zero
+adjustment. skid handled the termination with exit status zero, so
+`Restart=on-failure` left the gateway inactive.
+
+second repair: the development account's user manager now has adjustment -100,
+giving its services a zero default. apply updates the running manager,
+reexecutes it only when its default differs, and clears the old inherited +200
+inside its service tree without restarting workloads. other adjustments and
+login sessions are left unchanged. skid's linux unit now uses `Restart=always`.
+the active daemon, tmux, rootlesskit and sampled shells retained their process
+identities while moving from +200 to zero; a fresh transient service reported
+zero. repeat apply changed nothing. a transient service with the new restart
+policy restarted after handling termination with exit zero, and stayed stopped
+after an explicit stop. skid was recovered with the saved 16:31 layout; layout
+restoration alone does not resume conversations.
+
 follow-up: if terminations recur, inspect the earlyoom and kernel journals
 through the deployment account and identify the concurrent workload. reduce
 concurrent heavy jobs or explicitly choose a larger host. do not silently cap
