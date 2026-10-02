@@ -39,11 +39,15 @@ symlinks, release directories and upgrades. existing processes keep loaded code;
 account daemons may use separate upstream-managed packages.
 
 ```sh
-CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" "$HOME/.local/bin/codex" update
+env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_PACKAGE_ROOT CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" "$HOME/.local/bin/codex" update
 claude update
 ```
 
-use that codex command from any account shell. upstream's updater detects the
+use that codex command from any account shell. preserved daemon tool shells
+can retain `CODEX_MANAGED_BY_NPM` and `CODEX_MANAGED_PACKAGE_ROOT` from their
+original startup. those markers can select npm even for a native executable;
+the command clears them for this native maintenance invocation. upstream's
+updater detects the
 installation under `CODEX_HOME`; `codex-work update` and `codex-work2 update`
 cannot detect the shared personal installation. wrappers remain account
 selectors with unchanged argument forwarding. claude's invoking account owns

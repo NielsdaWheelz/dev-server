@@ -12,9 +12,11 @@ this is conditional operator retirement, not a second managed installation.
 
 evidence (2026-10-02): baseline macbook had eight npm-native user consumers and
 devbox had three. npm prefixes were `/Users/nnandal/.local` and
-`/home/niels/.local`. existing provider pids and daemon packages were preserved
-through native publication and upgrades. arch had no old foreground consumers;
-its package retirement is qualified separately in the validation record.
+`/home/niels/.local`. the migration stopped no user sessions or account daemons during native
+publication and upgrades. seven of eight baseline macbook npm foreground pids
+survived; one ended during concurrent user work. arch had no old foreground consumers and its package removal, immediate native
+repair and 23-launch recheck passed. seven macbook consumers and all three
+devbox consumers still required their old package at final acceptance.
 
 resolution: let the existing sessions finish or close them deliberately. verify
 no live processes use the recorded npm package or its bundled resources. during

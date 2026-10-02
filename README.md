@@ -110,11 +110,12 @@ manual maintenance updates every future account and skid launch without a
 repository edit, apply or gateway restart:
 
 ```sh
-CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" "$HOME/.local/bin/codex" update
+env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_PACKAGE_ROOT CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" "$HOME/.local/bin/codex" update
 claude update
 ```
 
-codex's updater requires that fixed installation context even from a work shell;
+the codex command clears npm-manager markers retained by old daemon tool
+shells and selects the fixed installation context, including from a work shell;
 plain `codex-work update` cannot detect the shared installation upstream.
 claude's invoking account selects its update channel for the shared command.
 [the native maintenance runbook](docs/gateway-separation-runbook.md#native-ai-maintenance)

@@ -5,8 +5,9 @@ its job is to install declared state, activate affected consumers, verify the
 critical result, and report mutations, deferrals, or required actions.
 
 the native ai installation policy is implemented.
-[the migration plan](docs/ai-native-installation-plan.md) tracks fleet acceptance
-and retirement of existing npm consumers.
+[the validation record](docs/ai-native-installation-validation.md) tracks fleet
+acceptance; [npm retirement](docs/issues/npm-codex-retirement.md) preserves
+resources needed by existing sessions.
 
 ## commands and update policy
 
@@ -198,7 +199,9 @@ without requiring a particular version, absolute symlink target or release
 directory schema. the canonical command is the installation interface.
 
 manual codex upgrades use the canonical command with the fixed installation
-context: `CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin"
+context and clear inherited npm-manager markers:
+`env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_PACKAGE_ROOT
+CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin"
 "$HOME/.local/bin/codex" update`. upstream installation detection cannot find
 the shared installation when `CODEX_HOME` selects a work account. preserve
 simple profile wrappers; do not parse updater arguments or create more cli
