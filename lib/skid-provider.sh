@@ -1,22 +1,17 @@
 #!/usr/bin/env bash
 
-# The npm launcher selects this packaged native executable. Gateway profiles
-# use the native path so foreground identity remains the provider process.
+if ! declare -F ai_native_version >/dev/null; then
+  # shellcheck source=lib/ai-tools.sh
+  source "$(dirname "${BASH_SOURCE[0]}")/ai-tools.sh"
+fi
+
+# Keep canonical commands so upstream upgrades reach every future launch.
 skidbladnir_native_paths() {
-  local home="$1" package triple codex claude claude_target
-  case "$(uname -s):$(uname -m)" in
-  Darwin:arm64) package=codex-darwin-arm64 triple=aarch64-apple-darwin ;;
-  Linux:x86_64) package=codex-linux-x64 triple=x86_64-unknown-linux-musl ;;
-  *) return 1 ;;
-  esac
-  codex="$home/.local/lib/node_modules/@openai/codex/node_modules/@openai/$package/vendor/$triple/bin/codex"
-  [[ -x "$codex" && -f "$codex" && ! -L "$codex" ]] || return 1
-  # Any installed native claude version serves; upgrades are the user's.
+  local home="$1" codex claude
+  codex="$home/.local/bin/codex"
   claude="$home/.local/bin/claude"
-  [[ -L "$claude" && -x "$claude" ]] || return 1
-  claude_target="$(readlink "$claude")" || return 1
-  [[ "$claude_target" == "$home/.local/share/claude/versions/"* &&
-    -f "$claude_target" && ! -L "$claude_target" && -x "$claude_target" ]] || return 1
+  ai_native_version codex "$codex" >/dev/null || return 1
+  ai_native_version claude "$claude" >/dev/null || return 1
   printf '%s\t%s\t%s\n' "$codex" "$claude" "$home"
 }
 

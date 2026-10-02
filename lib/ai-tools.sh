@@ -1,25 +1,5 @@
 #!/usr/bin/env bash
 
-ai_require_codex_runtime() {
-  local npm_version
-
-  require_cmd node
-  require_cmd npm
-  node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)' ||
-    die "Codex requires Node.js 24 or newer"
-  npm_version="$(npm --version)" || die "could not read the npm version"
-  node - "$npm_version" <<'NODE' || die "Codex requires npm 11.17.0 or newer"
-const actual = process.argv[2];
-if (!/^\d+\.\d+\.\d+$/.test(actual)) process.exit(1);
-const parts = actual.split('.').map(Number);
-const minimum = [11, 17, 0];
-for (let index = 0; index < minimum.length; index += 1) {
-  if (parts[index] > minimum[index]) process.exit(0);
-  if (parts[index] < minimum[index]) process.exit(1);
-}
-NODE
-}
-
 ai_validate_inputs() {
   local instructions
   local profile
@@ -53,188 +33,111 @@ ai_install_dirs() {
   ensure_directory "$home/.claude-work" 0700 || return 1
 }
 
-# True when version $1 is at least $2; a newer manual installation is kept.
-ai_version_at_least() {
-  [[ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n 1)" == "$2" ]]
-}
+# The command is the installation interface; upstream owns its target layout.
+# Reject scripts before execution so npm launchers and conflicts are not adopted.
+ai_native_version() {
+  local provider="$1" binary="$2" home output
 
-ai_package_version() {
-  local manifest="$1"
-  local package="$2"
+  [[ -f "$binary" && -x "$binary" ]] || return 1
+  python3 - "$binary" <<'PYTHON' || return 1
+import sys
 
-  node -e '
-    const manifest = require(process.argv[1]);
-    const packageName = process.argv[2];
-    const version = manifest.version;
-    if (manifest.name !== packageName || typeof version !== "string" || !/^\d+\.\d+\.\d+$/.test(version)) {
-      process.exit(1);
-    }
-    process.stdout.write(version);
-  ' "$manifest" "$package"
-}
-
-ai_codex_binary() {
-  printf '%s/.local/bin/codex\n' "$(dev_server_home)"
-}
-
-ai_codex_manifest() {
-  printf '%s/.local/lib/node_modules/@openai/codex/package.json\n' \
-    "$(dev_server_home)"
-}
-
-ai_codex_matches() {
-  local expected="$1"
-  local binary
-  local manifest
-  local output
-
-  binary="$(ai_codex_binary)"
-  manifest="$(ai_codex_manifest)"
-  [[ -x "$binary" && -f "$manifest" && ! -L "$manifest" ]] || return 1
-  [[ "$(ai_package_version "$manifest" @openai/codex 2>/dev/null || true)" == "$expected" ]] || return 1
-  output="$(CODEX_HOME="$(dev_server_home)/.codex-work" "$binary" --version)" ||
-    return 1
-  [[ "$output" == "codex-cli $expected" ]]
-}
-
-ai_install_codex() {
-  local binary
-  local candidate
-  local installed
-  local home
-  local npm_prefix
-  local prefix
-  local status
-
+with open(sys.argv[1], "rb") as stream:
+    magic = stream.read(4)
+# ELF and the native Mach-O/fat headers, in either byte order.
+if magic not in (b"\x7fELF", b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe",
+                 b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe",
+                 b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca",
+                 b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca"):
+    raise SystemExit(1)
+PYTHON
   home="$(dev_server_home)"
-  prefix="$home/.local"
-  binary="$(ai_codex_binary)"
-  npm_prefix="$(npm config get prefix)" || die "could not read the npm global prefix"
-  if [[ "$npm_prefix" != "$prefix" ]]; then
-    npm config set --location=user prefix "$prefix" ||
-      die "could not configure the npm user-global prefix"
-    [[ "$(npm config get prefix)" == "$prefix" ]] ||
-      die "npm did not retain the user-global prefix"
-    render_result CHANGED "npm global prefix" "$prefix"
-  fi
-
-  candidate="$(npm view @openai/codex dist-tags.latest)" ||
-    die 'could not resolve the latest stable Codex release'
-  [[ "$candidate" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
-    die 'npm latest must identify a stable Codex release'
-  if ai_codex_matches "$candidate"; then
-    return 0
-  fi
-  installed="$(ai_package_version "$(ai_codex_manifest)" @openai/codex 2>/dev/null)" &&
-    ai_version_at_least "$installed" "$candidate" && return 0
-  if [[ -e "$(ai_codex_manifest)" || -L "$(ai_codex_manifest)" ||
-  -e "$binary" || -L "$binary" ]]; then
-    status=UPDATED
-  else
-    status=INSTALLED
-  fi
-  npm install --global --prefix "$prefix" --ignore-scripts \
-    --no-audit --no-fund "@openai/codex@$candidate" || return 1
-  ai_codex_matches "$candidate" ||
-    die 'installed Codex does not match the selected version'
-  render_result "$status" "AI tool" "codex@$candidate"
-}
-
-ai_claude_binary() {
-  printf '%s/.local/bin/claude\n' "$(dev_server_home)"
-}
-
-ai_claude_version() {
-  local binary="$1"
-  local output
-
-  output="$(HOME="$(dev_server_home)" "$binary" --version)" || return 1
-  [[ "$output" =~ ^([0-9]+\.[0-9]+\.[0-9]+)' (Claude Code)'$ ]] || return 1
+  case "$provider" in
+  codex)
+    output="$(HOME="$home" CODEX_HOME="$home/.codex" "$binary" --version)" || return 1
+    [[ "$output" =~ ^codex-cli\ ([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)$ ]] || return 1
+    ;;
+  claude)
+    output="$(env -u CLAUDE_CONFIG_DIR HOME="$home" "$binary" --version)" || return 1
+    [[ "$output" =~ ^([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)' (Claude Code)'$ ]] || return 1
+    ;;
+  *) return 1 ;;
+  esac
   printf '%s\n' "${BASH_REMATCH[1]}"
 }
 
-ai_claude_native_version() {
-  local binary
-  local expected_prefix
-  local target
-  local version
-
-  binary="$(ai_claude_binary)"
-  expected_prefix="$(dev_server_home)/.local/share/claude/versions/"
-  [[ -L "$binary" ]] || return 1
-  target="$(readlink "$binary")" || return 1
-  [[ "$target" == "$expected_prefix"* && -f "$target" &&
-    ! -L "$target" && -x "$target" ]] || return 1
-  version="$(ai_claude_version "$binary")" || return 1
-  [[ "$target" == "$expected_prefix$version" ]] || return 1
-  printf '%s\n' "$version"
-}
-
-ai_bootstrap_claude_native() (
+ai_bootstrap_native() (
   set -euo pipefail
 
-  local version="$1"
-  local bytes
-  local home
-  local installer
-
+  local provider="$1" home installer url repair
+  home="$(dev_server_home)"
+  # Managed shells already own path order; keep installers from adding a block.
+  export PATH="$home/bin:$home/.local/bin:$PATH"
+  case "$provider" in
+  codex)
+    url=https://chatgpt.com/codex/install.sh
+    repair="rerun $url with CODEX_HOME=$home/.codex and CODEX_INSTALL_DIR=$home/.local/bin"
+    ;;
+  claude)
+    url=https://claude.ai/install.sh
+    repair="rerun $url with HOME=$home and CLAUDE_CONFIG_DIR unset"
+    ;;
+  *) die "unknown native provider: $provider" ;;
+  esac
   require_cmd bash
   require_cmd curl
-  home="$(dev_server_home)"
-  installer="$(mktemp "${TMPDIR:-/tmp}/dev-server-claude-install.XXXXXX")" ||
-    die "could not allocate a Claude installer candidate"
+  installer="$(mktemp "${TMPDIR:-/tmp}/dev-server-$provider-install.XXXXXX")" ||
+    die "could not allocate a $provider installer candidate"
   trap 'rm -f -- "$installer"' EXIT
-  curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
-    --output "$installer" https://claude.ai/install.sh ||
-    die "could not download the official Claude installer"
-  [[ -f "$installer" && ! -L "$installer" ]] ||
-    die "invalid Claude installer candidate"
-  bytes="$(wc -c <"$installer" | tr -d ' ')"
-  [[ "$bytes" =~ ^[0-9]+$ && "$bytes" -gt 0 && "$bytes" -le 1048576 ]] ||
-    die "invalid Claude installer candidate size"
-  bash -n "$installer" || die "invalid Claude installer syntax"
-  HOME="$home" bash "$installer" "$version" ||
-    die "Claude native installation failed"
+  dev_server_download "$url" "$installer" ||
+    die "could not download the official $provider installer"
+  [[ -s "$installer" ]] || die "empty $provider installer candidate"
+  bash -n "$installer" || die "invalid $provider installer syntax"
+  case "$provider" in
+  codex)
+    HOME="$home" CODEX_HOME="$home/.codex" CODEX_INSTALL_DIR="$home/.local/bin" \
+      CODEX_NON_INTERACTIVE=1 bash "$installer" ||
+      die "$provider native installation failed; partial state may remain; $repair"
+    ;;
+  claude)
+    env -u CLAUDE_CONFIG_DIR HOME="$home" bash "$installer" ||
+      die "$provider native installation failed; partial state may remain; $repair"
+    ;;
+  esac
 )
 
-ai_install_claude() {
-  local before
-  local binary
-  local candidate
-  local home
-  local status
-  local version
-
-  require_cmd npm
+ai_install_codex() {
+  local home binary version
   home="$(dev_server_home)"
-  binary="$(ai_claude_binary)"
-  candidate="$(npm view @anthropic-ai/claude-code dist-tags.stable)" ||
-    die 'could not resolve the latest stable Claude release'
-  [[ "$candidate" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
-    die 'npm stable must identify a Claude release'
-  if before="$(ai_claude_native_version)"; then
-    ai_version_at_least "$before" "$candidate" && return 0
-    HOME="$home" "$binary" install "$candidate" ||
-      die "Claude native upgrade failed"
-    version="$(ai_claude_native_version)" ||
-      die "Claude native upgrade produced an invalid installation"
-    [[ "$version" == "$candidate" ]] || die "Claude installation differs from the stable release"
-    render_result UPDATED "AI tool" "claude@$version"
-    return 0
-  fi
-
+  binary="$home/.local/bin/codex"
   if [[ -e "$binary" || -L "$binary" ]]; then
-    die "canonical Claude command is not an Anthropic native installation: $binary"
+    if ai_native_version codex "$binary" >/dev/null; then
+      return 0
+    fi
+    render_result ACTION 'AI tool codex' "invalid native command at $binary; preserve the conflict and follow docs/gateway-separation-runbook.md#native-ai-maintenance; repair with https://chatgpt.com/codex/install.sh using CODEX_HOME=$home/.codex CODEX_INSTALL_DIR=$home/.local/bin"
+    return 2
   fi
-  if [[ -e "$home/.local/share/claude" || -L "$home/.local/share/claude" ]]; then
-    status=UPDATED
-  else
-    status=INSTALLED
+  ai_bootstrap_native codex || return $?
+  version="$(ai_native_version codex "$binary")" ||
+    die "codex native installation is invalid; partial state may remain; rerun https://chatgpt.com/codex/install.sh with CODEX_HOME=$home/.codex CODEX_INSTALL_DIR=$home/.local/bin"
+  render_result INSTALLED 'AI tool' "codex@$version"
+}
+
+ai_install_claude() {
+  local home binary version
+  home="$(dev_server_home)"
+  binary="$home/.local/bin/claude"
+  if [[ -e "$binary" || -L "$binary" ]]; then
+    if ai_native_version claude "$binary" >/dev/null; then
+      return 0
+    fi
+    render_result ACTION 'AI tool claude' "invalid native command at $binary; preserve the conflict and follow docs/gateway-separation-runbook.md#native-ai-maintenance; repair with https://claude.ai/install.sh using HOME=$home and CLAUDE_CONFIG_DIR unset"
+    return 2
   fi
-  ai_bootstrap_claude_native "$candidate" || return 1
-  version="$(ai_claude_native_version)" ||
-    die "Claude native installer produced an invalid installation"
-  render_result "$status" "AI tool" "claude@$version"
+  ai_bootstrap_native claude || return $?
+  version="$(ai_native_version claude "$binary")" ||
+    die "claude native installation is invalid; partial state may remain; rerun https://claude.ai/install.sh with HOME=$home and CLAUDE_CONFIG_DIR unset"
+  render_result INSTALLED 'AI tool' "claude@$version"
 }
 
 ai_install_profiles() {
@@ -362,12 +265,11 @@ ai_install_claude_settings() {
 }
 
 ai_install() {
-  ai_require_codex_runtime || return $?
   ai_validate_inputs
   ai_install_dirs || return 1
   ai_install_claude_settings || return 1
   ai_install_codex || return $?
-  ai_install_claude || return 1
+  ai_install_claude || return $?
   ai_install_profiles || return 1
   ai_install_instructions || return 1
 }

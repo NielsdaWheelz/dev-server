@@ -31,6 +31,59 @@ and ports. devbox runs ingress admission/mutation as root and runtime as the
 development user. failed ingress can leave a verified runtime applied; report
 the partial condition and repair the remaining handler. never reset serve.
 
+## native ai maintenance
+
+all account wrappers, forge profiles, marked shells and native helpers invoke
+`$HOME/.local/bin/codex` or `$HOME/.local/bin/claude`. upstream owns their
+symlinks, release directories and upgrades. existing processes keep loaded code;
+account daemons may use separate upstream-managed packages.
+
+```sh
+env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_PACKAGE_ROOT CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" "$HOME/.local/bin/codex" update
+claude update
+```
+
+use that codex command from any account shell. preserved daemon tool shells
+can retain `CODEX_MANAGED_BY_NPM` and `CODEX_MANAGED_PACKAGE_ROOT` from their
+original startup. those markers can select npm even for a native executable;
+the command clears them for this native maintenance invocation. upstream's
+updater detects the
+installation under `CODEX_HOME`; `codex-work update` and `codex-work2 update`
+cannot detect the shared personal installation. wrappers remain account
+selectors with unchanged argument forwarding. claude's invoking account owns
+its update channel; updating it selects one shared binary for both accounts.
+
+for an absent installation or native repair, run the official installer as the
+host user. keep `~/bin` ahead of `~/.local/bin` in `PATH` so installer startup
+changes cannot supersede account wrappers:
+
+```sh
+export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
+curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" bash
+curl -fsSL https://claude.ai/install.sh | env -u CLAUDE_CONFIG_DIR bash
+```
+
+ordinary apply downloads and syntax-checks an installer only for an absent
+command. adoption checks native executable and provider version output without
+network access. a broken link, script or invalid provider at the canonical path
+requires operator repair; apply preserves it and returns `ACTION`.
+
+for an npm cutover, record its prefix, launcher target, versions and current skid
+generation. install native codex into a temporary command directory with the
+fixed personal installation context, verify it, then publish the canonical
+command through the official installer. do not expose the temporary directory
+in shell startup files. apply skid once so all consumers use canonical paths;
+verify fresh launches and account state. retain the npm package while its
+existing processes still need resources. never stop those sessions implicitly.
+
+when old consumers have retired, remove the npm package explicitly at its
+recorded prefix. npm removal can unlink the new canonical command too; restore
+it immediately with the official installer and verify ordinary and skid
+launches. this is a deliberate maintenance window, not recurring apply logic.
+before cleanup, recovery restores the recorded launcher and matching skid
+generation together. after cleanup, repair native installation first. gateway
+rollback does not roll back provider installations or account data.
+
 ## provider and jarvis contract
 
 skid's forge profiles and marked shell commands use `.codex`, `.codex-work`,

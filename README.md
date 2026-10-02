@@ -17,8 +17,8 @@ removal commands are retired. ordinary apply installs no herdr runtime, hook or 
 never discards workers. [the maintenance runbook](docs/gateway-separation-runbook.md)
 separates source changes from live acceptance.
 
-`apply` updates rolling packages and ai tools, reconciles exact repository pins,
-and installs shared host configuration. it replaces the former `upgrade`
+`apply` updates rolling packages, bootstraps missing native ai tools, reconciles
+exact repository pins, and installs shared host configuration. it replaces the former `upgrade`
 command; there is no separate update mode. each run checks upstream releases,
 so an unchanged checkout can still produce software updates. configuration-only
 and offline applies are not supported.
@@ -93,19 +93,34 @@ their authentication, configuration, history, memories, plugins and trust stay
 in place. existing environment-override semantics remain intact.
 
 original skid's forge and marked bash/zsh terminals use those same accounts
-through scoped commands. skid invokes codex's upstream npm native executable and
-the shared native claude command directly. personal claude leaves
+through scoped commands. skid invokes the shared native commands
+`~/.local/bin/codex` and `~/.local/bin/claude` directly. personal claude leaves
 `CLAUDE_CONFIG_DIR` unset. skid loads its claude identity plugin explicitly; it
 installs no codex hooks and never provisions or rewrites account state.
 [the runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract)
 gives the exact worker map and app environment contract.
 
-`apply` resolves codex's stable npm `latest` once per run on every host
-and installs it when needed under `~/.local`. npm owns package integrity;
-installation disables scripts and verifies the package and executable versions.
-claude upgrades its native installation to the latest `stable` release and
-keeps a newer one. account update settings remain user-owned; apply never
-restarts provider sessions.
+`apply` uses the official native installers only when a canonical command is
+absent. a working native installation is adopted without a provider release
+lookup, installer or updater. invalid commands produce a repair action. user
+account settings own release channels and automatic updates; apply never
+restarts provider sessions or changes npm's prefix.
+
+manual maintenance updates every future account and skid launch without a
+repository edit, apply or gateway restart:
+
+```sh
+env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_PACKAGE_ROOT CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" "$HOME/.local/bin/codex" update
+claude update
+```
+
+the codex command clears npm-manager markers retained by old daemon tool
+shells and selects the fixed installation context, including from a work shell;
+plain `codex-work update` cannot detect the shared installation upstream.
+claude's invoking account selects its update channel for the shared command.
+[the native maintenance runbook](docs/gateway-separation-runbook.md#native-ai-maintenance)
+covers installation, repair and the npm cutover. account daemons retain their
+separate upstream-managed packages and updates.
 
 interactive zsh aliases add `--yolo` to codex commands and
 `--dangerously-skip-permissions` to claude commands. the defaults live in
@@ -125,18 +140,17 @@ an existing `CODEX_HOME`, otherwise selecting `.codex`; `codex-work` and
 unchanged to the installed cli. manual marked-shell commands are ordinary
 stock launches; they do not acquire a native thread association. for sessions
 created through skid, the host starts or reuses the selected account's upstream
-daemon, creates a native thread, then launches `codex --remote unix://... resume`
-with that thread id. the socket comes from the selected `CODEX_HOME` at
+daemon and launches `codex --remote unix://...`; codex creates its initial
+thread. explicit native conversation references are separate from terminal
+identity. native helper creation, inspection and canonical cli attachment use
+that same selected daemon. the socket comes from the selected `CODEX_HOME` at
 `app-server-control/app-server-control.sock`. the installer owns no daemon
 bootstrap, service or package policy.
 
-on the devbox, apply retires the former shared services and their exact
-discovery links before reconciling ai tools. when those services are present,
-it first stops and disables jarvis, whose deployed cognition depends on them.
-jarvis cognition recovery through the shared app-server belongs to its owner;
-worker deployment can proceed while jarvis remains stopped.
-subsequent applies leave a separately repaired jarvis service alone. account
-homes, credentials and native daemon sockets are preserved.
+the former shared codex services and exact discovery links are retired;
+cleanup-only deployment code is gone. account homes, credentials and native
+daemon sockets remain upstream-owned. jarvis cognition recovery and activation
+are separate owner tasks.
 
 ordinary devbox apply installs ubuntu's bubblewrap apparmor profile and
 configures earlyoom to prefer preserving codex and claude. development user

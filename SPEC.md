@@ -4,6 +4,11 @@
 its job is to install declared state, activate affected consumers, verify the
 critical result, and report mutations, deferrals, or required actions.
 
+the native ai installation policy is implemented.
+[the validation record](docs/ai-native-installation-validation.md) tracks fleet
+acceptance; [npm retirement](docs/issues/npm-codex-retirement.md) preserves
+resources needed by existing sessions.
+
 ## commands and update policy
 
 ```text
@@ -15,10 +20,11 @@ critical result, and report mutations, deferrals, or required actions.
 ./devbox {help|--help|-h}
 ```
 
-`apply` updates rolling software, reconciles exact repository pins, and applies
-configuration. rolling versions come from upstream on each run; repository pins
-remain exact desired state. there is no configuration-only or offline mode and
-no `upgrade` command or alias.
+`apply` updates rolling host packages, bootstraps missing ai tools, reconciles
+exact repository pins, and applies configuration. rolling package versions come
+from upstream on each run; repository pins remain exact desired state. existing
+ai installations follow their upstream update policy independently of apply.
+there is no configuration-only or offline mode and no `upgrade` command or alias.
 
 gateway operations install or remove skid without updating shared host tools.
 ordinary host apply installs no gateway, herdr runtime, worker hook or ssh gate.
@@ -32,7 +38,7 @@ maintenance and the root-owned retirement evidence.
 | homebrew | update metadata and upgrade declared formulae and casks |
 | pacman/yay | full `pacman -Syu` with declared packages, then declared aur packages |
 | ubuntu apt | refresh metadata and reconcile declared packages to repository candidates |
-| codex/claude | upgrade to the latest stable release (npm `latest` for codex, claude's `stable` channel); never downgrade a newer manual installation |
+| codex/claude native installers | bootstrap missing commands; adopt working native installations without selecting or changing their versions |
 | repo pins | install declared exact versions |
 
 native package managers resolve required dependencies. arch partial upgrades
@@ -155,19 +161,66 @@ adopt old in-place clones. cursor extension and other exact tool declarations
 remain reviewable repository inputs. no generic profile/plugin framework,
 compatibility state reader, or second package manager is introduced.
 
-one codex binary is installed at `$HOME/.local/bin/codex` through npm's user
-prefix. apply resolves one stable `MAJOR.MINOR.PATCH` from `latest` on every
-host. installation uses npm integrity with scripts disabled. installed
-manifest and executable must agree; no stale-candidate fallback follows a
-failed requested upgrade. gateway profiles use the npm package's native
-executable so foreground identity remains the provider process.
+each host user has one canonical native command per provider:
+`$HOME/.local/bin/codex` and `$HOME/.local/bin/claude`. ordinary profiles, skid's
+forge, marked terminals and native helper dispatch invoke those exact paths.
+the canonical commands may be upstream-managed symlinks. consumers retain the
+canonical path rather than a resolved release path, npm package path or copied
+executable. provider exec must remain native so skid observes the provider
+process directly.
 
-one claude native binary is published at `$HOME/.local/bin/claude` from its
-versioned native directory. bootstrap downloads anthropic's official https
-installer to a temporary file and syntax-checks it before execution. apply
-upgrades the native installation under the normal host home to claude's latest
-`stable` release and keeps a newer one (native or manual updates). reject a
-conflicting canonical path; do not restart running claude processes.
+| owner | responsibility |
+|---|---|
+| upstream native installers | executable contents, release directories, integrity, selection, update metadata and native repair |
+| dev-server ai tools | bootstrap absent commands, verify callable native providers, install account wrappers and owned configuration |
+| user and upstream settings | release channels, automatic updates, manual upgrades and version selection |
+| skid | use canonical provider commands and existing account homes; verify its own integration |
+
+bootstrap uses the official standalone installers at
+`https://chatgpt.com/codex/install.sh` and `https://claude.ai/install.sh`, with
+their default release selection. download each requested installer to a
+temporary file over https and syntax-check it before execution. run as the
+host user with the normal host home. codex installation explicitly uses
+`CODEX_HOME=$HOME/.codex` and `CODEX_INSTALL_DIR=$HOME/.local/bin`; claude
+bootstrap leaves `CLAUDE_CONFIG_DIR` unset. inherited account selectors must
+not change where a shared installation is created. keep account wrappers
+ahead of the canonical commands in the managed shell path.
+
+| canonical command state | apply behavior |
+|---|---|
+| absent | invoke its official native installer, then verify the native command and provider version output |
+| working native provider | adopt it; invoke no provider installer, updater or release lookup |
+| broken link, invalid executable or conflicting script (including npm launchers) | report `ACTION` with the concrete native repair action; preserve the conflicting path |
+
+bootstrap failure or a failed post-install check is an error. report partial
+installation and native repair; do not substitute another installation method.
+adoption validates the native executable and expected provider version output,
+without requiring a particular version, absolute symlink target or release
+directory schema. the canonical command is the installation interface.
+
+manual codex upgrades use the canonical command with the fixed installation
+context and clear inherited npm-manager markers:
+`env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_PACKAGE_ROOT
+CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin"
+"$HOME/.local/bin/codex" update`. upstream installation detection cannot find
+the shared installation when `CODEX_HOME` selects a work account. preserve
+simple profile wrappers; do not parse updater arguments or create more cli
+installations. claude upgrades use `claude update`; the invoking account's
+channel selects the shared version. official installer reruns use the same
+installation context as bootstrap. native installers own their selection and
+layout; dev-server owns neither.
+an upgrade must reach every future cli launch without a dev-server edit, apply,
+skid reapply or gateway restart. existing processes retain their loaded code
+until upstream activation or an operator action. ordinary apply does not
+restart provider sessions, update daemons, select release channels, change
+auto-update settings, configure npm's prefix or enforce ai-specific node/npm
+minimum versions. host package declarations still own node/npm where needed.
+
+gateway operations require working canonical native providers and never install
+or upgrade them. upgrades do not alter skid generation identity because its
+configuration stores canonical command paths rather than provider versions.
+upstream cli or protocol changes can still require integration maintenance;
+shared paths are not a promise of compatibility with every future release.
 
 ordinary account commands are installed by `lib/ai-tools.sh`.
 `codex` preserves a nonempty `CODEX_HOME`, defaulting to `.codex`; the named
@@ -219,15 +272,29 @@ instruction updates affect new sessions; status line updates apply live.
 
 upstream codex owns account daemon startup, discovery, reuse, command support,
 and remote semantics. this repository installs no codex service, discovery
-link, custom source build or daemon package policy. binary updates do not
-restart running agents. preserve account homes, credentials, configuration and
-history.
+link, custom source build or daemon package policy. dev-server does not restart
+agents during cli bootstrap or adoption. native update activation belongs to
+upstream and the operator. preserve account homes, credentials, configuration
+and history.
+
+shared installation means one cli installation per provider per host user.
+codex's account daemons may retain separate upstream-managed packages and
+updaters under their existing homes. cli and running daemon versions need not
+agree. dev-server does not merge those package directories, repoint their
+selection links, pin them to the cli or synchronize their versions. operators
+inspect and update a selected daemon through upstream commands when needed;
+daemon updates can interrupt that account's work.
 
 skid-created sessions use the upstream daemon selected by `CODEX_HOME`; its
 socket is `app-server-control/app-server-control.sock` below that account home.
-the host ensures the daemon is running, creates the native thread, then attaches
-the stock tui using `--remote unix://... resume THREAD_ID`. manual marked-shell
-commands remain ordinary stock launches without a claimed native association.
+the host ensures the daemon is running and launches the stock tui using
+`--remote unix://...`; codex owns initial thread creation. native helper control
+creates and inspects explicit native conversation references independently of
+terminal projection. explicit attachment uses the canonical cli with
+`--remote unix://... resume THREAD_ID` and the selected account home; upstream
+forbids cli permission overrides for that attachment. wrappers do not parse
+arguments to conceal this restriction. manual marked-shell commands remain
+ordinary stock launches without a claimed native association.
 
 ubuntu provisions the distro's bubblewrap apparmor profile and verifies user,
 network and pid namespace creation without disabling the global restriction.
@@ -241,17 +308,13 @@ that manager's service tree, preserving other adjustments and login sessions.
 linux skid gateways restart after unexpected clean exits as well as failures;
 explicit service stops remain stopped.
 
-the devbox retires the former shared runtime before ai-tool reconciliation.
-when any former service unit remains installed, stop and disable its jarvis
-consumer before stopping and disabling the three services. remove only
-discovery symlinks whose targets are the former shared endpoints, the old
-service/helper/configuration files, and the two former client group memberships.
-leave every other discovery path intact. reload systemd only after removal
-changes installed files. subsequent applies do not stop a separately repaired
-jarvis service.
+the former shared codex runtime is retired. its service/helper/configuration
+files, exact old discovery links and former client access grants are absent.
+cleanup-only deployment code is deleted; apply preserves native discovery and
+never stops jarvis to accommodate that removed runtime.
 
-jarvis cognition recovery is a separate owner task, using the existing shared
-codex app-server process. worker deployment and herdr retirement can proceed
+jarvis cognition recovery is a separate owner task, using a selected upstream
+account daemon. worker deployment and herdr retirement can proceed
 with jarvis stopped. this change supplies no cognition implementation or
 readiness claim; jarvis activation and resume require their own acceptance.
 worker control uses the fixed skid cli and private fleet configuration described below.
