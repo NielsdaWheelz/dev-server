@@ -149,6 +149,9 @@ repo source; apply replaces the installed copies. new sessions load changes.
 [`assets/claude/statusline.sh`](assets/claude/statusline.sh) is installed as
 `~/bin/claude-statusline` and set as the `statusLine` command in both claude
 account `settings.json` files; running sessions pick it up on the next update.
+with an explicit absolute `CLAUDE_CONFIG_DIR`, it atomically replaces that home's
+private `skidbladnir-usage.json` with quota fields and their callback time. skid's
+desktop browser treats this as last-reported data; idle sessions may be stale.
 account update settings, project instructions, skills, other settings keys,
 history and authentication remain separately owned.
 
@@ -168,7 +171,8 @@ service containment. bearer rotation requires private-client redistribution.
 
 [`assets/skidbladnir`](assets/skidbladnir) owns the release pin and host template;
 [`assets/skid-provider`](assets/skid-provider) owns scoped provider commands and
-the separately pinned stock native helper. the admitted binary validates config.
+the native helper, installed from its repository's default branch into an exact
+revision generation. the admitted binary validates config.
 failed activation restores only skid's verified prior generation. provider
 binaries remain shared host tools, and signing material stays outside installer
 validation. phone enrollment and device acceptance belong to the app owner.
