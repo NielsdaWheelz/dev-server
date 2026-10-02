@@ -1,8 +1,10 @@
 # native ai installation validation
 
-2026-10-02. source branch `feat/native-ai-installation`, based on `0ed84b1`.
-source, disposable qualification and installed-fleet native acceptance passed.
-conditional npm retirement remains on macbook/devbox while old sessions run.
+2026-10-02. pr #155 merged as `01d69dbf2faad9884e60b96192e6f87ed28f5177`;
+that implementation is deployed on all three hosts. source, disposable
+qualification, installed-fleet native acceptance and obsolete provider cleanup
+passed. obsolete npm provider packages and unselected shared native cli releases
+are removed.
 this record separates actual native behavior from compiled-provider probes.
 
 ## source contract
@@ -67,7 +69,7 @@ channel. different accounts may choose different channels for the same command.
 | generation/configuration/gateway pid unchanged through upgrades | passed | passed | passed |
 | normal host apply | exit `0`; repeat gateway converged | exit `0`; kernel reboot deferred | ai adopted; exit `2` for unrelated operator github enrollment |
 | native thread/helper/plugin/provider turns | explicit native thread create/inspect/daemon attach and bounded claude identity turn passed | personal native thread/daemon attachment and fresh claude identity/native turn passed | explicit native thread create/inspect/daemon attach and bounded turn passed; fresh claude identity/native history passed |
-| npm retirement | seven active consumers retained | package removed; official native repair and 23-launch recheck passed | three active consumers retained |
+| final npm retirement | packages absent; official native repair and 23-launch recheck passed | packages absent; official native repair and 23-launch recheck passed | packages absent; official native repair and 23-launch recheck passed |
 
 private snapshots retain launcher targets, prefix, daemon versions, account
 configuration/authentication hashes, accessible history counts and process ids.
@@ -91,9 +93,10 @@ normal devbox apply from the existing macbook controller adopted the native
 providers and returned action `2` for its unrelated github enrollment check.
 existing docker containers and reboot-required state were reported deferred.
 recorded devbox account authentication/configuration/settings hashes and npm
-prefix are unchanged; all pre-existing provider pids remain alive. this covers
-the recorded files, not a byte-for-byte snapshot of every upstream account
-file: personal `~/.claude.json` was not included in the initial hash set.
+prefix were unchanged at initial acceptance; all pre-existing provider pids
+were then alive. this covers the recorded files, not a byte-for-byte snapshot
+of every upstream account file: personal `~/.claude.json` was not included in
+the initial hash set.
 
 native codex conversation references were qualified separately from terminal
 identity. current skid terminal projection exposes the codex foreground/profile;
@@ -148,10 +151,27 @@ credential change is consistent with upstream refresh, but baseline hashes do
 not prove an exact field diff or cause. no credentials or account data were
 restored to hide those changes. repository ai code does not write either file.
 
-conditional npm retirement on macbook/devbox is the explicit preservation state
-required while their old consumers run. every new consumer uses canonical native
-commands. the [retirement record](issues/npm-codex-retirement.md) owns the final
-operator cleanup; no compatibility installer or automatic process stop remains.
+macbook initially retained seven npm consumers and devbox three. the user closed
+those sessions; fresh authoritative process/reference scans found no consumers
+or inspection errors before npm uninstall at the recorded prefixes. all three
+hosts now have no codex or claude npm provider packages. official default repair
+selected codex `0.160.0` and left its latest-channel marker present on every
+host. explicit `--release` repair clears that upstream marker; default reruns
+restored it on macbook and arch. claude remains `2.1.288`.
+final 23-launch checks passed on each host with unchanged
+gateway pids, generations, configuration and receipts. devbox authenticated
+health, native work2 helper read, claude helper dispatch and native adoption
+passed.
+
+nine unselected native versions were removed after reference and selector checks:
+three claude versions on devbox, one codex and two claude versions on macbook,
+and one codex and two claude versions on arch. independent account daemon
+packages and processes remain intact. devbox also removed its obsolete user
+ingress-library copy and old provider declaration; all 37 remaining deployed
+current libraries/assets match merged source, as do the authoritative privileged
+ingress libraries. unrelated historical assets remain outside this cleanup.
+devbox's 12 recorded binary/account/configuration/settings hashes, including
+personal `~/.claude.json` in the cleanup snapshot, stayed unchanged.
 
 final fresh-source public `./devbox apply` repeated after shared-runtime
 retirement-code deletion and returned exactly `2`: no durable changes or ai
@@ -159,5 +179,5 @@ actions, only the existing docker/reboot deferrals and operator github enrollmen
 action. all three hosts finish with shared native codex `0.160.0` and claude
 `2.1.288`. source/native probes and test-owned terminals are removed; private
 logs and snapshots retain evidence. the completed cutover plan and resolved
-native-install/runtime-minimum issues are deleted; their source history remains
-in git.
+native-install/runtime-minimum/npm-retirement issues are deleted; their source
+history remains in git.
