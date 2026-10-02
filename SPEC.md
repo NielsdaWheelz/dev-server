@@ -4,10 +4,9 @@
 its job is to install declared state, activate affected consumers, verify the
 critical result, and report mutations, deferrals, or required actions.
 
-the native ai installation policy is implemented.
-[the validation record](docs/ai-native-installation-validation.md) tracks fleet
-acceptance; [npm retirement](docs/issues/npm-codex-retirement.md) preserves
-resources needed by existing sessions.
+the native ai installation policy and obsolete provider retirement are complete.
+[the validation record](docs/ai-native-installation-validation.md) records fleet
+acceptance and cleanup.
 
 ## commands and update policy
 
