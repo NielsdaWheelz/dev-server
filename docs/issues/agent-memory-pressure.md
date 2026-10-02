@@ -26,6 +26,26 @@ earlyoom, removes the preferred-victim list, and adds codex/claude to its
 avoidance list. the installed configuration matches and earlyoom is enabled.
 the old shared codex units and discovery links are gone; jarvis is disabled.
 
+recurrence (2026-10-02): at 00:35:35 utc, earlyoom terminated `tmux: server`
+(pid 385785, score 909, rss 119 mib). available memory was 762/7751 mib and
+free swap was 1/4095 mib. skid went from four sessions to zero by 00:35:37.
+the avoidance regex matched only the bare name `tmux`, missing the server's
+actual process name. the policy now matches both `tmux` and `tmux: server`.
+inspect the incident with
+`sudo journalctl -u earlyoom --since '2026-10-02 00:35:30' --until '2026-10-02 00:35:40' --no-pager`.
+at 00:38:17 a surviving effect diagnostics job used 3.05 gib rss and an
+overlapping typescript check used 0.83 gib. this establishes substantial check
+memory use, but no per-process snapshot exists at the instant of the kill.
+
+repair verified (2026-10-02): the three policy tasks installed the correction
+and restarted earlyoom; a second run changed nothing. the installed file and
+running daemon arguments match the repository. the old expression fails the
+server-name regression; the correction passes nine positive/negative name
+checks and matches the restarted server's actual `/proc` name. the full apply
+playbook passes its syntax check. skid was restarted and lists six reachable
+terminals: five shells restored from the 00:22 layout and a recovery shell.
+the layout restore does not resume the agent conversations.
+
 follow-up: if terminations recur, inspect the earlyoom and kernel journals
 through the deployment account and identify the concurrent workload. reduce
 concurrent heavy jobs or explicitly choose a larger host. do not silently cap

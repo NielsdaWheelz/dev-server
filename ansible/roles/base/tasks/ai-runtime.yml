@@ -58,7 +58,8 @@
     content: |
       # Preserve agent sessions and essential host processes; other victims are
       # ranked by memory use. This is a preference, not immunity from OOM.
-      EARLYOOM_ARGS="-r 60 -m 10 -s 20 --avoid '^(systemd|sshd|tailscaled|tmux|init|caddy|dockerd|containerd|postgres|codex|claude)$'"
+      # tmux renames its server process to "tmux: server".
+      EARLYOOM_ARGS="-r 60 -m 10 -s 20 --avoid '^(systemd|sshd|tailscaled|tmux(: server)?|init|caddy|dockerd|containerd|postgres|codex|claude)$'"
 
 - name: Check whether earlyoom is running the installed policy
   ansible.builtin.command:
