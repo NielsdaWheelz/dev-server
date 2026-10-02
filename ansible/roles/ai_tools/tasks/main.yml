@@ -2,10 +2,10 @@
 - name: Install canonical AI commands and explicit profiles
   ansible.builtin.shell: |
     set -euo pipefail
-    dev_server_home_dir="/home/{{ devbox_user }}"
-    dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
-    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
-    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/ai-tools.sh"
+    dev_server_home_dir={{ ('/home/' ~ devbox_user) | quote }}
+    dev_server_assets_root={{ ('/home/' ~ devbox_user ~ '/.local/share/dev-server/assets') | quote }}
+    source {{ ('/home/' ~ devbox_user ~ '/.local/share/dev-server/lib/common.sh') | quote }}
+    source {{ ('/home/' ~ devbox_user ~ '/.local/share/dev-server/lib/ai-tools.sh') | quote }}
     ai_install
   args:
     executable: /bin/bash
@@ -17,3 +17,22 @@
   register: ai_tools_apply
   changed_when: >-
     ai_tools_apply.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED)  ')
+  failed_when: >-
+    ai_tools_apply.rc not in [0, 2] or
+    (ai_tools_apply.rc == 2 and
+     not (ai_tools_apply.stdout is regex('(?m)^ACTION  ')))
+
+- name: Return the native AI result to the controller
+  ansible.builtin.copy:
+    content: "{{ {'rc': ai_tools_apply.rc, 'stdout': ai_tools_apply.stdout} | to_json }}"
+    dest: "{{ dev_server_ai_result_file }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  when: dev_server_ai_result_file is defined
+
+- name: Report native AI installation actions
+  ansible.builtin.debug:
+    msg: "{{ item }}"
+  loop: "{{ ai_tools_apply.stdout_lines | select('match', '^ACTION  ') | list }}"

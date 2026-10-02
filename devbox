@@ -871,8 +871,42 @@ apply_new_server() {
   install_ssh_config
 }
 
+# AI actions cross Ansible as JSON; callback formatting is not the interface.
+devbox_render_ai_result() {
+  local rows line detail subject
+  rows="$(python3 - "$1" <<'PYTHON'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    result = json.load(stream)
+if (not isinstance(result, dict) or result.keys() != {"rc", "stdout"}
+        or result["rc"] not in (0, 2) or not isinstance(result["stdout"], str)):
+    raise SystemExit("invalid native AI apply result")
+actions = [line for line in result["stdout"].split("\n") if line.startswith("ACTION  ")]
+if result["rc"] == 2 and not actions:
+    raise SystemExit("native AI action result has no action")
+for line in actions:
+    print(line)
+PYTHON
+  )" || return 1
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    detail="${line#ACTION  }"
+    subject="${detail%%: *}"
+    if [[ "$subject" == "$detail" ]]; then
+      render_result ACTION "$detail"
+    else
+      render_result ACTION "$subject" "${detail#*: }"
+    fi
+  done <<<"$rows"
+}
+
 run_ansible_apply() {
-  local rc
+  local rc ai_result_vars
+
+  ai_result_vars="$(python3 -c 'import json, sys; print(json.dumps({"dev_server_ai_result_file": sys.argv[1]}))' \
+    "$devbox_declared_stage/ai-result.json")" || return 1
 
   ansible_output="$(mktemp "${TMPDIR:-/tmp}/devbox-ansible.XXXXXX")"
   set +e
@@ -880,6 +914,7 @@ run_ansible_apply() {
     ANSIBLE_NOCOLOR=1 \
     uvx --from ansible-core==2.19.2 ansible-playbook \
     --ssh-common-args "-F $ssh_include" \
+    --extra-vars "$ai_result_vars" \
     -i "$ansible_inventory" "$ansible_apply_playbook" \
     >"$ansible_output" 2>&1
   rc=$?
@@ -892,6 +927,12 @@ run_ansible_apply() {
     return 1
   fi
 
+  if ! devbox_render_ai_result "$devbox_declared_stage/ai-result.json"; then
+    rm -f -- "$ansible_output"
+    ansible_output=''
+    render_result ERROR 'AI tool result' 'could not read the native AI apply result'
+    return 1
+  fi
   if grep -Eq '^devbox[[:space:]]*:.*changed=[1-9][0-9]*' "$ansible_output"; then
     render_result CHANGED 'Ubuntu state' 'Ansible installed declared changes'
   fi

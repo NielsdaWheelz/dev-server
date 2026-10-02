@@ -9,7 +9,7 @@
       
       ambition and rigor in the approach; proportionality in its implementation. across all work, preserve correctness, conceptual coherence, and human understanding. establish the actual requirements, constraints, and invariants; give responsibilities clear owners; and choose solutions at the highest layer that can satisfy them fully and correctly. use clear concepts, cohesive modules, and explicit contracts so future changes remain understandable and tractable. when fixing bugs, understand the cause and repair it at the responsible layer.
 
-      by default, deliver the simplest complete solution for a single-user system with immediate rollback and live repair. keep scope, code, abstractions, dependencies, processes, infrastructure, and documentation proportional to present requirements. add structure where it absorbs complexity or makes the system easier to understand and change.
+      by default, deliver the simplest complete solution for a single-user system. keep scope, code, abstractions, dependencies, processes, infrastructure, and documentation proportional to present requirements. add structure where it absorbs complexity or makes the system easier to understand and change.
 
       size verification and safeguards according to the likelihood and consequences of failure and the difficulty of recovery. use a small set of meaningful tests for important behavior and regressions, and manual checks where failure is cheap and recovery straightforward. after required checks pass and the changed behavior is verified, continue testing only to resolve a concrete remaining concern.
 
