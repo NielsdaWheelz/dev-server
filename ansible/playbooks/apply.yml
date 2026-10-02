@@ -15,8 +15,6 @@
           - ansible_facts['hostname'] == 'dev-server'
         fail_msg: Refusing to apply outside the exact Ubuntu devbox target
 
-    - name: Retire the shared Codex runtime before changing its binary
-      ansible.builtin.import_tasks: tasks/codex-retire.yml
   roles:
     - role: base
     - role: jarvis_host

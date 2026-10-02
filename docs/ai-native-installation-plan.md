@@ -4,14 +4,15 @@ implement the accepted [ai installation contract](../SPEC.md#files-and-ai-tools)
 on macbook, arch and devbox. every account and skid consumer will use one
 canonical native cli per provider per host user. upstream installers will own
 upgrades; ordinary apply will bootstrap missing tools and adopt existing ones.
-implementation and host cutover are pending.
+source implementation and disposable qualification have passed. installed-host
+acceptance and retirement of active npm consumers are in progress.
 
 ## current state and target
 
 the 2026-10-02 devbox investigation found one npm codex cli at 0.160.0 shared by
 personal, work and work2, and one native claude installation at 2.1.287 shared
-by both claude profiles. skid invokes the native executable inside codex's npm
-package. host apply resolves provider releases through npm and upgrades them.
+by both claude profiles. skid invoked the native executable inside codex's npm
+package. host apply resolved provider releases through npm and upgraded them.
 
 the target keeps the existing account homes, overrides, permission arguments,
 instructions, status line and claude identity plugin. all consumers invoke
@@ -27,7 +28,7 @@ this settles the daemon-sharing ambiguity; it does not change those runtimes.
 
 ## qualify native maintenance
 
-before source implementation, use a disposable home to qualify the official
+use a disposable home to qualify the official
 codex installer and updater with personal, work and work2 account selectors.
 establish that the shared native command executes directly and includes the
 resources needed for sandboxing and daemon control. installer fixtures alone
@@ -36,8 +37,17 @@ cannot establish this.
 the important open question is how `codex update` locates its installation when
 the invoking account has a different `CODEX_HOME`. qualify the normal shell
 command, the canonical executable and updater dispatch in that situation.
-installer reruns have a defined fallback: explicitly set the installation home
-to `$HOME/.codex` and the command directory to `$HOME/.local/bin`.
+maintenance uses the fixed installation home `$HOME/.codex` and command
+directory `$HOME/.local/bin`. this is the installation context, not another
+installation method.
+
+qualification found that plain work-account `codex update` cannot detect the
+personal shared installation in native releases 0.159.2 and 0.160.0. a real
+0.159.2 → 0.160.0 transition passed with the fixed maintenance command:
+
+```sh
+CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" "$HOME/.local/bin/codex" update
+```
 
 require normal host maintenance to update the shared cli and leave account
 selection intact. if upstream cannot provide plain `codex update` in an account
@@ -50,7 +60,7 @@ behavior with existing settings as well.
 
 | module | change |
 |---|---|
-| `lib/ai-tools.sh` | bootstrap absent native commands; adopt working native providers; report legacy or broken commands as actions; remove npm manifests, release lookups, version comparisons and the ai runtime gate |
+| `lib/ai-tools.sh` | bootstrap absent native commands; adopt working native providers; report invalid commands as actions; remove npm manifests, release lookups, version comparisons and the ai runtime gate |
 | `lib/skid-provider.sh` | return and validate canonical native commands; stop requiring npm directories or a particular claude version-directory layout |
 | `lib/skidbladnir.sh` | render canonical paths into forge configuration and scoped commands; retain account environments and native process identity |
 | `assets/dotfiles/zshenv` | retain wrapper precedence; update the comment that describes a raw npm binary |
@@ -167,9 +177,9 @@ no recurring rollback service or second installation manager is introduced.
 ## close the remaining records
 
 keep [the native-install issue](issues/codex-native-installation.md) open until
-source and installed-host acceptance pass. close
-[the runtime-minimum issue](issues/ai-runtime-minimum-policy.md) when the old
-ai-specific gate is removed and remaining runtime requirements have owners.
+source and installed-host acceptance pass. the runtime-minimum issue is closed:
+the ai-specific gate is removed; host package declarations retain ownership of
+node/npm for their other consumers.
 unrelated account-home declaration cleanup remains outside this migration.
 record qualification limitations honestly. after implementation and fleet
 acceptance, remove completed issue records and this cutover plan; retain the
