@@ -139,9 +139,11 @@ subsequent applies leave a separately repaired jarvis service alone. account
 homes, credentials and native daemon sockets are preserved.
 
 ordinary devbox apply installs ubuntu's bubblewrap apparmor profile and
-configures earlyoom to prefer preserving codex and claude. under severe memory
-pressure, builds and editors can still be killed; the preference does not make
-agents immune.
+configures earlyoom to prefer preserving codex and claude. development user
+services get the same zero oom adjustment as login-shell workloads; apply
+repairs the former inherited +200 without restarting those workloads. under
+severe memory pressure, builds and editors can still be killed; the preference
+does not make agents immune.
 
 [`assets/agent-instructions.md`](assets/agent-instructions.md)
 is installed into the five account homes as `AGENTS.md` or `CLAUDE.md`. edit the
@@ -158,6 +160,8 @@ skid owns the tmux gateway and native provider helper on each host: loopback
 `7341`, private tailscale `8443 /v1`, existing account homes and pairings.
 its unit, launcher, config, bearer, machine handle and rollback generations are
 independent of provider history. gateway maintenance never kills tmux workers.
+the linux gateway restarts after unexpected exits, including clean exits after
+termination signals. an explicit service stop leaves it stopped.
 
 jarvis uses `/usr/local/libexec/skidbladnir`, a regular root:root `0755` copy of
 the same admitted devbox gateway artifact. gateway apply compares both installed

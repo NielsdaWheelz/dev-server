@@ -48,6 +48,99 @@
   become_user: "{{ devbox_user }}"
   changed_when: false
 
+- name: Read the development account uid
+  ansible.builtin.command:
+    argv: [id, -u, "{{ devbox_user }}"]
+  register: base_devbox_uid
+  changed_when: false
+
+- name: Create the development user manager override directory
+  ansible.builtin.file:
+    path: "/etc/systemd/system/user@{{ base_devbox_uid.stdout }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Give development user services a neutral default OOM adjustment
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/user@{{ base_devbox_uid.stdout }}.service.d/50-dev-server-memory.conf"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Service]
+      # User managers add 100 to their own adjustment for child services.
+      # A -100 manager gives workers the same zero default as login shells.
+      OOMScoreAdjust=-100
+  register: base_user_memory_policy
+
+- name: Load the development user manager memory policy
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: base_user_memory_policy.changed
+
+- name: Apply the neutral OOM default without restarting user workloads
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import os
+        from pathlib import Path
+        import subprocess
+        import sys
+
+        user, uid = sys.argv[1:]
+        unit = f'user@{uid}.service'
+        pid = subprocess.check_output(
+            ['systemctl', 'show', unit, '-p', 'MainPID', '--value'],
+            text=True).strip()
+        if pid == '0':
+            print('inactive; policy applies at next login')
+            sys.exit(0)
+
+        changed = False
+        score = Path(f'/proc/{pid}/oom_score_adj')
+        if score.read_text().strip() != '-100':
+            score.write_text('-100')
+            changed = True
+
+        env = dict(os.environ, XDG_RUNTIME_DIR=f'/run/user/{uid}')
+        control = ['runuser', '-u', user, '--', 'systemctl', '--user']
+        def default_score():
+            return subprocess.check_output(
+                control + ['show', '-p', 'DefaultOOMScoreAdjust', '--value'],
+                env=env, text=True).strip()
+        if default_score() != '0':
+            subprocess.run(control + ['daemon-reexec'], env=env, check=True)
+            changed = True
+        if default_score() != '0':
+            raise SystemExit('user manager OOM default is not zero')
+
+        # Repair the old inherited +200 in this user's managed service tree.
+        # Leave login sessions and other per-process adjustments unchanged.
+        cgroup = subprocess.check_output(
+            ['systemctl', 'show', unit, '-p', 'ControlGroup', '--value'],
+            text=True).strip()
+        if not cgroup:
+            raise SystemExit('user manager control group is unavailable')
+        for proc in Path('/proc').glob('[0-9]*'):
+            try:
+                if not (proc / 'cgroup').read_text().startswith(f'0::{cgroup}/'):
+                    continue
+                score = proc / 'oom_score_adj'
+                if score.read_text().strip() == '200':
+                    score.write_text('0')
+                    changed = True
+            except (FileNotFoundError, ProcessLookupError):
+                pass
+        print('changed' if changed else 'current')
+      - "{{ devbox_user }}"
+      - "{{ base_devbox_uid.stdout }}"
+  register: base_user_memory_activation
+  changed_when: base_user_memory_activation.stdout == 'changed'
+
 - name: Prefer preserving interactive agents during memory exhaustion
   ansible.builtin.copy:
     dest: /etc/default/earlyoom

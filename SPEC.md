@@ -234,6 +234,12 @@ network and pid namespace creation without disabling the global restriction.
 earlyoom remains enabled and prefers preserving codex and claude. compare its
 active arguments with the installed policy so interrupted activation is
 repaired on the next apply; unchanged policy does not restart the service.
+the development account's user manager uses `OOMScoreAdjust=-100`, which makes
+systemd's default adjustment for its child services zero. apply activates this
+without restarting user workloads and removes the former inherited +200 within
+that manager's service tree, preserving other adjustments and login sessions.
+linux skid gateways restart after unexpected clean exits as well as failures;
+explicit service stops remain stopped.
 
 the devbox retires the former shared runtime before ai-tool reconciliation.
 when any former service unit remains installed, stop and disable its jarvis
