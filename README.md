@@ -165,9 +165,12 @@ repo source; apply replaces the installed copies. new sessions load changes.
 [`assets/claude/statusline.sh`](assets/claude/statusline.sh) is installed as
 `~/bin/claude-statusline` and set as the `statusLine` command in both claude
 account `settings.json` files; running sessions pick it up on the next update.
-with an explicit absolute `CLAUDE_CONFIG_DIR`, it atomically replaces that home's
-private `skidbladnir-usage.json` with quota fields and their callback time. skid's
-desktop browser treats this as last-reported data; idle sessions may be stale.
+devbox's ai installer adds `--publish-skid-usage`; workstation installs the same
+display without publication. with that flag and an explicit absolute
+`CLAUDE_CONFIG_DIR`, each devbox callback atomically replaces that home's private
+`skidbladnir-usage.json` with quota fields and their callback time. skid's desktop
+browser uses devbox's last-reported data; idle sessions may be stale. provider
+sessions on other hosts retain their normal statusline display.
 account update settings, project instructions, skills, other settings keys,
 history and authentication remain separately owned.
 

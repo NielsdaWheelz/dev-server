@@ -200,13 +200,14 @@ ai_install_instructions() {
 # A missing or empty file starts from {}.
 ai_claude_settings() {
   require_cmd python3
-  python3 - "$1" "$2" <<'PY'
+  python3 - "$1" "$2" "${3:-}" <<'PY'
 import json
 import os
+import shlex
 import stat
 import sys
 
-settings, script = sys.argv[1:]
+settings, script, publication = sys.argv[1:]
 
 def unique_object(pairs):
     value = {}
@@ -236,7 +237,10 @@ else:
         value = {}
 if not isinstance(value, dict):
     raise SystemExit(f"claude settings must be an object: {settings}")
-value["statusLine"] = {"type": "command", "command": script}
+command = shlex.quote(script)
+if publication == "--publish-skid-usage":
+    command += " --publish-skid-usage"
+value["statusLine"] = {"type": "command", "command": command}
 json.dump(value, sys.stdout, indent=2, ensure_ascii=False)
 sys.stdout.write("\n")
 PY
@@ -252,7 +256,7 @@ ai_install_claude_settings() {
   for account in .claude .claude-work; do
     settings="$home/$account/settings.json"
     temporary="$(mktemp "$home/$account/.settings.json.XXXXXX")" || return 1
-    if ! ai_claude_settings "$settings" "$script" >"$temporary"; then
+    if ! ai_claude_settings "$settings" "$script" "${1:-}" >"$temporary"; then
       rm -f -- "$temporary"
       return 1
     fi
@@ -265,9 +269,11 @@ ai_install_claude_settings() {
 }
 
 ai_install() {
+  (($# == 0)) || [[ $# == 1 && $1 == --publish-skid-usage ]] ||
+    die 'ai_install accepts only --publish-skid-usage'
   ai_validate_inputs
   ai_install_dirs || return 1
-  ai_install_claude_settings || return 1
+  ai_install_claude_settings "$@" || return 1
   ai_install_codex || return $?
   ai_install_claude || return $?
   ai_install_profiles || return 1

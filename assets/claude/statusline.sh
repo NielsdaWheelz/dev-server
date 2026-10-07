@@ -3,6 +3,7 @@
 #   <cwd> <branch> │ <model> <effort> │ ctx <used>% │ 5h <used>% · 7d <used>%
 # branch, effort, and each rate-limit window are omitted when absent.
 # the quota report is a callback observation; its provider data may be cached.
+# --publish-skid-usage enables account-local reporting on the selected host.
 
 IFS=$'\x1f' read -r dir model ctx limits report < <(jq -r '
   def pct: if type == "number" then "\(floor)%" else empty end;
@@ -49,7 +50,8 @@ IFS=$'\x1f' read -r dir model ctx limits report < <(jq -r '
 temporary=''
 trap '[[ -z "$temporary" ]] || rm -f -- "$temporary" 2>/dev/null' EXIT
 trap 'exit 0' HUP INT TERM
-if [[ "${CLAUDE_CONFIG_DIR:-}" == /* && -n "$report" ]]; then
+if [[ "${1:-}" == --publish-skid-usage &&
+      "${CLAUDE_CONFIG_DIR:-}" == /* && -n "$report" ]]; then
   temporary="$(mktemp "$CLAUDE_CONFIG_DIR/.skidbladnir-usage.XXXXXX" 2>/dev/null)" || temporary=''
   if [[ -n "$temporary" ]]; then
     { printf '%s\n' "$report" > "$temporary" &&
