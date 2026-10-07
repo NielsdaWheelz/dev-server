@@ -235,18 +235,20 @@ dotfiles_install_shell_repos() {
     "$home/.zsh/powerlevel10k" || return 1
 }
 
-dotfiles_install_tmux_repos() {
-  local home
+dotfiles_retire_tmux_plugins() {
+  local home plugin root link target
 
   home="$(dev_server_home)"
-  dotfiles_install_git_repo \
-    https://github.com/tmux-plugins/tmux-resurrect \
-    cff343cf9e81983d3da0c8562b01616f12e8d548 \
-    "$home/.tmux/plugins/tmux-resurrect" || return 1
-  dotfiles_install_git_repo \
-    https://github.com/tmux-plugins/tmux-continuum \
-    0698e8f4b17d6454c71bf5212895ec055c578da0 \
-    "$home/.tmux/plugins/tmux-continuum" || return 1
+  for plugin in tmux-resurrect tmux-continuum; do
+    root="$home/.local/share/dev-server/git-plugins/$plugin"
+    link="$home/.tmux/plugins/$plugin"
+    [[ -L "$link" ]] || continue
+    target="$(readlink "$link")" || return 1
+    if [[ "$target" == "$root/${target##*/}" && "${target##*/}" =~ ^[0-9a-f]{40}$ ]]; then
+      rm -- "$link" || return 1
+      render_result CHANGED 'tmux plugins' "retired $plugin"
+    fi
+  done
 }
 
 dotfiles_retire_tpm() {
@@ -277,8 +279,8 @@ dotfiles_install() {
   require_cmd find git python3
   dotfiles_install_dirs || return 1
   dotfiles_install_files || return 1
-  dotfiles_install_tmux_repos || return 1
   tmux_reload_if_changed || return 1
+  dotfiles_retire_tmux_plugins || return 1
   dotfiles_retire_tpm || return 1
   dotfiles_install_shell_repos || return 1
 }
