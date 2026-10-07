@@ -119,7 +119,7 @@ more privileged consumer. interrupted activation must remain retryable.
 
 | change | owning consumer action |
 |---|---|
-| `tmux.config` | source a running server once; store the config and plugin-generation hash in its live option |
+| `tmux.config` | source a running server once; store the config-only hash in its live option |
 | `shell.config`, `ai.instructions` | future shells or agent sessions |
 | `claude.settings` | live claude sessions reload settings and re-run the status line |
 | `desktop.session` | defer to login or manual ghostty reload |
@@ -130,11 +130,26 @@ more privileged consumer. interrupted activation must remain retryable.
 | `system.reboot` | report only |
 
 tmux activation belongs to `lib/tmux.sh` on all three hosts. package installation
-precedes it; dotfiles install the config and immutable plugin generations before
-reload. the live identity advances only after successful reload.
-resurrect and continuum load directly in that order. the repo owns their pins
-and installation; tpm's managed checkout and bindings are retired without
-removing unrelated bindings, saved layouts, or running sessions.
+precedes it; dotfiles install the config before activation. skid is the sole
+workspace recovery owner. resurrect and continuum are no longer installed or
+loaded. activation removes exact owned script options and bindings in every
+native key table, then reloads the managed status line. only complete commands
+targeting their owned aliases or immutable generations are retired; foreign
+options, unrelated commands and compound bindings remain untouched. dotfiles
+remove only the two exact owned plugin symlinks, retaining snapshots and inert
+generations. existing one-way tpm checkout and binding retirement remains.
+
+the config sets server options `exit-empty off` and `exit-unattached off`.
+activation observes populated and empty servers without starting an absent
+server or replacing live work. its config-only identity advances after
+successful retirement and reload; failure remains retryable. repeated apply
+leaves converged state alone.
+
+run full host apply before activating a gateway with recovery; gateway-only
+operations keep their existing narrow scope. finish or stop any legacy restore
+already executing during maintenance; apply does not hunt processes. recovery
+reconstructs the workspace with fresh shells. agent history remains native and
+the user resumes the desired conversation.
 
 consumer actions remain beside their subsystem. deduplicate within one run.
 never infer a restart target from arbitrary processes. native package/service

@@ -33,9 +33,12 @@ rerun after fixing the reported problem. `--help` lists the public commands.
 there is no retained test suite or repository ci workflow. changes use temporary
 integration tests and direct verification; evidence belongs in the pull request.
 
-tmux loads the pinned resurrect and continuum plugins directly. this repo owns
-their installation and updates; tpm is retired. apply removes its managed
-checkout and bindings while preserving running sessions and saved layouts.
+skid owns tmux workspace recovery. host apply removes the owned resurrect and
+continuum entry points, preserving running sessions, saved layouts and inert
+plugin generations; existing tpm retirement remains. run host apply before
+activating a gateway with recovery. gateway-only apply does not perform this
+host cutover. recovered panes start fresh shells; resume agent conversations
+through their native commands.
 
 ## workstation
 
