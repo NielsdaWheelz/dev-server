@@ -266,6 +266,12 @@ installed as mode `0600`. `assets/claude/statusline.sh` is installed as
 repo-owned `statusLine` key pointing at it. every other settings
 key, authentication, history, project instructions, and skills remain user-owned.
 instruction updates affect new sessions; status line updates apply live.
+the devbox ai-tools task passes `--publish-skid-usage` to `ai_install`, which
+adds that flag to both statusline commands. workstation omits it and retains
+display-only statuslines. publication requires both the flag and an explicit
+absolute `CLAUDE_CONFIG_DIR`; each callback atomically replaces only that
+account's private `skidbladnir-usage.json`. these are devbox's saved observations,
+which can be stale between callbacks; provider execution remains host-local.
 
 ## codex daemon ownership
 

@@ -6,7 +6,7 @@
     dev_server_assets_root={{ ('/home/' ~ devbox_user ~ '/.local/share/dev-server/assets') | quote }}
     source {{ ('/home/' ~ devbox_user ~ '/.local/share/dev-server/lib/common.sh') | quote }}
     source {{ ('/home/' ~ devbox_user ~ '/.local/share/dev-server/lib/ai-tools.sh') | quote }}
-    ai_install
+    ai_install --publish-skid-usage
   args:
     executable: /bin/bash
   become: true
