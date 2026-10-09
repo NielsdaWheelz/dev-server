@@ -29,6 +29,15 @@ native package managers and installers own update checks and bookkeeping. exit
 manual action is required; `1` means failure; `64` means invalid invocation.
 rerun after fixing the reported problem. `--help` lists the public commands.
 
+tmux follows the latest stable upstream release. homebrew and pacman install it
+on the workstations; ubuntu builds the official release into `/usr/local` because
+its distribution package lags upstream. every host verifies the installed version
+against upstream. a lagging workstation repository fails apply rather than
+silently accepting an older tmux. existing servers keep running until an explicit
+maintenance restart; installing a new binary does not upgrade a running server.
+after a version change, apply the skid gateway configuration before that restart
+so its recorded tmux executable and version agree with the installation.
+
 [the specification](SPEC.md) defines ownership, activation, and failure behavior.
 there is no retained test suite or repository ci workflow. changes use temporary
 integration tests and direct verification; evidence belongs in the pull request.

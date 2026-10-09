@@ -96,6 +96,7 @@
   ansible.builtin.apt:
     name:
       - bat
+      - bison
       - build-essential
       - ca-certificates
       - curl
@@ -116,10 +117,13 @@
       - gnupg
       - htop
       - jq
+      - libevent-dev
+      - libncurses-dev
       - locales
       - mosh
       - ncdu
       - nodejs
+      - pkg-config
       - python3
       - python3-venv
       - python3-apt
@@ -127,7 +131,6 @@
       - rsync
       - slirp4netns
       - tailscale
-      - tmux
       - uidmap
       - ufw
       - unattended-upgrades

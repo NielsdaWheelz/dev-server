@@ -1,5 +1,67 @@
 #!/usr/bin/env bash
 
+tmux_latest_stable_version() {
+  local release_url
+  local LC_ALL=C
+
+  release_url="$(curl --fail --location --silent --show-error \
+    --proto '=https' --proto-redir '=https' --tlsv1.2 \
+    --output /dev/null --write-out '%{url_effective}' \
+    https://github.com/tmux/tmux/releases/latest)" ||
+    die 'could not resolve the latest stable tmux release'
+  [[ "$release_url" =~ ^https://github\.com/tmux/tmux/releases/tag/([0-9]+\.[0-9]+[a-z]?)$ ]] ||
+    die "invalid stable tmux release URL: $release_url"
+  printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
+tmux_verify_stable_version() {
+  (($# <= 2)) || die 'tmux_verify_stable_version takes an optional binary and version'
+  local binary="${1:-tmux}" version="${2:-}" observed
+
+  if [[ -z "$version" ]]; then
+    version="$(tmux_latest_stable_version)" || return 1
+  fi
+  observed="$("$binary" -V)" || die "could not read tmux version: $binary"
+  [[ "$observed" == "tmux $version" ]] ||
+    die "latest stable tmux is $version; $binary reports $observed"
+}
+
+# Ubuntu's repository candidate need not follow upstream stable releases.
+# Keep the locally built executable separate from apt-owned /usr/bin/tmux.
+tmux_install_latest_stable() (
+  ((EUID == 0)) || die 'installing Ubuntu tmux requires root'
+  local version build_dir observed
+  local target=/usr/local/bin/tmux
+
+  require_cmd curl tar make cc
+  [[ ! -L "$target" && (! -e "$target" || -f "$target") ]] ||
+    die "tmux installation target is not a regular file: $target"
+  version="$(tmux_latest_stable_version)" || return 1
+  if [[ -x "$target" ]] && observed="$("$target" -V)" &&
+    [[ "$observed" == "tmux $version" && "$(file_mode "$target")" == 755 ]]; then
+    return 0
+  fi
+
+  build_dir="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-tmux.XXXXXX")" ||
+    die 'could not create the tmux build directory'
+  trap 'rm -rf -- "$build_dir"' EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  dev_server_download \
+    "https://github.com/tmux/tmux/releases/download/$version/tmux-$version.tar.gz" \
+    "$build_dir/tmux.tar.gz" || die 'could not download stable tmux'
+  tar -xzf "$build_dir/tmux.tar.gz" -C "$build_dir" ||
+    die 'could not extract stable tmux'
+  cd "$build_dir/tmux-$version" || die 'tmux source directory is missing'
+  ./configure --prefix=/usr/local || die 'could not configure stable tmux'
+  make -j2 || die 'could not build stable tmux'
+  tmux_verify_stable_version "$build_dir/tmux-$version/tmux" "$version" || return 1
+  ensure_directory /usr/local/bin 0755 || return 1
+  install_managed_file "$build_dir/tmux-$version/tmux" "$target" 0755 tmux.binary || return 1
+  tmux_verify_stable_version "$target" "$version"
+)
+
 # 0: live, including zero sessions; 1: absent; 2: observation failed.
 tmux_server_present() {
   local observation status
