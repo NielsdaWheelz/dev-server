@@ -18,7 +18,8 @@ skidbladnir_render_configs() {
   # macos redacts the environment of its platform ssh binary from the gateway.
   case "$platform" in
   macos) tmux_path=/opt/homebrew/bin/tmux; ssh_path=/opt/homebrew/opt/openssh/bin/ssh; platform=Darwin ;;
-  arch | devbox) tmux_path=/usr/bin/tmux; ssh_path="$(type -P ssh)" || return 1; platform=Linux ;;
+  arch) tmux_path=/usr/bin/tmux; ssh_path="$(type -P ssh)" || return 1; platform=Linux ;;
+  devbox) tmux_path=/usr/local/bin/tmux; ssh_path="$(type -P ssh)" || return 1; platform=Linux ;;
   *) return 1 ;;
   esac
   [[ -x "$tmux_path" ]] || return 1

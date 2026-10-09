@@ -1,7 +1,22 @@
 ---
+- name: Install latest stable tmux
+  ansible.builtin.shell: |
+    set -euo pipefail
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"
+    source "/home/{{ devbox_user }}/.local/share/dev-server/lib/tmux.sh"
+    tmux_install_latest_stable
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: root
+  register: shell_tmux_install
+  changed_when: >-
+    shell_tmux_install.stdout is regex('(?m)^(INSTALLED|UPDATED)  ')
+
 - name: Install managed dotfiles
   ansible.builtin.shell: |
     set -euo pipefail
+    export PATH="/usr/local/bin:$PATH"
     dev_server_home_dir="/home/{{ devbox_user }}"
     dev_server_assets_root="/home/{{ devbox_user }}/.local/share/dev-server/assets"
     source "/home/{{ devbox_user }}/.local/share/dev-server/lib/common.sh"

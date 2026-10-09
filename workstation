@@ -248,6 +248,11 @@ workstation_apply() {
   trap 'exit 143' TERM
   workstation_preflight
   packages_install
+  if [[ "$workstation_platform" == macos ]]; then
+    tmux_verify_stable_version /opt/homebrew/bin/tmux
+  else
+    tmux_verify_stable_version /usr/bin/tmux
+  fi
   dotfiles_install
   if [[ "$workstation_platform" == arch ]]; then
     personal_arch_apply

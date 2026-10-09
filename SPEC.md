@@ -37,6 +37,7 @@ maintenance and the root-owned retirement evidence.
 | homebrew | update metadata and upgrade declared formulae and casks |
 | pacman/yay | full `pacman -Syu` with declared packages, then declared aur packages |
 | ubuntu apt | refresh metadata and reconcile declared packages to repository candidates |
+| upstream tmux | latest stable release; native packages on workstations, official source build in `/usr/local` on ubuntu |
 | codex/claude native installers | bootstrap missing commands; adopt working native installations without selecting or changing their versions |
 | repo pins | install declared exact versions |
 
@@ -129,9 +130,20 @@ more privileged consumer. interrupted activation must remain retryable.
 | `tailscale.serve` | reconcile private mapping; no tailscale restart |
 | `system.reboot` | report only |
 
-tmux activation belongs to `lib/tmux.sh` on all three hosts. package installation
-precedes it; dotfiles install the config before activation. skid is the sole
-workspace recovery owner. resurrect and continuum are no longer installed or
+tmux version selection and activation belong to `lib/tmux.sh` on all three hosts.
+resolve the latest stable tag from the official release endpoint and verify the
+installed executable against it. homebrew and pacman retain workstation package
+ownership; fail apply if their candidate has not caught up. ubuntu apt supplies
+build dependencies; compile the official release and atomically install the
+verified binary at `/usr/local/bin/tmux`, leaving apt's `/usr/bin/tmux` untouched.
+an unchanged version is not rebuilt. download, build or verification failures
+must leave the installed binary intact. skid uses `/usr/local/bin/tmux` on devbox
+and the native package paths on workstations; gateway apply records the installed
+version. an upgrade requires gateway configuration convergence before an explicit
+tmux restart. ordinary host apply continues to defer that destructive restart.
+
+package installation precedes activation; dotfiles install the config first.
+skid is the sole workspace recovery owner. resurrect and continuum are no longer installed or
 loaded. activation removes exact owned script options and bindings in every
 native key table, then reloads the managed status line. only complete commands
 targeting their owned aliases or immutable generations are retired; foreign
