@@ -37,6 +37,9 @@ silently accepting an older tmux. existing servers keep running until an explici
 maintenance restart; installing a new binary does not upgrade a running server.
 after a version change, apply the skid gateway configuration before that restart
 so its recorded tmux executable and version agree with the installation.
+when starting an interactive tmux server from automation, clear inherited
+`NO_COLOR` first (`env -u NO_COLOR tmux ...`); the server otherwise passes that
+automation setting to new panes and their applications.
 
 [the specification](SPEC.md) defines ownership, activation, and failure behavior.
 there is no retained test suite or repository ci workflow. changes use temporary
