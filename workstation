@@ -15,6 +15,8 @@ source "$base_dir/lib/personal-arch.sh"
 source "$base_dir/lib/personal-macos.sh"
 # shellcheck source=lib/ai-tools.sh
 source "$base_dir/lib/ai-tools.sh"
+# shellcheck source=lib/memory.sh
+source "$base_dir/lib/memory.sh"
 
 workstation_platform=''
 workstation_target=''
@@ -72,14 +74,18 @@ workstation_report_deferrals() {
 workstation_snapshot() {
   (($# == 1)) || die 'workstation_snapshot needs one declared-input root'
   local root="$1"
+  local -a memory_inputs=()
+  if [[ -d "$root/secrets/memory/bundle/$workstation_target" ]]; then
+    memory_inputs=("secrets/memory/bundle/$workstation_target")
+  fi
 
   case "$workstation_platform" in
   macos)
-    dev_server_declared_snapshot "$root" assets packages/Brewfile
+    dev_server_declared_snapshot "$root" assets packages/Brewfile "${memory_inputs[@]}"
     ;;
   arch)
     dev_server_declared_snapshot "$root" \
-      assets packages/arch.pacman.txt packages/arch.aur.txt
+      assets packages/arch.pacman.txt packages/arch.aur.txt "${memory_inputs[@]}"
     ;;
   *) return 1 ;;
   esac
@@ -125,6 +131,13 @@ workstation_stage_declared_inputs() {
     die 'could not stage workstation package inputs'
   cp -Rp "$base_dir/assets" "$workstation_declared_stage/assets" ||
     die 'could not stage workstation assets'
+  if [[ -d "$base_dir/secrets/memory/bundle/$workstation_target" ]]; then
+    install -d -m 0700 "$workstation_declared_stage/secrets/memory/bundle" ||
+      die 'could not stage private memory configuration'
+    cp -Rp "$base_dir/secrets/memory/bundle/$workstation_target" \
+      "$workstation_declared_stage/secrets/memory/bundle/" ||
+      die 'could not stage private memory inputs'
+  fi
   case "$workstation_platform" in
   macos)
     cp -p "$base_dir/packages/Brewfile" \
@@ -242,6 +255,7 @@ workstation_preflight() {
 }
 
 workstation_apply() {
+  local memory_status
   trap workstation_cleanup_on_exit EXIT
   trap 'exit 129' HUP
   trap 'exit 130' INT
@@ -260,6 +274,11 @@ workstation_apply() {
     personal_macos_apply
   fi
   ai_install
+  if memory_install "$workstation_platform" \
+    "$workstation_declared_stage/secrets/memory/bundle/$workstation_target"; then :; else
+    memory_status=$?
+    ((memory_status == 2)) || die 'could not install universal memory host configuration'
+  fi
   workstation_report_deferrals
   workstation_results_finished=1
   finish_results "$workstation_target"

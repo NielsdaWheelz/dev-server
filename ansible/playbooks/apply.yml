@@ -23,6 +23,7 @@
     - role: shell
     - role: github
     - role: ai_tools
+    - role: memory
     - role: rootless_docker
   post_tasks:
     - name: Activate notified consumers before verification

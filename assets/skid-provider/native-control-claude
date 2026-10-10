@@ -6,4 +6,12 @@ case "${SKIDBLADNIR_CLAUDE_COMMAND:-}" in
   *) printf '%s\n' 'native claude command unavailable' >&2; exit 1 ;;
 esac
 unset SKIDBLADNIR_CLAUDE_COMMAND
+# shellcheck disable=SC1091 # shared installed profile credential owner.
+. "$HOME/.local/share/dev-server/memory-profile.sh"
+case "${CLAUDE_CONFIG_DIR:-}" in
+'' | "$HOME/.claude") profile=claude-personal ;;
+"$HOME/.claude-work") profile=claude-work ;;
+*) profile='' ;;
+esac
+jarvis_memory_profile_env "$HOME" "$profile"
 exec "$command" "$@"

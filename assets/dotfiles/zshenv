@@ -16,3 +16,8 @@ for _dev_server_path_dir in \
 done
 export PATH
 unset _dev_server_path_dir
+
+if [[ -f "$HOME/.local/share/dev-server/memory-profile.sh" ]]; then
+  source "$HOME/.local/share/dev-server/memory-profile.sh"
+  jarvis_memory_profile_env "$HOME" claude-personal
+fi

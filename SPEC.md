@@ -104,7 +104,8 @@ deployment declarations own host paths, pins, identities, and launch arguments.
 managed files use compare-before-write and same-filesystem atomic promotion.
 verify bytes and mode before rename; preserve credentials and account state.
 a managed file is entirely repo-owned except explicitly named parser-backed
-keys, currently cursor's `remote.SSH.remotePlatform` and claude's `statusLine`.
+keys, currently cursor's `remote.SSH.remotePlatform`, claude's `statusLine` and
+`cleanupPeriodDays`, and the native `jarvis-memory` MCP server entry.
 intentional symlinks have explicit owners and targets; do not overwrite
 conflicting foreign paths.
 
@@ -188,8 +189,12 @@ remain reviewable repository inputs. no generic profile/plugin framework,
 compatibility state reader, or second package manager is introduced.
 
 each host user has one canonical native command per provider:
-`$HOME/.local/bin/codex` and `$HOME/.local/bin/claude`. ordinary profiles, skid's
-forge, marked terminals and native helper dispatch invoke those exact paths.
+`$HOME/.local/bin/codex` and `$HOME/.local/bin/claude`. provider dispatch executes
+those exact paths. skid's codex profile command is the existing `$HOME/bin/codex`
+account wrapper: it preserves skid's selected `CODEX_HOME`, loads only that
+account's memory credential, then immediately execs the canonical command.
+this also supplies the credential when skid starts a fresh account daemon.
+the provider-command launcher retains the canonical path to avoid recursion.
 the canonical commands may be upstream-managed symlinks. consumers retain the
 canonical path rather than a resolved release path, npm package path or copied
 executable. provider exec must remain native so skid observes the provider
@@ -200,7 +205,7 @@ process directly.
 | upstream native installers | executable contents, release directories, integrity, selection, update metadata and native repair |
 | dev-server ai tools | bootstrap absent commands, verify callable native providers, install account wrappers and owned configuration |
 | user and upstream settings | release channels, automatic updates, manual upgrades and version selection |
-| skid | use canonical provider commands and existing account homes; verify its own integration |
+| skid | use existing account homes and the codex account wrapper, which execs the canonical command; verify its own integration |
 
 bootstrap uses the official standalone installers at
 `https://chatgpt.com/codex/install.sh` and `https://claude.ai/install.sh`, with
@@ -290,7 +295,10 @@ explicit arguments and claude identity plugin.
 `assets/agent-instructions.md` supplies the five account instruction files,
 installed as mode `0600`. `assets/claude/statusline.sh` is installed as
 `~/bin/claude-statusline`, and both claude account `settings.json` files carry a
-repo-owned `statusLine` key pointing at it. every other settings
+repo-owned `statusLine` key pointing at it. `cleanupPeriodDays` is globally
+36,500 days on both claude homes, before any memory activation. this retains
+other claude application data too; disk consumption is the deliberate cost.
+every other settings
 key, authentication, history, project instructions, and skills remain user-owned.
 instruction updates affect new sessions; status line updates apply live.
 the devbox ai-tools task passes `--publish-skid-usage` to `ai_install`, which
@@ -299,6 +307,77 @@ display-only statuslines. publication requires both the flag and an explicit
 absolute `CLAUDE_CONFIG_DIR`; each callback atomically replaces only that
 account's private `skidbladnir-usage.json`. these are devbox's saved observations,
 which can be stale between callbacks; provider execution remains host-local.
+
+## universal memory host configuration
+
+jarvis hosts the single archive/tree/view/search library and private memory
+server. dev-server owns its host configuration, not another server, corpus,
+database, collector state store or inference service. the accepted product
+contract is jarvis's `docs/universal-memory.md`; jarvis's public `MemoryConfig`
+validator owns admission and sharing semantics.
+
+the declaration contains the fifteen native `(machine, account)` lanes and
+`(devbox, jarvis)`. one common recipient/processor declaration governs recorded
+controller sharing authorizations. admission and connection are independent;
+unresolved controllers, authorizations and client identities remain disabled.
+the checked-in declaration denies every lane. nexus application access is a
+separate consumer handoff: native developer profiles do not grant nexus chats
+access or capture nexus conversations.
+
+the optional `nexus-owner` backend client is separate from those sixteen lanes.
+the same declaration names its configured viewer UUID, controller/authorization,
+independent connection and note admission, and complete Nexus model processor
+labels. rendering writes `nexus/client.json` with Nexus's closed owned-absence
+encoding: `{kind:"Absent"}` when disconnected/undeclared, otherwise
+`{kind:"Present",value:{client,owner_user_id,mcp_url,bearer,connect,admit,processors}}`.
+its credential belongs only to the Nexus backend; no native host receives it.
+Nexus owns installing that private file and selecting owner-chat grants. no
+automatic application conversation capture or automated-helper permission is
+implied. stopped sharing changes and explicit `client:nexus-owner` rotation use
+the existing declaration and one credential source.
+
+`scripts/memory-config.py` renders one private deployment bundle from the
+operator's declaration and existing credentials, using the pinned jarvis
+package's public validators. the first explicit rendering mints missing random
+256-bit `jmem_` capture/client bearers; later rendering preserves them. rotation
+is explicit. secrets and generated bundles live under ignored `secrets/memory/`,
+never checked-in assets. the server declaration contains only sha-256 hashes.
+configuration changes use jarvis's stopped maintenance boundary; an ordinary
+host apply cannot establish controller permission or rotate credentials.
+
+ordinary apply consumes the rendered host bundle when supplied, installing one
+collector as the owner: launchd on macbook, systemd user units on arch/devbox.
+the collector uses the exact central jarvis source revision and locked
+dependencies. preparing a new collector release requires ordinary contents-read
+git authorization to the private universal-memory repository under the owner
+account. that build credential is never copied into the deployment bundle,
+collector environment or native profiles. dependency preparation fails before
+profile/service changes and removes its newly owned incomplete candidate.
+it sweeps every thirty seconds without overlap, has no inference
+or database credentials, and keeps progress in central postgres. an absent
+bundle or pending release records an action; neither activates collection.
+ordinary convergence preserves credentials and leaves a matching active
+collector alone. changed collector inputs restart only this collector; failed
+activation leaves its active digest unchanged.
+
+connected profiles receive their own bearer environment variable and the native
+`jarvis-memory` streamable-http entry at the one declared `/v1/mcp` endpoint.
+native configuration owners preserve unrelated parser-backed settings. the
+shared shell environment and native helper/provider launchers load the private
+client environment for future launches. existing native sessions and account
+daemons are not restarted; connection acceptance must be verified separately
+before claiming those existing consumers loaded the change. each connected
+profile receives exactly the product's owner-authored memory instruction; tool
+authority notices remain server-owned.
+
+on devbox, memory owns only HTTPS 443 `/v1` in tailscale serve, forwarding to
+`http://127.0.0.1:8768/v1`. reuse the existing serve inspector/mutator, reject
+funnel or a foreign handler, and preserve every other port/path. the privileged
+deployment principal owns that mutation. jarvis's listener and postgres remain
+loopback-only. jarvis deployment owns the server declaration at
+`/etc/jarvis/memory.json`, service maintenance and source cutover. configuring
+these files is source delivery; fleet installation, actual authorization and
+production activation retain their own qualification.
 
 ## codex daemon ownership
 

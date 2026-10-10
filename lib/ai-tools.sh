@@ -150,6 +150,9 @@ ai_install_profiles() {
   profile="$(dev_server_assets_dir)/routers/ai-profile"
   [[ -f "$profile" && ! -L "$profile" ]] ||
     die "missing AI profile wrapper: $profile"
+  ensure_directory "$home/.local/share/dev-server" 0755 >/dev/null || return 1
+  install_managed_file "$(dev_server_assets_dir)/memory/profile-env.sh" \
+    "$home/.local/share/dev-server/memory-profile.sh" 0644 shell.config || return 1
 
   codex_profile="$(mktemp "$home/bin/.codex-profile.XXXXXX")" || return 1
   if ! python3 - "$home" >"$codex_profile" <<'PY'
@@ -163,6 +166,11 @@ for command, account in (("codex-work", ".codex-work"),
                          ("codex-work2", ".codex-work2")):
     print(f'  {command}) export CODEX_HOME={shlex.quote(home + "/" + account)} ;;')
 print('  *) exit 64 ;;\nesac')
+print(f'source {shlex.quote(home + "/.local/share/dev-server/memory-profile.sh")}')
+print('case "$CODEX_HOME" in')
+for account, root in (("codex-personal", ".codex"), ("codex-work", ".codex-work"), ("codex-work2", ".codex-work2")):
+    print(f'  {shlex.quote(home + "/" + root)}) jarvis_memory_profile_env {shlex.quote(home)} {account} ;;')
+print(f'  *) jarvis_memory_profile_env {shlex.quote(home)} "" ;;\nesac')
 print(f'exec {shlex.quote(home + "/.local/bin/codex")} "$@"')
 PY
   then
@@ -184,15 +192,33 @@ PY
 ai_install_instructions() {
   local instructions
   local instruction_home
-  local relative
+  local relative account variable temporary selected
 
   instruction_home="$(dev_server_home)"
   instructions="$(dev_server_assets_dir)/agent-instructions.md"
   for relative in \
     .codex/AGENTS.md .codex-work/AGENTS.md .codex-work2/AGENTS.md \
     .claude/CLAUDE.md .claude-work/CLAUDE.md; do
-    install_managed_file "$instructions" \
-      "$instruction_home/$relative" 0600 ai.instructions || return 1
+    account="${relative%%/*}"
+    account="${account#.}"
+    case "$account" in codex | claude) account="$account-personal" ;; esac
+    variable="JARVIS_MEMORY_$(printf '%s' "$account" | tr '[:lower:]-' '[:upper:]_')_BEARER"
+    selected="$instructions"
+    temporary=''
+    if [[ -f "$instruction_home/.config/jarvis-memory/clients.env" ]] &&
+      grep -q "^export $variable=" "$instruction_home/.config/jarvis-memory/clients.env"; then
+      temporary="$(mktemp "$(dirname "$instruction_home/$relative")/.memory-instruction.XXXXXX")" || return 1
+      cat "$instructions" >"$temporary" || return 1
+      printf '\n' >>"$temporary" || return 1
+      cat "$(dev_server_assets_dir)/memory/instruction.md" >>"$temporary" || return 1
+      selected="$temporary"
+    fi
+    if ! install_managed_file "$selected" \
+      "$instruction_home/$relative" 0600 ai.instructions; then
+      [[ -z "$temporary" ]] || rm -f -- "$temporary"
+      return 1
+    fi
+    [[ -z "$temporary" ]] || rm -f -- "$temporary"
   done
 }
 
@@ -241,6 +267,7 @@ command = shlex.quote(script)
 if publication == "--publish-skid-usage":
     command += " --publish-skid-usage"
 value["statusLine"] = {"type": "command", "command": command}
+value["cleanupPeriodDays"] = 36500
 json.dump(value, sys.stdout, indent=2, ensure_ascii=False)
 sys.stdout.write("\n")
 PY

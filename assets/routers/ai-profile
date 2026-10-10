@@ -23,4 +23,7 @@ esac
   printf 'error: AI command is unavailable: %s\n' "$real_binary" >&2
   exit 1
 }
+# shellcheck disable=SC1091 # shared installed profile credential owner.
+source "$HOME/.local/share/dev-server/memory-profile.sh"
+jarvis_memory_profile_env "$HOME" claude-work
 exec "$real_binary" "$@"

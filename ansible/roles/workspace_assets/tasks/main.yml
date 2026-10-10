@@ -15,6 +15,7 @@
     - assets/routers
     - assets/claude
     - assets/skid-provider
+    - assets/memory
 
 - name: Install exact runtime libraries
   ansible.builtin.copy:
@@ -28,6 +29,7 @@
     - tmux.sh
     - dotfiles.sh
     - ai-tools.sh
+    - memory.sh
 
 - name: Install exact dotfile assets
   ansible.builtin.copy:
@@ -76,3 +78,11 @@
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: "0644"
+
+- name: Install the declared memory deployment assets
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/memory/"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/memory/"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: preserve
