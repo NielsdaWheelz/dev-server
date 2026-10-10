@@ -11,6 +11,9 @@ one-user host configuration for `macbook`, `arch`, and the hetzner `devbox`.
 ./devbox gateway apply skidbladnir
 ```
 
+gateway apply includes the shared profile environment helper required by its
+provider launchers.
+
 `gateway remove skidbladnir` removes skid's gateway and owned serve handler;
 provider homes and signing files remain. herdr and herdr-mobile installation and
 removal commands are retired. ordinary apply installs no herdr runtime, hook or gate and

@@ -140,6 +140,13 @@ ai_install_claude() {
   render_result INSTALLED 'AI tool' "claude@$version"
 }
 
+ai_install_profile_env() {
+  local home="$1"
+  ensure_directory "$home/.local/share/dev-server" 0755 >/dev/null || return 1
+  install_managed_file "$(dev_server_assets_dir)/memory/profile-env.sh" \
+    "$home/.local/share/dev-server/memory-profile.sh" 0644 shell.config
+}
+
 ai_install_profiles() {
   local home
   local profile
@@ -150,9 +157,7 @@ ai_install_profiles() {
   profile="$(dev_server_assets_dir)/routers/ai-profile"
   [[ -f "$profile" && ! -L "$profile" ]] ||
     die "missing AI profile wrapper: $profile"
-  ensure_directory "$home/.local/share/dev-server" 0755 >/dev/null || return 1
-  install_managed_file "$(dev_server_assets_dir)/memory/profile-env.sh" \
-    "$home/.local/share/dev-server/memory-profile.sh" 0644 shell.config || return 1
+  ai_install_profile_env "$home" || return 1
 
   codex_profile="$(mktemp "$home/bin/.codex-profile.XXXXXX")" || return 1
   if ! python3 - "$home" >"$codex_profile" <<'PY'

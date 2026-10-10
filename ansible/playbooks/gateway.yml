@@ -29,7 +29,7 @@
         owner: "{{ devbox_user }}"
         group: "{{ devbox_user }}"
         mode: '0755'
-      loop: ['', 'lib', 'assets', 'assets/skidbladnir', 'assets/skid-provider']
+      loop: ['', 'lib', 'assets', 'assets/skidbladnir', 'assets/skid-provider', 'assets/memory']
       when: gateway_operation == 'apply' or item in ['', 'lib']
 
     - name: Install selected gateway libraries
@@ -59,6 +59,15 @@
         owner: "{{ devbox_user }}"
         group: "{{ devbox_user }}"
         mode: preserve
+      when: gateway_operation == 'apply'
+
+    - name: Install provider environment helper input
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../assets/memory/profile-env.sh"
+        dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/memory/profile-env.sh"
+        owner: "{{ devbox_user }}"
+        group: "{{ devbox_user }}"
+        mode: '0644'
       when: gateway_operation == 'apply'
 
     - name: Ensure root-owned gateway ingress library directory exists

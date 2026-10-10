@@ -338,6 +338,7 @@ skidbladnir_provider_apply() {
   [[ -f "$stage/host-config.json" && ! -L "$stage/host-config.json" ]] ||
     die 'rendered skid provider config is missing'
   dev_server_strict_json_file "$stage/host-config.json" 65536 || die 'rendered skid host config is invalid'
+  ai_install_profile_env "$home" || return 1
   skidbladnir_provider_install_helper "$home" "$stage" || return $?
   plugin="$stage/providers/claude-agent-identity"
   mkdir -m 0755 "$plugin" || return 1
