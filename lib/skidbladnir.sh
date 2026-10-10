@@ -5,6 +5,7 @@
 if ! declare -F gateway_apply >/dev/null; then
   source "$(dirname "${BASH_SOURCE[0]}")/gateway-runtime.sh"
 fi
+source "$(dirname "${BASH_SOURCE[0]}")/skid-notifications.sh"
 : "${dev_server_gateway_port:=7341}"
 
 skidbladnir_render_configs() {
@@ -208,12 +209,71 @@ skidbladnir_apply() {
   gateway_required_port=7341
   gateway_provider_preflight=skidbladnir_provider_preflight
   gateway_provider_apply=skidbladnir_provider_apply
-  gateway_apply "$@"
+  gateway_apply "$@" || return $?
+  [[ "$1" != macos ]] || skid_notifications_apply macos
 }
 
 skidbladnir_remove() {
   gateway_name=skidbladnir
   gateway_receipt=skid
   gateway_generation_validator=skidbladnir_generation_config_valid
+  skid_notifications_remove "$1" || return $?
   gateway_remove "$@"
 }
+
+# operator rollback restores a verified pair; it does not admit an archive.
+# stop notification owners and restore the saved fleet client before calling.
+skidbladnir_restore_previous() (
+  local platform="$1" home share stage pair current previous='' selected runtime unit current_runtime current_unit version target enabled=1
+  case "$platform" in macos | arch | devbox) ;; *) return 1 ;; esac
+  gateway_name=skidbladnir
+  gateway_receipt=skid
+  gateway_machine_header=Skidbladnir-Machine
+  gateway_port="$dev_server_gateway_port"
+  gateway_generation_validator=skidbladnir_generation_config_valid
+  home="$(dev_server_home)"
+  share="$home/.local/share/skidbladnir"
+  dev_server_acquire_lock "$share/.apply.lock" 9 gateway
+  pair="$(gateway_active_pair "$home/.local/state/dev-server/active/skid.pair")" || return 1
+  IFS=' ' read -r current_runtime current_unit <<<"$pair"
+  pair="$(gateway_active_pair "$home/.local/state/dev-server/active/skid.previous.pair")" || return 1
+  IFS=' ' read -r runtime unit <<<"$pair"
+  current="$(readlink "$share/current")" || return 1
+  [[ ! -L "$share/previous" ]] || previous="$(readlink "$share/previous")"
+  gateway_generation_owned "$share/$current" &&
+    gateway_unit_generation_owned "$share/units/$unit" &&
+    gateway_unit_generation_owned "$share/units/$current_unit" || return 1
+  if [[ "${current##*-}" == "$runtime" ]]; then
+    selected="$current"
+  elif [[ -n "$previous" && "${current##*-}" == "$current_runtime" && "${previous##*-}" == "$runtime" ]]; then
+    gateway_generation_owned "$share/$previous" || return 1
+    selected="$previous"
+  else
+    return 1
+  fi
+  version="$(jq -er '.version' "$share/$selected/release.json")" || return 1
+  target="$(gateway_unit_target "$platform" "$home")" || return 1
+  if gateway_service_enabled "$platform"; then
+    :
+  else
+    enabled=$?
+    ((enabled == 1)) || return 1
+    enabled=0
+  fi
+  stage="$(mktemp -d "$share/.apply.stage.XXXXXX")" || return 1
+  chmod 0700 "$stage" || return 1
+  # shellcheck disable=SC2064 # bind the private path before function scope unwinds.
+  trap "rm -R -- $(printf '%q' "$stage")" EXIT
+  if [[ "$current_runtime" == "$runtime" && "$current_unit" == "$unit" ]]; then
+    gateway_authenticated_health "$home" "$version" "$platform" || return 1
+    dev_server_remove_link "$share/previous" || return 1
+  else
+    gateway_restore_runtime "$platform" "$home" "$stage" "$selected" '' \
+      "$version" "$target" "$enabled" "$unit" || return 1
+  fi
+  gateway_record_pair "$stage" "$home" "$runtime" "$unit" skid || return 1
+  dev_server_record_active_sha skid.runtime "$runtime" &&
+    dev_server_record_active_sha skid.unit "$unit" || return 1
+  rm -f -- "$home/.local/state/dev-server/active/skid.previous.pair" || return 1
+  render_result CHANGED skid.runtime 'verified previous runtime and unit restored'
+)
