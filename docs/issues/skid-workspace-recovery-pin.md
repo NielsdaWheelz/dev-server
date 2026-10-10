@@ -1,11 +1,10 @@
-# pinned skid has no automatic workspace recovery
+# installed workspace recovery awaits restart qualification
 
-problem: host apply retires tmux-resurrect and tmux-continuum, but the pinned
-skid v0.13.0 predates skid's workspace recovery implementation.
+problem: v0.14.0 includes workspace recovery and is installed fleet-wide, but
+saved workspace restoration through an actual approved restart remains unqualified.
 
-impact: a tmux restart currently needs a manual workspace snapshot and terminal
-recreation. provider-owned codex work can survive independently, but terminal
-names and directories are not automatically restored by the deployed gateway.
+impact: a present checkpoint proves capture, not successful reconstruction of
+names, directories and presentation metadata after restart.
 
 evidence: during 2026-10-09 fleet maintenance, all three gateways used v0.13.0
 and none had `~/.local/state/skidbladnir/workspace.json`. the pinned source lacks
@@ -13,7 +12,11 @@ and none had `~/.local/state/skidbladnir/workspace.json`. the pinned source lack
 the authorized tmux restarts therefore used temporary snapshots and explicit
 fresh-shell restoration through the installed skid terminal helper.
 
-resolution: publish and pin a verified skid release with workspace recovery,
-deploy it to the fleet, and prove saved names, directories and presentation
+later 2026-10-09 release cutover pins and installs v0.14.0 from exact source
+`111c91b4c97e70ee154dae3032d011533951f55e` on macbook, devbox and arch. each has
+`~/.local/state/skidbladnir/workspace.json`; retired plugin links/configuration
+were absent before activation. no restart or reboot was performed during release.
+
+resolution: prove saved names, directories and presentation
 metadata survive an explicitly authorized restart. recovered shells must not
 automatically replay provider launches or conversation bindings.

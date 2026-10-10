@@ -169,7 +169,8 @@ workstation_gateway_snapshot() {
   local -a paths=(lib/common.sh lib/gateway-ingress.sh
     lib/gateway-runtime.sh lib/skidbladnir.sh lib/skid-notifications.sh)
   if [[ "$operation" == apply ]]; then
-    paths+=(assets/skidbladnir assets/skid-provider lib/ai-tools.sh lib/skid-provider.sh)
+    paths+=(assets/skidbladnir assets/skid-provider assets/memory/profile-env.sh
+      lib/ai-tools.sh lib/skid-provider.sh)
   fi
   dev_server_declared_snapshot "$root" "${paths[@]}"
 }
@@ -194,6 +195,10 @@ workstation_stage_gateway_inputs() {
   if [[ "$operation" == apply ]]; then
     cp -Rp "$base_dir/assets/skid-provider" "$workstation_declared_stage/assets/skid-provider" ||
       die 'could not stage skid provider assets'
+    install -d -m 0755 "$workstation_declared_stage/assets/memory" ||
+      die 'could not stage provider environment directory'
+    cp -p "$base_dir/assets/memory/profile-env.sh" "$workstation_declared_stage/assets/memory/" ||
+      die 'could not stage provider environment helper'
     cp -p "$base_dir/lib/ai-tools.sh" "$base_dir/lib/skid-provider.sh" "$workstation_declared_stage/lib/" ||
       die 'could not stage skid provider library'
   fi
