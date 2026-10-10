@@ -149,6 +149,7 @@ gateway_validate_namespace() {
     "$home/.local/bin/${gateway_name}" "$home/.local/bin/${gateway_name}-launch" "$unit" \
     "$share/current" "$share/previous" \
     "$home/.local/state/dev-server/active/${gateway_receipt}.pair" \
+    "$home/.local/state/dev-server/active/${gateway_receipt}.previous.pair" \
     "$home/.local/state/dev-server/active/${gateway_receipt}.runtime.sha256" \
     "$home/.local/state/dev-server/active/${gateway_receipt}.unit.sha256"; do
     if [[ -e "$path" || -L "$path" ]]; then
@@ -322,13 +323,15 @@ gateway_validate_active_journals() {
     fi
     ((status == 1)) || return 1
   done
-  path="$home/.local/state/dev-server/active/${gateway_receipt}.pair"
-  if gateway_active_pair "$path" >/dev/null; then
-    :
-  else
-    status=$?
+  for path in "$home/.local/state/dev-server/active/${gateway_receipt}.pair" \
+    "$home/.local/state/dev-server/active/${gateway_receipt}.previous.pair"; do
+    if gateway_active_pair "$path" >/dev/null; then
+      continue
+    else
+      status=$?
+    fi
     ((status == 1)) || return 1
-  fi
+  done
 }
 
 gateway_discard_stage() {
@@ -354,13 +357,31 @@ gateway_settle_failed_restore() {
 }
 
 gateway_archive_members_exact() {
-  local archive="$1"
-  local members types
-
-  members="$(tar -tzf "$archive" 2>/dev/null | LC_ALL=C sort)" || return 1
-  [[ "$members" == "$(printf 'characters.json\nrelease.json\n%s\n' "$gateway_name" | LC_ALL=C sort)" ]] || return 1
-  types="$(tar -tvzf "$archive" 2>/dev/null | LC_ALL=C awk '{print substr($1,1,1)}' | LC_ALL=C sort)" || return 1
-  [[ "$types" == $'-\n-\n-' ]]
+  local archive="$1" platform="$2"
+  python3 - "$archive" "$platform" "$gateway_name" <<'PY'
+import sys, tarfile
+expected = {sys.argv[3]: (False, 0o755), "characters.json": (False, 0o644), "release.json": (False, 0o644)}
+if sys.argv[2] == "darwin-arm64":
+    for name in ("Skid.app", "Skid.app/Contents", "Skid.app/Contents/MacOS",
+                 "Skid.app/Contents/Resources", "Skid.app/Contents/_CodeSignature"):
+        expected[name] = (True, 0o755)
+    for name in ("Info.plist", "Resources/skid.icns", "_CodeSignature/CodeResources"):
+        expected["Skid.app/Contents/" + name] = (False, 0o644)
+    expected["Skid.app/Contents/MacOS/skid-notifications"] = (False, 0o755)
+seen = set()
+with tarfile.open(sys.argv[1], "r:gz") as archive:
+    for member in archive:
+        name = member.name.rstrip("/")
+        if name not in expected or name in seen:
+            raise SystemExit(1)
+        seen.add(name)
+        directory, mode = expected[name]
+        if (not (member.isdir() if directory else member.isfile()) or member.mode != mode or
+                any(key.startswith(("LIBARCHIVE.xattr.", "SCHILY.xattr.")) for key in member.pax_headers)):
+            raise SystemExit(1)
+if seen != set(expected):
+    raise SystemExit(1)
+PY
 }
 
 gateway_prepare_artifact() {
@@ -386,14 +407,16 @@ gateway_prepare_artifact() {
     "$(file_mode "$artifact/release.json")" == 644 ]] || return 6
     gateway_release_manifest_matches "$artifact/release.json" \
       "$manifest_platform" "$source_sha" "$version" || return 4
+    if [[ "$manifest_platform" == darwin-arm64 ]]; then
+      skid_notifications_validate_app "$artifact/Skid.app" "$version" "$source_sha" || return 6
+    fi
     return 0
   fi
   dev_server_download "$url" "$archive" || return 1
   [[ "$(dev_server_sha256 "$archive")" == "$archive_sha" ]] || return 2
-  gateway_archive_members_exact "$archive" || return 3
+  gateway_archive_members_exact "$archive" "$manifest_platform" || return 3
   mkdir -m 0700 "$payload" || return 1
-  tar --no-same-owner --no-same-permissions -xzf "$archive" -C "$payload" \
-    "$gateway_name" characters.json release.json || return 3
+  tar --no-same-owner -xpzf "$archive" -C "$payload" || return 3
   [[ -f "$payload/${gateway_name}" && ! -L "$payload/${gateway_name}" ]] || return 3
   [[ -f "$payload/characters.json" && ! -L "$payload/characters.json" ]] || return 3
   [[ -f "$payload/release.json" && ! -L "$payload/release.json" ]] || return 3
@@ -401,6 +424,9 @@ gateway_prepare_artifact() {
   chmod 0644 "$payload/characters.json" "$payload/release.json" || return 1
   gateway_release_manifest_matches "$payload/release.json" \
     "$manifest_platform" "$source_sha" "$version" || return 4
+  if [[ "$manifest_platform" == darwin-arm64 ]]; then
+    skid_notifications_validate_app "$payload/Skid.app" "$version" "$source_sha" || return 3
+  fi
   framed="$("$payload/${gateway_name}" version && printf .)" || return 5
   identity="${framed%$'\n.'}"
   [[ "$framed" == "$identity"$'\n.' && "$identity" == "$version $source_sha" ]] || return 5
@@ -416,9 +442,8 @@ gateway_generation_exact() {
   local staged_providers="$4"
 
   gateway_generation_owned "$installed" || return 1
-  cmp -s "$desired/${gateway_name}" "$installed/${gateway_name}" &&
-    cmp -s "$desired/characters.json" "$installed/characters.json" &&
-    cmp -s "$desired/release.json" "$installed/release.json" &&
+  [[ "$(gateway_payload_hashes "$desired" | dev_server_sha256_stream)" == \
+    "$(gateway_payload_hashes "$installed" | dev_server_sha256_stream)" ]] &&
     cmp -s "$host_config" "$installed/host-config.json" || return 1
   local name
   for name in native-control provider-command shell-init terminal-context-init \
@@ -437,19 +462,14 @@ gateway_payload_hashes() {
     digest="$(dev_server_sha256 "$payload/$name")" || return 1
     printf '%s\0%s\n' "$name" "$digest"
   done
-}
-
-# The first separated skid release has a ten-file receipt. Keep its verified
-# generation usable as the rollback target while admitting eleven-file releases.
-gateway_v09_skid_generation() {
-  local path="$1"
-  [[ "$(basename "$path")" == v0.9.0-* &&
-    ! -e "$path/providers/terminal-context-init" &&
-    ! -L "$path/providers/terminal-context-init" ]] || return 1
-  gateway_release_manifest_matches "$path/release.json" darwin-arm64 \
-    580e0992d1ee0d7334cefc6561e7f55a5836baf5 v0.9.0 ||
-    gateway_release_manifest_matches "$path/release.json" linux-amd64 \
-      580e0992d1ee0d7334cefc6561e7f55a5836baf5 v0.9.0
+  # extend an already-admitted receipt with present bundle bytes. candidate
+  # admission separately requires the exact signed bundle on darwin.
+  if [[ -d "$payload/Skid.app" ]]; then
+    while IFS= read -r name; do
+      digest="$(dev_server_sha256 "$payload/Skid.app/$name")" || return 1
+      printf 'Skid.app/%s\0%s\n' "$name" "$digest"
+    done < <(skid_notifications_app_files)
+  fi
 }
 
 gateway_runtime_identity() {
@@ -457,9 +477,7 @@ gateway_runtime_identity() {
   local host_config="${2:-$generation/host-config.json}"
   local providers="${3:-$generation/providers}"
   local digest name
-  local -a provider_files=(native-control provider-command shell-init)
-
-  gateway_v09_skid_generation "$generation" || provider_files+=(terminal-context-init)
+  local -a provider_files=(native-control provider-command shell-init terminal-context-init)
   provider_files+=(claude-agent-identity/.claude-plugin/plugin.json
     claude-agent-identity/hooks/hooks.json
     claude-agent-identity/bin/agent-hook)
@@ -663,11 +681,11 @@ gateway_active_pair() {
 }
 
 gateway_record_pair() {
-  local stage="$1" home="$2" runtime="$3" unit="$4"
+  local stage="$1" home="$2" runtime="$3" unit="$4" receipt="$5"
   [[ "$runtime" =~ ^[0-9a-f]{64}$ && "$unit" =~ ^[0-9a-f]{64}$ ]] || return 1
-  printf '%s %s\n' "$runtime" "$unit" >"$stage/active.pair" || return 1
-  atomic_install_file "$stage/active.pair" \
-    "$home/.local/state/dev-server/active/${gateway_receipt}.pair" 0600
+  printf '%s %s\n' "$runtime" "$unit" >"$stage/$receipt.pair" || return 1
+  atomic_install_file "$stage/$receipt.pair" \
+    "$home/.local/state/dev-server/active/$receipt.pair" 0600
 }
 
 gateway_service_state() {
@@ -820,26 +838,31 @@ gateway_running_binary_matches() {
   esac
 }
 
+skidbladnir_authenticated_get() (
+  set +x
+  local home="$1" port="$2" path="$3" maximum="$4" config="$1/.config/skidbladnir"
+  gateway_secret_valid "$config/machine-handle" '^mh-[0-9a-f]{32}$' || return 1
+  gateway_secret_valid "$config/bearer" '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$' || return 1
+  {
+    printf 'silent\nshow-error\nfail\nconnect-timeout = 1\nmax-time = 2\nmax-filesize = %s\n' "$maximum"
+    printf 'header = "Authorization: Bearer %s"\n' "$(cat "$config/bearer")"
+    printf 'header = "Skidbladnir-Machine: %s"\n' "$(cat "$config/machine-handle")"
+    printf 'url = "http://127.0.0.1:%s%s"\n' "$port" "$path"
+  } | curl -q --noproxy '*' --config - 2>/dev/null
+)
+
 gateway_authenticated_health() (
   set +x
   local home="$1"
   local expected_version="$2"
   local platform="${3:-}"
   local runtime_ref="${4:-current}"
-  local config="$home/.config/${gateway_name}"
   local response bytes observed_version attempt
 
-  gateway_secret_valid "$config/machine-handle" '^mh-[0-9a-f]{32}$' || return 1
-  gateway_secret_valid "$config/bearer" '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$' || return 1
   observed_version="$(jq -er '.version' "$home/.local/share/${gateway_name}/$runtime_ref/release.json")" || return 1
   [[ "$observed_version" == "$expected_version" ]] || return 1
   for attempt in 1 2 3 4 5; do
-    response="$({
-      printf 'silent\nshow-error\nfail\nconnect-timeout = 1\nmax-time = 2\nmax-filesize = 65536\n'
-      printf 'header = "Authorization: Bearer %s"\n' "$(cat "$config/bearer")"
-      printf 'header = "%s: %s"\n' "$gateway_machine_header" "$(cat "$config/machine-handle")"
-      printf 'url = "http://127.0.0.1:%s/v1/pressure"\n' "$gateway_port"
-    } | curl -q --noproxy '*' --config - 2>/dev/null || true)"
+    response="$(skidbladnir_authenticated_get "$home" "$gateway_port" /v1/pressure 65536 || true)"
     bytes="$(LC_ALL=C printf '%s' "$response" | wc -c | tr -d '[:space:]')"
     if [[ "$bytes" =~ ^[1-9][0-9]*$ && "$bytes" -le 65536 ]] &&
       printf '%s' "$response" | jq -e '
@@ -970,22 +993,23 @@ gateway_install_runtime_files() {
 gateway_generation_owned() {
   local path="$1"
   local name entries
-  local -a provider_files=(native-control provider-command shell-init)
+  local -a provider_files=(native-control provider-command shell-init terminal-context-init)
   local provider_entries=$'claude-agent-identity\nnative-control\nprovider-command\nshell-init\nterminal-context-init'
   name="$(basename "$path")"
   [[ "$name" =~ ^v(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]{0,3})-[0-9a-f]{64}$ ]] || return 1
   [[ -d "$path" && ! -L "$path" &&
     "$(_dev_server_observed_mode user "$path" 2>/dev/null)" == 700 ]] || return 1
   entries="$(find "$path" -mindepth 1 -maxdepth 1 -print | sed "s#^$path/##" | LC_ALL=C sort)" || return 1
-  if gateway_v09_skid_generation "$path"; then
-    provider_entries=$'claude-agent-identity\nnative-control\nprovider-command\nshell-init'
-  else
-    provider_files+=(terminal-context-init)
-  fi
   provider_files+=(claude-agent-identity/.claude-plugin/plugin.json
     claude-agent-identity/hooks/hooks.json
     claude-agent-identity/bin/agent-hook)
-  [[ "$entries" == "$(printf 'characters.json\nhost-config.json\nproviders\nrelease.json\n%s\n' "$gateway_name" | LC_ALL=C sort)" ]] || return 1
+  local bundle=''
+  if [[ -e "$path/Skid.app" ]]; then
+    bundle='Skid.app'
+    skid_notifications_validate_app "$path/Skid.app" \
+      "$(jq -er '.version' "$path/release.json")" "$(jq -er '.sourceSha' "$path/release.json")" || return 1
+  fi
+  [[ "$entries" == "$(printf '%s\ncharacters.json\nhost-config.json\nproviders\nrelease.json\n%s\n' "$bundle" "$gateway_name" | sed '/^$/d' | LC_ALL=C sort)" ]] || return 1
   [[ -d "$path/providers" && ! -L "$path/providers" &&
     "$(find "$path/providers" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)" == "$provider_entries" ]] || return 1
   local provider_file mode
@@ -1067,11 +1091,18 @@ gateway_retain_unit_generations() {
   local home="$1"
   local desired="$2"
   local units="$home/.local/share/${gateway_name}/units"
-  local path
+  local path previous='' pair status
 
   [[ "$desired" =~ ^[0-9a-f]{64}$ ]] || return 1
+  if pair="$(gateway_active_pair "$home/.local/state/dev-server/active/${gateway_receipt}.previous.pair")"; then
+    previous="${pair#* }"
+    gateway_unit_generation_owned "$units/$previous" || return 1
+  else
+    status=$?
+    ((status == 1)) || return 1
+  fi
   while IFS= read -r -d '' path; do
-    [[ "$(basename "$path")" == "$desired" ]] && continue
+    [[ "$(basename "$path")" == "$desired" || "$(basename "$path")" == "$previous" ]] && continue
     gateway_unit_generation_owned "$path" || return 1
     rm -R -- "$path" || return 1
   done < <(find "$units" -mindepth 1 -maxdepth 1 -print0)
@@ -1248,6 +1279,12 @@ gateway_apply() {
       gateway_discard_stage "$share" "$stage"
       die 'could not stage the gateway generation'
     }
+    if [[ "$manifest_platform" == darwin-arm64 ]]; then
+      cp -Rp "$artifact/Skid.app" "$stage/generation/Skid.app" || {
+        gateway_discard_stage "$share" "$stage"
+        die 'could not stage the signed native app'
+      }
+    fi
     mkdir -m 0700 "$stage/generation/providers" &&
       install -m 0755 "$stage/providers/native-control" "$stage/generation/providers/native-control" &&
       install -m 0755 "$stage/providers/provider-command" "$stage/generation/providers/provider-command" &&
@@ -1534,7 +1571,18 @@ gateway_apply() {
     gateway_discard_stage "$share" "$stage"
     die 'could not record the active gateway unit identity'
   }
-  gateway_record_pair "$stage" "$home" "$runtime_identity" "$unit_identity" || {
+  if [[ -n "$active_pair" && "$active_runtime" != "$runtime_identity" ]]; then
+    gateway_record_pair "$stage" "$home" "$active_runtime" "$active_unit" "${gateway_receipt}.previous" || {
+      gateway_discard_stage "$share" "$stage"
+      die 'could not preserve the previous gateway runtime and unit pair'
+    }
+  elif [[ ! -L "$share/previous" ]]; then
+    rm -f -- "$home/.local/state/dev-server/active/${gateway_receipt}.previous.pair" || {
+      gateway_discard_stage "$share" "$stage"
+      die 'could not clear the absent previous gateway pair'
+    }
+  fi
+  gateway_record_pair "$stage" "$home" "$runtime_identity" "$unit_identity" "$gateway_receipt" || {
     gateway_discard_stage "$share" "$stage"
     die 'could not commit the verified gateway runtime and unit pair'
   }
@@ -1600,6 +1648,7 @@ gateway_remove() {
   done
   for path in "$config/client.json" \
     "$home/.local/state/dev-server/active/${gateway_receipt}.pair" \
+    "$home/.local/state/dev-server/active/${gateway_receipt}.previous.pair" \
     "$home/.local/state/dev-server/active/${gateway_receipt}.runtime.sha256" \
     "$home/.local/state/dev-server/active/${gateway_receipt}.unit.sha256"; do
     if [[ -e "$path" || -L "$path" ]]; then
@@ -1614,7 +1663,9 @@ gateway_remove() {
       die "unowned $gateway_name artifact: $path"
     entries="$(find "$path" -mindepth 1 -maxdepth 1 -exec basename {} \; | LC_ALL=C sort)" ||
       die "invalid $gateway_name artifact inventory"
-    [[ "$entries" == "$(printf 'characters.json\nidentity.sha256\nrelease.json\n%s\n' "$gateway_name" | LC_ALL=C sort)" ]] ||
+    local bundle=''
+    [[ ! -e "$path/Skid.app" ]] || bundle=Skid.app
+    [[ "$entries" == "$(printf '%s\ncharacters.json\nidentity.sha256\nrelease.json\n%s\n' "$bundle" "$gateway_name" | sed '/^$/d' | LC_ALL=C sort)" ]] ||
       die "unowned $gateway_name artifact: $path"
     identity="$(gateway_active_identity "$path/identity.sha256")" ||
       die "invalid $gateway_name artifact receipt"
@@ -1644,6 +1695,7 @@ gateway_remove() {
   for path in "$home/.local/bin/$gateway_name-launch" "$unit" \
     "$config/bearer" "$config/machine-handle" "$config/client.json" \
     "$home/.local/state/dev-server/active/${gateway_receipt}.pair" \
+    "$home/.local/state/dev-server/active/${gateway_receipt}.previous.pair" \
     "$home/.local/state/dev-server/active/${gateway_receipt}.runtime.sha256" \
     "$home/.local/state/dev-server/active/${gateway_receipt}.unit.sha256"; do
     [[ ! -e "$path" && ! -L "$path" ]] || rm -f -- "$path" ||

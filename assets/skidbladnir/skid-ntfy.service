@@ -1,0 +1,16 @@
+[Unit]
+Description=skid private ntfy
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/skidbladnir/ntfy-2.28.0/ntfy serve --config=%h/.config/skidbladnir/notifications/ntfy.yml
+Restart=always
+RestartSec=2s
+TimeoutStopSec=10s
+UMask=0077
+StandardOutput=null
+StandardError=null
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

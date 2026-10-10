@@ -40,7 +40,7 @@
         set -euo pipefail
         source /usr/local/libexec/dev-server-gateway/common.sh
         source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
-        gateway_ingress_preflight 443 8768 jarvis.memory
+        gateway_ingress_preflight 443 8768 /v1 jarvis.memory
         declared={{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../secrets/memory/bundle/devbox/collector.json') | from_json).service_url | quote }}
         [[ "$declared" == "https://$gateway_ingress_hostname" ]] || {
           render_result ERROR memory 'declared endpoint differs from this private Tailscale host'
@@ -59,7 +59,7 @@
         set -euo pipefail
         source /usr/local/libexec/dev-server-gateway/common.sh
         source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
-        gateway_ingress_apply 443 8768 jarvis.memory
+        gateway_ingress_apply 443 8768 /v1 jarvis.memory
       args:
         executable: /bin/bash
       environment:

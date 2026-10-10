@@ -29,6 +29,18 @@ native package managers and installers own update checks and bookkeeping. exit
 manual action is required; `1` means failure; `64` means invalid invocation.
 rerun after fixing the reported problem. `--help` lists the public commands.
 
+tmux follows the latest stable upstream release. homebrew and pacman install it
+on the workstations; ubuntu builds the official release into `/usr/local` because
+its distribution package lags upstream. every host verifies the installed version
+against upstream. a lagging workstation repository fails apply rather than
+silently accepting an older tmux. existing servers keep running until an explicit
+maintenance restart; installing a new binary does not upgrade a running server.
+after a version change, apply the skid gateway configuration before that restart
+so its recorded tmux executable and version agree with the installation.
+when starting an interactive tmux server from automation, clear inherited
+`NO_COLOR` first (`env -u NO_COLOR tmux ...`); the server otherwise passes that
+automation setting to new panes and their applications.
+
 [the specification](SPEC.md) defines ownership, activation, and failure behavior.
 there is no retained test suite or repository ci workflow. changes use temporary
 integration tests and direct verification; evidence belongs in the pull request.
@@ -263,8 +275,61 @@ service containment. bearer rotation requires private-client redistribution.
 the native helper, installed from its repository's default branch into an exact
 revision generation. the admitted binary validates config.
 failed activation restores only skid's verified prior generation. provider
-binaries remain shared host tools, and signing material stays outside installer
-validation. phone enrollment and device acceptance belong to the app owner.
+binaries remain shared host tools. signing keys stay outside installer
+validation; the mac app's public signing certificate is pinned and verified.
+phone enrollment and device acceptance belong to the app owner.
+
+native needs-input notifications add three owned mechanisms. mac gateway apply
+admits `Skid.app` inside the darwin archive, copies it to the real directory
+`~/Applications/Skid.app`, registers that installed path through the signed
+helper's public launch services mode, and loads the login agent
+`dev.niels.skid-notifications`. run `skid notifications setup` for notification
+consent; ordinary app activation stays quiet. ghostty automation consent appears
+on first use. local signing preserves identity; it makes no
+public gatekeeper/notarization claim.
+replacement stops the helper briefly; generation, unit and client-config bytes
+own activation. provisioning a previously absent config restarts the helper.
+an application symlink is refused. the installed app duplicates its generation.
+the login unit fixes `XDG_STATE_HOME` to `~/.local/state`, matching the
+installer's socket and readiness path.
+
+devbox gateway apply installs ntfy `2.28.0` at loopback `2586`, the observer at
+loopback `7342`, and their systemd user units. private tailscale handlers are
+`8443 /v1/notifications` and `8444 /`; other handlers are preserved. ntfy denies
+anonymous access. `skid-publisher` writes only `up*`; `skid-phone` reads only
+`up*`. config and credentials are private under
+`~/.config/skidbladnir/notifications`; operator setup uses `phonePassword` in
+`credentials.json`, never `publisher-token`. no firebase/upstream forwarding.
+ntfy's standard auth/cache databases live in `~/.local/state/skidbladnir/ntfy`.
+
+first apply can report observer setup required after the gateway and private
+ntfy are healthy. run skid's fleet provisioning, then reapply devbox. configure
+the qualified ntfy android distributor with the private `:8444` origin and
+read-only account; allow ntfy/tailscale background delivery and skid alerts.
+arch has no native notification service. service failure after gateway activation
+can leave the new gateway selected; reapply repairs it. this is a phased cutover.
+
+for complete previous-release rollback, keep jarvis paused and cleanly stopped.
+stop/remove notification owners using `skid_notifications_remove PLATFORM` from
+`lib/skidbladnir.sh`; on devbox, the deployment principal also runs
+`skidbladnir_notifications_ingress_remove` from `lib/gateway-ingress.sh`.
+restore `~/.config/skidbladnir/client.before-notifications.json` to the private
+mode-0600 `client.json`; skid's provisioning step saves the original bytes once.
+then call `skidbladnir_restore_previous PLATFORM` with this checkout's libraries
+and the deployment home. it restores only the already-admitted `previous` runtime
+and its `skid.previous.pair` unit, verifies health, then consumes that rollback
+checkpoint. interruption before commit preserves the target; retry completes it.
+on devbox, restore the root jarvis cli from that admitted current executable
+using `skidbladnir_install_jarvis_cli`, then verify it matches the running gateway.
+clear stopped skid alerts through the native notification UI. use the app owner's
+qualified android platform rollback for the apk and opaque app data. do not
+uninstall, migrate state, or admit an older archive through the new checker.
+provider state, signing keys, ntfy credentials and readiness memory remain intact.
+the first native cutover restores the preceding deployment, which has no native
+notification services. a prior runtime without its verified pair is not a rollback target.
+
+[deployment qualification](docs/issues/native-notification-deployment.md) records
+the unperformed native and installed boundaries; scripted checks alone do not pass them.
 
 the root operator completed herdr and herdr-mobile retirement on all three hosts:
 owned runtimes, integrations, ssh gates, credentials and `8444 /v1` are removed.

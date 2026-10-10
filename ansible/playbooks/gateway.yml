@@ -40,7 +40,7 @@
         group: "{{ devbox_user }}"
         mode: '0644'
       loop: >-
-        {{ ['common.sh', 'gateway-runtime.sh', 'skidbladnir.sh']
+        {{ ['common.sh', 'gateway-runtime.sh', 'skidbladnir.sh', 'skid-notifications.sh']
            + (['ai-tools.sh', 'skid-provider.sh'] if gateway_operation == 'apply' else []) }}
 
     - name: Install selected gateway assets
@@ -79,7 +79,7 @@
         mode: '0644'
       loop: >-
         {{ ['common.sh', 'gateway-ingress.sh']
-           + (['gateway-runtime.sh', 'skidbladnir.sh'] if gateway_operation == 'apply' else []) }}
+           + (['gateway-runtime.sh', 'skidbladnir.sh', 'skid-notifications.sh'] if gateway_operation == 'apply' else []) }}
 
     - name: Preflight selected gateway ingress
       ansible.builtin.shell: |
@@ -87,6 +87,7 @@
         source /usr/local/libexec/dev-server-gateway/common.sh
         source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
         skidbladnir_ingress_preflight
+        skidbladnir_notifications_ingress_preflight
         finish_results devbox
       args:
         executable: /bin/bash
@@ -195,6 +196,9 @@
             source /usr/local/libexec/dev-server-gateway/common.sh
             source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
             skidbladnir_ingress_{{ gateway_operation }}
+            {% if gateway_operation == 'remove' %}
+            skidbladnir_notifications_ingress_remove
+            {% endif %}
             finish_results devbox
           args:
             executable: /bin/bash
@@ -209,6 +213,50 @@
             ingress_result.rc not in [0, 2] or
             (ingress_result.rc == 2 and
              not (ingress_result.stdout is regex('(?m)^ACTION  ')))
+
+        - name: Reconcile private notification services
+          ansible.builtin.shell: |
+            set -euo pipefail
+            dev_server_home_dir="/home/{{ devbox_user }}"
+            dev_server_assets_root="$dev_server_home_dir/.local/share/dev-server/assets"
+            source "$dev_server_assets_root/../lib/common.sh"
+            source "$dev_server_assets_root/../lib/skidbladnir.sh"
+            skid_notifications_apply devbox
+            finish_results devbox
+          args:
+            executable: /bin/bash
+          become_user: "{{ devbox_user }}"
+          environment:
+            HOME: "/home/{{ devbox_user }}"
+            PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+            XDG_RUNTIME_DIR: "/run/user/{{ gateway_user_uid.stdout }}"
+            DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ gateway_user_uid.stdout }}/bus"
+          when: gateway_operation == 'apply' and ingress_result.rc | default(1) == 0
+          register: notifications_result
+          changed_when: notifications_result.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ')
+          failed_when: >-
+            notifications_result.rc not in [0, 2] or
+            (notifications_result.rc == 2 and
+             not (notifications_result.stdout is regex('(?m)^ACTION  ')))
+
+        - name: Reconcile private notification ingress
+          ansible.builtin.shell: |
+            set -euo pipefail
+            source /usr/local/libexec/dev-server-gateway/common.sh
+            source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
+            skidbladnir_notifications_ingress_apply
+            finish_results devbox
+          args:
+            executable: /bin/bash
+          environment:
+            PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          when: gateway_operation == 'apply' and notifications_result.rc | default(1) in [0, 2]
+          register: notifications_ingress_result
+          changed_when: notifications_ingress_result.stdout is regex('(?m)^CHANGED  ')
+          failed_when: >-
+            notifications_ingress_result.rc not in [0, 2] or
+            (notifications_ingress_result.rc == 2 and
+             not (notifications_ingress_result.stdout is regex('(?m)^ACTION  ')))
 
         - name: Install the admitted root Jarvis cli after gateway verification
           ansible.builtin.shell: |
@@ -237,6 +285,8 @@
         {{ ((ingress_preflight_result.stdout_lines | default([]))
             + (gateway_result.stdout_lines | default([]))
             + (ingress_result.stdout_lines | default([]))
+            + (notifications_result.stdout_lines | default([]))
+            + (notifications_ingress_result.stdout_lines | default([]))
             + (cli_preflight_result.stdout_lines | default([]))
             + (cli_install_result.stdout_lines | default([])))
            | select('match', '^(ACTION|INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  ')
