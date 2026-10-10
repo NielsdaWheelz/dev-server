@@ -3,12 +3,13 @@
 problem: the new managed mac/devbox deployment and complete prior-release
 rollback have not been exercised on the installed fleet. release pins are
 unchanged. the first temporary stage diverted the normal api; its routes were
-restored and its services removed. current qualification uses six owned user
+restored and its services removed. qualification used six owned user
 services and five handlers on three separate qa tailnet addresses, with a
 distinct android app. those services, isolated tmux servers, stage directories
 and qa applications are now removed; production routes/pairings and phone
-packages stay unchanged. ancillary distributor/control-plane cleanup remains
-recorded in skid's `docs/issues/native-notifications-qa-cleanup.md`.
+packages stay unchanged. phone distributor cleanup is complete; authenticated
+admin search confirms all three retired qa node names are already absent.
+no other devices changed.
 permanent deployment and release pins have not changed. mac candidate admission
 requires the new signed bundle; publish and pin its matching release before
 applying the notification cutover. there is no old-archive fallback.
