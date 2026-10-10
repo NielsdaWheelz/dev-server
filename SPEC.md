@@ -460,7 +460,8 @@ under skid's lock, reuse a verified artifact or download and verify its
 archive digest, exact members, manifest and executable version/source. retain
 independent `artifacts`, `releases`, `units`, `current` and `previous` below
 skid's data root. runtime identity covers executable, catalogue,
-manifest and host config. unchanged apply downloads and activates nothing.
+manifest, host config and, on macos, the four signed app files. unchanged apply
+downloads and activates nothing.
 skid generations also include their rendered shell launcher, shell and remote
 context initialization, native-helper launcher and claude plugin. the original
 app's fleet verifier
@@ -468,9 +469,11 @@ implements the same digest contract, recorded in the
 [runbook](docs/gateway-separation-runbook.md#generation-receipt-contract).
 generation admission requires directory mode `0700` and a basename digest
 suffix equal to the computed runtime identity for skid.
-the exact `v0.9.0` skid ten-file generation remains admissible as an upgrade
-rollback target when its original source, files, modes and receipt verify.
-new skid generations use the eleven-file contract.
+provider receipts require the current seven-file contract; no release-number
+exception remains. new and cached darwin candidate admission requires the exact
+signed `Skid.app` tree, its pinned leaf certificate and matching version/source.
+already-admitted prior generations are inspected by their original receipt;
+present bundle files extend the payload hash without a version/format fallback.
 the stable helper command follows `current`, so
 gateway rollback selects its matching immutable helper revision. private
 helper environments remain while retained generations reference them. shared
@@ -479,7 +482,9 @@ installation and rollback never write them.
 
 before recording activation, verify authenticated health and the running
 executable. a single atomic `<receipt>.pair` records the verified runtime/unit
-association and is the rollback authority. the mandated `.runtime.sha256` and
+association and is the rollback authority. `<receipt>.previous.pair` preserves
+the prior admitted runtime/unit association. retain both named units alongside
+the current/previous runtimes. the mandated `.runtime.sha256` and
 `.unit.sha256` stems remain informational; interruption between their writes
 cannot authorize a mixed pair. recovery leaves a distinct `previous` or none.
 failed activation first confirms the candidate stopped, restores
@@ -498,7 +503,7 @@ unadmitted prior namespace state is never a recovery source. skid's operator
 `client.json` remains private.
 gateway validation never inspects android signing files.
 
-serve operations own only `/v1` on the selected port and preserve all unrelated
+serve operations own `/v1` on the selected port and preserve all unrelated
 handlers and ports. no funnel, reset, private localapi or hostname rewriting.
 on devbox, the deployment principal runs ingress preflight and mutation as
 root with a system command path; gateway reconciliation remains under `niels`.
@@ -513,6 +518,53 @@ removal. record per-host lifecycle evidence and unperformed boundaries in the ru
 exercise recovery against an actual prior separated generation when one
 exists; a first separated release has no version rollback target. do not
 manufacture one or infer rollback from repeat apply.
+
+native notifications are a phased addition to this gateway transaction.
+macos admits the signed app as part of the runtime, then installs its owned login
+agent and real `~/Applications/Skid.app` directory. copy only the admitted signed
+generation, stop the helper before replacement, and invoke its
+`register ABSOLUTE_APP_BUNDLE` mode on that installed logical path before
+activation. it uses public `LSRegisterURL` with update enabled and runs no
+owner/config/socket/consent code. an app symlink is refused; no runtime repair.
+ordinary application activation is quiet. `skid notifications setup` opens the
+existing native setup window through the running helper's bounded socket operation;
+it does not launch a replacement owner. the old `--background` argument is removed.
+activation identity covers generation, unit and private client bytes, including
+the transition from initially absent client config to provisioned config.
+unchanged apply is inert. go remains the app/store owner;
+deployment writes no device attention. public certificate pins are repository
+inputs; private keys/keychains never enter archives or installer validation.
+the login unit explicitly sets `XDG_STATE_HOME` to `@ROOT@/.local/state` so
+inherited gui environment cannot move the socket away from installer checks.
+
+devbox owns pinned stock ntfy `2.28.0`, systemd user units, private mode-0600
+observer/ntfy configuration and credentials. ntfy declaratively creates its own
+auth database: deny-all default, publisher write-only `up*`, phone read-only `up*`.
+listen only on `127.0.0.1:2586`; cache for twelve hours; disable anonymous access,
+firebase/upstream forwarding and public ingress. the observer listens only on
+`127.0.0.1:7342`, using the existing bearer/machine-handle and fleet client.
+no gateway observer routes or new bearer are introduced. preserve producer memory
+and ntfy identity on removal. services use private umasks; ntfy logs are suppressed
+because upstream diagnostic text can disclose request/account metadata.
+
+devbox's deployment principal owns two additional exact serve handlers:
+`8443 /v1/notifications` -> `7342 /v1/notifications`, and `8444 /` -> `2586 /`.
+preflight all handlers before changing a runtime; retain foreign handlers/ports.
+the gateway activates before notification services. absent fleet configuration
+leaves the observer explicitly unqualified while gateway/ntfy/ingress permit
+first provisioning. provision, then reapply. service failure can leave the new
+gateway selected; rerun the same admitted inputs for live repair.
+
+`skidbladnir_restore_previous PLATFORM` restores opaque already-admitted runtime
+and unit bytes through the existing stop/restore/authenticated-health mechanism;
+it performs no download/admission or migration. the operator separately stops
+notification owners, removes only their exact serve paths, restores the fleet
+client saved before cutover, restores devbox's root cli from the admitted runtime,
+and completes the app owner's qualified android package/data rollback. this
+first cutover's prior deployment has no native notification units. no unit/receipt,
+missing client backup or unqualified phone rollback means incomplete rollback.
+ordinary apk downgrade/uninstall is not a substitute. prove the complete path
+before claiming release acceptance.
 
 ## devbox boundary
 

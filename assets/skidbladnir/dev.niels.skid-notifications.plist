@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>@FLEET_LABEL_PREFIX@.skid-notifications</string>
+  <key>ProgramArguments</key><array>
+    <string>/usr/bin/open</string><string>-g</string><string>-W</string><string>-a</string>
+    <string>@ROOT@/Applications/Skid.app</string>
+    <string>--env</string><string>XDG_STATE_HOME=@ROOT@/.local/state</string>
+    <string>--stdout</string><string>@ROOT@/.local/state/skidbladnir/notification-app.log</string>
+    <string>--stderr</string><string>@ROOT@/.local/state/skidbladnir/notification-app.error.log</string>
+    <string>--args</string>
+    <string>--config</string><string>@ROOT@/.config/skidbladnir/client.json</string>
+    <string>--skid</string><string>@ROOT@/.local/share/skidbladnir/current/skidbladnir</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>HOME</key><string>@ROOT@</string>
+    <key>XDG_STATE_HOME</key><string>@ROOT@/.local/state</string>
+    <key>PATH</key><string>@ROOT@/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>WorkingDirectory</key><string>@ROOT@</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>2</integer>
+  <key>ExitTimeOut</key><integer>10</integer>
+  <key>Umask</key><integer>63</integer>
+  <key>StandardOutPath</key><string>@ROOT@/.local/state/skidbladnir/notification-app.log</string>
+  <key>StandardErrorPath</key><string>@ROOT@/.local/state/skidbladnir/notification-app.error.log</string>
+</dict></plist>

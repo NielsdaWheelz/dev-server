@@ -1,0 +1,19 @@
+[Unit]
+Description=skid notification observer
+After=skid-ntfy.service
+Wants=skid-ntfy.service
+ConditionPathExists=%h/.config/skidbladnir/client.json
+
+[Service]
+Type=simple
+Environment="PATH=%h/bin:%h/.local/bin:%h/.local/share/mise/shims:/usr/local/bin:/usr/bin:/bin"
+UnsetEnvironment=TMUX TMUX_PANE TMUX_TMPDIR SKIDBLADNIR_SHELL SKIDBLADNIR_AGENT SKIDBLADNIR_CONNECTION SKIDBLADNIR_TERMINAL_CONTEXT
+ExecStart=%h/.local/share/skidbladnir/current/skidbladnir notifications observer --config %h/.config/skidbladnir/notifications/observer.json
+Restart=always
+RestartSec=2s
+TimeoutStopSec=10s
+UMask=0077
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

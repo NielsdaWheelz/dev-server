@@ -598,7 +598,7 @@ devbox_gateway_snapshot() {
   local root="$1" operation="$2"
   local -a paths=(ansible.cfg ansible/inventory/devbox.yml ansible/group_vars/devbox.yml
     ansible/playbooks/gateway.yml lib/common.sh
-    lib/gateway-ingress.sh lib/skidbladnir.sh lib/gateway-runtime.sh)
+    lib/gateway-ingress.sh lib/skidbladnir.sh lib/gateway-runtime.sh lib/skid-notifications.sh)
   if [[ "$operation" == apply ]]; then
     paths+=(assets/skidbladnir assets/skid-provider lib/ai-tools.sh lib/skid-provider.sh)
   fi
@@ -629,7 +629,7 @@ devbox_stage_gateway_inputs() {
       die "could not stage skidbladnir assets"
   fi
   cp -p "$base_dir/lib/common.sh" "$base_dir/lib/gateway-ingress.sh" \
-    "$base_dir/lib/gateway-runtime.sh" "$base_dir/lib/skidbladnir.sh" \
+    "$base_dir/lib/gateway-runtime.sh" "$base_dir/lib/skidbladnir.sh" "$base_dir/lib/skid-notifications.sh" \
     "$devbox_declared_stage/lib/" || die "could not stage skidbladnir libraries"
   if [[ "$operation" == apply ]]; then
     cp -Rp "$base_dir/assets/skid-provider" "$devbox_declared_stage/assets/skid-provider" ||
