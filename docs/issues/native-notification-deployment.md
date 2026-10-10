@@ -1,18 +1,46 @@
 # native notification deployment qualification
 
-problem: the new managed mac/devbox deployment and complete prior-release
-rollback have not been exercised on the installed fleet. release pins are
-unchanged. the first temporary stage diverted the normal api; its routes were
-restored and its services removed. qualification used six owned user
+problem: v0.14.0 is deployed, but complete prior-release rollback and current
+physical notification acceptance remain unqualified.
+
+2026-10-09 deployment: the owner authorized the signed release and all-machine/
+android rollout. the pin now selects immutable v0.14.0, exact source
+`111c91b4c97e70ee154dae3032d011533951f55e`. published-release validation passes
+for source, all five assets, signer/version identities and upstream pin.
+managed apply and upstream fleet verification pass on macbook, devbox and arch.
+devbox's gateway, observer and ntfy services are healthy; private gateway and
+notification/ntfy handlers are installed. the signed mac app and producer are
+healthy. root's jarvis cli uses the same admitted linux release; jarvis remains
+inactive. the attached android app updates in place to `0.14.0` / `14000`, with
+unchanged first-install time. phone notification enrollment still requires a
+fresh v2 fleet qr and production ntfy setup.
+
+the first devbox observer activation rejected the old client config. supported
+fleet provisioning saved each exact prior config and added notification inputs;
+same-release reapply restored health. machine identities, bearer/peer credentials
+and ownership remain unchanged. devbox's three original session/provider identities
+are unchanged; concurrent owner activity makes macbook inventory unsuitable as a
+preservation witness. no production session was deliberately restarted or closed.
+
+gateway-only apply also exposed an omitted provider dependency: the installed
+skid `claude-work` version probe failed on devbox/arch because
+`~/.local/share/dev-server/memory-profile.sh` was absent. the repair includes
+`assets/memory/profile-env.sh` in both declared snapshots/stages and ansible copy,
+then installs it through the shared ai owner before provider activation. managed
+reapply passes on all three hosts without service activation; exact helper bytes,
+mode/ownership and installed launcher version probes pass. full host/package
+apply is not required for this dependency. bash syntax, focused shellcheck
+(excluding pre-existing workstation `SC2119`) and gateway ansible syntax pass.
+
+earlier temporary qualification: the first stage diverted the normal api; its
+routes were restored and its services removed. qualification used six owned user
 services and five handlers on three separate qa tailnet addresses, with a
 distinct android app. those services, isolated tmux servers, stage directories
 and qa applications are now removed; production routes/pairings and phone
 packages stay unchanged. phone distributor cleanup is complete; authenticated
 admin search confirms all three retired qa node names are already absent.
-no other devices changed.
-permanent deployment and release pins have not changed. mac candidate admission
-requires the new signed bundle; publish and pin its matching release before
-applying the notification cutover. there is no old-archive fallback.
+no other devices changed during that cleanup. mac candidate admission requires
+the new signed bundle; there is no old-archive fallback.
 
 evidence: temporary tests used a real baseline darwin archive (missing-app red),
 the actual pinned ntfy `2.28.0` official binary in isolated owned containers
@@ -31,7 +59,7 @@ and native executable reproduction pass. fresh/cache native admission passes;
 flat candidates/caches and modified signed resources reject. apple's native
 signing tool normalizes signing allocation on private audit copies before
 signature removal/comparison; executable instruction changes remain detectable.
-clean committed-source release provenance remains `NOT_RUN`.
+clean committed-source release provenance now passes for published v0.14.0.
 
 real mac installation exposed a launch services rejection of application
 symlinks (`-10811`). the corrected installer copies and validates a real bundle,
@@ -51,9 +79,9 @@ both exact children stopped and their copied apps were removed; no global gui
 environment was changed. the app owner qualified mac native delivery,
 exact-session click, two-build consent and earlier physical-phone rollback.
 
-impact: these establish packaging/installer control flow, pinned server
-configuration and temporary managed routing. complete installed release and
-rollback remain unqualified.
+impact: published packaging, managed fleet installation and service health are
+qualified. installation does not establish physical delivery/click or complete
+rollback behavior.
 
 resolution: qualify the exact signed release with source/member/signer/version
 checks; managed login/restart and devbox services; authenticated private paths
@@ -62,6 +90,6 @@ input repair; saved fleet-client restoration and prior runtime/unit/root-cli
 restore; actual android platform rollback. provider history and tmux workers
 must survive. remove temporary tests after recorded acceptance.
 
-blockers: actual deployment/publication belongs to the root cutover operator;
-phone rollback and native consent require the app owner's physical qualification.
-these boundaries are `NOT_RUN`, never passes.
+blockers: full phone rollback and native consent/delivery require the app owner's
+physical qualification. complete coordinated rollback remains `NOT_RUN`, never
+a pass.
