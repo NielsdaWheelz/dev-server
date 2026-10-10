@@ -41,7 +41,7 @@ replacements = {
     "PLATFORM": platform,
     "TMUX": tmux_path,
     "TMUX_VERSION": tmux_version,
-    "CODEX": codex,
+    "CODEX": f"{home}/bin/codex",
     "CLAUDE": claude,
     "ZOXIDE": zoxide,
 }

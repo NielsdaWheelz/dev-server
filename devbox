@@ -563,9 +563,13 @@ render_cloud_init() {
 
 devbox_snapshot() {
   local root="$1"
+  local -a memory_inputs=()
+  if [[ -d "$root/secrets/memory/bundle/devbox" ]]; then
+    memory_inputs=(secrets/memory/bundle/devbox)
+  fi
 
   dev_server_declared_snapshot "$root" \
-    ansible ansible.cfg assets cloud-init-devbox.template.yaml lib
+    ansible ansible.cfg assets cloud-init-devbox.template.yaml lib "${memory_inputs[@]}"
 }
 
 devbox_stage_declared_inputs() {
@@ -582,6 +586,13 @@ devbox_stage_declared_inputs() {
     die 'could not stage devbox assets'
   cp -Rp "$base_dir/lib" "$devbox_declared_stage/lib" ||
     die 'could not stage devbox libraries'
+  if [[ -d "$base_dir/secrets/memory/bundle/devbox" ]]; then
+    install -d -m 0700 "$devbox_declared_stage/secrets/memory/bundle" ||
+      die 'could not stage private memory inputs'
+    cp -Rp "$base_dir/secrets/memory/bundle/devbox" \
+      "$devbox_declared_stage/secrets/memory/bundle/" ||
+      die 'could not stage private memory bundle'
+  fi
   cp -p "$base_dir/ansible.cfg" "$base_dir/cloud-init-devbox.template.yaml" \
     "$devbox_declared_stage/" || die 'could not stage devbox controller inputs'
   staged_snapshot="$(devbox_snapshot "$devbox_declared_stage")" ||

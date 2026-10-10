@@ -1,0 +1,130 @@
+---
+- name: Inspect the controller's private memory bundle
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/../../secrets/memory/bundle/devbox"
+  delegate_to: localhost
+  become: false
+  register: memory_bundle
+
+- name: Read the collector source pin
+  ansible.builtin.set_fact:
+    memory_release_pin: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/memory/release-pin.json') | from_json }}"
+
+- name: Report pending memory activation
+  ansible.builtin.debug:
+    msg: "ACTION  memory: supply the private bundle and qualified central source pin before activation"
+  when: not memory_bundle.stat.exists or memory_release_pin.revision is none
+
+- name: Reconcile the explicitly supplied memory configuration
+  when: memory_bundle.stat.exists and memory_release_pin.revision is not none
+  block:
+    - name: Create the root-owned ingress library directory
+      ansible.builtin.file:
+        path: /usr/local/libexec/dev-server-gateway
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install root-owned ingress libraries
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../lib/{{ item }}"
+        dest: "/usr/local/libexec/dev-server-gateway/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: [common.sh, gateway-ingress.sh]
+
+    - name: Preflight memory's private Serve boundary and declared endpoint
+      ansible.builtin.shell: |
+        set -euo pipefail
+        source /usr/local/libexec/dev-server-gateway/common.sh
+        source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
+        gateway_ingress_preflight 443 8768 jarvis.memory
+        declared={{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../secrets/memory/bundle/devbox/collector.json') | from_json).service_url | quote }}
+        [[ "$declared" == "https://$gateway_ingress_hostname" ]] || {
+          render_result ERROR memory 'declared endpoint differs from this private Tailscale host'
+          exit 1
+        }
+      args:
+        executable: /bin/bash
+      environment:
+        PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      register: memory_ingress_preflight
+      changed_when: false
+      failed_when: memory_ingress_preflight.rc not in [0, 2]
+
+    - name: Install only memory's private Serve handler
+      ansible.builtin.shell: |
+        set -euo pipefail
+        source /usr/local/libexec/dev-server-gateway/common.sh
+        source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
+        gateway_ingress_apply 443 8768 jarvis.memory
+      args:
+        executable: /bin/bash
+      environment:
+        PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      register: memory_ingress_apply
+      changed_when: memory_ingress_apply.stdout is regex('(?m)^CHANGED  ')
+      when: memory_ingress_preflight.rc == 0
+
+    - name: Install the private owner bundle
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../secrets/memory/bundle/devbox/"
+        dest: "/home/{{ devbox_user }}/.local/share/dev-server/memory-input/"
+        owner: "{{ devbox_user }}"
+        group: "{{ devbox_user }}"
+        mode: "0600"
+        directory_mode: "0700"
+      no_log: true
+      when: memory_ingress_preflight.rc == 0
+
+    - name: Reconcile the owner collector and connected native profiles
+      ansible.builtin.shell: |
+        set -euo pipefail
+        dev_server_home_dir={{ ('/home/' ~ devbox_user) | quote }}
+        dev_server_assets_root="$dev_server_home_dir/.local/share/dev-server/assets"
+        source "$dev_server_assets_root/../lib/common.sh"
+        source "$dev_server_assets_root/../lib/ai-tools.sh"
+        source "$dev_server_assets_root/../lib/memory.sh"
+        memory_install devbox "$dev_server_home_dir/.local/share/dev-server/memory-input"
+        finish_results devbox
+      args:
+        executable: /bin/bash
+      become_user: "{{ devbox_user }}"
+      environment:
+        HOME: "/home/{{ devbox_user }}"
+        PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+        XDG_RUNTIME_DIR: "/run/user/{{ base_user_uid.stdout }}"
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ base_user_uid.stdout }}/bus"
+      register: memory_apply
+      changed_when: memory_apply.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED)  ')
+      failed_when: memory_apply.rc not in [0, 2]
+      when: memory_ingress_preflight.rc == 0
+
+    - name: Report memory configuration results
+      ansible.builtin.debug:
+        msg: "{{ item }}"
+      loop: >-
+        {{ ((memory_ingress_preflight.stdout_lines | default([]))
+            + (memory_apply.stdout_lines | default([]))
+            + (memory_ingress_apply.stdout_lines | default([])))
+           | select('match', '^(ACTION|DEFERRED|INSTALLED|UPDATED|CHANGED|STARTED|RESTARTED)  ')
+           | list }}
+
+- name: Return native configuration actions to the controller
+  ansible.builtin.copy:
+    content: >-
+      {{ {'rc': ([ai_tools_apply.rc, memory_apply.rc | default(0), memory_ingress_preflight.rc | default(0)] | max)
+                   if memory_bundle.stat.exists and memory_release_pin.revision is not none else 2,
+          'stdout': ai_tools_apply.stdout ~ '\n' ~ (memory_apply.stdout | default('')) ~ '\n'
+                    ~ (memory_ingress_preflight.stdout | default('')) ~ '\n' ~ (memory_ingress_apply.stdout | default(''))
+                    ~ ('' if memory_bundle.stat.exists and memory_release_pin.revision is not none
+                         else '\nACTION  memory: supply the private bundle and qualified central source pin before activation')}
+         | to_json }}
+    dest: "{{ dev_server_ai_result_file }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  when: dev_server_ai_result_file is defined

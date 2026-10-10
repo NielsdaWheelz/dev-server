@@ -61,7 +61,7 @@ casks. the app store tailscale app remains separately owned: apply verifies
 and optionally starts it, but never installs, updates, replaces, or signs in to it.
 
 host configuration is applied in order: native packages, dotfiles, exact-host
-personal policy, ai tools. gateway
+personal policy, ai tools, supplied memory configuration. gateway
 commands stage only their own inputs and reconcile only their own ingress. desktop login, reboot, busy containers, and tmux
 binary activation are reported as `DEFERRED`. repo-owned activation never forces
 them. native package installation/upgrade scripts can still restart their
@@ -142,13 +142,17 @@ an existing `CODEX_HOME`, otherwise selecting `.codex`; `codex-work` and
 `codex-work2` always select their named homes. the wrappers pass arguments
 unchanged to the installed cli. manual marked-shell commands are ordinary
 stock launches; they do not acquire a native thread association. for sessions
-created through skid, the host starts or reuses the selected account's upstream
+created through skid, the host uses the shared account wrapper to start or reuse the selected account's upstream
 daemon and launches `codex --remote unix://...`; codex creates its initial
 thread. explicit native conversation references are separate from terminal
 identity. native helper creation, inspection and canonical cli attachment use
 that same selected daemon. the socket comes from the selected `CODEX_HOME` at
 `app-server-control/app-server-control.sock`. the installer owns no daemon
 bootstrap, service or package policy.
+
+fresh skid codex daemon starts pass through `$HOME/bin/codex`, preserving the
+selected `CODEX_HOME` and loading only its memory credential before native exec.
+the underlying provider-command launcher still executes the canonical cli.
 
 the former shared codex services and exact discovery links are retired;
 cleanup-only deployment code is gone. account homes, credentials and native
@@ -175,7 +179,68 @@ display without publication. with that flag and an explicit absolute
 browser uses devbox's last-reported data; idle sessions may be stale. provider
 sessions on other hosts retain their normal statusline display.
 account update settings, project instructions, skills, other settings keys,
-history and authentication remain separately owned.
+history and authentication remain separately owned. both claude homes set
+`cleanupPeriodDays` to 36,500; this retains other application data as well as
+conversation history and increases disk use. claude documents no supported
+disable sentinel. [claude directory reference](https://code.claude.com/docs/en/claude-directory).
+
+## universal memory
+
+jarvis owns the shared corpus, private server, admission and stopped cutover.
+this repository owns host collectors and native client configuration. the
+[default declaration](assets/memory/declaration.example.json) lists all sixteen
+lanes with admission and connection disabled. record actual controllers,
+sharing authorization, recipients and processors before enabling a lane.
+native developer profiles do not grant nexus application chats access.
+
+render the private bundle with the qualified central jarvis release's python:
+
+```sh
+"$JARVIS_RELEASE/.venv/bin/python" scripts/memory-config.py \
+  --declaration secrets/memory/declaration.json \
+  --credentials secrets/memory/credentials.json \
+  --output secrets/memory/bundle \
+  --url "$MEMORY_URL" \
+  --home "macbook=$MACBOOK_HOME" \
+  --home "arch=$ARCH_HOME" \
+  --home "devbox=$DEVBOX_HOME"
+```
+
+declare the same origin in the input; devbox requires its private tailscale
+HTTPS origin. rendering creates missing scoped bearers once and preserves
+existing credentials. `--rotate capture:macbook` or
+`--rotate client:macbook:codex-personal` rotates only the named current identity.
+the entire generated bundle is private; only `server.json` contains hashes.
+jarvis's installer consumes that file separately. distribute only each host's
+own directory under ignored `secrets/memory/bundle/<host>`.
+
+the optional `nexus_client` declaration names one configured viewer and the
+complete selected model processor labels. its separately scoped backend bearer
+is rendered only in `bundle/nexus/client.json`, consumed through Nexus's
+`MEMORY_CLIENT_CONFIG_PATH`. undeclared/disconnected clients receive the explicit
+`Absent` shape. `--rotate client:nexus-owner` rotates that credential only.
+owner send/rerun/regenerate may read shared memory and append admitted notes;
+other viewers, automated helpers and Nexus conversations gain no capture.
+
+ordinary `apply` installs a collector from
+[`release-pin.json`](assets/memory/release-pin.json) and reconciles connected
+profiles. it neither changes sharing authority nor rotates credentials. the
+collector is a launchd owner job on macbook or a systemd user unit on linux.
+before preparing a new release, supply ordinary authenticated git read access to
+the private universal-memory dependency under that owner account. this build
+authorization stays outside the bundle and collector/native runtime environment.
+an absent bundle or pending source pin reports an action. verification failure
+reports deferred activation without advancing the active digest.
+
+connected native profiles load a private bearer environment for future launches
+and the native `jarvis-memory` entry at `/v1/mcp`. they receive the exact product
+memory instruction; existing native agents and daemons remain running. the
+native configuration contracts are
+[codex MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli) and
+[claude MCP](https://code.claude.com/docs/en/mcp). actual loaded connections need
+their own acceptance. devbox owns only private HTTPS 443 `/v1`, preserving skid's
+8443 endpoint and unrelated handlers; funnel and foreign owned handlers refuse
+activation. [remaining host qualification](docs/issues/universal-memory-activation.md).
 
 ## agent fleet
 
@@ -276,6 +341,7 @@ reach each host through the fixed skid cli (see [agent fleet](#agent-fleet)).
 | file installation and result reporting | `lib/common.sh` |
 | workstation packages, personal policy, dotfiles, tmux activation | `lib/packages-*.sh`, `lib/personal-*.sh`, `lib/dotfiles.sh`, `lib/tmux.sh` |
 | ai binaries and account commands | `lib/ai-tools.sh`, `assets/routers/ai-profile` |
+| memory bundle, collectors and native client configuration | `scripts/memory-config.py`, `lib/memory.sh`, `assets/memory/`, `ansible/roles/memory/` |
 | devbox github identity and ssh client policy | `ansible/roles/github/`; `devbox` owns account enrollment checks |
 | gateway ownership and shared activation | `lib/skidbladnir.sh`, `lib/gateway-runtime.sh`, `assets/skidbladnir/` |
 | scoped skid commands and helper | `lib/skid-provider.sh`, `assets/skid-provider/` |

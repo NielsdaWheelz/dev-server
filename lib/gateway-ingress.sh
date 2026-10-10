@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# Tailscale Serve belongs to the host. Skid owns only /v1 on HTTPS 8443;
+# Tailscale Serve belongs to the host. Skid owns /v1 on HTTPS 8443 and
+# Jarvis memory owns /v1 on HTTPS 443;
 # other handlers and other ports are outside this installer's scope.
 gateway_ingress_observe() {
   local port="$1" backend="$2" status serve
@@ -69,59 +70,59 @@ else:
 }
 
 gateway_ingress_preflight() {
-  local port="$1" backend="$2"
+  local port="$1" backend="$2" owner="$3"
   gateway_ingress_observe "$port" "$backend" ||
-    die "could not inspect skidbladnir private Serve boundary"
+    die "could not inspect $owner private Serve boundary"
   case "$gateway_ingress_state" in
   desired | empty) return 0 ;;
-  missing) render_result ACTION "skidbladnir.ingress" 'install and sign in to Tailscale'; return 2 ;;
-  signed-out) render_result ACTION "skidbladnir.ingress" 'sign in to Tailscale'; return 2 ;;
-  foreign) render_result ACTION "skidbladnir.ingress" "resolve the foreign /v1 handler or HTTPS configuration on port $port"; return 2 ;;
-  public) die "public Tailscale exposure is enabled on skidbladnir HTTPS $port" ;;
-  *) die "invalid skidbladnir Serve state" ;;
+  missing) render_result ACTION "$owner.ingress" 'install and sign in to Tailscale'; return 2 ;;
+  signed-out) render_result ACTION "$owner.ingress" 'sign in to Tailscale'; return 2 ;;
+  foreign) render_result ACTION "$owner.ingress" "resolve the foreign /v1 handler or HTTPS configuration on port $port"; return 2 ;;
+  public) die "public Tailscale exposure is enabled on $owner HTTPS $port" ;;
+  *) die "invalid $owner Serve state" ;;
   esac
 }
 
 gateway_ingress_apply() {
-  local port="$1" backend="$2"
+  local port="$1" backend="$2" owner="$3"
   gateway_ingress_observe "$port" "$backend" ||
-    die "could not inspect skidbladnir private Serve boundary"
+    die "could not inspect $owner private Serve boundary"
   case "$gateway_ingress_state" in
   desired) return 0 ;;
   empty) ;;
-  missing | signed-out | foreign) gateway_ingress_preflight "$port" "$backend"; return 2 ;;
-  public) die "public Tailscale exposure is enabled on skidbladnir HTTPS $port" ;;
-  *) die "invalid skidbladnir Serve state" ;;
+  missing | signed-out | foreign) gateway_ingress_preflight "$port" "$backend" "$owner"; return 2 ;;
+  public) die "public Tailscale exposure is enabled on $owner HTTPS $port" ;;
+  *) die "invalid $owner Serve state" ;;
   esac
   TAILSCALE_BE_CLI=1 "$gateway_ingress_cli" serve --bg --yes "--https=$port" --set-path=/v1 \
-    "http://127.0.0.1:$backend/v1" >/dev/null || die "could not install skidbladnir Serve handler"
+    "http://127.0.0.1:$backend/v1" >/dev/null || die "could not install $owner Serve handler"
   gateway_ingress_observe "$port" "$backend" ||
-    die "could not verify skidbladnir Serve handler"
-  [[ "$gateway_ingress_state" == desired ]] || die "skidbladnir Serve handler differs after apply"
-  render_result CHANGED "skidbladnir.ingress" "private HTTPS $port /v1 mapping installed"
+    die "could not verify $owner Serve handler"
+  [[ "$gateway_ingress_state" == desired ]] || die "$owner Serve handler differs after apply"
+  render_result CHANGED "$owner.ingress" "private HTTPS $port /v1 mapping installed"
 }
 
 gateway_ingress_remove() {
-  local port="$1" backend="$2"
+  local port="$1" backend="$2" owner="$3"
   gateway_ingress_observe "$port" "$backend" ||
-    die "could not inspect skidbladnir private Serve boundary"
+    die "could not inspect $owner private Serve boundary"
   case "$gateway_ingress_state" in
   empty) return 0 ;;
-  missing) render_result ACTION "skidbladnir.ingress" 'install and sign in to Tailscale to inspect the owned handler'; return 2 ;;
-  signed-out) render_result ACTION "skidbladnir.ingress" 'sign in to Tailscale to inspect the owned handler'; return 2 ;;
+  missing) render_result ACTION "$owner.ingress" 'install and sign in to Tailscale to inspect the owned handler'; return 2 ;;
+  signed-out) render_result ACTION "$owner.ingress" 'sign in to Tailscale to inspect the owned handler'; return 2 ;;
   desired) ;;
-  foreign) render_result ACTION "skidbladnir.ingress" "resolve the foreign /v1 handler or HTTPS configuration on port $port"; return 2 ;;
-  public) die "public Tailscale exposure is enabled on skidbladnir HTTPS $port" ;;
-  *) die "invalid skidbladnir Serve state" ;;
+  foreign) render_result ACTION "$owner.ingress" "resolve the foreign /v1 handler or HTTPS configuration on port $port"; return 2 ;;
+  public) die "public Tailscale exposure is enabled on $owner HTTPS $port" ;;
+  *) die "invalid $owner Serve state" ;;
   esac
   TAILSCALE_BE_CLI=1 "$gateway_ingress_cli" serve "--https=$port" --set-path=/v1 off >/dev/null ||
-    die "could not remove skidbladnir Serve handler"
+    die "could not remove $owner Serve handler"
   gateway_ingress_observe "$port" "$backend" ||
-    die "could not verify removal of skidbladnir Serve handler"
-  [[ "$gateway_ingress_state" == empty ]] || die "skidbladnir Serve handler persists after removal"
-  render_result CHANGED "skidbladnir.ingress" "private HTTPS $port /v1 mapping removed"
+    die "could not verify removal of $owner Serve handler"
+  [[ "$gateway_ingress_state" == empty ]] || die "$owner Serve handler persists after removal"
+  render_result CHANGED "$owner.ingress" "private HTTPS $port /v1 mapping removed"
 }
 
-skidbladnir_ingress_preflight() { gateway_ingress_preflight 8443 "${dev_server_gateway_port:-7341}"; }
-skidbladnir_ingress_apply() { gateway_ingress_apply 8443 "${dev_server_gateway_port:-7341}"; }
-skidbladnir_ingress_remove() { gateway_ingress_remove 8443 "${dev_server_gateway_port:-7341}"; }
+skidbladnir_ingress_preflight() { gateway_ingress_preflight 8443 "${dev_server_gateway_port:-7341}" skidbladnir; }
+skidbladnir_ingress_apply() { gateway_ingress_apply 8443 "${dev_server_gateway_port:-7341}" skidbladnir; }
+skidbladnir_ingress_remove() { gateway_ingress_remove 8443 "${dev_server_gateway_port:-7341}" skidbladnir; }

@@ -1,0 +1,1 @@
+when context from earlier conversations would materially help, search it with memory_search or inspect memory_view, then use memory_zoom/memory_open for detail. when memory_save_note is available, save useful conclusions or lessons that the visible conversation would otherwise miss.

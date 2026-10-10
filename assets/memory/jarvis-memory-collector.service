@@ -1,0 +1,12 @@
+[Unit]
+Description=Jarvis native memory collector
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=@LAUNCHER@
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
