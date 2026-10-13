@@ -3,9 +3,12 @@
 status: source implemented and pinned; fleet activation pending.
 
 2026-10-13 repair handoff: `codex/memory-repairs` prepares corrected presentation,
-the single `native-archive.v2` codec and nexus client/build source. real postgres,
-native/live inference, docker builds and the network audit remain blocked in its
-qualification environment. `assets/memory/release-pin.json` therefore retains
+the single `native-archive.v2` codec and nexus client/build source. the network
+audit and source checks pass; real-postgres proof is recorded before consumer
+merge. remaining [native/inference](https://github.com/NielsdaWheelz/jarvis/issues/51),
+[nexus rows/routes](https://github.com/NielsdaWheelz/nexus-web/issues/570) and
+[image/secret](https://github.com/NielsdaWheelz/nexus-web/issues/571) qualification
+remain open. `assets/memory/release-pin.json` therefore retains
 the prior qualified source below. after the candidate passes the jarvis repair
 contract, advance this pin to its exact qualified commit and repeat source
 preparation; do not install or activate as part of that repair. original v1
