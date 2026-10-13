@@ -54,7 +54,10 @@ PYTHON
   home="$(dev_server_home)"
   case "$provider" in
   codex)
-    output="$(HOME="$home" CODEX_HOME="$home/.codex" "$binary" --version)" || return 1
+    output="$(env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_BY_BUN \
+      -u CODEX_MANAGED_BY_PNPM -u CODEX_MANAGED_BY_VITE_PLUS \
+      -u CODEX_MANAGED_PACKAGE_ROOT \
+      HOME="$home" CODEX_HOME="$home/.codex" "$binary" --version)" || return 1
     [[ "$output" =~ ^codex-cli\ ([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)$ ]] || return 1
     ;;
   claude)
@@ -176,6 +179,8 @@ print('case "$CODEX_HOME" in')
 for account, root in (("codex-personal", ".codex"), ("codex-work", ".codex-work"), ("codex-work2", ".codex-work2")):
     print(f'  {shlex.quote(home + "/" + root)}) jarvis_memory_profile_env {shlex.quote(home)} {account} ;;')
 print(f'  *) jarvis_memory_profile_env {shlex.quote(home)} "" ;;\nesac')
+print('unset CODEX_MANAGED_BY_NPM CODEX_MANAGED_BY_BUN CODEX_MANAGED_BY_PNPM '
+      'CODEX_MANAGED_BY_VITE_PLUS CODEX_MANAGED_PACKAGE_ROOT')
 print(f'exec {shlex.quote(home + "/.local/bin/codex")} "$@"')
 PY
   then

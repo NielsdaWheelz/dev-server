@@ -6,7 +6,8 @@ evidence. account identity and installation ownership are coupled.
 
 impact: the planned local correction removes false package-manager routing, but
 work accounts still cannot discover the standalone release owned under `.codex`.
-shared maintenance must explicitly select the installation context.
+shared maintenance must explicitly select the installation context; launcher
+sanitation alone cannot supply work-profile self-update.
 
 evidence: [the 0.162.1 resolver](https://github.com/openai/codex/blob/rust-v0.162.1/codex-rs/install-context/src/lib.rs#L120)
 uses marker presence as a method override. its standalone discovery requires the
@@ -23,4 +24,5 @@ dependency or extra installation is authorized by the local launch correction.
 
 resolved when: released upstream behavior discovers a shared native installation
 from personal/work account contexts and rejects inherited empty or nonempty
-false manager markers while preserving genuine package-manager launches.
+false manager markers while preserving genuine package-manager launches and
+account selection.

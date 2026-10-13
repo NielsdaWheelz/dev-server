@@ -124,21 +124,31 @@ lookup, installer or updater. invalid commands produce a repair action. user
 account settings own release channels and automatic updates; apply never
 restarts provider sessions or changes npm's prefix.
 
-manual maintenance updates every future account and skid launch without a
+upstream cli maintenance updates every future account and skid launch without a
 repository edit, apply or gateway restart:
 
 ```sh
-env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_PACKAGE_ROOT CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" "$HOME/.local/bin/codex" update
+env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_BY_BUN \
+    -u CODEX_MANAGED_BY_PNPM -u CODEX_MANAGED_BY_VITE_PLUS \
+    -u CODEX_MANAGED_PACKAGE_ROOT \
+    CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" \
+    "$HOME/.local/bin/codex" update
 claude update
 ```
 
-the codex command clears npm-manager markers retained by old daemon tool
-shells and selects the fixed installation context, including from a work shell;
+the codex command clears inherited package-manager provenance and selects the
+fixed installation context, including from a work shell;
 plain `codex-work update` cannot detect the shared installation upstream.
 claude's invoking account selects its update channel for the shared command.
 [the native maintenance runbook](docs/gateway-separation-runbook.md#native-ai-maintenance)
-covers installation, repair and the npm cutover. account daemons retain their
+covers installation and repair. account daemons retain their
 separate upstream-managed packages and updates.
+
+account wrappers, scoped codex commands, native version inspection and the memory
+configuration writer remove the five provenance keys named in that command
+before invoking native codex. selected accounts, memory credentials and existing
+arguments remain intact. parent shells and running clients retain their
+environments. changed scoped assets use normal gateway admission and activation.
 
 interactive zsh aliases add `--yolo` to codex commands and
 `--dangerously-skip-permissions` to claude commands. the defaults live in
@@ -153,9 +163,11 @@ codex-work2 resume
 ```
 
 codex owns each account's native daemon and discovery socket. `codex` honors
-an existing `CODEX_HOME`, otherwise selecting `.codex`; `codex-work` and
-`codex-work2` always select their named homes. the wrappers pass arguments
-unchanged to the installed cli. manual marked-shell commands are ordinary
+a nonempty `CODEX_HOME`, otherwise selecting `.codex` under the host-user home
+recorded when installed; `codex-work` and `codex-work2` always select their named
+homes there, independently of runtime `HOME`. ordinary wrappers pass arguments
+unchanged; scoped commands retain their `--yolo` prefix and literal caller
+suffix. manual marked-shell commands are ordinary
 stock launches; they do not acquire a native thread association. for sessions
 created through skid, the host uses the shared account wrapper to start or reuse the selected account's upstream
 daemon and launches `codex --remote unix://...`; codex creates its initial

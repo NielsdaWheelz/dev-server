@@ -204,6 +204,7 @@ process directly.
 |---|---|
 | upstream native installers | executable contents, release directories, integrity, selection, update metadata and native repair |
 | dev-server ai tools | bootstrap absent commands, verify callable native providers, install account wrappers and owned configuration |
+| dev-server launch, admission and memory configuration owners | remove inherited installer provenance before canonical native codex execution |
 | user and upstream settings | release channels, automatic updates, manual upgrades and version selection |
 | skid | use existing account homes and the codex account wrapper, which execs the canonical command; verify its own integration |
 
@@ -229,15 +230,44 @@ adoption validates the native executable and expected provider version output,
 without requiring a particular version, absolute symlink target or release
 directory schema. the canonical command is the installation interface.
 
+installation ownership is independent of account selection. the four owned
+native invocation sites remove exactly `CODEX_MANAGED_BY_NPM`,
+`CODEX_MANAGED_BY_BUN`, `CODEX_MANAGED_BY_PNPM`,
+`CODEX_MANAGED_BY_VITE_PLUS` and `CODEX_MANAGED_PACKAGE_ROOT` from the child
+environment, including empty and `0` values. no wildcard removal. `owner_home`
+is the rendered host-user home, independent of the caller's runtime `HOME`.
+
+| native invocation owner | preserved context and execution |
+|---|---|
+| generated account wrappers in `lib/ai-tools.sh` | bare `codex` preserves nonempty `CODEX_HOME`, otherwise selects `owner_home/.codex`; work/work2 force their named homes; select only that account's memory credential and exec canonical codex with literal `"$@"` |
+| scoped codex commands in `assets/skid-provider/provider-command` | select the named personal/work/work2 home under `owner_home`; preserve memory selection and native exec with the existing `--yolo` prefix and literal caller suffix |
+| codex branch of `ai_native_version` | retain fixed owner home, `.codex`, native admission and version validation; remove provenance only from the inspection child |
+| codex subprocess in `assets/memory/profile-config.py` | retain private staging home, native `mcp add/remove`, owned-key validation and publication; remove provenance from its copied environment |
+
+sanitation emits no message and changes no parent environment or running client.
+claude behavior, unrelated environment, arguments and existing errors/exit status
+remain unchanged. ordinary/skid profile launches use the account wrapper;
+marked shells use scoped commands. direct canonical invocations and external
+package internals remain outside these owned boundaries.
+
 manual codex upgrades use the canonical command with the fixed installation
-context and clear inherited npm-manager markers:
-`env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_PACKAGE_ROOT
-CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin"
-"$HOME/.local/bin/codex" update`. upstream installation detection cannot find
-the shared installation when `CODEX_HOME` selects a work account. preserve
-simple profile wrappers; do not parse updater arguments or create more cli
-installations. claude upgrades use `claude update`; the invoking account's
-channel selects the shared version. official installer reruns use the same
+context and clear inherited package-manager provenance:
+
+```sh
+env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_BY_BUN \
+    -u CODEX_MANAGED_BY_PNPM -u CODEX_MANAGED_BY_VITE_PLUS \
+    -u CODEX_MANAGED_PACKAGE_ROOT \
+    CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" \
+    "$HOME/.local/bin/codex" update
+claude update
+```
+
+use the codex command from any account shell. upstream installation detection
+cannot find the shared installation when `CODEX_HOME` selects a work account;
+[the upstream issue](docs/issues/codex-installation-discovery.md) records that
+remaining limitation. preserve simple profile wrappers; do not parse updater
+arguments or create more cli installations. claude's invoking account selects
+the shared version through its channel. official installer reruns use the same
 installation context as bootstrap. native installers own their selection and
 layout; dev-server owns neither.
 an upgrade must reach every future cli launch without a dev-server edit, apply,
@@ -250,13 +280,16 @@ minimum versions. host package declarations still own node/npm where needed.
 gateway operations require working canonical native providers and never install
 or upgrade them. upgrades do not alter skid generation identity because its
 configuration stores canonical command paths rather than provider versions.
+changed scoped launcher assets alter generation identity and follow normal
+gateway admission and activation.
 upstream cli or protocol changes can still require integration maintenance;
 shared paths are not a promise of compatibility with every future release.
 
 ordinary account commands are installed by `lib/ai-tools.sh`.
-`codex` preserves a nonempty `CODEX_HOME`, defaulting to `.codex`; the named
-work commands force `.codex-work` or `.codex-work2`. each executes the canonical
-cli with unchanged arguments. `ai-profile` supplies only `claude-work`; bare
+`codex` preserves a nonempty `CODEX_HOME`, defaulting to `owner_home/.codex`;
+the named work commands force `owner_home/.codex-work` or
+`owner_home/.codex-work2`. each executes the canonical cli with unchanged
+arguments. `ai-profile` supplies only `claude-work`; bare
 claude resolves to its existing native executable. normal homes remain
 `.codex`, `.codex-work`, `.codex-work2`,
 `.claude` and `.claude-work`, with existing override and account-selection

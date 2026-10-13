@@ -152,11 +152,20 @@ or phone transport. preserve existing unrelated issue records.
 
 ## cutover and limits
 
-roll out macbook, arch and devbox; preserve running clients. publish ordinary wrappers
-through host apply and scoped assets through gateway apply, from the same source
-revision; gateway-only apply cannot install wrappers. verify installed paths and
-fresh ordinary/scoped/profile launches per selected host. version admission and
-memory writing execute from applying source, with no persistent writer artifact.
+roll out macbook, arch and devbox; preserve running clients. from one frozen source
+revision, compose existing `ai_native_version` and `ai_install_profiles` owners to
+publish ordinary wrappers, then use normal gateway apply for scoped assets.
+atomically replace changed applying-source files on devbox. use an isolated source
+worktree on arch. gateway-only apply cannot install wrappers. verify installed
+paths and fresh ordinary/scoped/profile launches on each host. version admission
+and memory writing execute from applying source, with no persistent writer artifact.
+
+tradeoff: full host apply upgrades unrelated rolling software and cannot promise
+client preservation. this bounded operator composition avoids those changes; it
+adds no public maintenance mode. gateway activation may interrupt http/websocket
+connections while retaining tmux/provider processes. capture their pids and start
+times before activation; verify afterward. record the external native helper
+revision before/after apply and qualify the deployed revision if it advances.
 
 hard replacement means no opt-in, alternate launcher, compatibility branch or npm
 fallback. source deployment may activate a new gateway generation; preserve tmux
