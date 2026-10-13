@@ -181,3 +181,77 @@ action. all three hosts finish with shared native codex `0.160.0` and claude
 logs and snapshots retain evidence. the completed cutover plan and resolved
 native-install/runtime-minimum/npm-retirement issues are deleted; their source
 history remains in git.
+
+## 2026-10-13 native launch provenance
+
+source `b9407c431cd9e85401958cf9acff3c5efd34d767` is deployed on macbook,
+arch and devbox. all four owned native codex invocation sites remove inherited
+installer provenance while preserving account selection, memory selection and
+arguments. upstream installation ownership remains unchanged.
+
+| boundary | result and scope |
+|---|---|
+| compiled integration | each original/final run passed 1,081 controls and checked 100 provenance cases: 78 original leaks, zero final leaks; receivers qualify execution/environment, not native updater or mcp behavior |
+| wrapper publication | original full publication failed the narrow claude-preservation predicate; final codex publication passed 62 controls and preservation; full-parent publication passed its separate 34 controls and declared-asset predicate |
+| genuine native behavior | seven poisoned personal/work/work2/custom ordinary/scoped doctor routes passed; personal selected standalone, work/custom selected no manager; six actual native mcp add/remove operations preserved staged inputs and unrelated configuration |
+| disposable native upgrade | `0.162.0 → 0.162.1` advanced the canonical target; three account commands agreed afterward; three account configuration hashes and four wrapper hashes were unchanged |
+| live composition | real http gateway → tmux → bash/zsh → released codex: 12 leaking red cases became 12 clean cases on the same dirty server; the final refactor passed 12 cases on a new dirty server, bound to accepted source hashes |
+| installed routing | 15 routes per host, 45 total, passed ordinary/scoped/marked bash+zsh/installed-profile execution; all three selected homes and exact installed codex profile fields were checked; doctor rows, not overall exit status, establish this result |
+| client access | the actual three-peer client reached all hosts over authenticated tls; nonpartial `skid list` results included all four profiles |
+
+| host | platform | native codex | provider identities preserved | tmux servers preserved | gateway attachments replaced | strict all-process comparison |
+|---|---|---|---|---|---|---|
+| macbook | darwin | `0.162.0` | 55 | 1 | 1 | failed |
+| arch | linux | `0.160.0` | 4 | 1 | 0 | passed |
+| devbox | linux | `0.162.0` | 14 | 1 | 2 | failed |
+
+provider/server identities compare pid, start time and command, without arguments.
+gateway activation replaced attachment clients; old gateway ownership is inferred
+on macbook and directly observed on devbox. those strict comparison failures
+remain failures; the surviving provider/server identities qualify worker
+preservation. no production provider upgrade was performed.
+
+all 15 recorded account/helper/wrapper file states matched across each activation
+interval, as did canonical binaries, gateway executable/configuration and helper
+revision `5aecc2bb3bd08e2c58b79d2e494d2bedb13871c8`. devbox's applying-source files matched
+the accepted hashes, owned by `niels`, mode `0644`.
+
+| host | admitted gateway generation |
+|---|---|
+| macbook | `v0.14.0-c129624c23335235fee779930bef438766c790513fad6c857f84a39291b46854` |
+| arch | `v0.14.0-b180e454521f6fcbd2fc6573a3bd86688d01d5cdea62f7e15bbe85cf07986b02` |
+| devbox | `v0.14.0-f045d6d750abdbe955440c90ee4f9b9ebee3b0bbc6b4ed1ed9d7fe02e57f921e` |
+
+the first publication transiently replaced `claude-work`; its exact prior bytes
+and mode `0755` were restored before gateway activation. this drove extraction
+of the existing codex publication owner, whose bounded publication preserves the
+installed claude wrapper. no account data was restored.
+
+macbook's `.claude-work/.claude.json` whole hash changed between the initial
+snapshot and preactivation. changed fields and cause are unclassified; later
+fingerprints cannot establish the earlier difference. the activation interval
+matched both whole hashes and the explicit identity/update/mcp projection. this
+does not establish byte preservation across the earlier interval.
+
+the checks captured filtered process/hash/routing observations without retaining
+raw production doctor reports, account values, tokens or terminal contents.
+task snapshots are deleted with the temporary tests; this appendix retains the
+dated aggregate evidence.
+production model turns and phone transport are `NOT_RUN` and outside this
+correction's acceptance. work-account self-update remains the separate
+[upstream discovery issue](issues/codex-installation-discovery.md); the supported
+maintenance command selects the installation context. the
+[current five-key runbook command](gateway-separation-runbook.md#native-ai-maintenance)
+supersedes the historical two-key maintenance command above. no upstream fork or release
+dependency was added.
+
+temporary tests, drivers, receivers, accounts, snapshots, clone and task caches
+are deleted. teardown initially missed two orphaned fixture foregrounds and a
+stale tmux socket; exact fixture identities were verified, both clients exited
+on sigterm, and the stale socket was removed. independent final observation found
+zero fixture executable paths and no owned tmux or daemon sockets.
+
+shell syntax, `shellcheck -x`, python syntax and `git diff --check` passed.
+no retained test suite is introduced. the
+[accepted applying worktrees](codex-native-launch-plan.md#cutover-and-limits)
+own future applies; the original dirty checkout remains untouched.

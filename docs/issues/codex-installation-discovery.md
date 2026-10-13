@@ -4,8 +4,9 @@ problem: upstream uses the selected `CODEX_HOME` to discover a shared standalone
 installation and accepts inherited package-manager markers before executable
 evidence. account identity and installation ownership are coupled.
 
-impact: the planned local correction removes false package-manager routing, but
-work accounts still cannot discover the standalone release owned under `.codex`.
+impact: the local correction is deployed on all three hosts and removes false
+package-manager routing at dev-server's owned invocation boundaries. work accounts
+still cannot discover the standalone release owned under `.codex`.
 shared maintenance must explicitly select the installation context; launcher
 sanitation alone cannot supply work-profile self-update.
 
@@ -14,6 +15,8 @@ uses marker presence as a method override. its standalone discovery requires the
 release directory to be beneath the selected home's standalone releases root.
 [native qualification](../ai-native-installation-validation.md#upstream-native-qualification)
 already records the work-account discovery limitation.
+[2026-10-13 acceptance](../ai-native-installation-validation.md#2026-10-13-native-launch-provenance)
+records the deployed local correction and remaining manual/unknown work routing.
 
 proposal: upstream should discover installation ownership independently of
 account selection and accept manager provenance only when consistent with the

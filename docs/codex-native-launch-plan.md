@@ -1,7 +1,9 @@
 # codex native launch specification and implementation plan
 
-2026-10-13. implementation authorized: local dev-server correction, all three
-hosts, macbook first; preserve running clients. upstream proposal only, with no
+2026-10-13. implemented and deployed on macbook, arch and devbox from source
+`b9407c431cd9e85401958cf9acff3c5efd34d767`. the
+[dated acceptance record](ai-native-installation-validation.md#2026-10-13-native-launch-provenance)
+qualifies the results and preservation limits. upstream proposal only, with no
 fork or release dependency.
 
 ## target and contract
@@ -96,8 +98,8 @@ migration/launcher-restoration paragraphs and their readme pointer; preserve
 native repair and deliberate admitted rollback.
 
 append dated acceptance to `docs/ai-native-installation-validation.md`; preserve
-historical evidence. delete [the local issue](issues/codex-npm-marker-inheritance.md)
-after local acceptance; retain [the upstream issue](issues/codex-installation-discovery.md).
+historical evidence. the resolved local marker-inheritance issue is removed;
+retain [the upstream issue](issues/codex-installation-discovery.md).
 
 ## acceptance and implementation sequence
 
@@ -175,14 +177,35 @@ and memory writing execute from applying source, with no persistent writer artif
 tradeoff: full host apply upgrades unrelated rolling software and cannot promise
 client preservation. this bounded operator composition avoids those changes; it
 adds no public maintenance mode. gateway activation may interrupt http/websocket
-connections while retaining tmux/provider processes. capture their pids and start
-times before activation; verify afterward. record the external native helper
+connections while retaining provider processes and tmux servers. gateway-owned
+attachment clients follow the gateway's lifetime and reconnect. capture worker
+pids, start times and commands before activation; verify afterward. retain strict
+all-process comparison failures and qualify attachment replacement separately.
+record the external native helper
 revision before/after apply and qualify the deployed revision if it advances.
+
+account files with runtime state can change while clients run. compare whole
+hashes across the activation interval and an explicit identity/update/mcp field
+projection. an earlier unexplained whole-hash change stays unclassified; later
+matching fields cannot prove its cause or erase it. never restore account data
+to manufacture preservation.
 
 hard replacement means no opt-in, alternate launcher, compatibility branch or npm
 fallback. source deployment may activate a new gateway generation; preserve tmux
 workers and running provider clients. no provider
 upgrade is required. future upstream upgrades retain the canonical-path contract.
+
+routine applies now use branch `fix/codex-native-launch` in these accepted
+worktrees; the macbook checkout also controls devbox:
+
+| applying owner | source worktree | normal apply from that directory |
+|---|---|---|
+| macbook; devbox controller | `/Users/nnandal/Documents/code/dev-server-codex-native-launch` | `./workstation apply`; `./devbox apply` |
+| arch | `/home/nnandal/Projects/dev-server-codex-native-launch` | `./workstation apply` |
+
+the original dirty main checkout is preserved and is no longer the applying
+source for this rollout. applying its old revision would reinstall the defect.
+source integration into main is outside the requested branch/worktree scope.
 
 deliberate operator rollback may restore the prior admitted generation; it also
 restores the known provenance defect. do not report that state as repaired.
