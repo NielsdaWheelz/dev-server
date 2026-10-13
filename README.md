@@ -20,8 +20,8 @@ removal commands are retired. ordinary apply installs no herdr runtime, hook or 
 never discards workers. [the maintenance runbook](docs/gateway-separation-runbook.md)
 separates source changes from live acceptance.
 
-`apply` updates rolling packages, bootstraps missing native ai tools, reconciles
-exact repository pins, and installs shared host configuration. it replaces the former `upgrade`
+`apply` updates rolling packages, maintains native codex, bootstraps missing
+claude, reconciles exact repository pins, and installs shared host configuration. it replaces the former `upgrade`
 command; there is no separate update mode. each run checks upstream releases,
 so an unchanged checkout can still produce software updates. configuration-only
 and offline applies are not supported.
@@ -111,42 +111,48 @@ their authentication, configuration, history, memories, plugins and trust stay
 in place. existing environment-override semantics remain intact.
 
 original skid's forge and marked bash/zsh terminals use those same accounts
-through scoped commands. skid invokes the shared native commands
-`~/.local/bin/codex` and `~/.local/bin/claude` directly. personal claude leaves
+through scoped commands. skid reaches the shared native commands
+`~/.local/bin/codex` and `~/.local/bin/claude`; its codex profile uses the existing
+account wrapper. personal claude leaves
 `CLAUDE_CONFIG_DIR` unset. skid loads its claude identity plugin explicitly; it
 installs no codex hooks and never provisions or rewrites account state.
 [the runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract)
 gives the exact worker map and app environment contract.
 
-`apply` uses the official native installers only when a canonical command is
-absent. a working native installation is adopted without a provider release
-lookup, installer or updater. invalid commands produce a repair action. user
-account settings own release channels and automatic updates; apply never
-restarts provider sessions or changes npm's prefix.
+normal `apply` on macbook, arch and devbox maintains codex through the checked
+official installer even when its native command already works. this requires network
+access, can advance the version on an unchanged checkout and can fail. upstream
+defaults to latest unless its release selector, such as `CODEX_RELEASE`, says
+otherwise. dev-server fixes the host-owner `HOME`, `CODEX_HOME=owner_home/.codex`
+and `CODEX_INSTALL_DIR=owner_home/.local/bin`, independently of inherited
+work-account selectors.
+`UPDATED` means the before/after version differs; equal versions prove only no
+observed version change. completed earlier operations remain after a failure;
+there is no fallback or automatic rollback.
 
-upstream cli maintenance updates every future account and skid launch without a
-repository edit, apply or gateway restart:
+claude retains bootstrap/adoption only: missing commands use the official
+installer; working native commands are not updated by apply. its
+[activation-result defect](docs/issues/claude-native-update-activation.md) blocks
+strict maintenance. invalid canonical commands are preserved and produce a
+repair `ACTION`. apply does not restart provider sessions, update account
+daemons, change account update settings or change npm's prefix.
 
-```sh
-env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_BY_BUN \
-    -u CODEX_MANAGED_BY_PNPM -u CODEX_MANAGED_BY_VITE_PLUS \
-    -u CODEX_MANAGED_PACKAGE_ROOT \
-    CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" \
-    "$HOME/.local/bin/codex" update
-claude update
-```
-
-the codex command clears inherited package-manager provenance and selects the
-fixed installation context, including from a work shell;
-plain `codex-work update` cannot detect the shared installation upstream.
-claude's invoking account selects its update channel for the shared command.
+future account and skid cli invocations follow the canonical selection without
+a repository edit or gateway restart. direct `codex update` is not the checked
+maintenance path: its [shell pipeline can hide download failure](docs/issues/codex-self-update-pipeline.md).
+`codex-work update` also retains the separate
+[upstream discovery limitation](docs/issues/codex-installation-discovery.md).
 [the native maintenance runbook](docs/gateway-separation-runbook.md#native-ai-maintenance)
-covers installation and repair. account daemons retain their
+covers installation, manual context and repair. account daemons retain their
 separate upstream-managed packages and updates.
 
 account wrappers, scoped codex commands, native version inspection and the memory
-configuration writer remove the five provenance keys named in that command
-before invoking native codex. selected accounts, memory credentials and existing
+configuration writer remove `CODEX_MANAGED_BY_NPM`, `CODEX_MANAGED_BY_BUN`,
+`CODEX_MANAGED_BY_PNPM`, `CODEX_MANAGED_BY_VITE_PLUS` and
+`CODEX_MANAGED_PACKAGE_ROOT` before invoking native codex. installer execution
+clears the same keys and forces dedicated cli selection; the
+[exact contract](SPEC.md#files-and-ai-tools) specifies preservation of upstream
+release/transport selectors. selected accounts, memory credentials and existing
 arguments remain intact. parent shells and running clients retain their
 environments. changed scoped assets use normal gateway admission and activation.
 

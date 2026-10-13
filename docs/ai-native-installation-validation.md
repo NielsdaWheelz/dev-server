@@ -240,9 +240,11 @@ dated aggregate evidence.
 production model turns and phone transport are `NOT_RUN` and outside this
 correction's acceptance. work-account self-update remains the separate
 [upstream discovery issue](issues/codex-installation-discovery.md); the supported
-maintenance command selects the installation context. the
-[current five-key runbook command](gateway-separation-runbook.md#native-ai-maintenance)
-supersedes the historical two-key maintenance command above. no upstream fork or release
+maintenance command selected the installation context. the initial five-key
+guidance superseded the historical two-key command above;
+[checked apply maintenance](gateway-separation-runbook.md#native-ai-maintenance)
+now supersedes that direct-update recommendation, as the follow-up below records.
+no upstream fork or release
 dependency was added.
 
 temporary tests, drivers, receivers, accounts, snapshots, clone and task caches
@@ -255,3 +257,43 @@ shell syntax, `shellcheck -x`, python syntax and `git diff --check` passed.
 no retained test suite is introduced. the
 [accepted applying worktrees](codex-native-launch-plan.md#cutover-and-limits)
 own future applies; the original dirty checkout remains untouched.
+
+## 2026-10-13 claude maintenance qualification follow-up
+
+five direct native updater cases used copied released binaries in disposable
+homes on darwin. each invocation fixed `HOME` and cwd to the fixture owner,
+unset `CLAUDE_CONFIG_DIR`, closed stdin, used no tty and passed an allowlisted
+environment without real credentials. personal settings bytes were preserved.
+these are updater controls, not acceptance of normal-apply claude maintenance.
+
+| case | observed behavior | result |
+|---|---|---|
+| personal stable | `2.1.288 → 2.1.287`, exit `0`; upstream channel selection can downgrade | `PASS` |
+| stable with `minimumVersion=2.1.296` | same starting binary retained `2.1.288`, exit `0`; the selected target was blocked, not replaced by the floor | `PASS` |
+| latest no-op | `2.1.296` remained selected, exit `0` | `PASS` |
+| network failure | dead, non-listening loopback proxy; exit `1` after 25.4 seconds; canonical link, bytes and version unchanged | `PASS` |
+| activation failure | only fixture `.local/bin` made nonwritable (`0555`); exit `0` and successful-update message, but canonical link, bytes and `2.1.288` unchanged; no visible activation error | `RED` |
+
+the activation probe reused the downloaded stable target and restored directory
+mode `0755` in `finally`. its failed nonzero-exit assertion remains failed.
+an unchanged version proves no observed version change; it does not distinguish
+policy/no-op from this silent activation failure or prove the command is newest.
+the [upstream activation issue](issues/claude-native-update-activation.md) blocks
+strict claude maintenance through the current interface.
+
+scope decision: ship checked codex maintenance and defer claude. current
+[runbook guidance](gateway-separation-runbook.md#native-ai-maintenance) replaces
+the earlier direct-update recommendation; the five-key command in the historical
+acceptance remains historical. this claude qualification does not establish
+acceptance or deployment of the new codex maintenance behavior.
+
+| qualified native executable | sha256 |
+|---|---|
+| starting `2.1.288` | `bbe93063f7a0879a1021b2891e5c9354e5b3b98433e32efe6750f7710afed750` |
+| starting `2.1.296` | `c9b5341637becbd423ddffc5b254afb645682a3868cb708bbc6cc0e7bb419937` |
+| downloaded stable `2.1.287` | `6eab8333fe2121553100d8f40bfada384a3e989b94f947e18ba6677a6fcb41ea` |
+
+starting binaries admitted the native mach-o header `cffaedfe` and exact native
+version output. evidence retains only filtered outcomes, hashes and execution
+bindings. no production provider was executed or upgraded; no daemon, tmux or
+model turn was started. fixture/test teardown is pending.

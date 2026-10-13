@@ -82,15 +82,11 @@ limitation. distinguish future launches from already-running clients.
 reuse contract tables, runbook commands, issue fields and
 `boundary | result and scope` validation rows. add no product ui or schema.
 
-supported maintenance from any account shell:
-
-```sh
-env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_BY_BUN \
-    -u CODEX_MANAGED_BY_PNPM -u CODEX_MANAGED_BY_VITE_PLUS \
-    -u CODEX_MANAGED_PACKAGE_ROOT \
-    CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" \
-    "$HOME/.local/bin/codex" update
-```
+current strict maintenance is normal apply from the accepted source, using the
+checked official-installer runner described below. the initial launch rollout
+qualified native `codex update` in fixed personal context; subsequent review
+found its [download failure propagation defect](issues/codex-self-update-pipeline.md).
+that command is no longer the recommended strict maintenance path.
 
 update current guidance in spec, readme and
 `docs/gateway-separation-runbook.md` together. remove only obsolete npm
@@ -220,3 +216,52 @@ provenance against the executable; it has no local release dependency.
 non-goals: upstream code/PR, fork, installer migration, extra installations,
 account consolidation, auto-update changes, global environment reset, daemon/socket
 redesign, gateway binary release, phone acceptance or unrelated cleanup.
+
+## authorized follow-up: native cli maintenance during apply
+
+2026-10-13. normal workstation/devbox apply must maintain shared native codex.
+the user initially authorized both providers, then explicitly chose strict codex
+maintenance with claude deferred after its activation defect was reproduced.
+this supersedes codex's bootstrap/adoption-only policy. claude retains it;
+gateway scope stays unchanged. retain the branch, native ownership and account
+launch contracts.
+
+| canonical state | required operation and result |
+|---|---|
+| absent | existing official installer; native revalidation; `INSTALLED` |
+| valid native codex | checked official installer in owner personal context; native revalidation; `UPDATED` only when the version changes; otherwise `UP TO DATE` |
+| valid native claude | adopt without download or updater; unchanged existing behavior |
+| broken link, script or invalid native version | preserve that provider's path; concrete `ACTION`, status `2`; no maintenance for that provider |
+| failed download, updater or post-maintenance admission | visible error, status `1`; no fallback or automatic rollback |
+
+codex uses the existing checked official-installer runner every apply. its native
+`update` command's shell pipeline can hide a failed installer download. keep
+`HOME=owner_home`, `CODEX_HOME=owner_home/.codex`,
+`CODEX_INSTALL_DIR=owner_home/.local/bin`, noninteractive operation and the exact
+five-key removal. pin `CODEX_INSTALL_DAEMON_ONLY=0`; unset
+`CODEX_INSTALL_DEFER_SELECTION`, `CODEX_INSTALL_IF_LATEST` and
+`CODEX_INSTALL_IF_CURRENT` so explicit cli maintenance cannot select a daemon or
+silently take a conditional-update path. preserve upstream release/transport
+selectors; no repository version pin.
+
+missing claude still uses its official installer; healthy claude is adopted.
+genuine claude maintenance can report success
+after launcher activation fails. the [upstream activation issue](issues/claude-native-update-activation.md)
+records the red evidence. no healthy claude updater path, flag or fallback is
+introduced. unchanged codex means no observed version change; it does not prove
+the newest release is installed. upstream release selection may downgrade.
+
+provider operations are sequential. a completed codex update remains if later
+claude admission fails; rerunning is repair. preserve running providers, account data and separate daemon
+ownership. installer-owned selection/bookkeeping may change. no provider restart,
+daemon update, new public command, policy registry or receipt machinery.
+
+ownership: shell author changes only `lib/ai-tools.sh`; the acceptance author owns
+temporary compiled integration/codex fixtures; the content designer owns genuine
+claude blocker fixtures and the four current docs; root owns this plan, issues,
+independent verification and rollout. write red against frozen `0df1b89`, then
+code, green, adversarial review/refactor, genuine disposable codex
+update/no-op/error qualification,
+and the existing result-carrier checks. record before deleting all temporary
+tests/resources. deploy applying source on all three hosts without a full rolling
+host upgrade; keep the original dirty checkout intact.

@@ -69,7 +69,7 @@ PYTHON
   printf '%s\n' "${BASH_REMATCH[1]}"
 }
 
-ai_bootstrap_native() (
+ai_run_native_installer() (
   set -euo pipefail
 
   local provider="$1" home installer url repair
@@ -80,6 +80,7 @@ ai_bootstrap_native() (
   codex)
     url=https://chatgpt.com/codex/install.sh
     repair="rerun $url with CODEX_HOME=$home/.codex and CODEX_INSTALL_DIR=$home/.local/bin"
+    cd "$home" || die "could not enter codex installation owner home: $home"
     ;;
   claude)
     url=https://claude.ai/install.sh
@@ -98,8 +99,13 @@ ai_bootstrap_native() (
   bash -n "$installer" || die "invalid $provider installer syntax"
   case "$provider" in
   codex)
-    HOME="$home" CODEX_HOME="$home/.codex" CODEX_INSTALL_DIR="$home/.local/bin" \
-      CODEX_NON_INTERACTIVE=1 bash "$installer" ||
+    env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_BY_BUN \
+      -u CODEX_MANAGED_BY_PNPM -u CODEX_MANAGED_BY_VITE_PLUS \
+      -u CODEX_MANAGED_PACKAGE_ROOT \
+      -u CODEX_INSTALL_DEFER_SELECTION -u CODEX_INSTALL_IF_LATEST \
+      -u CODEX_INSTALL_IF_CURRENT \
+      HOME="$home" CODEX_HOME="$home/.codex" CODEX_INSTALL_DIR="$home/.local/bin" \
+      CODEX_NON_INTERACTIVE=1 CODEX_INSTALL_DAEMON_ONLY=0 bash "$installer" </dev/null ||
       die "$provider native installation failed; partial state may remain; $repair"
     ;;
   claude)
@@ -110,20 +116,25 @@ ai_bootstrap_native() (
 )
 
 ai_install_codex() {
-  local home binary version
+  local home binary version previous_version=""
   home="$(dev_server_home)"
   binary="$home/.local/bin/codex"
   if [[ -e "$binary" || -L "$binary" ]]; then
-    if ai_native_version codex "$binary" >/dev/null; then
-      return 0
+    if ! previous_version="$(ai_native_version codex "$binary")"; then
+      render_result ACTION 'AI tool codex' "invalid native command at $binary; preserve the conflict and follow docs/gateway-separation-runbook.md#native-ai-maintenance; repair with https://chatgpt.com/codex/install.sh using CODEX_HOME=$home/.codex CODEX_INSTALL_DIR=$home/.local/bin"
+      return 2
     fi
-    render_result ACTION 'AI tool codex' "invalid native command at $binary; preserve the conflict and follow docs/gateway-separation-runbook.md#native-ai-maintenance; repair with https://chatgpt.com/codex/install.sh using CODEX_HOME=$home/.codex CODEX_INSTALL_DIR=$home/.local/bin"
-    return 2
   fi
-  ai_bootstrap_native codex || return $?
+  ai_run_native_installer codex || return $?
   version="$(ai_native_version codex "$binary")" ||
     die "codex native installation is invalid; partial state may remain; rerun https://chatgpt.com/codex/install.sh with CODEX_HOME=$home/.codex CODEX_INSTALL_DIR=$home/.local/bin"
-  render_result INSTALLED 'AI tool' "codex@$version"
+  if [[ -z "$previous_version" ]]; then
+    render_result INSTALLED 'AI tool' "codex@$version"
+  elif [[ "$version" != "$previous_version" ]]; then
+    render_result UPDATED 'AI tool' "codex@$version"
+  else
+    render_result 'UP TO DATE' 'AI tool' "codex@$version (version unchanged)"
+  fi
 }
 
 ai_install_claude() {
@@ -137,7 +148,7 @@ ai_install_claude() {
     render_result ACTION 'AI tool claude' "invalid native command at $binary; preserve the conflict and follow docs/gateway-separation-runbook.md#native-ai-maintenance; repair with https://claude.ai/install.sh using HOME=$home and CLAUDE_CONFIG_DIR unset"
     return 2
   fi
-  ai_bootstrap_native claude || return $?
+  ai_run_native_installer claude || return $?
   version="$(ai_native_version claude "$binary")" ||
     die "claude native installation is invalid; partial state may remain; rerun https://claude.ai/install.sh with HOME=$home and CLAUDE_CONFIG_DIR unset"
   render_result INSTALLED 'AI tool' "claude@$version"

@@ -38,46 +38,64 @@ all account wrappers, forge profiles, marked shells and native helpers invoke
 symlinks, release directories and upgrades. existing processes keep loaded code;
 account daemons may use separate upstream-managed packages.
 
-```sh
-env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_BY_BUN \
-    -u CODEX_MANAGED_BY_PNPM -u CODEX_MANAGED_BY_VITE_PLUS \
-    -u CODEX_MANAGED_PACKAGE_ROOT \
-    CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" \
-    "$HOME/.local/bin/codex" update
-claude update
-```
+normal apply on macbook, arch and devbox is the checked codex maintenance path. it
+downloads the unchanged official installer, checks nonempty content and shell
+syntax, checks execution status, then revalidates the canonical native command.
+it runs even for healthy codex, using the fixed host-owner `HOME`, personal
+`CODEX_HOME`, `.local/bin` installation directory, owner cwd and closed stdin.
+this is the upstream installer with explicit context, not a custom installer.
 
-use that codex command from any account shell. it clears all five provenance
-keys, including empty values, and selects the fixed installation context.
-upstream's updater detects the installation under `CODEX_HOME`;
-`codex-work update` and `codex-work2 update` cannot detect the shared personal
-installation. [the upstream issue](issues/codex-installation-discovery.md)
-records that limitation. claude's invoking account owns
-its update channel; updating it selects one shared binary for both accounts.
+installer execution clears `CODEX_MANAGED_BY_NPM`, `CODEX_MANAGED_BY_BUN`,
+`CODEX_MANAGED_BY_PNPM`, `CODEX_MANAGED_BY_VITE_PLUS` and
+`CODEX_MANAGED_PACKAGE_ROOT`, including empty and `0` values. it fixes
+`CODEX_INSTALL_DAEMON_ONLY=0`, unsets `CODEX_INSTALL_DEFER_SELECTION`,
+`CODEX_INSTALL_IF_LATEST` and `CODEX_INSTALL_IF_CURRENT`, and preserves upstream
+release/transport selectors such as `CODEX_RELEASE`. upstream defaults to latest
+and owns layout and integrity. inherited work context cannot redirect maintenance.
+
+healthy codex maintenance needs network access and may change the version.
+`UPDATED` records any version difference, including a downgrade; unchanged means
+no observed version change, not proof of newest. failure returns `ERROR`, status
+`1`; earlier completed operations and partial upstream state may remain. repair
+and rerun; there is no fallback or automatic rollback. normal apply also runs the
+host's ordinary package policy; deploying this source change does not require a
+full rolling host upgrade or add a public maintenance mode.
+
+working native claude is adopted without installer, updater or release lookup.
+missing claude still uses its official installer. its
+[activation-result defect](issues/claude-native-update-activation.md) blocks
+strict updater integration. normal apply preserves account update policy and
+does not restart providers or update separately owned account daemons.
 
 generated account wrappers, scoped codex commands, version inspection and the
-memory configuration writer clear the same keys before native invocation.
+memory configuration writer clear the same five provenance keys before native
+invocation.
 wrappers retain account and memory selection; ordinary arguments remain literal,
 and scoped commands retain their `--yolo` prefix plus literal caller suffix.
-parent shells and existing clients keep their environments. direct canonical
-maintenance uses the explicit command above. upstream
+parent shells and existing clients keep their environments. upstream
 cli upgrades need no gateway reapply; deploying changed scoped assets follows
 normal generation admission and activation while preserving tmux workers.
 
-for an absent installation or native repair, run the official installer as the
-host user. keep `~/bin` ahead of `~/.local/bin` in `PATH` so installer startup
-changes cannot supersede account wrappers:
+direct `codex update` and the upstream curl-to-shell one-liner can hide download
+failure through their shell pipeline; see the [pipeline issue](issues/codex-self-update-pipeline.md).
+work/work2 updates also cannot detect the shared personal installation; the
+[discovery issue](issues/codex-installation-discovery.md) remains upstream.
+wrappers do not parse maintenance arguments.
+
+manual claude maintenance remains upstream-owned. if using its updater, select
+the personal home and cwd explicitly. it can report success while the canonical
+selection remains old; this command has no strict activation-failure guarantee:
 
 ```sh
-export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
-curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" bash
-curl -fsSL https://claude.ai/install.sh | env -u CLAUDE_CONFIG_DIR bash
+(cd "$HOME" && env -u CLAUDE_CONFIG_DIR HOME="$HOME" \
+    "$HOME/.local/bin/claude" update </dev/null)
 ```
 
-ordinary apply downloads and syntax-checks an installer only for an absent
-command. adoption checks native executable and provider version output without
-network access. a broken link, script or invalid provider at the canonical path
-requires operator repair; apply preserves it and returns `ACTION`.
+for native repair, use the official [codex installer](https://chatgpt.com/codex/install.sh)
+or [claude installer](https://claude.ai/install.sh) as the host owner with the
+installation context above. keep `~/bin` before `~/.local/bin` in `PATH`.
+a broken link, script or invalid provider at the canonical path requires
+operator repair; apply preserves it and returns `ACTION`, status `2`.
 
 gateway rollback does not roll back provider installations or account data.
 
