@@ -184,6 +184,16 @@ history remains in git.
 
 ## 2026-10-13 native launch provenance
 
+historical diagnosis (2026-10-11, macbook): the canonical native `0.162.0`
+command was valid and the global npm codex package was absent. the long-lived
+tmux server carried `CODEX_MANAGED_BY_NPM=1` and `CODEX_MANAGED_PACKAGE_ROOT`;
+sampled native processes across all three accounts carried both. the observed
+personal ancestry ran through zsh from that server; the later gateway was
+unmarked. this ancestry and upstream
+marker precedence support the reported npm/`EEXIST` mechanism; the failed
+process had exited, so its exact environment and the server's original launcher
+remain unknown.
+
 source `b9407c431cd9e85401958cf9acff3c5efd34d767` is deployed on macbook,
 arch and devbox. all four owned native codex invocation sites remove inherited
 installer provenance while preserving account selection, memory selection and
@@ -256,7 +266,9 @@ zero fixture executable paths and no owned tmux or daemon sockets.
 shell syntax, `shellcheck -x`, python syntax and `git diff --check` passed.
 no retained test suite is introduced. the
 [accepted applying worktrees](codex-native-launch-plan.md#cutover-and-limits)
-own future applies; the original dirty checkout remains untouched.
+were used for this rollout; the original dirty checkout remained untouched.
+permanent applying guidance moves to `main` after
+[source integration](codex-native-launch-plan.md#main-integration-and-cleanup).
 
 ## 2026-10-13 claude maintenance qualification follow-up
 
@@ -369,5 +381,8 @@ values or terminal contents. a finite audit of 26 acceptance receipts found all
 no fixture executable paths, filesystem sockets or socket links remained.
 temporary tests, drivers, native copies, fixture homes, snapshots and remote
 code-rollout stages are deleted; their exact local and remote paths are absent.
-legitimate applying worktrees remain. shell syntax, `shellcheck -x` and
+applying worktrees remained at this acceptance. their retirement is a separate
+operation specified in [main integration](codex-native-launch-plan.md#main-integration-and-cleanup),
+distinct from completed fixture cleanup.
+shell syntax, `shellcheck -x` and
 `git diff --check` passed. no retained test suite is introduced.

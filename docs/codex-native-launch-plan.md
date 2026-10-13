@@ -194,17 +194,18 @@ fallback. source deployment may activate a new gateway generation; preserve tmux
 workers and running provider clients. no provider
 upgrade is required. future upstream upgrades retain the canonical-path contract.
 
-routine applies now use branch `fix/codex-native-launch` in these accepted
-worktrees; the macbook checkout also controls devbox:
+the rollout used branch `fix/codex-native-launch` in these accepted worktrees;
+the macbook checkout also controlled devbox:
 
-| applying owner | source worktree | normal apply from that directory |
+| rollout owner | historical source worktree | rollout apply commands |
 |---|---|---|
 | macbook; devbox controller | `/Users/nnandal/Documents/code/dev-server-codex-native-launch` | `./workstation apply`; `./devbox apply` |
 | arch | `/home/nnandal/Projects/dev-server-codex-native-launch` | `./workstation apply` |
 
-the original dirty main checkout is preserved and is no longer the applying
-source for this rollout. applying its old revision would reinstall the defect.
-source integration into main is outside the requested branch/worktree scope.
+the original dirty main checkout was preserved during this rollout. its old
+revision could reinstall the defect. authorized main integration and permanent
+applying locations are specified below; temporary worktrees are not the final
+source arrangement.
 
 deliberate operator rollback may restore the prior admitted generation; it also
 restores the known provenance defect. do not report that state as repaired.
@@ -226,7 +227,7 @@ redesign, gateway binary release, phone acceptance or unrelated cleanup.
 the user initially authorized both providers, then explicitly chose strict codex
 maintenance with claude deferred after its activation defect was reproduced.
 this supersedes codex's bootstrap/adoption-only policy. claude retains it;
-gateway scope stays unchanged. retain the branch, native ownership and account
+gateway scope stays unchanged. retain native ownership and account
 launch contracts.
 
 | canonical state | required operation and result |
@@ -283,4 +284,24 @@ the [dated maintenance acceptance](ai-native-installation-validation.md#2026-10-
 records the frozen red/green matrix, genuine installer probes, controller-boundary
 checks, 21 fresh fleet routes and their limits. no full rolling host apply,
 gateway activation, daemon update or production model turn was performed for
-this follow-up. final documentation integration leaves main untouched.
+this follow-up. main remained untouched during qualification and rollout.
+
+## main integration and cleanup
+
+authorized sequence: reviewed pr merge, normal main-checkout synchronization,
+then temporary branch/worktree retirement after source verification.
+
+after integration, routine applies use `main` in the normal checkouts below.
+the macbook checkout also becomes the devbox controller. temporary rollout
+paths above remain historical evidence, not permanent applying guidance.
+
+| applying owner | permanent main checkout | normal apply commands |
+|---|---|---|
+| macbook; devbox controller | `/Users/nnandal/Documents/code/dev-server` | `./workstation apply`; `./devbox apply` |
+| arch | `/home/nnandal/Projects/dev-server` | `./workstation apply` |
+
+merge the reviewed source, synchronize both normal checkouts to `main`, preserve
+unrelated dirty main documentation, then verify the accepted production bytes
+before removing `fix/codex-native-launch` and its two rollout worktrees. source
+routing changes; reviewed runtime code stays the same. this requires no provider
+restart, gateway activation, full host apply or recreated acceptance fixtures.
