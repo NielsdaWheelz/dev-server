@@ -2,6 +2,15 @@
 
 status: source implemented and pinned; fleet activation pending.
 
+2026-10-13 repair handoff: `codex/memory-repairs` prepares corrected presentation,
+the single `native-archive.v2` codec and nexus client/build source. real postgres,
+native/live inference, docker builds and the network audit remain blocked in its
+qualification environment. `assets/memory/release-pin.json` therefore retains
+the prior qualified source below. after the candidate passes the jarvis repair
+contract, advance this pin to its exact qualified commit and repeat source
+preparation; do not install or activate as part of that repair. original v1
+qualification does not qualify the changed codec. no real history was admitted.
+
 the collector must use the final qualified central jarvis commit and locked
 dependencies. `assets/memory/release-pin.json` declares qualified source
 `c62647a285457e0f61668947f50ab9274aa9bdaf`. controller/sharing declarations are default
