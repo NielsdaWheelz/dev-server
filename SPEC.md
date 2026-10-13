@@ -239,7 +239,7 @@ is the rendered host-user home, independent of the caller's runtime `HOME`.
 
 | native invocation owner | preserved context and execution |
 |---|---|
-| generated account wrappers in `lib/ai-tools.sh` | bare `codex` preserves nonempty `CODEX_HOME`, otherwise selects `owner_home/.codex`; work/work2 force their named homes; select only that account's memory credential and exec canonical codex with literal `"$@"` |
+| account wrappers published by `ai_install_codex_profiles` in `lib/ai-tools.sh` | bare `codex` preserves nonempty `CODEX_HOME`, otherwise selects `owner_home/.codex`; work/work2 force their named homes; select only that account's memory credential and exec canonical codex with literal `"$@"` |
 | scoped codex commands in `assets/skid-provider/provider-command` | select the named personal/work/work2 home under `owner_home`; preserve memory selection and native exec with the existing `--yolo` prefix and literal caller suffix |
 | codex branch of `ai_native_version` | retain fixed owner home, `.codex`, native admission and version validation; remove provenance only from the inspection child |
 | codex subprocess in `assets/memory/profile-config.py` | retain private staging home, native `mcp add/remove`, owned-key validation and publication; remove provenance from its copied environment |
@@ -285,7 +285,13 @@ gateway admission and activation.
 upstream cli or protocol changes can still require integration maintenance;
 shared paths are not a promise of compatibility with every future release.
 
-ordinary account commands are installed by `lib/ai-tools.sh`.
+`ai_install_codex_profiles` owns codex wrapper rendering/publication and the shared
+memory credential helper. callers provide the existing owner home/assets context,
+prepare directories and admit native codex. `ai_install_profiles` validates the
+declared claude wrapper first, calls the codex owner, then publishes `claude-work`.
+full host apply retains that composition; provider-specific publication adds no
+public command or selector.
+
 `codex` preserves a nonempty `CODEX_HOME`, defaulting to `owner_home/.codex`;
 the named work commands force `owner_home/.codex-work` or
 `owner_home/.codex-work2`. each executes the canonical cli with unchanged

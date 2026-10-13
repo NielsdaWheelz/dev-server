@@ -47,7 +47,7 @@ differ; scoped commands must not route through ordinary wrappers.
 
 | owner | exclusive files | change |
 |---|---|---|
-| a, shell | `lib/ai-tools.sh` | generated account wrappers and codex version inspection |
+| a, shell | `lib/ai-tools.sh` | generated account wrappers, codex version inspection and provider-specific publication ownership |
 | b, scoped launch | `assets/skid-provider/provider-command` | one codex exec epilogue, explicit personal/work mapping and provenance removal; claude unchanged |
 | c, configuration | `assets/memory/profile-config.py` | remove provenance from copied codex subprocess environment |
 | d, content designer | `SPEC.md`, `README.md`, runbook, validation and issue docs below | current contract, maintenance command, evidence and limitation |
@@ -55,8 +55,16 @@ differ; scoped commands must not route through ordinary wrappers.
 | integrator; read-only reviewers | this plan; integration of completed slices | boundary agreement, adversarial verification and cutover |
 
 a–c work independently after the same red baseline; d owns docs. reuse
-`ai_install_profiles`, `ai_native_version`, `skidbladnir_render_configs`,
+`ai_install_codex_profiles`, `ai_native_version`, `skidbladnir_render_configs`,
 `install_managed_file`, memory staging and gateway admission.
+
+`ai_install_codex_profiles()` owns the existing codex renderer and three-wrapper
+publication, including the shared credential helper. it needs the existing owner
+home/assets context and prepared directories; native admission remains the caller's
+responsibility. `ai_install_profiles()` validates the claude asset first, calls
+that owner, then publishes claude-work. full host apply keeps its contract; this
+internal split lets the codex correction preserve installed claude bytes even when
+they differ from the current declaration. no public selector or alternate asset.
 
 tradeoff: four short explicit removal sites avoid a shared runtime helper's
 deployment/version coupling. review their exact key agreement. add no library,
@@ -106,6 +114,10 @@ after local acceptance; retain [the upstream issue](issues/codex-installation-di
    arguments and existing prefixes. verify wrapper exec pid/exit behavior,
    unchanged parent/claude behavior, native admission and staged configuration.
    avoid a full Cartesian suite.
+   codex-only publication preserves an installed conflicting claude wrapper and
+   the current shared helper; repetition is inert. it works without a claude
+   declaration. full-profile publication still requires that declaration before
+   publishing anything and retains its existing claude installation contract.
 4. **real native acceptance.** use genuine released codex in a disposable install.
    parse `codex doctor --json`; require both `installation` and `updates.status`
    rows, independent of overall exit/network warnings. corrected personal routing
@@ -153,8 +165,8 @@ or phone transport. preserve existing unrelated issue records.
 ## cutover and limits
 
 roll out macbook, arch and devbox; preserve running clients. from one frozen source
-revision, compose existing `ai_native_version` and `ai_install_profiles` owners to
-publish ordinary wrappers, then use normal gateway apply for scoped assets.
+revision, compose `ai_native_version` and `ai_install_codex_profiles` owners to
+publish ordinary codex wrappers, then use normal gateway apply for scoped assets.
 atomically replace changed applying-source files on devbox. use an isolated source
 worktree on arch. gateway-only apply cannot install wrappers. verify installed
 paths and fresh ordinary/scoped/profile launches on each host. version admission
