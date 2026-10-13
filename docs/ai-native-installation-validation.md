@@ -181,3 +181,208 @@ action. all three hosts finish with shared native codex `0.160.0` and claude
 logs and snapshots retain evidence. the completed cutover plan and resolved
 native-install/runtime-minimum/npm-retirement issues are deleted; their source
 history remains in git.
+
+## 2026-10-13 native launch provenance
+
+historical diagnosis (2026-10-11, macbook): the canonical native `0.162.0`
+command was valid and the global npm codex package was absent. the long-lived
+tmux server carried `CODEX_MANAGED_BY_NPM=1` and `CODEX_MANAGED_PACKAGE_ROOT`;
+sampled native processes across all three accounts carried both. the observed
+personal ancestry ran through zsh from that server; the later gateway was
+unmarked. this ancestry and upstream
+marker precedence support the reported npm/`EEXIST` mechanism; the failed
+process had exited, so its exact environment and the server's original launcher
+remain unknown.
+
+source `b9407c431cd9e85401958cf9acff3c5efd34d767` is deployed on macbook,
+arch and devbox. all four owned native codex invocation sites remove inherited
+installer provenance while preserving account selection, memory selection and
+arguments. upstream installation ownership remains unchanged.
+
+| boundary | result and scope |
+|---|---|
+| compiled integration | each original/final run passed 1,081 controls and checked 100 provenance cases: 78 original leaks, zero final leaks; receivers qualify execution/environment, not native updater or mcp behavior |
+| wrapper publication | original full publication failed the narrow claude-preservation predicate; final codex publication passed 62 controls and preservation; full-parent publication passed its separate 34 controls and declared-asset predicate |
+| genuine native behavior | seven poisoned personal/work/work2/custom ordinary/scoped doctor routes passed; personal selected standalone, work/custom selected no manager; six actual native mcp add/remove operations preserved staged inputs and unrelated configuration |
+| disposable native upgrade | `0.162.0 → 0.162.1` advanced the canonical target; three account commands agreed afterward; three account configuration hashes and four wrapper hashes were unchanged |
+| live composition | real http gateway → tmux → bash/zsh → released codex: 12 leaking red cases became 12 clean cases on the same dirty server; the final refactor passed 12 cases on a new dirty server, bound to accepted source hashes |
+| installed routing | 15 routes per host, 45 total, passed ordinary/scoped/marked bash+zsh/installed-profile execution; all three selected homes and exact installed codex profile fields were checked; doctor rows, not overall exit status, establish this result |
+| client access | the actual three-peer client reached all hosts over authenticated tls; nonpartial `skid list` results included all four profiles |
+
+| host | platform | native codex | provider identities preserved | tmux servers preserved | gateway attachments replaced | strict all-process comparison |
+|---|---|---|---|---|---|---|
+| macbook | darwin | `0.162.0` | 55 | 1 | 1 | failed |
+| arch | linux | `0.160.0` | 4 | 1 | 0 | passed |
+| devbox | linux | `0.162.0` | 14 | 1 | 2 | failed |
+
+provider/server identities compare pid, start time and command, without arguments.
+gateway activation replaced attachment clients; old gateway ownership is inferred
+on macbook and directly observed on devbox. those strict comparison failures
+remain failures; the surviving provider/server identities qualify worker
+preservation. no production provider upgrade was performed.
+
+all 15 recorded account/helper/wrapper file states matched across each activation
+interval, as did canonical binaries, gateway executable/configuration and helper
+revision `5aecc2bb3bd08e2c58b79d2e494d2bedb13871c8`. devbox's applying-source files matched
+the accepted hashes, owned by `niels`, mode `0644`.
+
+| host | admitted gateway generation |
+|---|---|
+| macbook | `v0.14.0-c129624c23335235fee779930bef438766c790513fad6c857f84a39291b46854` |
+| arch | `v0.14.0-b180e454521f6fcbd2fc6573a3bd86688d01d5cdea62f7e15bbe85cf07986b02` |
+| devbox | `v0.14.0-f045d6d750abdbe955440c90ee4f9b9ebee3b0bbc6b4ed1ed9d7fe02e57f921e` |
+
+the first publication transiently replaced `claude-work`; its exact prior bytes
+and mode `0755` were restored before gateway activation. this drove extraction
+of the existing codex publication owner, whose bounded publication preserves the
+installed claude wrapper. no account data was restored.
+
+macbook's `.claude-work/.claude.json` whole hash changed between the initial
+snapshot and preactivation. changed fields and cause are unclassified; later
+fingerprints cannot establish the earlier difference. the activation interval
+matched both whole hashes and the explicit identity/update/mcp projection. this
+does not establish byte preservation across the earlier interval.
+
+the checks captured filtered process/hash/routing observations without retaining
+raw production doctor reports, account values, tokens or terminal contents.
+task snapshots are deleted with the temporary tests; this appendix retains the
+dated aggregate evidence.
+production model turns and phone transport are `NOT_RUN` and outside this
+correction's acceptance. work-account self-update remains the separate
+[upstream discovery issue](issues/codex-installation-discovery.md); the supported
+maintenance command selected the installation context. the initial five-key
+guidance superseded the historical two-key command above;
+[checked apply maintenance](gateway-separation-runbook.md#native-ai-maintenance)
+now supersedes that direct-update recommendation, as the follow-up below records.
+no upstream fork or release
+dependency was added.
+
+temporary tests, drivers, receivers, accounts, snapshots, clone and task caches
+are deleted. teardown initially missed two orphaned fixture foregrounds and a
+stale tmux socket; exact fixture identities were verified, both clients exited
+on sigterm, and the stale socket was removed. independent final observation found
+zero fixture executable paths and no owned tmux or daemon sockets.
+
+shell syntax, `shellcheck -x`, python syntax and `git diff --check` passed.
+no retained test suite is introduced. the
+[accepted applying worktrees](codex-native-launch-plan.md#cutover-and-limits)
+were used for this rollout; the original dirty checkout remained untouched.
+permanent applying guidance moves to `main` after
+[source integration](codex-native-launch-plan.md#main-integration-and-cleanup).
+
+## 2026-10-13 claude maintenance qualification follow-up
+
+five direct native updater cases used copied released binaries in disposable
+homes on darwin. each invocation fixed `HOME` and cwd to the fixture owner,
+unset `CLAUDE_CONFIG_DIR`, closed stdin, used no tty and passed an allowlisted
+environment without real credentials. personal settings bytes were preserved.
+these are updater controls, not acceptance of normal-apply claude maintenance.
+
+| case | observed behavior | result |
+|---|---|---|
+| personal stable | `2.1.288 → 2.1.287`, exit `0`; upstream channel selection can downgrade | `PASS` |
+| stable with `minimumVersion=2.1.296` | same starting binary retained `2.1.288`, exit `0`; the selected target was blocked, not replaced by the floor | `PASS` |
+| latest no-op | `2.1.296` remained selected, exit `0` | `PASS` |
+| network failure | dead, non-listening loopback proxy; exit `1` after 25.4 seconds; canonical link, bytes and version unchanged | `PASS` |
+| activation failure | only fixture `.local/bin` made nonwritable (`0555`); exit `0` and successful-update message, but canonical link, bytes and `2.1.288` unchanged; no visible activation error | `RED` |
+
+the activation probe reused the downloaded stable target and restored directory
+mode `0755` in `finally`. its failed nonzero-exit assertion remains failed.
+an unchanged version proves no observed version change; it does not distinguish
+policy/no-op from this silent activation failure or prove the command is newest.
+the [upstream activation issue](issues/claude-native-update-activation.md) blocks
+strict claude maintenance through the current interface.
+
+scope decision: ship checked codex maintenance and defer claude. current
+[runbook guidance](gateway-separation-runbook.md#native-ai-maintenance) replaces
+the earlier direct-update recommendation; the five-key command in the historical
+acceptance remains historical. this claude qualification does not establish
+acceptance or deployment of the new codex maintenance behavior.
+
+| qualified native executable | sha256 |
+|---|---|
+| starting `2.1.288` | `bbe93063f7a0879a1021b2891e5c9354e5b3b98433e32efe6750f7710afed750` |
+| starting `2.1.296` | `c9b5341637becbd423ddffc5b254afb645682a3868cb708bbc6cc0e7bb419937` |
+| downloaded stable `2.1.287` | `6eab8333fe2121553100d8f40bfada384a3e989b94f947e18ba6677a6fcb41ea` |
+
+starting binaries admitted the native mach-o header `cffaedfe` and exact native
+version output. evidence retains only filtered outcomes, hashes and execution
+bindings. no production provider was executed or upgraded; no daemon, tmux or
+model turn was started. qualification fixtures and tests are deleted in the
+coordinated teardown below.
+
+## 2026-10-13 checked codex maintenance during apply
+
+source `3da3cdb774337129c3cac0c660021cc7edb14bc5` is deployed on all three
+applying hosts. normal apply maintains valid native codex through the checked,
+unchanged official installer. claude remains bootstrap/adoption only; its
+activation-result blocker above remains unresolved.
+
+| boundary | result and scope |
+|---|---|
+| compiled public `ai_install` | 20 cases, 205 controls and 376 feature checks per phase; controls passed in both; original source failed 211 feature assertions, including 127 mandatory assertions not reached; final source passed all |
+| genuine codex owner | four cases, 40 controls and 53 checks passed using real official transport/payload and native version admission; a finite pass-through bash observer captured execution bindings without changing the installer |
+| devbox controller | five cases passed through the real controller with a synthetic ansible boundary; unchanged role schema/result-carrier/changed-predicate binding was checked; no actual linux ansible role was executed |
+
+| genuine case | entry point | exit | observed result |
+|---|---|---|---|
+| upgrade | public `ai_install`, conditional caller | `0` | `0.161.0 → 0.162.1`; `UPDATED`, mutation counter `1` |
+| unchanged | public `ai_install`, conditional caller | `0` | `0.162.1` unchanged; exact `UP TO DATE` version-unchanged event, mutation counter `0` |
+| refused-proxy download | public `ai_install`, conditional caller | `1` | canonical version unchanged; visible error, no success/mutation event |
+| nonwritable command directory | `ai_install_codex` | `1` | visible error, no success/mutation event; current selection and canonical version partially advanced to `0.162.1` |
+
+the permission case uses the provider owner because public `ai_install_dirs`
+repairs directory modes; fixture mode was restored to `0755`. synthetic account
+policy and separate daemon-package selections matched. twelve compiled process
+holds survived their cases and then exited; they qualify loaded-code preservation,
+not genuine terminal or daemon services. an initial genuine fixture omitted the
+compiled claude receiver's `FIXTURE_RECORD` and produced later `ACTION`, status
+`2`; only fixture setup changed before the fresh accepted run. review strengthened
+exact no-op event/counter assertions; the final minimal product owner required no
+further refactor.
+
+| source or native artifact | retained binding |
+|---|---|
+| baseline commit | `0df1b89565e2ecb82fe04b18dcf119d593305fed` |
+| baseline `lib/ai-tools.sh` sha256 | `6e77315dedef3e7f62a0fc1051f433eabddcf1db041c222e02db423229697da3` |
+| accepted owner sha256, unchanged before/after genuine checks | `8412974db24c7924a6fe55df55077ffbddfa87516d03c23bb5c6665cb79710a3` |
+| compiled integration driver sha256 | `250a6b45bd7b1de7543155c46fcecf66fc664909cc1e18083f4980a3bbb15342` |
+| genuine qualification driver sha256 | `2fc178c1ad0a51d28e05f583aeb2f4ef9e16653fb9fc0dbfad0932a86e4347a2` |
+| official installer sha256 | `150e3cf675682efeaac115aa3747add3f27887896d04ce6d0b56478d8b428bf6` |
+| starting `0.161.0` native copy sha256 | `12ac11d2c7eee27cfae34393986d7b7c9ed0dea537cb749831cdd7033893e6de` |
+| genuine darwin `0.162.1` target sha256 | `74c6a6d263f40d65f99c27a815275f5b4ed0bcc2baecc396b4cf3255498bdfc0` |
+
+rollout published the applying source and invoked the existing codex owner twice
+per host. it ran no full host apply, rolling package upgrade or gateway activation.
+each host reported `UPDATED`, then version unchanged. seven fresh actual version
+routes per host passed: canonical, three ordinary accounts and three scoped
+accounts; 21 total.
+
+| host | codex before → after | claude unchanged | recorded processes preserved | strict process comparison |
+|---|---|---|---|---|
+| macbook | `0.162.0 → 0.162.1` | `2.1.296` | 56/57 | failed |
+| arch | `0.160.0 → 0.162.1` | `2.1.288` | 6/6 | passed |
+| devbox | `0.162.0 → 0.162.1` | `2.1.288` | 14/14 | passed |
+
+claude executable bytes and selection, and all recorded account/deployment/daemon
+selection fingerprints, were unchanged. each deployed owner matched the accepted
+sha256.
+macbook's missing pid `39978` was a gateway-owned tmux child of `63463`; its exact
+role and cause are unknown. gateway `63463`, tmux server `72423` and all native
+providers survived. the failed strict comparison remains failed; the
+[unclassified child exit](issues/tmux-child-exit.md) limits broader client-preservation claims.
+
+the initial devbox collector included three zombies and encountered failed
+`/proc` reads. state filtering was corrected before deployment; accepted live
+captures reported no inspection races. the original dirty checkout remained
+untouched. this appendix retains filtered aggregate evidence without raw account
+values or terminal contents. a finite audit of 26 acceptance receipts found all
+432 unique recorded test-process identities absent, with none live or reused;
+no fixture executable paths, filesystem sockets or socket links remained.
+temporary tests, drivers, native copies, fixture homes, snapshots and remote
+code-rollout stages are deleted; their exact local and remote paths are absent.
+applying worktrees remained at this acceptance. their retirement is a separate
+operation specified in [main integration](codex-native-launch-plan.md#main-integration-and-cleanup),
+distinct from completed fixture cleanup.
+shell syntax, `shellcheck -x` and
+`git diff --check` passed. no retained test suite is introduced.

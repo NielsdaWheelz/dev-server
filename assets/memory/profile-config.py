@@ -88,6 +88,11 @@ def main() -> None:
             if target.exists():
                 shutil.copyfile(target, stage / name)
             environment = dict(os.environ)
+            environment.pop("CODEX_MANAGED_BY_NPM", None)
+            environment.pop("CODEX_MANAGED_BY_BUN", None)
+            environment.pop("CODEX_MANAGED_BY_PNPM", None)
+            environment.pop("CODEX_MANAGED_BY_VITE_PLUS", None)
+            environment.pop("CODEX_MANAGED_PACKAGE_ROOT", None)
             environment.pop("CODEX_HOME", None)
             environment.pop("CLAUDE_CONFIG_DIR", None)
             environment["CODEX_HOME"] = str(stage)

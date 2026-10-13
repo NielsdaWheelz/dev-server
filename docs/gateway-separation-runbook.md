@@ -38,51 +38,66 @@ all account wrappers, forge profiles, marked shells and native helpers invoke
 symlinks, release directories and upgrades. existing processes keep loaded code;
 account daemons may use separate upstream-managed packages.
 
+normal apply on macbook, arch and devbox is the checked codex maintenance path. it
+downloads the unchanged official installer, checks nonempty content and shell
+syntax, checks execution status, then revalidates the canonical native command.
+it runs even for healthy codex, using the fixed host-owner `HOME`, personal
+`CODEX_HOME`, `.local/bin` installation directory, owner cwd and closed stdin.
+this is the upstream installer with explicit context, not a custom installer.
+
+installer execution clears `CODEX_MANAGED_BY_NPM`, `CODEX_MANAGED_BY_BUN`,
+`CODEX_MANAGED_BY_PNPM`, `CODEX_MANAGED_BY_VITE_PLUS` and
+`CODEX_MANAGED_PACKAGE_ROOT`, including empty and `0` values. it fixes
+`CODEX_INSTALL_DAEMON_ONLY=0`, unsets `CODEX_INSTALL_DEFER_SELECTION`,
+`CODEX_INSTALL_IF_LATEST` and `CODEX_INSTALL_IF_CURRENT`, and preserves upstream
+release/transport selectors such as `CODEX_RELEASE`. upstream defaults to latest
+and owns layout and integrity. inherited work context cannot redirect maintenance.
+
+healthy codex maintenance needs network access and may change the version.
+`UPDATED` records any version difference, including a downgrade; unchanged means
+no observed version change, not proof of newest. failure returns `ERROR`, status
+`1`; earlier completed operations and partial upstream state may remain. repair
+and rerun; there is no fallback or automatic rollback. normal apply also runs the
+host's ordinary package policy; deploying this source change does not require a
+full rolling host upgrade or add a public maintenance mode.
+
+working native claude is adopted without installer, updater or release lookup.
+missing claude still uses its official installer. its
+[activation-result defect](issues/claude-native-update-activation.md) blocks
+strict updater integration. normal apply preserves account update policy and
+does not restart providers or update separately owned account daemons.
+
+generated account wrappers, scoped codex commands, version inspection and the
+memory configuration writer clear the same five provenance keys before native
+invocation.
+wrappers retain account and memory selection; ordinary arguments remain literal,
+and scoped commands retain their `--yolo` prefix plus literal caller suffix.
+parent shells and existing clients keep their environments. upstream
+cli upgrades need no gateway reapply; deploying changed scoped assets follows
+normal generation admission and activation while preserving tmux workers.
+
+direct `codex update` and the upstream curl-to-shell one-liner can hide download
+failure through their shell pipeline; see the [pipeline issue](issues/codex-self-update-pipeline.md).
+work/work2 updates also cannot detect the shared personal installation; the
+[discovery issue](issues/codex-installation-discovery.md) remains upstream.
+wrappers do not parse maintenance arguments.
+
+manual claude maintenance remains upstream-owned. if using its updater, select
+the personal home and cwd explicitly. it can report success while the canonical
+selection remains old; this command has no strict activation-failure guarantee:
+
 ```sh
-env -u CODEX_MANAGED_BY_NPM -u CODEX_MANAGED_PACKAGE_ROOT CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" "$HOME/.local/bin/codex" update
-claude update
+(cd "$HOME" && env -u CLAUDE_CONFIG_DIR HOME="$HOME" \
+    "$HOME/.local/bin/claude" update </dev/null)
 ```
 
-use that codex command from any account shell. preserved daemon tool shells
-can retain `CODEX_MANAGED_BY_NPM` and `CODEX_MANAGED_PACKAGE_ROOT` from their
-original startup. those markers can select npm even for a native executable;
-the command clears them for this native maintenance invocation. upstream's
-updater detects the
-installation under `CODEX_HOME`; `codex-work update` and `codex-work2 update`
-cannot detect the shared personal installation. wrappers remain account
-selectors with unchanged argument forwarding. claude's invoking account owns
-its update channel; updating it selects one shared binary for both accounts.
+for native repair, use the official [codex installer](https://chatgpt.com/codex/install.sh)
+or [claude installer](https://claude.ai/install.sh) as the host owner with the
+installation context above. keep `~/bin` before `~/.local/bin` in `PATH`.
+a broken link, script or invalid provider at the canonical path requires
+operator repair; apply preserves it and returns `ACTION`, status `2`.
 
-for an absent installation or native repair, run the official installer as the
-host user. keep `~/bin` ahead of `~/.local/bin` in `PATH` so installer startup
-changes cannot supersede account wrappers:
-
-```sh
-export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
-curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_HOME="$HOME/.codex" CODEX_INSTALL_DIR="$HOME/.local/bin" bash
-curl -fsSL https://claude.ai/install.sh | env -u CLAUDE_CONFIG_DIR bash
-```
-
-ordinary apply downloads and syntax-checks an installer only for an absent
-command. adoption checks native executable and provider version output without
-network access. a broken link, script or invalid provider at the canonical path
-requires operator repair; apply preserves it and returns `ACTION`.
-
-for an npm cutover, record its prefix, launcher target, versions and current skid
-generation. install native codex into a temporary command directory with the
-fixed personal installation context, verify it, then publish the canonical
-command through the official installer. do not expose the temporary directory
-in shell startup files. apply skid once so all consumers use canonical paths;
-verify fresh launches and account state. retain the npm package while its
-existing processes still need resources. never stop those sessions implicitly.
-
-when old consumers have retired, remove the npm package explicitly at its
-recorded prefix. npm removal can unlink the new canonical command too; restore
-it immediately with the official installer and verify ordinary and skid
-launches. this is a deliberate maintenance window, not recurring apply logic.
-before cleanup, recovery restores the recorded launcher and matching skid
-generation together. after cleanup, repair native installation first. gateway
-rollback does not roll back provider installations or account data.
+gateway rollback does not roll back provider installations or account data.
 
 ## provider and jarvis contract
 
