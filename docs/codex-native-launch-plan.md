@@ -1,10 +1,13 @@
 # codex native launch specification and implementation plan
 
-2026-10-13. implemented and deployed on macbook, arch and devbox from source
+2026-10-13. launch correction implemented and deployed on macbook, arch and devbox
+from source
 `b9407c431cd9e85401958cf9acff3c5efd34d767`. the
 [dated acceptance record](ai-native-installation-validation.md#2026-10-13-native-launch-provenance)
 qualifies the results and preservation limits. upstream proposal only, with no
-fork or release dependency.
+fork or release dependency. checked codex maintenance is also deployed on all
+three hosts from `3da3cdb774337129c3cac0c660021cc7edb14bc5`; its completed scope
+and separate acceptance are recorded below.
 
 ## target and contract
 
@@ -207,9 +210,9 @@ deliberate operator rollback may restore the prior admitted generation; it also
 restores the known provenance defect. do not report that state as repaired.
 already-running clients retain old environments until individually relaunched.
 
-tradeoffs: work-profile self-update remains limited upstream; explicit maintenance
-selects the installation context. deleting temporary tests leaves no automatic
-regression protection. [the upstream proposal](issues/codex-installation-discovery.md)
+tradeoffs: work-profile self-update remains limited upstream; normal apply
+selects the shared installation context. deleting temporary tests leaves no
+automatic regression protection. [the upstream proposal](issues/codex-installation-discovery.md)
 separates installation discovery from account identity and validates shim
 provenance against the executable; it has no local release dependency.
 
@@ -265,3 +268,19 @@ update/no-op/error qualification,
 and the existing result-carrier checks. record before deleting all temporary
 tests/resources. deploy applying source on all three hosts without a full rolling
 host upgrade; keep the original dirty checkout intact.
+
+completed: source `3da3cdb774337129c3cac0c660021cc7edb14bc5` is deployed on
+macbook, arch and devbox. each shared codex is `0.162.1`; first maintenance
+reported `UPDATED`, repetition reported `UP TO DATE` with `version unchanged`.
+claude versions, account/deployment fingerprints and separate daemon selections
+matched. all native providers, gateways and tmux servers retained their identities.
+one macbook gateway-owned tmux child exited; its role/cause are unknown and the
+strict all-process comparison failed. retain the
+[unclassified issue](issues/tmux-child-exit.md), not a blanket client-preservation
+claim.
+
+the [dated maintenance acceptance](ai-native-installation-validation.md#2026-10-13-checked-codex-maintenance-during-apply)
+records the frozen red/green matrix, genuine installer probes, controller-boundary
+checks, 21 fresh fleet routes and their limits. no full rolling host apply,
+gateway activation, daemon update or production model turn was performed for
+this follow-up. final documentation integration leaves main untouched.

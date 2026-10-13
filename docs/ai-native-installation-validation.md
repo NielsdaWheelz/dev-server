@@ -296,4 +296,78 @@ acceptance or deployment of the new codex maintenance behavior.
 starting binaries admitted the native mach-o header `cffaedfe` and exact native
 version output. evidence retains only filtered outcomes, hashes and execution
 bindings. no production provider was executed or upgraded; no daemon, tmux or
-model turn was started. fixture/test teardown is pending.
+model turn was started. qualification fixtures and tests are deleted in the
+coordinated teardown below.
+
+## 2026-10-13 checked codex maintenance during apply
+
+source `3da3cdb774337129c3cac0c660021cc7edb14bc5` is deployed on all three
+applying hosts. normal apply maintains valid native codex through the checked,
+unchanged official installer. claude remains bootstrap/adoption only; its
+activation-result blocker above remains unresolved.
+
+| boundary | result and scope |
+|---|---|
+| compiled public `ai_install` | 20 cases, 205 controls and 376 feature checks per phase; controls passed in both; original source failed 211 feature assertions, including 127 mandatory assertions not reached; final source passed all |
+| genuine codex owner | four cases, 40 controls and 53 checks passed using real official transport/payload and native version admission; a finite pass-through bash observer captured execution bindings without changing the installer |
+| devbox controller | five cases passed through the real controller with a synthetic ansible boundary; unchanged role schema/result-carrier/changed-predicate binding was checked; no actual linux ansible role was executed |
+
+| genuine case | entry point | exit | observed result |
+|---|---|---|---|
+| upgrade | public `ai_install`, conditional caller | `0` | `0.161.0 → 0.162.1`; `UPDATED`, mutation counter `1` |
+| unchanged | public `ai_install`, conditional caller | `0` | `0.162.1` unchanged; exact `UP TO DATE` version-unchanged event, mutation counter `0` |
+| refused-proxy download | public `ai_install`, conditional caller | `1` | canonical version unchanged; visible error, no success/mutation event |
+| nonwritable command directory | `ai_install_codex` | `1` | visible error, no success/mutation event; current selection and canonical version partially advanced to `0.162.1` |
+
+the permission case uses the provider owner because public `ai_install_dirs`
+repairs directory modes; fixture mode was restored to `0755`. synthetic account
+policy and separate daemon-package selections matched. twelve compiled process
+holds survived their cases and then exited; they qualify loaded-code preservation,
+not genuine terminal or daemon services. an initial genuine fixture omitted the
+compiled claude receiver's `FIXTURE_RECORD` and produced later `ACTION`, status
+`2`; only fixture setup changed before the fresh accepted run. review strengthened
+exact no-op event/counter assertions; the final minimal product owner required no
+further refactor.
+
+| source or native artifact | retained binding |
+|---|---|
+| baseline commit | `0df1b89565e2ecb82fe04b18dcf119d593305fed` |
+| baseline `lib/ai-tools.sh` sha256 | `6e77315dedef3e7f62a0fc1051f433eabddcf1db041c222e02db423229697da3` |
+| accepted owner sha256, unchanged before/after genuine checks | `8412974db24c7924a6fe55df55077ffbddfa87516d03c23bb5c6665cb79710a3` |
+| compiled integration driver sha256 | `250a6b45bd7b1de7543155c46fcecf66fc664909cc1e18083f4980a3bbb15342` |
+| genuine qualification driver sha256 | `2fc178c1ad0a51d28e05f583aeb2f4ef9e16653fb9fc0dbfad0932a86e4347a2` |
+| official installer sha256 | `150e3cf675682efeaac115aa3747add3f27887896d04ce6d0b56478d8b428bf6` |
+| starting `0.161.0` native copy sha256 | `12ac11d2c7eee27cfae34393986d7b7c9ed0dea537cb749831cdd7033893e6de` |
+| genuine darwin `0.162.1` target sha256 | `74c6a6d263f40d65f99c27a815275f5b4ed0bcc2baecc396b4cf3255498bdfc0` |
+
+rollout published the applying source and invoked the existing codex owner twice
+per host. it ran no full host apply, rolling package upgrade or gateway activation.
+each host reported `UPDATED`, then version unchanged. seven fresh actual version
+routes per host passed: canonical, three ordinary accounts and three scoped
+accounts; 21 total.
+
+| host | codex before → after | claude unchanged | recorded processes preserved | strict process comparison |
+|---|---|---|---|---|
+| macbook | `0.162.0 → 0.162.1` | `2.1.296` | 56/57 | failed |
+| arch | `0.160.0 → 0.162.1` | `2.1.288` | 6/6 | passed |
+| devbox | `0.162.0 → 0.162.1` | `2.1.288` | 14/14 | passed |
+
+claude executable bytes and selection, and all recorded account/deployment/daemon
+selection fingerprints, were unchanged. each deployed owner matched the accepted
+sha256.
+macbook's missing pid `39978` was a gateway-owned tmux child of `63463`; its exact
+role and cause are unknown. gateway `63463`, tmux server `72423` and all native
+providers survived. the failed strict comparison remains failed; the
+[unclassified child exit](issues/tmux-child-exit.md) limits broader client-preservation claims.
+
+the initial devbox collector included three zombies and encountered failed
+`/proc` reads. state filtering was corrected before deployment; accepted live
+captures reported no inspection races. the original dirty checkout remained
+untouched. this appendix retains filtered aggregate evidence without raw account
+values or terminal contents. a finite audit of 26 acceptance receipts found all
+432 unique recorded test-process identities absent, with none live or reused;
+no fixture executable paths, filesystem sockets or socket links remained.
+temporary tests, drivers, native copies, fixture homes, snapshots and remote
+code-rollout stages are deleted; their exact local and remote paths are absent.
+legitimate applying worktrees remain. shell syntax, `shellcheck -x` and
+`git diff --check` passed. no retained test suite is introduced.
