@@ -205,12 +205,10 @@ repo source; apply replaces the installed copies. new sessions load changes.
 [`assets/claude/statusline.sh`](assets/claude/statusline.sh) is installed as
 `~/bin/claude-statusline` and set as the `statusLine` command in both claude
 account `settings.json` files; running sessions pick it up on the next update.
-devbox's ai installer adds `--publish-skid-usage`; workstation installs the same
-display without publication. with that flag and an explicit absolute
-`CLAUDE_CONFIG_DIR`, each devbox callback atomically replaces that home's private
-`skidbladnir-usage.json` with quota fields and their callback time. skid's desktop
-browser uses devbox's last-reported data; idle sessions may be stale. provider
-sessions on other hosts retain their normal statusline display.
+every host installs the same display-only command. it renders context usage and
+optional 5-hour/weekly used quota from claude's structured statusline input.
+skid observes these displayed figures in tmux; absent or unrecognized usage stays
+unknown. the formatter stores no quota report.
 account update settings, project instructions, skills, other settings keys,
 history and authentication remain separately owned. both claude homes set
 `cleanupPeriodDays` to 36,500; this retains other application data as well as
