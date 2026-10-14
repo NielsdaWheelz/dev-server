@@ -352,12 +352,11 @@ other claude application data too; disk consumption is the deliberate cost.
 every other settings
 key, authentication, history, project instructions, and skills remain user-owned.
 instruction updates affect new sessions; status line updates apply live.
-the devbox ai-tools task passes `--publish-skid-usage` to `ai_install`, which
-adds that flag to both statusline commands. workstation omits it and retains
-display-only statuslines. publication requires both the flag and an explicit
-absolute `CLAUDE_CONFIG_DIR`; each callback atomically replaces only that
-account's private `skidbladnir-usage.json`. these are devbox's saved observations,
-which can be stale between callbacks; provider execution remains host-local.
+every host invokes `ai_install` without arguments and installs the same
+display-only statusline command. the formatter reads claude's structured stdin
+and renders context usage plus optional 5-hour/weekly used quota. it owns no
+quota file or publication. skid owns passive terminal observation and disclosure;
+displayed figures do not establish backend freshness or reset times.
 
 ## universal memory host configuration
 
