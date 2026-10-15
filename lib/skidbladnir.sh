@@ -38,6 +38,12 @@ import sys
 
 assets, platform, home, stage, tmux_path, tmux_version, codex, claude, zoxide, ssh, mosh = sys.argv[1:]
 assets = Path(assets)
+try:
+    claude_versions_directory = Path(home, ".local/share/claude/versions").resolve(strict=True)
+    if not claude_versions_directory.is_dir():
+        raise SystemExit("claude versions directory is unavailable")
+except (OSError, RuntimeError):
+    raise SystemExit("claude versions directory is unavailable")
 replacements = {
     "ROOT": home,
     "PLATFORM": platform,
@@ -45,6 +51,7 @@ replacements = {
     "TMUX_VERSION": tmux_version,
     "CODEX": f"{home}/bin/codex",
     "CLAUDE": claude,
+    "CLAUDE_VERSIONS_DIRECTORY": str(claude_versions_directory),
     "ZOXIDE": zoxide,
 }
 def render(name):
@@ -78,6 +85,13 @@ for row in value["profiles"]:
     name, leaf = accounts[row["key"]]
     if row["environment"] != [{"name": name, "value": f"{home}/{leaf}"}]:
         raise SystemExit("skid provider home differs from existing account")
+claude_profile = value["profiles"][-1]
+try:
+    claude_target = Path(claude_profile["command"]).resolve(strict=True)
+except (OSError, RuntimeError):
+    raise SystemExit("claude launch target is unavailable")
+if claude_target.parent != Path(claude_profile["foregroundSignatures"][0]["executableDirectory"]):
+    raise SystemExit("claude launch target is outside its configured versions directory")
 providers = Path(stage, "providers")
 providers.mkdir(mode=0o700)
 command = (assets / "skid-provider/provider-command").read_text()
