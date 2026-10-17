@@ -114,14 +114,14 @@
 
 - name: Return native configuration actions to the controller
   ansible.builtin.copy:
-    content: >-
-      {{ {'rc': ([ai_tools_apply.rc, memory_apply.rc | default(0), memory_ingress_preflight.rc | default(0)] | max)
+    # let yaml decode newline escapes before ansible templates and serializes stdout.
+    content: "{{ {'rc': ([ai_tools_apply.rc, memory_apply.rc | default(0), memory_ingress_preflight.rc | default(0)] | max)
                    if memory_bundle.stat.exists and memory_release_pin.revision is not none else 2,
           'stdout': ai_tools_apply.stdout ~ '\n' ~ (memory_apply.stdout | default('')) ~ '\n'
                     ~ (memory_ingress_preflight.stdout | default('')) ~ '\n' ~ (memory_ingress_apply.stdout | default(''))
                     ~ ('' if memory_bundle.stat.exists and memory_release_pin.revision is not none
                          else '\nACTION  memory: supply the private bundle and qualified central source pin before activation')}
-         | to_json }}
+         | to_json }}"
     dest: "{{ dev_server_ai_result_file }}"
     mode: "0600"
   delegate_to: localhost
