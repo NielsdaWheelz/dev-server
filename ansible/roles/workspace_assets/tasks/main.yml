@@ -14,7 +14,6 @@
     - assets/dotfiles
     - assets/routers
     - assets/claude
-    - assets/skid-provider
     - assets/memory
 
 - name: Install exact runtime libraries
@@ -71,18 +70,18 @@
     group: "{{ devbox_user }}"
     mode: "0600"
 
-- name: Install skid native-control declaration
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../assets/skid-provider/native-control.json"
-    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/skid-provider/native-control.json"
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    mode: "0644"
-
 - name: Install the declared memory deployment assets
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../assets/memory/"
     dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/memory/"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: preserve
+
+- name: Install personal Claude identity plugin inputs
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/claude/agent-identity/"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/claude/agent-identity/"
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: preserve

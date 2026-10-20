@@ -1,15 +1,4 @@
 {
-  "artifacts": {
-    "darwin-arm64": {
-      "sha256": "6d2998e71a54f5b53ff94157476d4d75b39c6b7f1bc8b39bdfcd61100ddc20c0",
-      "url": "https://github.com/NielsdaWheelz/skidbladnir/releases/download/v0.18.0/skidbladnir-darwin-arm64.tar.gz"
-    },
-    "linux-amd64": {
-      "sha256": "aea7a19ebd713b6e1e06805b2e249c24957f11d1833d76793598c4c81a3572f7",
-      "url": "https://github.com/NielsdaWheelz/skidbladnir/releases/download/v0.18.0/skidbladnir-linux-amd64.tar.gz"
-    }
-  },
   "schemaVersion": 1,
-  "sourceSha": "c7d4c9e949322ca5f8edda2589b4322637db6983",
-  "version": "v0.18.0"
+  "status": "awaiting-standalone-skid-release"
 }

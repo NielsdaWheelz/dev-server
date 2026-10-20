@@ -122,20 +122,3 @@ gateway_ingress_remove() {
   [[ "$gateway_ingress_state" == empty ]] || die "$owner Serve handler persists after removal"
   render_result CHANGED "$owner.ingress" "private HTTPS $port $path mapping removed"
 }
-
-skidbladnir_ingress_preflight() { gateway_ingress_preflight 8443 "${dev_server_gateway_port:-7341}" /v1 skidbladnir; }
-skidbladnir_ingress_apply() { gateway_ingress_apply 8443 "${dev_server_gateway_port:-7341}" /v1 skidbladnir; }
-skidbladnir_ingress_remove() { gateway_ingress_remove 8443 "${dev_server_gateway_port:-7341}" /v1 skidbladnir; }
-
-skidbladnir_notifications_ingress_preflight() {
-  gateway_ingress_preflight 8443 7342 /v1/notifications skidbladnir || return $?
-  gateway_ingress_preflight 8444 2586 / skidbladnir
-}
-skidbladnir_notifications_ingress_apply() {
-  gateway_ingress_apply 8443 7342 /v1/notifications skidbladnir || return $?
-  gateway_ingress_apply 8444 2586 / skidbladnir
-}
-skidbladnir_notifications_ingress_remove() {
-  gateway_ingress_remove 8443 7342 /v1/notifications skidbladnir || return $?
-  gateway_ingress_remove 8444 2586 / skidbladnir
-}

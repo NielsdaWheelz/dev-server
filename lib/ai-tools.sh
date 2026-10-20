@@ -214,6 +214,19 @@ ai_install_profiles() {
   ai_install_codex_profiles || return 1
   install_managed_file "$profile" \
     "$home/bin/claude-work" 0755 shell.config || return 1
+  # This explicit personal provider plugin remains user configuration. skid's
+  # installer neither injects it nor owns its lifetime.
+  local plugin="$home/.local/share/dev-server/claude-agent-identity" item
+  ensure_directory "$plugin" 0700 || return 1
+  for item in .claude-plugin hooks bin; do
+    ensure_directory "$plugin/$item" 0700 || return 1
+  done
+  for item in .claude-plugin/plugin.json hooks/hooks.json; do
+    install_managed_file "$(dev_server_assets_dir)/claude/agent-identity/$item" \
+      "$plugin/$item" 0600 ai.identity || return 1
+  done
+  install_managed_file "$(dev_server_assets_dir)/claude/agent-identity/bin/agent-hook" \
+    "$plugin/bin/agent-hook" 0755 ai.identity || return 1
 }
 
 ai_install_instructions() {
@@ -319,6 +332,23 @@ ai_install_claude_settings() {
   done
 }
 
+# Upstream owns daemon discovery and implementation. Personal provisioning asks
+# each declared account to start/reuse its daemon, never to restart or upgrade it.
+ai_start_codex_daemons() {
+  local home command account
+  home="$(dev_server_home)"
+  for command in codex codex-work codex-work2; do
+    case "$command" in
+    codex) account="$home/.codex" ;;
+    *) account="$home/.$command" ;;
+    esac
+    if ! CODEX_HOME="$account" "$home/bin/$command" app-server daemon start >/dev/null 2>&1; then
+      render_result ACTION "AI daemon $command" 'inspect the account daemon with upstream codex commands; provisioning does not restart existing agents'
+      return 2
+    fi
+  done
+}
+
 ai_install() {
   (($# == 0)) || die 'ai_install accepts no arguments'
   ai_validate_inputs
@@ -328,4 +358,5 @@ ai_install() {
   ai_install_claude || return $?
   ai_install_profiles || return 1
   ai_install_instructions || return 1
+  ai_start_codex_daemons || return $?
 }

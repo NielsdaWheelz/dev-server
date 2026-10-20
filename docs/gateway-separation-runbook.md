@@ -13,27 +13,20 @@ installs only skid. retired-product installation and removal commands are gone.
 ./devbox gateway remove skidbladnir
 ```
 
-skid owns `.config/skidbladnir`, `.local/share/skidbladnir`,
-`.local/state/skidbladnir`, its unit/launcher, `skid` and `skidbladnir` links,
-loopback `7341`, and tailscale https `8443 /v1`. it shares existing provider
-accounts and history; maintenance never kills tmux workers. native helper and
-explicit claude plugin follow the admitted generation. provider binaries remain
-shared host tools.
+these commands delegate to the reviewed standalone bootstrap with its pinned
+release version, and to `skid uninstall`. only devbox receives the authoritative personal yaml and
+`skid apply`; membership and generated state stay owned by skid. host provider
+tools/accounts/daemon preparation remain independent.
 
-gateway operations stage declared bytes and modes before consumption. release
-pins are exact app-owned artifacts, not name redirects or version intentions.
-the binary validates the rendered host configuration. unchanged apply reuses
-verified artifacts. authenticated health and the observed executable establish
-runtime activation; they do not prove a provider turn or phone attachment.
-
-serve reconciliation changes only `/v1` on `8443`, preserving other handlers
-and ports. devbox runs ingress admission/mutation as root and runtime as the
-development user. failed ingress can leave a verified runtime applied; report
-the partial condition and repair the remaining handler. never reset serve.
+the pending release pin reports action before installation. after review,
+replace it with version, source commit and bootstrap sha256. do not deploy the
+old-wire v0.18 archive or restore a symlink across incompatible private state.
+the root-owned staged conversion/enrollment preserves handles, observer/device
+memory and existing work before matching host/phone activation.
 
 ## native ai maintenance
 
-all account wrappers, forge profiles, marked shells and native helpers invoke
+all personal account wrappers invoke
 `$HOME/.local/bin/codex` or `$HOME/.local/bin/claude`. upstream owns their
 symlinks, release directories and upgrades. existing processes keep loaded code;
 account daemons may use separate upstream-managed packages.
@@ -67,14 +60,13 @@ missing claude still uses its official installer. its
 strict updater integration. normal apply preserves account update policy and
 does not restart providers or update separately owned account daemons.
 
-generated account wrappers, scoped codex commands, version inspection and the
+generated account wrappers, version inspection and the
 memory configuration writer clear the same five provenance keys before native
 invocation.
 wrappers retain account and memory selection; ordinary arguments remain literal,
-and scoped commands retain their `--yolo` prefix plus literal caller suffix.
-parent shells and existing clients keep their environments. upstream
-cli upgrades need no gateway reapply; deploying changed scoped assets follows
-normal generation admission and activation while preserving tmux workers.
+and configured profile commands explicitly retain the intended provider flags.
+parent shells and existing clients keep their environments. upstream cli upgrades
+need no gateway reapply; hub yaml owns changed profile commands.
 
 direct `codex update` and the upstream curl-to-shell one-liner can hide download
 failure through their shell pipeline; see the [pipeline issue](issues/codex-self-update-pipeline.md).
@@ -101,54 +93,25 @@ gateway rollback does not roll back provider installations or account data.
 
 ## provider and jarvis contract
 
-skid's forge profiles and marked shell commands use `.codex`, `.codex-work`,
-`.codex-work2`, `.claude` and `.claude-work`. explicit provider commands preserve
-account isolation and scrub inherited skid startup context. personal claude
-leaves `CLAUDE_CONFIG_DIR` unset. no codex hooks or private account homes are
-installed. exact already-owned startup snippets are replaced while unrelated
-content, modes and startup symlink identities remain intact.
+personal yaml uses ordinary wrappers for `.codex`, `.codex-work`, `.codex-work2`
+and `.claude-work`. it explicitly carries codex `--yolo`/`--remote` and claude's
+permission and identity-plugin arguments. ordinary account wrappers own account
+selection and memory credentials. the personal plugin is installed by AI apply
+under `~/.local/share/dev-server/claude-agent-identity` and invokes
+`skid agent-hook Claude SessionStart`. no deleted provider-command shim, injected
+alias or copied shell-init remains.
 
+ordinary AI apply invokes `app-server daemon start` through each codex account
+wrapper. upstream owns start/reuse; failed preparation reports action and never
+forces a restart/upgrade. skid consumes existing daemons only. provider data,
+settings, history and running work remain intact.
 
-the managed instant-prompt preamble excludes only the intended shell's pending
-skid startup action. skid gateway apply also replaces the recognized existing
-preamble in place; a gateway operation need not replace all dotfiles. unfamiliar,
-duplicated or changed owned preambles fail preflight. keep the product's
-`shell-init` and `assets/skid-provider/shell-init` synchronized.
-the early preview is unavailable for new skid startup actions. the theme can
-invalidate its shared cache, delaying later ordinary previews until regeneration.
-
-startup edits are not part of gateway runtime rollback. to reverse just this
-guard, run from this checkout on the target host before restoring a prior
-declaration:
-
-```sh
-bash <<'BASH'
-source lib/common.sh
-source lib/skid-provider.sh
-skidbladnir_shell_setup "$HOME" restore-instant-prompt
-BASH
-```
-
-this restores the original cached preamble, retaining integration, unrelated
-bytes, symlinks and modes. repeated reversal is inert. reapplying this
-declaration installs the guard again. reversal restores the original launch
-conflict too; it is recovery, not the corrected configuration.
-
-on devbox, both gateway and root cli use the same admitted artifact and pin.
-`/usr/local/libexec/skidbladnir` is a regular root:root `0755` file. before
-switching either executable, compare candidate bytes with the root cli and the
-running gateway's `/proc/PID/exe`; an inactive gateway uses its selected
-executable. changes require jarvis paused and cleanly stopped: `ActiveState`
-`inactive`, `Result` `success`, `MainPID` `0`, exact paused schema v1 true.
-identical executable apply requires no service action. the operator keeps
-jarvis stopped through the operation; there is no automatic stop or resume.
-
-jarvis deploy owns the private three-peer client at
-`/etc/jarvis/agent-client.json`, regular jarvis:jarvis `0600`, and its two path
-settings. redistribute that existing fleet configuration explicitly after
-bearer rotation. verify under actual service restrictions before resuming.
-cognition provisioning is a separate owner task; worker deployment does not
-repair or replace it.
+jarvis consumes the matching cli and `JARVIS_AGENT_STATE_DIRECTORY`, with no
+model/effort creation overrides or copied client-json reader. installed worker
+cutover is BLOCKED pending its separate service-state-access issue: the `jarvis`
+uid with `ProtectHome`/`NoNewPrivileges` cannot read `niels`'s private live state.
+do not copy stale snapshots or add a privilege bridge here. old code must settle
+unfinished actions before the v8 schema/cli cutover. cognition is separately owned.
 
 ## retirement boundary
 
@@ -173,48 +136,11 @@ lifetimes were preserved. activation and cognition remain separately owned.
 
 ## generation receipt contract
 
-the deployment hashes each file as `relative-name + NUL + lowercase-sha256 +
-newline`, concatenates those records in the order below, then hashes the
-concatenation. the result is the generation directory suffix and
-`active/<receipt>.runtime.sha256` value. receipts are mode `0600`, generation
-directories `0700`. admission requires that mode and equality between the
-computed digest and directory suffix. skid has eleven, in this exact order:
-
-1. `skidbladnir` (`0755`)
-2. `characters.json` (`0644`)
-3. `release.json` (`0644`)
-4. `host-config.json` (`0600`)
-5. `providers/native-control` (`0755`)
-6. `providers/provider-command` (`0755`)
-7. `providers/shell-init` (`0644`)
-8. `providers/terminal-context-init` (`0644`)
-9. `providers/claude-agent-identity/.claude-plugin/plugin.json` (`0644`)
-10. `providers/claude-agent-identity/hooks/hooks.json` (`0644`)
-11. `providers/claude-agent-identity/bin/agent-hook` (`0755`)
-
-the exact `v0.9.0` skid generation from source
-`580e0992d1ee0d7334cefc6561e7f55a5836baf5` has ten files: it omits
-`providers/terminal-context-init`. deployment admits that old layout only when
-its membership, modes and original ten-file receipt verify. it remains the
-rollback target during the `v0.10.0` upgrade; new generations require eleven.
-
-the helper launcher names a separately pinned immutable environment. its shim,
-entry point, source commit, lock and installed versions are checked before
-activation. the plugin and helper launcher follow the gateway's `current`
-pointer, so failed activation restores them together. this costs four more
-hashed files and retains private helper environments; it avoids independently
-switching dependencies underneath a verified gateway.
-
-the app's `docs/dev-server-handoff.md` and `scripts/fleet` implement this
-order, encoding and modes. fleet verification requires the computed digest,
-directory suffix and active receipt to agree. native lifecycle acceptance
-remains a separate live boundary.
-
-helper environments are never pruned by gateway apply or removal. this
-conservatively preserves every retained generation's dependency at the cost of
-disk space; automatic helper-environment collection is deferred. any future
-cleanup must account for every retained generation and recovery stage before
-removing a revision.
+the old eleven-file generation/rollback receipt and helper checkout are retired.
+skid's signed standalone archive and installer own release identity, immutable
+assets, locked helper dependencies, services, startup blocks and removal.
+dev-server reads none of those private receipt schemas. local bootstrap admission
+uses only its reviewed source commit/checksum and pinned release version.
 
 ## verification and limits
 
