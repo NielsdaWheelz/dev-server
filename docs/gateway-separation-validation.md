@@ -3,6 +3,46 @@
 current maintenance follows [the skid runbook](gateway-separation-runbook.md).
 root owns the live observations below; source checks alone do not establish them.
 
+## 2026-10-21 standalone v0.19.5 repeat-install correction
+
+the consumer selects immutable `v0.19.5` from
+`fef63472576267541e385cb212b64f7b0e7c327e`. a fresh public bootstrap download
+matches unchanged sha256
+`76f76197c03e8f5c7a715add0b3eb63d5f00fdbb6f2a1cc5cb8c838d4a008463`.
+both coordinator-downloaded public host archives independently pass ed25519
+verification against that bootstrap's pinned key and exact release manifests:
+
+| platform | archive sha256 |
+| --- | --- |
+| linux-amd64 | `9f4cd0ddd254704597ea0b7879e1085b5b54e28ef176d0d0ae90e274900f1931` |
+| darwin-arm64 | `fb7e569a15b490743968e22f60042b9ffc0f05e674a54f15645cbe29ce7a8b7c` |
+
+the patch records symlink mode as zero, matching other installer link resources.
+the actual signed mac archive extracted under umasks 077 and 022 previously
+failed comparison despite identical targets and bytes across ten python links;
+the corrected comparison passes. changed link targets, regular content,
+regular modes and directory modes still refuse. independent review and host
+engineering passed; temporary probes were removed before commit.
+
+devbox and endeavouros arch passed ordinary installed v0.19.4-to-v0.19.5 updates
+and same-release v0.19.5 updater probes. fresh receipts prove exact active
+executables, changed service pids, successful status, `KillMode=process`,
+unchanged private yaml/identity and observer epoch. repeat-update observer
+counters and receiver floors remain monotonic. both operations retained
+devbox's three session lifetimes and twelve provider/server processes, and
+arch's zero sessions and one existing tmux server. json parsing and diff checks
+pass. no yaml/key write, full host apply, connect or provider restart was
+performed by this update slice.
+
+separate live v0.19.4 qualification exercised missing destination credentials,
+then actual devbox-to-macbook-to-devbox hub transfer. missing credentials left
+devbox active with advancing observer revisions; mac activation left the old
+devbox observer file stable over five seconds and its API at 503. return restored
+devbox's API to 200 with all three inventories fresh, the same observer epoch,
+no retained counter regressions and receiver generation three confirmed without
+errors. all original devbox session/process lifetimes survived. root separately
+owns actual phone delivery, mac lifecycle and final v0.19.5 acceptance.
+
 ## 2026-10-21 standalone v0.19.4 installer and hub-return repairs
 
 the consumer selects immutable `v0.19.4` from
