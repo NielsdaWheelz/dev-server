@@ -3,6 +3,22 @@
 current maintenance follows [the skid runbook](gateway-separation-runbook.md).
 root owns the live observations below; source checks alone do not establish them.
 
+## 2026-10-21 standalone v0.19.1 pin
+
+the consumer now selects immutable `v0.19.1` from
+`ddf6005f3625bab186ac93d2032461bf4e8deefd`. a fresh public bootstrap download
+matches sha256 `76f76197c03e8f5c7a715add0b3eb63d5f00fdbb6f2a1cc5cb8c838d4a008463`.
+both public host archives independently pass ed25519 checks against the pinned
+source key and exact version/source/platform manifest checks.
+
+the patch shares arch-family detection between admission and package selection:
+the installed arch host declares `ID=endeavouros` and `ID_LIKE=arch`; v0.19.0
+refused it before activation. actual-host production-function probes reproduced
+that refusal and wrong package selection, then passed with exact-token detection;
+package writes were stand-ins and temporary probes were removed after review.
+ordinary signed v0.19.1 host activation and phone parity remain separately
+qualified; publication and this pin do not assert them.
+
 ## 2026-10-20 standalone consumer source and linux preflight
 
 the reviewed public `v0.19.0` bootstrap was downloaded independently and matched
