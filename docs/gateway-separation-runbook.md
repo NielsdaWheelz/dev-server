@@ -93,13 +93,27 @@ gateway rollback does not roll back provider installations or account data.
 
 ## provider and jarvis contract
 
-personal yaml uses ordinary wrappers for `.codex`, `.codex-work`, `.codex-work2`
-and `.claude-work`. it explicitly carries codex `--yolo`/`--remote` and claude's
-permission and identity-plugin arguments. ordinary account wrappers own account
-selection and memory credentials. the personal plugin is installed by AI apply
-under `~/.local/share/dev-server/claude-agent-identity` and invokes
-`skid agent-hook Claude SessionStart`. no deleted provider-command shim, injected
-alias or copied shell-init remains.
+personal yaml command values are exactly `codex`, `codex-work`, `codex-work2`,
+`claude-work`. retain profile labels/order, provider/home observation metadata,
+hub/machine overrides and private options. ordinary initialized shell aliases
+and account wrappers own permissions, account/home selection and memory.
+no flags/socket/plugin arguments are added. bare codex follows inherited
+`CODEX_HOME`; named work wrappers force their established account home.
+
+source publication/staging of the claude identity plugin is removed. installed
+cleanup is a separate coordinated cut: drain affected claude work first, then
+remove only verified deployment-owned `bin/agent-hook`, `hooks/hooks.json` and
+`.claude-plugin/plugin.json`, followed by empty directories, under both
+`~/.local/share/dev-server/claude-agent-identity` and
+`~/.local/share/dev-server/assets/claude/agent-identity`. unexpected content
+blocks cleanup. no recursive sweep, permanent cleanup machinery or automatic
+termination of existing work. old inert tmux options need no migration.
+
+update only the four command values in devbox's private desired yaml before
+signed config application. preserve all other bytes/values and mode `0600`.
+stage matching signed host/android/worker artifacts and the exact release pin
+before coordinated activation. source changes do not update installed private
+configuration or claim installed parity.
 
 ordinary AI apply invokes `app-server daemon start` through each codex account
 wrapper. upstream owns start/reuse; failed preparation reports action and never
@@ -111,7 +125,7 @@ model/effort creation overrides or copied client-json reader. installed worker
 cutover is BLOCKED pending its separate service-state-access issue: the `jarvis`
 uid with `ProtectHome`/`NoNewPrivileges` cannot read `niels`'s private live state.
 do not copy stale snapshots or add a privilege bridge here. old code must settle
-unfinished actions before the v8 schema/cli cutover. cognition is separately owned.
+unfinished actions before the v9 terminal-only schema/cli cutover. cognition is separately owned.
 
 ## retirement boundary
 

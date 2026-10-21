@@ -77,11 +77,3 @@
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: preserve
-
-- name: Install personal Claude identity plugin inputs
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../../assets/claude/agent-identity/"
-    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/claude/agent-identity/"
-    owner: "{{ devbox_user }}"
-    group: "{{ devbox_user }}"
-    mode: preserve

@@ -299,7 +299,7 @@ paths are not a promise of compatibility with every future release.
 `ai_install_codex_profiles` owns codex wrapper rendering/publication and the shared
 memory credential helper. callers provide the existing owner home/assets context,
 prepare directories and admit native codex. `ai_install_profiles` validates the
-declared claude wrapper first, calls the codex owner, then publishes `claude-work` and the explicit personal claude identity plugin.
+declared claude wrapper first, calls the codex owner, then publishes `claude-work`. no skid identity plugin is staged or published.
 full host apply retains that composition; provider-specific publication adds no
 public command or selector.
 
@@ -314,14 +314,13 @@ semantics. they are shared user state.
 preserve authentication, configuration, history, memories, plugins and trust.
 
 `assets/skidbladnir/config.yaml` preserves the four profile keys, labels and
-order as personal desired state. codex commands explicitly retain `--yolo` and
-each account's `--remote unix://…/app-server-control/app-server-control.sock`.
-claude-work explicitly retains `--dangerously-skip-permissions` and its identity
-plugin. account wrappers retain memory credentials; the plugin lives under
-`~/.local/share/dev-server/claude-agent-identity` and invokes the ordinary
-installed `skid agent-hook Claude SessionStart` endpoint. no deleted
-provider-command shim remains in any command. metadata homes support observation;
-the command alone selects execution settings.
+order as personal desired state. command values are exactly `codex`, `codex-work`,
+`codex-work2`, `claude-work`. initialized shell aliases and account wrappers own
+permission defaults, account/home selection and memory credentials. bare codex
+respects inherited `CODEX_HOME`; named work wrappers force their normal homes.
+skid evaluates command text once unchanged: no permission/socket/plugin flags
+or conversation association. metadata homes support observation only; ambiguity
+remains unknown and cannot override execution.
 
 interactive zsh aliases independently retain their ordinary permission flags.
 skid owns generic shell startup integration. dev-server no longer ships copied
@@ -431,19 +430,13 @@ selection links, pin them to the cli or synchronize their versions. operators
 inspect and update a selected daemon through upstream commands when needed;
 daemon updates can interrupt that account's work.
 
-skid-created sessions use the upstream daemon selected by `CODEX_HOME`; its
-socket is `app-server-control/app-server-control.sock` below that account home.
-ordinary AI apply invokes each account wrapper with `app-server daemon start`,
-using upstream start/reuse semantics and never restart/upgrade. launch commands
-then use
-`--remote unix://...`; codex owns initial thread creation. native helper control
-creates and inspects explicit native conversation references independently of
-terminal projection. explicit attachment uses the canonical cli with
-`--remote unix://... resume THREAD_ID` and the selected account home; upstream
-forbids cli permission overrides for that attachment. wrappers do not parse
-arguments to conceal this restriction. manual account commands remain ordinary stock launches without an inferred
-native association. a failed daemon start reports action and preserves existing
-processes; skid neither retries that lifecycle nor starts a daemon.
+ordinary provider settings own daemon auto-start. ordinary AI apply invokes
+each codex account wrapper with `app-server daemon start`, using upstream
+start/reuse semantics and never restart/upgrade. failure reports action and
+preserves existing processes. skid reads quota from already-running account
+sockets and observes terminals; no provider-native conversation read/write,
+identity detection, stop or wait path remains in skid. independent cognition,
+provider archive/memory APIs and their host-owned services are unchanged.
 
 ubuntu provisions the distro's bubblewrap apparmor profile and verifies user,
 network and pid namespace creation without disabling the global restriction.
