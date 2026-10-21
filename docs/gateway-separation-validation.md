@@ -3,6 +3,42 @@
 current maintenance follows [the skid runbook](gateway-separation-runbook.md).
 root owns the live observations below; source checks alone do not establish them.
 
+## 2026-10-21 standalone v0.19.4 installer and hub-return repairs
+
+the consumer selects immutable `v0.19.4` from
+`d3bb28d23db0b78eeeb59835c1098b806f752c65`. a fresh public bootstrap download
+matches unchanged sha256
+`76f76197c03e8f5c7a715add0b3eb63d5f00fdbb6f2a1cc5cb8c838d4a008463`.
+both coordinator-downloaded public host archives independently pass ed25519
+verification against that bootstrap's pinned key and exact release manifests:
+
+| platform | archive sha256 |
+| --- | --- |
+| linux-amd64 | `6957da6309c85d14db3be6c1c2df5bf3f013c7ff4602e37b68eb62a9a61817ae` |
+| darwin-arm64 | `73ee2e9bb01d1d8a62c8933863de486adaed453d7aa8440f6313c249c283680e` |
+
+v0.19.3's updater compares signed payload runtime pins with its own embedded
+pins and therefore cannot admit this approved dependency change. the ordinary
+verified public bootstrap invokes the target installer and bridges this update;
+the new installer retains signature and runnable-payload validation, while the
+release checker binds dependency pins to exact target source. actual signed
+archive and source-pin mutant probes passed independently before publication.
+the release also corrects staging a hub return to a fenced former source by
+checking current signed ownership rather than historical authority ownership.
+actual-service authenticated http roundtrip/reopen, credential refusal and
+stale-transfer probes passed; owned-state callbacks used synthetic data.
+
+devbox and endeavouros arch passed normal verified public bootstrap activation,
+then same-release ordinary `skid update --version v0.19.4`. fresh receipts prove
+exact active service executables, changed service pids, successful status,
+`KillMode=process`, unchanged private yaml/identity and unchanged observer epoch
+across the ordinary updater probe. both operations preserved devbox's three
+session lifetimes and twelve provider/server processes; arch preserved its zero
+sessions and one existing tmux server. no full host apply, connect, fleet
+restaging or provider restart was performed by this slice. macbook/phone
+acceptance, live push toggling and actual observer/receiver hub roundtrip remain
+separate root-owned qualification. json parsing and diff checks pass.
+
 ## 2026-10-21 standalone v0.19.3 origin preservation
 
 the consumer selects immutable `v0.19.3` from
