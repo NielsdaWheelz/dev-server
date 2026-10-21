@@ -3,6 +3,41 @@
 current maintenance follows [the skid runbook](gateway-separation-runbook.md).
 root owns the live observations below; source checks alone do not establish them.
 
+## 2026-10-21 standalone v0.19.3 origin preservation
+
+the consumer selects immutable `v0.19.3` from
+`0872730c8ae9ca9010fab2760fc24541542662bd`. a fresh public bootstrap download
+matches unchanged sha256
+`76f76197c03e8f5c7a715add0b3eb63d5f00fdbb6f2a1cc5cb8c838d4a008463`.
+both coordinator-downloaded public host archives independently pass ed25519
+verification against that bootstrap's pinned key and exact release manifests:
+
+| platform | archive sha256 |
+| --- | --- |
+| linux-amd64 | `ab0f5077b4277590b2e98bc6321bce8ae4f0547f81c605b688598c0c17019ed6` |
+| darwin-arm64 | `06e280a7d6f3de536d208f2e4932dead56835bc29a129529da9cf5ed63be6084` |
+
+the patch preserves a known signed member origin when a computer self-report
+has no current network evidence. malformed and duplicate origins still refuse;
+duplicate refusal now also preserves in-memory reports. temporary real-service
+reopen/refresh and authenticated two-host http probes demonstrated red/green;
+independent review passed and the probes were removed before commit.
+
+devbox hub was updated first through ordinary signed `skid update --version
+v0.19.3`; arch followed. fresh receipts prove exact active service executables,
+changed service pids, successful status, `KillMode=process` and unchanged private
+desired/active yaml. devbox retained all three session lifetimes and twelve
+provider/server process lifetimes. arch retained its tmux server lifetime, but
+one session present in the fresh pre-update receipt was absent afterward; its
+cause remains unproven and session continuity is UNPASSED. the older arch
+baseline was empty. global `destroy-unattached` and `exit-empty` are off;
+`remain-on-exit` is off. client cleanup targets only the owned attachment client,
+which does not establish why that session disappeared. no full host apply,
+connect, fleet restaging or provider restart was performed by this slice.
+the root integrator separately owns repair of the already absent mac address,
+macbook restart continuity, phone acceptance and actual push delivery. json
+parsing and diff checks pass.
+
 ## 2026-10-21 standalone v0.19.2 pin and linux patch activation
 
 the consumer selects immutable `v0.19.2` from
