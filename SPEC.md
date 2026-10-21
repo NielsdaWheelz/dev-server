@@ -501,8 +501,8 @@ owns dependency handling, installation and removal. the same reviewed bootstrap 
 does not decode product receipts,
 copy binaries, install helper environments or own runtime/service assets.
 
-the pin selects immutable `v0.19.0` from
-`e7c659e9aa4da0009d6874efd204e0caef77d451` and its reviewed public bootstrap.
+the pin selects immutable `v0.20.0` from
+`acf4e1770b03fe254d201fdcd9cc7add0cce79ad` and its reviewed public bootstrap.
 only the strict version/source/bootstrap schema is accepted; v0.18's old-wire
 archive cannot be used for this target.
 
