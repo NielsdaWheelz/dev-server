@@ -36,7 +36,7 @@ used codex `0.163`; arch used `0.162.1`. exact owned-session closure and directo
 cleanup passed. no model input or retry was sent. root and a separate reviewer
 accepted the launch, removal and continuity evidence.
 
-final document review remains pending. the [canonical installed qualification](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/v0.20.0-installed-qualification.md)
+the [canonical installed qualification](https://github.com/NielsdaWheelz/skidbladnir/blob/09e5992df1cf8e71b16447dafcb65d6ee60be311/docs/v0.20.0-installed-qualification.md)
 owns the final deployment evidence and limits; this consumer record does not
 replace provider-turn or notification-delivery evidence.
 
