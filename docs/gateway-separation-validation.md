@@ -27,12 +27,12 @@ devbox hub was updated first through ordinary signed `skid update --version
 v0.19.3`; arch followed. fresh receipts prove exact active service executables,
 changed service pids, successful status, `KillMode=process` and unchanged private
 desired/active yaml. devbox retained all three session lifetimes and twelve
-provider/server process lifetimes. arch retained its tmux server lifetime, but
-one session present in the fresh pre-update receipt was absent afterward; its
-cause remains unproven and session continuity is UNPASSED. the older arch
-baseline was empty. global `destroy-unattached` and `exit-empty` are off;
-`remain-on-exit` is off. client cleanup targets only the owned attachment client,
-which does not establish why that session disappeared. no full host apply,
+provider/server process lifetimes. arch retained its tmux server lifetime and
+original empty session/provider baseline. one session present in the fresh
+pre-update receipt was absent afterward; the owner explicitly confirmed closing
+it during that exact interval. that session did not survive, and its disappearance
+is owner-confirmed closure rather than an updater-attributed failure. no open
+product continuity defect follows from this observation. no full host apply,
 connect, fleet restaging or provider restart was performed by this slice.
 the root integrator separately owns repair of the already absent mac address,
 macbook restart continuity, phone acceptance and actual push delivery. json
