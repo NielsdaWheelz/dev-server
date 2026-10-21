@@ -214,19 +214,6 @@ ai_install_profiles() {
   ai_install_codex_profiles || return 1
   install_managed_file "$profile" \
     "$home/bin/claude-work" 0755 shell.config || return 1
-  # This explicit personal provider plugin remains user configuration. skid's
-  # installer neither injects it nor owns its lifetime.
-  local plugin="$home/.local/share/dev-server/claude-agent-identity" item
-  ensure_directory "$plugin" 0700 || return 1
-  for item in .claude-plugin hooks bin; do
-    ensure_directory "$plugin/$item" 0700 || return 1
-  done
-  for item in .claude-plugin/plugin.json hooks/hooks.json; do
-    install_managed_file "$(dev_server_assets_dir)/claude/agent-identity/$item" \
-      "$plugin/$item" 0600 ai.identity || return 1
-  done
-  install_managed_file "$(dev_server_assets_dir)/claude/agent-identity/bin/agent-hook" \
-    "$plugin/bin/agent-hook" 0755 ai.identity || return 1
 }
 
 ai_install_instructions() {

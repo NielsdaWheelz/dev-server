@@ -18,11 +18,12 @@ release version, and to `skid uninstall`. only devbox receives the authoritative
 `skid apply`; membership and generated state stay owned by skid. host provider
 tools/accounts/daemon preparation remain independent.
 
-the reviewed release pin selects immutable `v0.19.0` from `e7c659e`; its
+the reviewed release pin selects immutable `v0.20.0` from `acf4e17`; its
 version, source commit and bootstrap sha256 admit the public installer. do not deploy the
 old-wire v0.18 archive or restore a symlink across incompatible private state.
-the root-owned staged conversion/enrollment preserves handles, observer/device
-memory and existing work before matching host/phone activation.
+the in-place upgrade preserves existing handles/order, hub, pairings and
+observer/device acknowledgement memory. no conversion or reenrollment belongs
+to this cut.
 
 ## native ai maintenance
 
@@ -93,13 +94,36 @@ gateway rollback does not roll back provider installations or account data.
 
 ## provider and jarvis contract
 
-personal yaml uses ordinary wrappers for `.codex`, `.codex-work`, `.codex-work2`
-and `.claude-work`. it explicitly carries codex `--yolo`/`--remote` and claude's
-permission and identity-plugin arguments. ordinary account wrappers own account
-selection and memory credentials. the personal plugin is installed by AI apply
-under `~/.local/share/dev-server/claude-agent-identity` and invokes
-`skid agent-hook Claude SessionStart`. no deleted provider-command shim, injected
-alias or copied shell-init remains.
+personal yaml command values are exactly `codex`, `codex-work`, `codex-work2`,
+`claude-work`. retain profile labels/order, provider/home observation metadata,
+hub/machine overrides and private options. ordinary initialized shell aliases
+and account wrappers own permissions, account/home selection and memory.
+no flags/socket/plugin arguments are added. bare codex follows inherited
+`CODEX_HOME`; named work wrappers force their established account home.
+
+source publication/staging of the claude identity plugin is removed. installed
+cleanup is a separate coordinated cut. the verified plugin has only a
+`SessionStart` identity hook whose failure does not block claude, with no other
+events or blocking-on-failure policy (see the [official hook failure contract](https://code.claude.com/docs/en/hooks#other-exit-codes)).
+that exact plugin may be removed while the existing claude process keeps running;
+a cached hook may briefly warn if its removed command is invoked. do not stop the
+process automatically.
+
+remove only the three deployment-owned files `bin/agent-hook`,
+`hooks/hooks.json` and `.claude-plugin/plugin.json`, after matching each file's
+hash to its reviewed source and confirming no extra content, under both
+`~/.local/share/dev-server/claude-agent-identity` and
+`~/.local/share/dev-server/assets/claude/agent-identity`; remove only empty
+directories afterward. unexpected bytes, hook policy or content block cleanup.
+retain immutable skid installation generations. no recursive sweep, permanent
+cleanup machinery or compatibility shim. old inert tmux options need no migration.
+
+update only the four command values in devbox's private desired yaml before
+signed config application. preserve all other bytes/values and mode `0600`.
+stage matching signed artifacts for active host/android consumers and the exact
+release pin before coordinated activation. jarvis source is merged, but its
+runtime remains STOPPED and is not deployed in this cut. source changes do not
+update installed private configuration or claim installed parity.
 
 ordinary AI apply invokes `app-server daemon start` through each codex account
 wrapper. upstream owns start/reuse; failed preparation reports action and never
@@ -110,8 +134,9 @@ jarvis consumes the matching cli and `JARVIS_AGENT_STATE_DIRECTORY`, with no
 model/effort creation overrides or copied client-json reader. installed worker
 cutover is BLOCKED pending its separate service-state-access issue: the `jarvis`
 uid with `ProtectHome`/`NoNewPrivileges` cannot read `niels`'s private live state.
+jarvis remains STOPPED while the separately authorized skid deployment proceeds.
 do not copy stale snapshots or add a privilege bridge here. old code must settle
-unfinished actions before the v8 schema/cli cutover. cognition is separately owned.
+unfinished actions before the v9 terminal-only schema/cli cutover. cognition is separately owned.
 
 ## retirement boundary
 

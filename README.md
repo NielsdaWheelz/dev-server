@@ -13,7 +13,7 @@ one-user host configuration for `macbook`, `arch`, and the hetzner `devbox`.
 
 gateway commands use skid's ordinary standalone installer. only devbox receives
 the authoritative personal yaml. the reviewed standalone pin selects immutable
-`v0.19.0` from `e7c659e`; installed cutover remains separately qualified.
+`v0.20.0` from `acf4e17`; installed cutover remains separately qualified.
 
 `gateway remove skidbladnir` delegates to `skid uninstall`; settings/private state,
 tmux and shared packages are retained.
@@ -110,11 +110,11 @@ commands: `.codex`, `.codex-work`, `.codex-work2`, `.claude`, `.claude-work`.
 their authentication, configuration, history, memories, plugins and trust stay
 in place. existing environment-override semantics remain intact.
 
-the configured skid profile commands use these ordinary account wrappers.
-explicit yaml retains codex `--yolo` and per-account `--remote` sockets, plus
-claude's permission flag and personal identity plugin. the plugin is provisioned
-under `~/.local/share/dev-server/claude-agent-identity`; skid injects no provider
-flags or replacement shell functions. [the runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract)
+the configured skid profile commands are exactly `codex`, `codex-work`,
+`codex-work2` and `claude-work`. ordinary shell aliases/wrappers own permissions,
+account selection and memory credentials. skid evaluates the configured command
+once after normal shell startup; it adds no flags, sockets or identity plugin.
+[the runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract)
 records the consumer and blocked jarvis deployment boundary.
 
 normal `apply` on macbook, arch and devbox maintains codex through the checked
@@ -159,7 +159,7 @@ interactive zsh aliases add `--yolo` to codex commands and
 [`assets/dotfiles/zsh_helpers`](assets/dotfiles/zsh_helpers). after applying,
 start a shell or `source ~/.zsh_helpers`. `command codex`, `command claude`, and
 the corresponding work names bypass the alias for one invocation. skid's
-personal yaml explicitly supplies permission arguments and its identity plugin.
+personal yaml uses those ordinary command names, so the same shell defaults apply.
 
 ```sh
 codex-work login
@@ -170,14 +170,12 @@ codex owns each account's native daemon and discovery socket. `codex` honors
 a nonempty `CODEX_HOME`, otherwise selecting `.codex` under the host-user home
 recorded when installed; `codex-work` and `codex-work2` always select their named
 homes there, independently of runtime `HOME`. ordinary wrappers pass arguments
-unchanged. ordinary account commands are stock launches; they do not acquire a native thread association. for sessions
-created through skid, ordinary host AI apply prepares the account daemon and
-the configured command explicitly launches `codex --remote unix://...`; codex creates its initial
-thread. explicit native conversation references are separate from terminal
-identity. native helper creation, inspection and canonical cli attachment use
-that same selected daemon. the socket comes from the selected `CODEX_HOME` at
-`app-server-control/app-server-control.sock`. the installer owns no daemon
-bootstrap, service or package policy.
+unchanged. ordinary account commands are stock launches. bare `codex` follows
+inherited `CODEX_HOME`; named wrappers select their normal account homes.
+provider settings own ordinary daemon auto-start. independent host AI apply
+starts/reuses each account daemon; skid only observes existing account quota
+and terminal evidence. it neither manages daemon lifetime nor associates a
+provider conversation with a terminal.
 
 host-owned codex daemon starts pass through each ordinary account wrapper,
 loading only its memory credential before native exec. skid does not manage
@@ -272,7 +270,7 @@ activation. [remaining host qualification](docs/issues/universal-memory-activati
 ## agent fleet
 
 [personal yaml](assets/skidbladnir/config.yaml) retains profile keys, labels,
-order, accounts and effective provider options. devbox is the desired hub;
+order and observation accounts, with ordinary command values. devbox is the desired hub;
 macbook keeps ghostty notifications, and each host retains its login shell and
 self-selection default. explicit root-owned enrollment/conversion preserves
 machine handles/order and notification memory. dev-server writes no roster or
@@ -287,7 +285,7 @@ the service-account private key remains in its separately configured private fil
 `lib/skidbladnir.sh` delegates installation and removal to the standalone skid
 installer. the release pin names a version, source commit and bootstrap sha256;
 the ordinary bootstrap verifies signed archives. the pin selects reviewed
-immutable `v0.19.0`; publication alone does not establish installed parity. normal skid
+immutable `v0.20.0`; publication alone does not establish installed parity. normal skid
 updates own services/shell integration and preserve settings, tmux and providers.
 old ntfy, copied gateway/native helper assets and deployment rollback code are
 removed; there is no old-wire fallback. see [the maintenance runbook](docs/gateway-separation-runbook.md).
@@ -370,7 +368,6 @@ reach each host through the fixed skid cli (see [agent fleet](#agent-fleet)).
 | memory bundle, collectors and native client configuration | `scripts/memory-config.py`, `lib/memory.sh`, `assets/memory/`, `ansible/roles/memory/` |
 | devbox github identity and ssh client policy | `ansible/roles/github/`; `devbox` owns account enrollment checks |
 | standalone skid consumer and personal yaml | `lib/skidbladnir.sh`, `assets/skidbladnir/` |
-| personal identity plugin | `lib/ai-tools.sh`, `assets/claude/agent-identity/` |
 | devbox host configuration | `ansible/roles/`, `cloud-init-devbox.template.yaml` |
 
 work one bounded slice per pr, following the
