@@ -5,6 +5,14 @@ root owns the live observations below; source checks alone do not establish them
 
 ## 2026-10-20 standalone consumer source and linux preflight
 
+the reviewed public `v0.19.0` bootstrap was downloaded independently and matched
+sha256 `76f76197c03e8f5c7a715add0b3eb63d5f00fdbb6f2a1cc5cb8c838d4a008463`.
+the consumer pin names exact source `e7c659e9aa4da0009d6874efd204e0caef77d451`.
+both host archives from the coordinator's public download independently passed
+ed25519 signature checks against the source's pinned key and exact
+version/source/platform manifest checks.
+release publication and source admission do not establish installed acceptance.
+
 the hub consumer accepts one complete host-owned desired yaml at
 `~/.config/dev-server/skidbladnir.yaml`, retaining the committed yaml when that
 file is absent. a temporary before/after probe reproduced the old consumer

@@ -18,8 +18,8 @@ release version, and to `skid uninstall`. only devbox receives the authoritative
 `skid apply`; membership and generated state stay owned by skid. host provider
 tools/accounts/daemon preparation remain independent.
 
-the pending release pin reports action before installation. after review,
-replace it with version, source commit and bootstrap sha256. do not deploy the
+the reviewed release pin selects immutable `v0.19.0` from `e7c659e`; its
+version, source commit and bootstrap sha256 admit the public installer. do not deploy the
 old-wire v0.18 archive or restore a symlink across incompatible private state.
 the root-owned staged conversion/enrollment preserves handles, observer/device
 memory and existing work before matching host/phone activation.

@@ -1,4 +1,6 @@
 {
   "schemaVersion": 1,
-  "status": "awaiting-standalone-skid-release"
+  "version": "v0.19.0",
+  "sourceSha": "e7c659e9aa4da0009d6874efd204e0caef77d451",
+  "installerSha256": "76f76197c03e8f5c7a715add0b3eb63d5f00fdbb6f2a1cc5cb8c838d4a008463"
 }

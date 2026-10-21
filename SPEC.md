@@ -508,9 +508,10 @@ owns dependency handling, installation and removal. the same reviewed bootstrap 
 does not decode product receipts,
 copy binaries, install helper environments or own runtime/service assets.
 
-the explicit `awaiting-standalone-skid-release` pin blocks apply with action
-before installation/configuration changes. it must become a reviewed published
-pin before cutover; v0.18's old-wire archive cannot be used for this target.
+the pin selects immutable `v0.19.0` from
+`e7c659e9aa4da0009d6874efd204e0caef77d451` and its reviewed public bootstrap.
+the earlier `awaiting-standalone-skid-release` value remains an explicit action
+state; v0.18's old-wire archive cannot be used for this target.
 
 only devbox receives `assets/skidbladnir/config.yaml` at its authoritative xdg
 configuration path, followed by `skid apply`. macbook/arch consume the ordinary
