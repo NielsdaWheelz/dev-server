@@ -606,56 +606,28 @@ devbox_stage_declared_inputs() {
 }
 
 devbox_gateway_snapshot() {
-  local root="$1" operation="$2"
-  local -a paths=(ansible.cfg ansible/inventory/devbox.yml ansible/group_vars/devbox.yml
-    ansible/playbooks/gateway.yml lib/common.sh
-    lib/gateway-ingress.sh lib/skidbladnir.sh lib/gateway-runtime.sh lib/skid-notifications.sh)
-  if [[ "$operation" == apply ]]; then
-    paths+=(assets/skidbladnir assets/skid-provider assets/memory/profile-env.sh
-      lib/ai-tools.sh lib/skid-provider.sh)
-  fi
-  dev_server_declared_snapshot "$root" "${paths[@]}"
+  dev_server_declared_snapshot "$1" ansible.cfg ansible/inventory/devbox.yml \
+    ansible/group_vars/devbox.yml ansible/playbooks/gateway.yml \
+    lib/common.sh lib/skidbladnir.sh assets/skidbladnir
 }
 
 devbox_stage_gateway_inputs() {
   local operation="$1" desired_snapshot staged_snapshot
-  desired_snapshot="$(devbox_gateway_snapshot "$base_dir" "$operation")" ||
-    die "could not resolve skidbladnir gateway inputs"
-  devbox_declared_stage="$(mktemp -d "${TMPDIR:-/tmp}/devbox-declared.XXXXXX")" ||
-    die 'could not stage gateway inputs'
-  chmod 0700 "$devbox_declared_stage" || die 'could not secure gateway inputs'
+  desired_snapshot="$(devbox_gateway_snapshot "$base_dir" "$operation")" || return 1
+  devbox_declared_stage="$(mktemp -d "${TMPDIR:-/tmp}/devbox-declared.XXXXXX")" || return 1
+  chmod 0700 "$devbox_declared_stage" || return 1
   mkdir -p "$devbox_declared_stage/ansible/inventory" \
     "$devbox_declared_stage/ansible/group_vars" \
     "$devbox_declared_stage/ansible/playbooks" \
-    "$devbox_declared_stage/assets" "$devbox_declared_stage/lib" ||
-    die 'could not stage gateway directories'
-  cp -p "$base_dir/ansible.cfg" "$devbox_declared_stage/" || die 'could not stage ansible configuration'
-  cp -p "$base_dir/ansible/inventory/devbox.yml" "$devbox_declared_stage/ansible/inventory/" ||
-    die 'could not stage gateway inventory'
-  cp -p "$base_dir/ansible/group_vars/devbox.yml" "$devbox_declared_stage/ansible/group_vars/" ||
-    die 'could not stage gateway variables'
-  cp -p "$base_dir/ansible/playbooks/gateway.yml" "$devbox_declared_stage/ansible/playbooks/" ||
-    die 'could not stage gateway playbook'
-  if [[ "$operation" == apply ]]; then
-    cp -Rp "$base_dir/assets/skidbladnir" "$devbox_declared_stage/assets/skidbladnir" ||
-      die "could not stage skidbladnir assets"
-  fi
-  cp -p "$base_dir/lib/common.sh" "$base_dir/lib/gateway-ingress.sh" \
-    "$base_dir/lib/gateway-runtime.sh" "$base_dir/lib/skidbladnir.sh" "$base_dir/lib/skid-notifications.sh" \
-    "$devbox_declared_stage/lib/" || die "could not stage skidbladnir libraries"
-  if [[ "$operation" == apply ]]; then
-    cp -Rp "$base_dir/assets/skid-provider" "$devbox_declared_stage/assets/skid-provider" ||
-      die 'could not stage skid provider assets'
-    install -d -m 0755 "$devbox_declared_stage/assets/memory" ||
-      die 'could not stage provider environment directory'
-    cp -p "$base_dir/assets/memory/profile-env.sh" "$devbox_declared_stage/assets/memory/" ||
-      die 'could not stage provider environment helper'
-    cp -p "$base_dir/lib/ai-tools.sh" "$base_dir/lib/skid-provider.sh" "$devbox_declared_stage/lib/" ||
-      die 'could not stage provider library'
-  fi
-  staged_snapshot="$(devbox_gateway_snapshot "$devbox_declared_stage" "$operation")" ||
-    die 'could not verify staged gateway inputs'
-  [[ "$staged_snapshot" == "$desired_snapshot" ]] || die 'gateway inputs changed while staging; rerun'
+    "$devbox_declared_stage/assets" "$devbox_declared_stage/lib" || return 1
+  cp -p "$base_dir/ansible.cfg" "$devbox_declared_stage/" || return 1
+  cp -p "$base_dir/ansible/inventory/devbox.yml" "$devbox_declared_stage/ansible/inventory/" || return 1
+  cp -p "$base_dir/ansible/group_vars/devbox.yml" "$devbox_declared_stage/ansible/group_vars/" || return 1
+  cp -p "$base_dir/ansible/playbooks/gateway.yml" "$devbox_declared_stage/ansible/playbooks/" || return 1
+  cp -Rp "$base_dir/assets/skidbladnir" "$devbox_declared_stage/assets/" || return 1
+  cp -p "$base_dir/lib/common.sh" "$base_dir/lib/skidbladnir.sh" "$devbox_declared_stage/lib/" || return 1
+  staged_snapshot="$(devbox_gateway_snapshot "$devbox_declared_stage" "$operation")" || return 1
+  [[ "$staged_snapshot" == "$desired_snapshot" ]] || die 'skid inputs changed while staging; rerun'
   ansible_config="$devbox_declared_stage/ansible.cfg"
   ansible_inventory="$devbox_declared_stage/ansible/inventory/devbox.yml"
   ansible_apply_playbook="$devbox_declared_stage/ansible/playbooks/gateway.yml"

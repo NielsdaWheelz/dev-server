@@ -11,10 +11,12 @@ one-user host configuration for `macbook`, `arch`, and the hetzner `devbox`.
 ./devbox gateway apply skidbladnir
 ```
 
-gateway apply includes the shared profile environment helper required by its
-provider launchers.
+gateway commands use skid's ordinary standalone installer. only devbox receives
+the authoritative personal yaml. the reviewed standalone pin selects immutable
+`v0.19.0` from `e7c659e`; installed cutover remains separately qualified.
 
-`gateway remove skidbladnir` removes skid's gateway and owned serve handler;
+`gateway remove skidbladnir` delegates to `skid uninstall`; settings/private state,
+tmux and shared packages are retained.
 provider homes and signing files remain. herdr and herdr-mobile installation and
 removal commands are retired. ordinary apply installs no herdr runtime, hook or gate and
 never discards workers. [the maintenance runbook](docs/gateway-separation-runbook.md)
@@ -39,7 +41,7 @@ against upstream. a lagging workstation repository fails apply rather than
 silently accepting an older tmux. existing servers keep running until an explicit
 maintenance restart; installing a new binary does not upgrade a running server.
 after a version change, apply the skid gateway configuration before that restart
-so its recorded tmux executable and version agree with the installation.
+so its own detection agrees with the installation.
 when starting an interactive tmux server from automation, clear inherited
 `NO_COLOR` first (`env -u NO_COLOR tmux ...`); the server otherwise passes that
 automation setting to new panes and their applications.
@@ -83,11 +85,9 @@ them. native package installation/upgrade scripts can still restart their
 services; schedule host applies accordingly. package changes have no automatic
 rollback; native package managers own repair after a partial failure.
 
-deployment identity uses `dev_server_home_dir` (`$HOME`),
-`dev_server_fleet_label_prefix` (`dev.niels`) and `dev_server_gateway_port`
-(`7341`). skid's mac plist is rendered in its private stage. linux identity is
-the user account and skid's systemd unit. [the specification](SPEC.md#deployment-identity)
-defines disposable qualification and isolation requirements.
+skid owns its service identity, xdg installation paths, dependencies and private
+ingress. dev-server owns providers, account wrappers and personal desired yaml;
+it installs no copied gateway, shell, ntfy or native-helper implementation.
 
 arch touchpad policy lives in
 [`assets/xorg/90-dev-server-huawei-touchpad.conf`](assets/xorg/90-dev-server-huawei-touchpad.conf).
@@ -110,14 +110,12 @@ commands: `.codex`, `.codex-work`, `.codex-work2`, `.claude`, `.claude-work`.
 their authentication, configuration, history, memories, plugins and trust stay
 in place. existing environment-override semantics remain intact.
 
-original skid's forge and marked bash/zsh terminals use those same accounts
-through scoped commands. skid reaches the shared native commands
-`~/.local/bin/codex` and `~/.local/bin/claude`; its codex profile uses the existing
-account wrapper. personal claude leaves
-`CLAUDE_CONFIG_DIR` unset. skid loads its claude identity plugin explicitly; it
-installs no codex hooks and never provisions or rewrites account state.
-[the runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract)
-gives the exact worker map and app environment contract.
+the configured skid profile commands use these ordinary account wrappers.
+explicit yaml retains codex `--yolo` and per-account `--remote` sockets, plus
+claude's permission flag and personal identity plugin. the plugin is provisioned
+under `~/.local/share/dev-server/claude-agent-identity`; skid injects no provider
+flags or replacement shell functions. [the runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract)
+records the consumer and blocked jarvis deployment boundary.
 
 normal `apply` on macbook, arch and devbox maintains codex through the checked
 official installer even when its native command already works. this requires network
@@ -146,7 +144,7 @@ maintenance path: its [shell pipeline can hide download failure](docs/issues/cod
 covers installation, manual context and repair. account daemons retain their
 separate upstream-managed packages and updates.
 
-account wrappers, scoped codex commands, native version inspection and the memory
+account wrappers, native version inspection and the memory
 configuration writer remove `CODEX_MANAGED_BY_NPM`, `CODEX_MANAGED_BY_BUN`,
 `CODEX_MANAGED_BY_PNPM`, `CODEX_MANAGED_BY_VITE_PLUS` and
 `CODEX_MANAGED_PACKAGE_ROOT` before invoking native codex. installer execution
@@ -154,14 +152,14 @@ clears the same keys and forces dedicated cli selection; the
 [exact contract](SPEC.md#files-and-ai-tools) specifies preservation of upstream
 release/transport selectors. selected accounts, memory credentials and existing
 arguments remain intact. parent shells and running clients retain their
-environments. changed scoped assets use normal gateway admission and activation.
+environments. profile-command changes use ordinary hub yaml application.
 
 interactive zsh aliases add `--yolo` to codex commands and
 `--dangerously-skip-permissions` to claude commands. the defaults live in
 [`assets/dotfiles/zsh_helpers`](assets/dotfiles/zsh_helpers). after applying,
 start a shell or `source ~/.zsh_helpers`. `command codex`, `command claude`, and
 the corresponding work names bypass the alias for one invocation. skid's
-own launcher supplies these permission arguments and its identity plugin.
+personal yaml explicitly supplies permission arguments and its identity plugin.
 
 ```sh
 codex-work login
@@ -172,20 +170,18 @@ codex owns each account's native daemon and discovery socket. `codex` honors
 a nonempty `CODEX_HOME`, otherwise selecting `.codex` under the host-user home
 recorded when installed; `codex-work` and `codex-work2` always select their named
 homes there, independently of runtime `HOME`. ordinary wrappers pass arguments
-unchanged; scoped commands retain their `--yolo` prefix and literal caller
-suffix. manual marked-shell commands are ordinary
-stock launches; they do not acquire a native thread association. for sessions
-created through skid, the host uses the shared account wrapper to start or reuse the selected account's upstream
-daemon and launches `codex --remote unix://...`; codex creates its initial
+unchanged. ordinary account commands are stock launches; they do not acquire a native thread association. for sessions
+created through skid, ordinary host AI apply prepares the account daemon and
+the configured command explicitly launches `codex --remote unix://...`; codex creates its initial
 thread. explicit native conversation references are separate from terminal
 identity. native helper creation, inspection and canonical cli attachment use
 that same selected daemon. the socket comes from the selected `CODEX_HOME` at
 `app-server-control/app-server-control.sock`. the installer owns no daemon
 bootstrap, service or package policy.
 
-fresh skid codex daemon starts pass through `$HOME/bin/codex`, preserving the
-selected `CODEX_HOME` and loading only its memory credential before native exec.
-the underlying provider-command launcher still executes the canonical cli.
+host-owned codex daemon starts pass through each ordinary account wrapper,
+loading only its memory credential before native exec. skid does not manage
+daemon startup, upgrade or shutdown.
 
 the former shared codex services and exact discovery links are retired;
 cleanup-only deployment code is gone. account homes, credentials and native
@@ -275,91 +271,37 @@ activation. [remaining host qualification](docs/issues/universal-memory-activati
 
 ## agent fleet
 
-skid owns the tmux gateway and native provider helper on each host: loopback
-`7341`, private tailscale `8443 /v1`, existing account homes and pairings.
-its unit, launcher, config, bearer, machine handle and rollback generations are
-independent of provider history. gateway maintenance never kills tmux workers.
-the linux gateway restarts after unexpected exits, including clean exits after
-termination signals. an explicit service stop leaves it stopped.
+[personal yaml](assets/skidbladnir/config.yaml) retains profile keys, labels,
+order, accounts and effective provider options. devbox is the desired hub;
+macbook keeps ghostty notifications, and each host retains its login shell and
+self-selection default. explicit root-owned enrollment/conversion preserves
+machine handles/order and notification memory. dev-server writes no roster or
+generated runtime config.
 
-jarvis uses `/usr/local/libexec/skidbladnir`, a regular root:root `0755` copy of
-the same admitted devbox gateway artifact. gateway apply compares both installed
-cli and running gateway bytes before activation. a changed executable requires
-jarvis paused and cleanly stopped; identical apply is inert. jarvis deploy owns
-the explicitly supplied private `/etc/jarvis/agent-client.json`, its settings and
-service containment. bearer rotation requires private-client redistribution.
+on devbox, `~/.config/dev-server/skidbladnir.yaml` (or the matching xdg config
+path) may supply the complete personal yaml instead of the committed file.
+keep it mode `0600`. this host-owned file is authoritative when present; apply
+copies it whole, without merging. optional firebase public options belong here;
+the service-account private key remains in its separately configured private file.
 
-[`assets/skidbladnir`](assets/skidbladnir) owns the release pin and host template;
-[`assets/skid-provider`](assets/skid-provider) owns scoped provider commands and
-the native helper, installed from its repository's default branch into an exact
-revision generation. the admitted binary validates config.
-failed activation restores only skid's verified prior generation. provider
-binaries remain shared host tools. signing keys stay outside installer
-validation; the mac app's public signing certificate is pinned and verified.
-phone enrollment and device acceptance belong to the app owner.
+`lib/skidbladnir.sh` delegates installation and removal to the standalone skid
+installer. the release pin names a version, source commit and bootstrap sha256;
+the ordinary bootstrap verifies signed archives. the pin selects reviewed
+immutable `v0.19.0`; publication alone does not establish installed parity. normal skid
+updates own services/shell integration and preserve settings, tmux and providers.
+old ntfy, copied gateway/native helper assets and deployment rollback code are
+removed; there is no old-wire fallback. see [the maintenance runbook](docs/gateway-separation-runbook.md).
 
-native needs-input notifications add three owned mechanisms. mac gateway apply
-admits `Skid.app` inside the darwin archive, copies it to the real directory
-`~/Applications/Skid.app`, registers that installed path through the signed
-helper's public launch services mode, and loads the login agent
-`dev.niels.skid-notifications`. run `skid notifications setup` for notification
-consent; ordinary app activation stays quiet. ghostty automation consent appears
-on first use. local signing preserves identity; it makes no
-public gatekeeper/notarization claim.
-replacement stops the helper briefly; generation, unit and client-config bytes
-own activation. provisioning a previously absent config restarts the helper.
-an application symlink is refused. the installed app duplicates its generation.
-the login unit fixes `XDG_STATE_HOME` to `~/.local/state`, matching the
-installer's socket and readiness path.
+ordinary host AI apply starts/reuses each declared codex daemon through upstream
+commands; it never restarts/upgrades that daemon. skid does no daemon lifecycle
+work. a later upstream cli change still needs compatibility qualification.
 
-devbox gateway apply installs ntfy `2.28.0` at loopback `2586`, the observer at
-loopback `7342`, and their systemd user units. private tailscale handlers are
-`8443 /v1/notifications` and `8444 /`; other handlers are preserved. ntfy denies
-anonymous access. `skid-publisher` writes only `up*`; `skid-phone` reads only
-`up*`. config and credentials are private under
-`~/.config/skidbladnir/notifications`; operator setup uses `phonePassword` in
-`credentials.json`, never `publisher-token`. no firebase/upstream forwarding.
-ntfy's standard auth/cache databases live in `~/.local/state/skidbladnir/ntfy`.
-
-first apply can report observer setup required after the gateway and private
-ntfy are healthy. run skid's fleet provisioning, then reapply devbox. configure
-the qualified ntfy android distributor with the private `:8444` origin and
-read-only account; allow ntfy/tailscale background delivery and skid alerts.
-arch has no native notification service. service failure after gateway activation
-can leave the new gateway selected; reapply repairs it. this is a phased cutover.
-
-for complete previous-release rollback, keep jarvis paused and cleanly stopped.
-stop/remove notification owners using `skid_notifications_remove PLATFORM` from
-`lib/skidbladnir.sh`; on devbox, the deployment principal also runs
-`skidbladnir_notifications_ingress_remove` from `lib/gateway-ingress.sh`.
-restore `~/.config/skidbladnir/client.before-notifications.json` to the private
-mode-0600 `client.json`; skid's provisioning step saves the original bytes once.
-then call `skidbladnir_restore_previous PLATFORM` with this checkout's libraries
-and the deployment home. it restores only the already-admitted `previous` runtime
-and its `skid.previous.pair` unit, verifies health, then consumes that rollback
-checkpoint. interruption before commit preserves the target; retry completes it.
-on devbox, restore the root jarvis cli from that admitted current executable
-using `skidbladnir_install_jarvis_cli`, then verify it matches the running gateway.
-clear stopped skid alerts through the native notification UI. use the app owner's
-qualified android platform rollback for the apk and opaque app data. do not
-uninstall, migrate state, or admit an older archive through the new checker.
-provider state, signing keys, ntfy credentials and readiness memory remain intact.
-the first native cutover restores the preceding deployment, which has no native
-notification services. a prior runtime without its verified pair is not a rollback target.
-
-[deployment qualification](docs/issues/native-notification-deployment.md) records
-the unperformed native and installed boundaries; scripted checks alone do not pass them.
-
-the root operator completed herdr and herdr-mobile retirement on all three hosts:
-owned runtimes, integrations, ssh gates, credentials and `8444 /v1` are removed.
-cleanup-only code is deleted. preserve unrelated settings and serve handlers,
-provider history, skid workers and permanent signing backups. normal host apply,
-gateway apply and installed native lifecycle passed on all three hosts with
-skid `v0.10.6` and stock codex `0.159.2`. fleet tls, the production client under
-the actual jarvis uid, and owner phone attachment also passed on all three.
-jarvis remains disabled, inactive and paused; activation and cognition are
-separate. [qualification](docs/gateway-separation-validation.md#2026-09-29-installed-fleet)
-records the evidence and deferred reboots.
+jarvis's source adapter uses the matching cli and live installed computer state,
+with no launch model/effort overrides. its service uid cannot read the enrolled
+host user's private state under existing containment. installed worker cutover
+is BLOCKED pending separate jarvis service-state integration. source checks are
+neither that qualification nor fleet/phone deployment. preserve unrelated
+settings, provider history and all existing workers throughout cutover.
 
 ## devbox
 
@@ -427,8 +369,8 @@ reach each host through the fixed skid cli (see [agent fleet](#agent-fleet)).
 | ai binaries and account commands | `lib/ai-tools.sh`, `assets/routers/ai-profile` |
 | memory bundle, collectors and native client configuration | `scripts/memory-config.py`, `lib/memory.sh`, `assets/memory/`, `ansible/roles/memory/` |
 | devbox github identity and ssh client policy | `ansible/roles/github/`; `devbox` owns account enrollment checks |
-| gateway ownership and shared activation | `lib/skidbladnir.sh`, `lib/gateway-runtime.sh`, `assets/skidbladnir/` |
-| scoped skid commands and helper | `lib/skid-provider.sh`, `assets/skid-provider/` |
+| standalone skid consumer and personal yaml | `lib/skidbladnir.sh`, `assets/skidbladnir/` |
+| personal identity plugin | `lib/ai-tools.sh`, `assets/claude/agent-identity/` |
 | devbox host configuration | `ansible/roles/`, `cloud-init-devbox.template.yaml` |
 
 work one bounded slice per pr, following the

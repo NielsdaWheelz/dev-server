@@ -1,0 +1,26 @@
+version: 1
+hub: devbox
+profiles:
+  - name: personal
+    label: "Codex · Personal"
+    command: 'CODEX_HOME="$HOME/.codex" "$HOME/bin/codex" --yolo --remote "unix://$HOME/.codex/app-server-control/app-server-control.sock"'
+    provider: codex
+    home: ~/.codex
+  - name: work
+    label: "Codex · Work"
+    command: '"$HOME/bin/codex-work" --yolo --remote "unix://$HOME/.codex-work/app-server-control/app-server-control.sock"'
+    provider: codex
+    home: ~/.codex-work
+  - name: work2
+    label: "Codex · Work 2"
+    command: '"$HOME/bin/codex-work2" --yolo --remote "unix://$HOME/.codex-work2/app-server-control/app-server-control.sock"'
+    provider: codex
+    home: ~/.codex-work2
+  - name: claude-work
+    label: "Claude · Work"
+    command: 'SKIDBLADNIR_AGENT=1 "$HOME/bin/claude-work" --dangerously-skip-permissions --plugin-dir "$HOME/.local/share/dev-server/claude-agent-identity"'
+    provider: claude
+    home: ~/.claude-work
+machines:
+  macbook:
+    terminal: ghostty

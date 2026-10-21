@@ -2,12 +2,10 @@
 
 dev_server_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 dev_server_root="$(cd "$dev_server_lib_dir/.." && pwd -P)"
-# deployment identity: the root of every installer-owned path, the launchd label
-# prefix of the fleet services and the gateways' loopback ports. fixed for a
-# deployment's life; a second deployment on one mac uses distinct values.
+# personal host identity for dev-server-owned paths and native services.
+# standalone skid owns its own paths, labels and ports.
 dev_server_home_dir="${dev_server_home_dir:-$HOME}"
 dev_server_fleet_label_prefix="${dev_server_fleet_label_prefix:-dev.niels}"
-dev_server_gateway_port="${dev_server_gateway_port:-7341}"
 dev_server_assets_root="${dev_server_assets_root:-$dev_server_root/assets}"
 
 dev_server_result_mutations=0
@@ -93,36 +91,11 @@ dev_server_home() {
   printf '%s\n' "$dev_server_home_dir"
 }
 
-# the macbook assets name the deployment identity as @ROOT@, @FLEET_LABEL_PREFIX@
-# and @GATEWAY_PORT@. DIR is a private copy of assets/: skid's plist is
-# rendered in place; its host config is rendered in the gateway stage.
+# Each subsystem owns its own templates. Staging only fixes the input root.
 dev_server_render_assets() {
   (($# == 1)) || die 'dev_server_render_assets needs an assets directory'
-  local assets="$1" path rendered
-  local -a sed_args=()
-
-  [[ "$dev_server_home_dir" =~ ^/[A-Za-z0-9._/-]+$ ]] ||
-    die "invalid deployment root: $dev_server_home_dir"
-  [[ "$dev_server_fleet_label_prefix" =~ ^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$ ]] ||
-    die "invalid fleet label prefix: $dev_server_fleet_label_prefix"
-  [[ -d "$assets" && ! -L "$assets" ]] || die "rendered assets directory is invalid: $assets"
-  sed_args=(
-    -e "s|@ROOT@|$dev_server_home_dir|g"
-    -e "s|@FLEET_LABEL_PREFIX@|$dev_server_fleet_label_prefix|g"
-  )
-  [[ "$dev_server_gateway_port" =~ ^[1-9][0-9]{0,4}$ ]] || die "invalid gateway port: $dev_server_gateway_port"
-  ((dev_server_gateway_port <= 65535)) || die "invalid gateway port: $dev_server_gateway_port"
-  sed_args+=(-e "s|@GATEWAY_PORT@|$dev_server_gateway_port|g")
-  path="$assets/skidbladnir/dev.niels.skidbladnir.plist"
-  [[ -f "$path" && ! -L "$path" ]] || die "invalid asset template: $path"
-  rendered="$(LC_ALL=C sed "${sed_args[@]}" "$path" && printf .)" ||
-    die "could not render asset template: $path"
-  printf '%s' "${rendered%.}" >"$path" || die "could not write rendered asset: $path"
-  ! LC_ALL=C grep -Eq '@[A-Z_]+@' "$path" || die "unrendered placeholder in asset: $path"
-  dev_server_assets_root="$assets"
-  # Read dynamically by the already-sourced Skidbladnir library.
-  # shellcheck disable=SC2034
-  skidbladnir_release_pin_file="$assets/skidbladnir/release-pin.json"
+  [[ -d "$1" && ! -L "$1" ]] || die "rendered assets directory is invalid: $1"
+  dev_server_assets_root="$1"
 }
 
 dev_server_declared_snapshot() {

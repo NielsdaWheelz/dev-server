@@ -43,6 +43,48 @@ dotfiles_install_dirs() {
   ensure_directory "$home/.ai-images" 0755 || return 1
 }
 
+dotfiles_install_zshrc() {
+  local home="$1" candidate status
+  candidate="$(mktemp "${TMPDIR:-/tmp}/dev-server-zshrc.XXXXXX")" || return 1
+  if ! python3 - "$(dotfiles_asset zshrc)" "$home/.zshrc" >"$candidate" <<'PY'; then
+import pathlib
+import sys
+
+template = pathlib.Path(sys.argv[1]).read_bytes()
+path = pathlib.Path(sys.argv[2])
+old = path.read_bytes() if path.exists() else b""
+kept = {}
+for name, first in (("zsh prompt", True), ("shell", False)):
+    begin = ("# >>> skidbladnir managed " + name + " >>>").encode()
+    end = ("# <<< skidbladnir managed " + name + " <<<").encode()
+    if begin not in old and end not in old:
+        kept[name] = b""
+        continue
+    start = b"\n" + begin + b"\n"
+    stop = end + b"\n"
+    if old.count(begin) != 1 or old.count(end) != 1 or start not in old or stop not in old:
+        raise SystemExit("skid shell block is incomplete or duplicated")
+    left = old.index(start)
+    right = old.index(stop) + len(stop)
+    if right <= left or (left != 0 if first else right != len(old)):
+        raise SystemExit("skid shell block is outside its startup boundary")
+    kept[name] = old[left:right]
+if len(kept["zsh prompt"]) + len(kept["shell"]) > len(old):
+    raise SystemExit("skid shell blocks overlap")
+sys.stdout.buffer.write(kept["zsh prompt"] + template + kept["shell"])
+PY
+    rm -f -- "$candidate"
+    return 1
+  fi
+  if install_managed_file "$candidate" "$home/.zshrc" 0644 shell.config; then
+    status=0
+  else
+    status=$?
+  fi
+  rm -f -- "$candidate" || return 1
+  return "$status"
+}
+
 dotfiles_install_files() {
   local home
   local status
@@ -50,8 +92,7 @@ dotfiles_install_files() {
   home="$(dev_server_home)"
   install_managed_file "$(dotfiles_asset zshenv)" \
     "$home/.zshenv" 0644 shell.config || return 1
-  install_managed_file "$(dotfiles_asset zshrc)" \
-    "$home/.zshrc" 0644 shell.config || return 1
+  dotfiles_install_zshrc "$home" || return 1
   install_managed_file "$(dotfiles_asset zsh_helpers)" \
     "$home/.zsh_helpers" 0644 shell.config || return 1
   install_managed_file "$(dotfiles_asset p10k.zsh)" \
