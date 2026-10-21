@@ -159,7 +159,7 @@ interactive zsh aliases add `--yolo` to codex commands and
 [`assets/dotfiles/zsh_helpers`](assets/dotfiles/zsh_helpers). after applying,
 start a shell or `source ~/.zsh_helpers`. `command codex`, `command claude`, and
 the corresponding work names bypass the alias for one invocation. skid's
-personal yaml explicitly supplies permission arguments and its identity plugin.
+personal yaml uses those ordinary command names, so the same shell defaults apply.
 
 ```sh
 codex-work login
