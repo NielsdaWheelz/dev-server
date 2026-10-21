@@ -6,8 +6,8 @@ root owns the live observations below; source checks alone do not establish them
 ## 2026-10-21 terminal-only v0.20.0 installed fleet
 
 macbook, endeavouros arch and devbox run healthy signed `v0.20.0` from
-`acf4e1770b03fe254d201fdcd9cc7add0cce79ad`. all three applied configuration
-epoch `4`, state version `20` and config version `10`, with command values
+`acf4e1770b03fe254d201fdcd9cc7add0cce79ad`. all three applied authority
+epoch `4`, state revision `20` and configuration revision `10`, with command values
 `codex`, `codex-work`, `codex-work2` and `claude-work`. existing fleet/member
 identities, devbox hub, pairings and notification reset/epoch/counter state
 were preserved. no reenrollment or provider-daemon lifecycle work occurred.
@@ -32,7 +32,7 @@ empty directories were removed afterward. staged copies were absent.
 one installed personal codex launch per host passed in an owned cwd containing
 spaces, with stable os/projection identity, profile and foreground, normal
 `--yolo` behavior, no `--remote`, and a successful terminal read. macbook/devbox
-used codex `0.163`; arch used `0.162.1`. exact owned-session closure and directory
+used codex `0.163.0`; arch used `0.162.1`. exact owned-session closure and directory
 cleanup passed. no model input or retry was sent. root and a separate reviewer
 accepted the launch, removal and continuity evidence.
 
