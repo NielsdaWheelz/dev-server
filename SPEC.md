@@ -510,8 +510,8 @@ copy binaries, install helper environments or own runtime/service assets.
 
 the pin selects immutable `v0.19.0` from
 `e7c659e9aa4da0009d6874efd204e0caef77d451` and its reviewed public bootstrap.
-the earlier `awaiting-standalone-skid-release` value remains an explicit action
-state; v0.18's old-wire archive cannot be used for this target.
+only the strict version/source/bootstrap schema is accepted; v0.18's old-wire
+archive cannot be used for this target.
 
 only devbox receives `assets/skidbladnir/config.yaml` at its authoritative xdg
 configuration path, followed by `skid apply`. macbook/arch consume the ordinary

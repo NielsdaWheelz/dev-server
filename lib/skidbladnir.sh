@@ -9,17 +9,6 @@ skidbladnir_apply() {
   assets="$(dev_server_assets_dir)/skidbladnir"
   pin="$assets/release-pin.json"
   dev_server_strict_json_file "$pin" 4096 || return 1
-  if python3 - "$pin" <<'PY'
-import json
-import sys
-value = json.load(open(sys.argv[1], encoding="utf-8"))
-raise SystemExit(0 if value == {"schemaVersion": 1,
-    "status": "awaiting-standalone-skid-release"} else 1)
-PY
-  then
-    render_result ACTION skid.release 'publish and pin the reviewed standalone skid release before installation'
-    return 2
-  fi
   pin="$(
     python3 - "$pin" <<'PY'
 import json
