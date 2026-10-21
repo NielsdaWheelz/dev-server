@@ -1,23 +1,25 @@
 # standalone skid release and installed cutover
 
-problem: source consumer work is prepared, but no reviewed matching standalone
-release is pinned. `assets/skidbladnir/release-pin.json` deliberately blocks apply.
+problem: the standalone consumer pins reviewed published `v0.19.0` from
+`e7c659e9aa4da0009d6874efd204e0caef77d451`, but the authorized installed
+three-host/phone cutover has not yet run.
 
 impact: no standalone host/phone activation can be claimed. the old deployed
 runtime remains unchanged; incompatible old archives cannot satisfy this source.
 
-evidence: disposable shell fixtures qualify installer delegation, hub-only yaml
-publication and pending-pin refusal. copied skid runtime/ntfy/helper/services
-are removed from source. no installed service, provider, tmux or phone was touched.
+evidence, 2026-10-20: public bootstrap hash, both host signatures and exact
+release manifests pass. temporary fixtures qualify installer delegation,
+whole-file hub yaml ownership, startup-block preservation and refusal boundaries;
+the probes are removed. copied skid runtime/ntfy/helper/services are removed
+from source. linux installed ownership validators and read-only baselines pass;
+these do not establish activation or parity.
 
-resolution: complete independent source review, publish/pin the matching signed
-release and bootstrap source/hash, then execute the separately approved root
+resolution: execute the authorized root
 cutover with preserved machine handles/order, provider settings/history, active
 tmux and observer/device notification memory. enroll macbook/devbox/arch in the
 preserved order, place authority on devbox, pair each phone once and qualify
 parity/background delivery. qualify upstream account-daemon start/reuse and
 explicit personal profile commands on the real fleet. jarvis service-state
 access remains its separate recorded integration blocker. delete temporary
-consumer probes after integrator review and retained evidence. on 2026-10-20,
-independent source review and the three disposable consumer fixture groups passed;
-the probes were removed before commit. package/service activation remains unrun.
+consumer probes after integrator review and retained evidence. source review and
+publication are complete; package/service activation remains unrun.
