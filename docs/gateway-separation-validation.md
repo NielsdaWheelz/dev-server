@@ -14,17 +14,29 @@ were preserved. no reenrollment or provider-daemon lifecycle work occurred.
 
 macbook retained all fourteen exact session lifetimes. devbox retained its three
 pre-deployment survivors; the owner had closed a fourth session before the
-first deployment mutation. arch retained its empty baseline.
-the existing mac claude process stayed running.
+first deployment mutation. arch retained its empty baseline. final nonpartial
+fleet reads contained all three peers and the same fourteen/three/zero session
+survivors, with no extras. all three original mac claude process lifetimes
+remained unchanged, including the plugin-bearing process.
 
 the signed phone update used `install -r`; version `0.20.0`/`20000`, application
 identity and original first-install time were verified. the actual dashboard
 showed controls and two nonempty hostnames, with no pairing screen. no pairing
 or data clear occurred. jarvis remains disabled/stopped with its installed cli
-unchanged; its access issue remains solely in the jarvis repository.
+unchanged; jarvis owns its authoritative access issue.
 
-final acceptance still awaits the exact owned-plugin cleanup, three no-input
-launch smokes and independent review. the [canonical installed qualification](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/v0.20.0-installed-qualification.md)
+all three deployment-owned identity-plugin roots were removed after their three
+files matched the reviewed hashes and inventories contained no extras; only
+empty directories were removed afterward. staged copies were absent.
+
+one installed personal codex launch per host passed in an owned cwd containing
+spaces, with stable os/projection identity, profile and foreground, normal
+`--yolo` behavior, no `--remote`, and a successful terminal read. macbook/devbox
+used codex `0.163`; arch used `0.162.1`. exact owned-session closure and directory
+cleanup passed. no model input or retry was sent. root and a separate reviewer
+accepted the launch, removal and continuity evidence.
+
+final document review remains pending. the [canonical installed qualification](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/v0.20.0-installed-qualification.md)
 owns the final deployment evidence and limits; this consumer record does not
 replace provider-turn or notification-delivery evidence.
 
