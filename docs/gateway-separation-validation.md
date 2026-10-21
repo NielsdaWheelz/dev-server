@@ -3,6 +3,31 @@
 current maintenance follows [the skid runbook](gateway-separation-runbook.md).
 root owns the live observations below; source checks alone do not establish them.
 
+## 2026-10-21 terminal-only v0.20.0 installed fleet
+
+macbook, endeavouros arch and devbox run healthy signed `v0.20.0` from
+`acf4e1770b03fe254d201fdcd9cc7add0cce79ad`. all three applied configuration
+epoch `4`, state version `20` and config version `10`, with command values
+`codex`, `codex-work`, `codex-work2` and `claude-work`. existing fleet/member
+identities, devbox hub, pairings and notification reset/epoch/counter state
+were preserved. no reenrollment or provider-daemon lifecycle work occurred.
+
+macbook retained all fourteen exact session lifetimes. devbox retained its three
+pre-deployment survivors; the owner had closed a fourth session before the
+first deployment mutation. arch retained its empty baseline.
+the existing mac claude process stayed running.
+
+the signed phone update used `install -r`; version `0.20.0`/`20000`, application
+identity and original first-install time were verified. the actual dashboard
+showed controls and two nonempty hostnames, with no pairing screen. no pairing
+or data clear occurred. jarvis remains disabled/stopped with its installed cli
+unchanged; its access issue remains solely in the jarvis repository.
+
+final acceptance still awaits the exact owned-plugin cleanup, three no-input
+launch smokes and independent review. the [canonical installed qualification](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/v0.20.0-installed-qualification.md)
+owns the final deployment evidence and limits; this consumer record does not
+replace provider-turn or notification-delivery evidence.
+
 ## 2026-10-21 standalone v0.19.5 repeat-install correction
 
 the consumer selects immutable `v0.19.5` from

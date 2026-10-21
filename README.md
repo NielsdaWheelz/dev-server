@@ -13,7 +13,8 @@ one-user host configuration for `macbook`, `arch`, and the hetzner `devbox`.
 
 gateway commands use skid's ordinary standalone installer. only devbox receives
 the authoritative personal yaml. the reviewed standalone pin selects immutable
-`v0.20.0` from `acf4e17`; installed cutover remains separately qualified.
+`v0.20.0` from `acf4e17`; the [installed qualification](docs/gateway-separation-validation.md#2026-10-21-terminal-only-v0200-installed-fleet)
+records installed results and remaining limits.
 
 `gateway remove skidbladnir` delegates to `skid uninstall`; settings/private state,
 tmux and shared packages are retained.
