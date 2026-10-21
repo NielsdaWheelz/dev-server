@@ -108,6 +108,11 @@ verify bytes and mode before rename; preserve credentials and account state.
 a managed file is entirely repo-owned except explicitly named parser-backed
 keys, currently cursor's `remote.SSH.remotePlatform`, claude's `statusLine` and
 `cleanupPeriodDays`, and the native `jarvis-memory` MCP server entry.
+`~/.zshrc` also preserves standalone skid's existing `skidbladnir managed zsh
+prompt` preamble and `skidbladnir managed shell` suffix byte-for-byte. the
+`# >>> ... >>>` / `# <<< ... <<<` marker pairs must be complete, unique and at
+their respective file boundaries; malformed blocks stop replacement. dev-server
+owns the body between them and never creates skid's blocks or reads its receipts.
 intentional symlinks have explicit owners and targets; do not overwrite
 conflicting foreign paths.
 
@@ -514,6 +519,13 @@ order and stable machine handles belong to explicit skid enrollment/conversion,
 never a second roster here. omit shell to retain each host's login shell, and
 omit desktop default to retain self-selection. macbook keeps ghostty notification
 handling. hub placement is devbox.
+
+when present, `${XDG_CONFIG_HOME:-~/.config}/dev-server/skidbladnir.yaml`
+replaces that committed source as the complete desired hub yaml. it is a
+host-owned private file, mode `0600`, retained outside git. apply copies the
+whole file; no yaml merge or fallback from an invalid present file occurs.
+optional firebase public options may live there; service-account private key
+bytes remain in the separately configured private file.
 
 normal upgrades preserve skid/private state and provider data. `gateway remove`
 delegates to `skid uninstall`, retaining settings/private state, tmux, providers

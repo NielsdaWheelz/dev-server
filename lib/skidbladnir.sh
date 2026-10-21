@@ -3,7 +3,7 @@
 # skid owns installation, services, dependencies, shell integration and removal.
 # dev-server owns one personal release pin and the desired yaml on the hub.
 skidbladnir_apply() {
-  local platform="$1" home assets pin version source_sha installer_sha config
+  local platform="$1" home assets pin version source_sha installer_sha config desired_config
   case "$platform" in macos | arch | devbox) ;; *) return 64 ;; esac
   home="$(dev_server_home)"
   assets="$(dev_server_assets_dir)/skidbladnir"
@@ -39,6 +39,14 @@ print("\t".join(value[key] for key in ("version", "sourceSha", "installerSha256"
 PY
   )" || return 1
   IFS=$'\t' read -r version source_sha installer_sha <<<"$pin"
+  if [[ "$platform" == devbox ]]; then
+    config="${XDG_CONFIG_HOME:-$home/.config}/skidbladnir"
+    desired_config="${XDG_CONFIG_HOME:-$home/.config}/dev-server/skidbladnir.yaml"
+    if [[ ! -e "$desired_config" && ! -L "$desired_config" ]]; then
+      desired_config="$assets/config.yaml"
+    fi
+    [[ -f "$desired_config" ]] || die 'skid desired configuration is not a regular file'
+  fi
   (
     local stage
     stage="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-skid.XXXXXX")" || return 1
@@ -57,9 +65,8 @@ PY
   # Only the authoritative hub receives desired configuration. membership and
   # generated state belong to skid; enrollment is an explicit cutover operation.
   if [[ "$platform" == devbox ]]; then
-    config="${XDG_CONFIG_HOME:-$home/.config}/skidbladnir"
     ensure_directory "$config" 0700 || return 1
-    install_managed_file "$assets/config.yaml" "$config/config.yaml" 0600 skid.config || return 1
+    install_managed_file "$desired_config" "$config/config.yaml" 0600 skid.config || return 1
     "$home/.local/bin/skid" apply || return $?
   fi
 }

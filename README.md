@@ -278,6 +278,12 @@ self-selection default. explicit root-owned enrollment/conversion preserves
 machine handles/order and notification memory. dev-server writes no roster or
 generated runtime config.
 
+on devbox, `~/.config/dev-server/skidbladnir.yaml` (or the matching xdg config
+path) may supply the complete personal yaml instead of the committed file.
+keep it mode `0600`. this host-owned file is authoritative when present; apply
+copies it whole, without merging. optional firebase public options belong here;
+the service-account private key remains in its separately configured private file.
+
 `lib/skidbladnir.sh` delegates installation and removal to the standalone skid
 installer. the release pin names a version, source commit and bootstrap sha256;
 the ordinary bootstrap verifies signed archives. the current pending pin refuses

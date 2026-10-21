@@ -3,6 +3,34 @@
 current maintenance follows [the skid runbook](gateway-separation-runbook.md).
 root owns the live observations below; source checks alone do not establish them.
 
+## 2026-10-20 standalone consumer source and linux preflight
+
+the hub consumer accepts one complete host-owned desired yaml at
+`~/.config/dev-server/skidbladnir.yaml`, retaining the committed yaml when that
+file is absent. a temporary before/after probe reproduced the old consumer
+overwriting private push configuration, then verified whole-file preservation
+and the absent-file default. bootstrap and `skid apply` were stand-ins; this
+proves source selection, not installation or push delivery. bash syntax,
+shellcheck and diff checks passed. present directories and dangling symlinks
+were refused before bootstrap without replacing the active configuration.
+
+the real dotfile installer in isolated homes reproduced standalone skid's
+startup blocks being erased, then verified exact preamble/suffix preservation,
+repeat idempotence and ordinary replacement when no blocks exist. incomplete,
+interior and duplicate blocks refused replacement and retained the startup
+file. no service or provider was invoked. shellcheck excluded the existing
+`SC2329` warnings for trap-invoked cleanup functions. temporary probes were removed.
+
+read-only preflight on the existing ubuntu devbox and arch hosts passed the
+frozen `aeadd573` namespace, local-state, runtime-generation and unit-generation
+validators. each actual gateway launcher/unit identity matched its saved active
+pair and both running gateways used `KillMode=process`. devbox's observer and
+ntfy units matched the frozen source exactly. private ownership inventories,
+backups, session-lifetime hashes and process identities were retained outside
+git. devbox had three session lifetimes; arch had no tmux server or provider
+process. these are migration baselines, not fresh-user installation proof.
+installed activation and continuity remain unqualified by this preflight.
+
 ## 2026-09-29 installed fleet
 
 normal host apply and gateway apply completed on macbook, devbox and arch with
