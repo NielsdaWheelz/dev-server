@@ -3,6 +3,29 @@
 current maintenance follows [the skid runbook](gateway-separation-runbook.md).
 root owns the live observations below; source checks alone do not establish them.
 
+## 2026-10-21 standalone v0.19.2 pin and linux patch activation
+
+the consumer selects immutable `v0.19.2` from
+`e13a8b974869662a75d2716be36c22e730bac431`. a fresh public bootstrap download
+matches unchanged sha256
+`76f76197c03e8f5c7a715add0b3eb63d5f00fdbb6f2a1cc5cb8c838d4a008463`.
+both coordinator-downloaded public host archives independently pass ed25519
+verification against that bootstrap's pinned key and exact release manifests:
+
+| platform | archive sha256 |
+| --- | --- |
+| linux-amd64 | `3bd36827578d553a2ab5e0ff82df1e06c92a862da15e980e754e7a47590623a6` |
+| darwin-arm64 | `d35cc5593540bf8ff6231600d5eb20defec47e7f01a2641357bae9e0e37f2f0d` |
+
+devbox and endeavouros arch passed ordinary signed `skid update --version
+v0.19.2`. fresh before/after receipts prove changed service pids, exact new
+executables, active services, `KillMode=process`, successful status and unchanged
+private desired/active yaml hashes. devbox retained all three session lifetimes
+and twelve provider/server process lifetimes; arch retained its empty baseline.
+no full host apply, connect, fleet restaging or provider restart was performed.
+macbook activation, phone acceptance and actual push delivery remain separately
+qualified by the root integrator. json parsing and diff checks pass.
+
 ## 2026-10-21 standalone v0.19.1 pin
 
 the consumer now selects immutable `v0.19.1` from
