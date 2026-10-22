@@ -38,6 +38,14 @@ if [[ -x /usr/bin/dircolors ]]; then
   zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
 fi
 
+# brew shellenv in .zprofile prepends site-functions even when an inherited
+# FPATH already has it, and shells that skip .zprofile lack it. compinit keys its
+# dump on the file count, so deduplicate and add it once for every shell.
+typeset -U fpath
+if [[ -d /opt/homebrew/share/zsh/site-functions ]]; then
+  fpath=(/opt/homebrew/share/zsh/site-functions $fpath)
+fi
+
 autoload -Uz compinit
 _devbox_zcompdump="${XDG_CACHE_HOME:-$HOME/.cache}/zcompdump"
 if mkdir -p "${_devbox_zcompdump:h}" 2>/dev/null; then
