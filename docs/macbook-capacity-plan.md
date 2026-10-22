@@ -48,8 +48,12 @@ leftover docker stores on 2026-10-22.
 d2 vm budget. docker desktop runs with 8 gib memory and 8 cpus. guest memory
 the vm has touched stays with the host, resident or compressed, so the limit
 becomes the steady-state footprint; it is sized to peak work, not headroom. two
-lab stacks measured under 2 gib of container memory. acceptance is two concurrent
-ordinary nexus lab invocations completing with 8 gib memory and 8 cpus.
+lab stacks measured under 2 gib of container memory. there is no dedicated
+acceptance run (operator, 2026-10-22): raising the limit is a settings change and
+a restart, so a nexus lab that fails for memory in ordinary work is the evidence
+to raise it. a container killed with exit 137, or a lab that stalls, points there
+first: `docker run --rm --privileged alpine dmesg | grep -i oom` lists the vm's
+out-of-memory kills.
 the 24 gib setting of 2026-09-05 recorded no memory failure at 8 gib. the disk
 image maximum (`DiskSizeMiB`, now 2 tib) drops to 128 gib in the window.
 lowering it deletes the existing image, so this is a full docker reset. the
@@ -216,11 +220,8 @@ interrupts or deletes something.
 6. colima. run the retirement steps above.
 7. stale completion dumps. remove `~/.zcompdump`, `~/.zcompdump-*` and
    `~/.zcompdump.*`; the managed cache lives at `~/.cache/zcompdump`.
-8. verify. memory pressure level 1 after docker restarts. run two ordinary nexus
-   lab invocations concurrently; both must complete within d2's budget. then,
-   during the next campaign cycle with interactive work, level 1 throughout
-   (d10). record results in [macbook-vm-memory](issues/macbook-vm-memory.md) and
-   delete the records this window resolves.
+8. verify. memory pressure level 1 after docker restarts, then the acceptance
+   list below. delete the records this window resolves.
 
 ### 2026-10-22 daytime steps
 
@@ -243,9 +244,8 @@ steps 5–7 ran on 2026-10-22; steps 2–4 and 8 remain for the operator.
 
 ## acceptance
 
-- two ordinary nexus lab invocations complete concurrently with 8 gib memory
-  and 8 cpus (d2).
-- d10's machine target holds, with the measurement recorded.
+- memory pressure level 1 after docker restarts. a later nexus lab that fails
+  for memory reopens d2.
 - docker's disk image maximum is 128 gib, and `Docker.raw` allocation and host
   free space are recorded before the reset, after it, and a day later.
 - skid serve, the tmux server and pane shells run at priority 31.
