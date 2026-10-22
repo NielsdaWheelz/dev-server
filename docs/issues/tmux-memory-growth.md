@@ -30,6 +30,12 @@ restart. this proves daemon survival, not uninterrupted progress of every turn.
 the separately named devbox notification qa server, pid 987483 on 3.4, was
 explicitly excluded and kept its original pid and start time.
 
+observation on 2026-10-21: macbook's tmux 3.8 server, pid 1328, started
+2026-10-17 06:15 after a reboot, so it is not the 10-09 replacement. after 4.4 days
+with 18 codex and claude sessions, `vmmap -summary` reported a 10.7 mib physical
+footprint (11.3 mib peak). no growth so far, but that uptime is about a third of
+the original incident's.
+
 resolution: compare the replacement server's memory with its pane history over
 representative long-running codex workloads, ideally matching the original
 uptime. if disproportionate growth recurs, capture content-free allocation and
