@@ -42,8 +42,8 @@ back here.
 
 d1 runtime. docker desktop is the only container runtime on the macbook. no
 repository uses colima. profile `c3nt` is deleted in the maintenance window after
-its port session ends. hockey-stats has no container dependency; its leftover
-docker volume and containers are its own decision.
+its port session ends. hockey-stats has no container dependency; it deleted its
+leftover docker stores on 2026-10-22.
 
 d2 vm budget. docker desktop runs with 8 gib memory and 8 cpus. guest memory
 the vm has touched stays with the host, resident or compressed, so the limit
@@ -51,12 +51,12 @@ becomes the steady-state footprint; it is sized to peak work, not headroom. two
 lab stacks measured under 2 gib of container memory. acceptance is two concurrent
 ordinary nexus lab invocations completing with 8 gib memory and 8 cpus.
 the 24 gib setting of 2026-09-05 recorded no memory failure at 8 gib. the disk
-image maximum (`DiskSizeMiB`, 2 tib) stays as is. docker desktop deletes the
-existing disk image when that maximum is lowered, so a cap is a full docker
-reset, not a resize. allocated size, not the maximum, consumes host disk;
-the window's prunes and nexus's image ownership (d8) control it.
-[docker-disk-allocation](issues/docker-disk-allocation.md) records the
-condition for a deliberate reset.
+image maximum (`DiskSizeMiB`, now 2 tib) drops to 128 gib in the window.
+lowering it deletes the existing image, so this is a full docker reset. the
+operator confirmed on 2026-10-22 that everything left in docker is disposable
+dev, test and cache state, including jarvis's local postgres; images and stacks
+rebuild on demand. the cap makes runaway image or cache growth fail builds
+loudly instead of consuming the host disk.
 
 d3 host slots. heavy nexus test work on the macbook (lab stacks and campaign
 cycles) shares one host-wide budget of two concurrent stacks. a throttled
@@ -113,7 +113,6 @@ d10 targets.
 |---|---|
 | nexus lab and campaign harness, load instrument, image teardown, host slots, testing docs | nexus-web `docs/issues/lab-host-budget.md` and its item records, branch `host-budget-spec` |
 | skid tmux exec budget and launchd `ProcessType` | skidbladnir `docs/tmux-exec-budget.md` and its issue records, branch `tmux-exec-budget-spec`; sequenced by skid's cleanup campaign |
-| predecessor hockey store in docker desktop | hockey-stats `docs/issues/desktop-docker-retention.md` |
 | docker desktop sizing, colima retirement, codex mcp leak, zsh completion cache, the window | this plan |
 
 ## machine-level changes
@@ -129,18 +128,39 @@ consumer with container-aware deferral. d9 retires the memory record that
 prompted the raise. if drift recurs, declare `MemoryMiB` and the cpu key as
 parser-backed keys under the existing `docker.config` deferral rule.
 
-the disk image maximum stays at 2 tib (d2); lowering it deletes the image. the
-build cache already has a
-20 gb cleanup limit in `~/.docker/daemon.json`; the nexus image leak, not that
-limit, is what retains the 55.8 gb of build cache.
+the window also lowers the disk image maximum to 128 gib (d2), which deletes and
+recreates the image. the build cache already has a 20 gb cleanup limit in
+`~/.docker/daemon.json`, but that limit only removes unreferenced cache. on
+2026-10-22 docker reported 92 gb of build cache with only 20 gb reclaimable, and
+244 images. the nexus image leak, not the limit, is what keeps the rest in use.
 
 ### colima retirement (d1)
 
 `colima` and `lima` are homebrew formulae installed outside `packages/Brewfile`,
 and the only profile is `c3nt`. once its port session has ended:
 `colima delete --profile c3nt --data --force`, check that `limactl list` is empty,
-`brew uninstall colima lima`, then remove `~/.colima`. the former hockey profile
+`brew uninstall colima lima`, then remove `~/.colima` (43 gb) and
+`~/Library/Caches/lima` (6 gb). the former hockey profile
 lived on `/Volumes/Expansion` and was already deleted in hockey 03m.
+
+### host disk
+
+on 2026-10-22, after hockey's deletion returned about 96 gb, the data volume had
+191 gib free of 926. `du` accounted for nearly all of the 744.5 gb consumed:
+
+| holder | size | owner and disposition |
+|---|---:|---|
+| docker desktop (`Docker.raw`) | 178 gb | this plan: reset to a 128 gib maximum in the window |
+| `~/.colima` plus `~/Library/Caches/lima` | 49 gb | this plan: colima retirement |
+| `~/.codex-personal` | 34 gb | operator. a former codex home, 33 gb of sessions, newest file 2026-09-05. no profile, wrapper or skid config points at the directory; `codex-personal` survives only as the memory profile name for `~/.codex` |
+| `~/.codex-default-archive-20260519`, `~/.codex-home-migration-backups` | 9.3 gb | operator: migration leftovers |
+| `nexus-web-campaign-artifacts` | 33 gb | nexus-web (d5 outputs; `2026-10-14` alone is 12 gb) |
+| regenerable caches | about 80 gb | optional: `~/Library/Caches/codapt` 18, `~/.cache/uv` 15, `~/.npm` 11, jetbrains 10, `go-build` 6, `~/.bun` 6, `~/.gradle` 4 |
+| personal and hockey data | about 100 gb | operator: steam 61, android sdk and avds 19, `~/Backups/hockey-stats` 11 (protected by hockey-stats), claude desktop 10 |
+| `/Applications`, `/Library`, homebrew, `/private/tmp`, `/private/var/folders` | 76 gb | system and transient |
+
+the window's docker and colima steps alone return about 100–150 gb, depending on
+how far docker's rebuilt steady state stays below its cap.
 
 ### codex mcp process leak
 
@@ -164,7 +184,8 @@ run when no agent turn, lab stack or campaign is active. every step below
 interrupts or deletes something.
 
 1. preconditions. `docker ps` shows no `nexus-lab-*` or campaign stacks. the c3nt
-   port session has finished. codex sessions are daemon-owned (`--remote`) and
+   port session has finished, and nex-cleanup and the nexus host-budget runner are
+   idle, because step 5 destroys every image and stack. codex sessions are daemon-owned (`--remote`) and
    claude conversations are resumable natively; skid recovery recreates the
    workspace with fresh shells, not running conversations.
 2. skid priority (d7). install the skid release that carries
@@ -181,18 +202,14 @@ interrupts or deletes something.
    `CODEX_HOME=~/.codex codex app-server daemon restart`; repeat for the work
    homes only if their leak counts warrant it. check that no `node_repl` or
    `cua-repl.mjs` process predates the restart.
-5. docker desktop. record `du -h` of
+5. docker desktop reset (d2). record `du -h` of
    `~/Library/Containers/com.docker.docker/Data/vms-data/Docker.raw` and
-   `df -h /System/Volumes/Data`. quit (`osascript -e 'quit app "Docker"'`),
-   apply d2's memory and cpu settings, start. leave the disk image maximum
-   alone. prune: remove `nexus-lab-*` worker images; run
-   `docker volume prune` (anonymous dangling volumes only); run
-   `docker builder prune`. remove the stale `supabase_*_nexus-simplify-04` and
-   `supabase_*_nexus-search-cleanup-20261002` containers, and their volumes only
-   with operator confirmation. hockey containers and volumes belong to
-   hockey-stats' retention decision; no prune here touches them. record both
-   sizes again after the prunes, and once more a day later, since freed blocks
-   may return to the host only after the guest trims them.
+   `df -h /System/Volumes/Data`. in settings → resources, set memory to 8 gib,
+   cpus to 8 and the disk image maximum to 128 gib, then apply. docker deletes
+   and recreates its disk image. this replaces every prune and stale-stack
+   removal. check that `docker system df` is empty and `docker info` reports
+   the new memory and cpus. record both sizes again, then once more a day
+   later.
 6. colima. run the retirement steps above.
 7. stale completion dumps. remove `~/.zcompdump`, `~/.zcompdump-*` and
    `~/.zcompdump.*`; the managed cache lives at `~/.cache/zcompdump`.
@@ -207,8 +224,8 @@ interrupts or deletes something.
 - two ordinary nexus lab invocations complete concurrently with 8 gib memory
   and 8 cpus (d2).
 - d10's machine target holds, with the measurement recorded.
-- `Docker.raw` allocation and host free space are recorded before the window,
-  after its prunes, and a day later.
+- docker's disk image maximum is 128 gib, and `Docker.raw` allocation and host
+  free space are recorded before the reset, after it, and a day later.
 - skid serve, the tmux server and pane shells run at priority 31.
 - `colima` is absent and `docker context ls` shows only docker desktop.
 - no codex mcp child predates its daemon's restart, and the leak's growth rate
@@ -220,6 +237,7 @@ interrupts or deletes something.
 
 skid's fenced hub transfer and lagging fleet revisions (the operator handles
 those separately), nexus's unexplained docker writes (nexus-web spec), and the
-hockey store decision (hockey-stats). declined on 2026-10-21: excluding
+disposition of the operator-owned disk holders listed under host disk. declined on
+2026-10-21: excluding
 `~/Documents/code` from spotlight. inspection had found 32 `mdworker_shared`
 processes and `mds_stores` averaging about 1% of a core.
