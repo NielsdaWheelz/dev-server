@@ -18,4 +18,5 @@ session raised it from the 8 gib default on 2026-09-05.
 
 resolution: the [macbook capacity plan](../macbook-capacity-plan.md) window applies
 d1 and d2. the pressure level then stays 1 through one campaign cycle plus
-interactive work, and the nexus release lane passes at 8 gib.
+interactive work, and two ordinary nexus lab invocations complete concurrently
+with 8 gib memory and 8 cpus.
