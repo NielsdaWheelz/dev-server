@@ -3,40 +3,37 @@
 problem: the `~/.codex` app-server daemon starts mcp server processes for its
 threads and never reaps them. they accumulate for as long as the daemon runs.
 
-impact: on 2026-10-21 the daemon held 204 idle processes using about 2.2 gib.
-that adds to host memory pressure and grows without bound until the daemon
-restarts. restarting it interrupts every live session on that account.
+impact: on 2026-10-21 the daemon held about 210 idle processes using about
+2.5 gib, and the count was still growing. that adds to host memory pressure until
+the daemon restarts, and a restart interrupts every live session on that account.
 
-evidence (2026-10-21, codex 0.163.0, daemon pid 7426, up 4 days 9 hours):
-- 68 `node_repl` processes are direct children of the daemon (1,640 mib rss,
-  counted together with the next item).
-- 68 `cua_node/bin/node .../@oai/cua-repl/bin/cua-repl.mjs` processes are also
-  direct children, each with one `node_repl` child (583 mib rss for those
-  children).
-- their working directories spread across nexus-web (76), hockey-stats (44),
-  home (7), skidbladnir (6) and jarvis (4).
-- only four live tuis used that daemon at the time.
-- `~/.codex/config.toml` declares `[mcp_servers.node_repl]` with command
-  `/Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl`, plus the
-  `browser`, `computer-use` and `unified-computer-use` bundled plugins. the
-  chatgpt app's codex integration added these; dev-server does not manage them.
-- the `~/.codex-work2` daemon had one such child; `~/.codex-work` had none.
+evidence (2026-10-21, codex 0.163.0, daemon pid 7426, up about 4.5 days):
+- two server kinds are direct children of the daemon. by evening there were 70
+  of each, up from 68 that afternoon.
+- `node_repl`, 646 mib rss: the `[mcp_servers.node_repl]` entry in
+  `~/.codex/config.toml`. the `browser@openai-bundled` plugin's tools target it.
+- `cua_node/bin/node .../@oai/cua-repl/bin/cua-repl.mjs`, 1,222 mib rss, each with
+  one `node_repl` child (about 580 mib together): the `cua_repl` server that
+  `unified-computer-use@openai-bundled` declares in its `.mcp.json`.
+- working directories spread across nexus-web, hockey-stats, home, skidbladnir
+  and jarvis. only four live tuis used that daemon at the time.
+- the chatgpt app's codex integration installed these entries; dev-server does
+  not manage them. the `~/.codex-work2` daemon had one such child;
+  `~/.codex-work` had none.
 
 unverified: the exact lifecycle event that should release a thread's mcp
 servers (turn end, tui detach, or thread unload), and whether managed-daemon mode
 ever unloads threads.
 
-reproduce: run several codex sessions against the daemon's `--remote` socket
-that touch the node repl or browser tools, exit them, then count `node_repl` and
-`cua-repl.mjs` children of the daemon pid.
+reproduce: run several codex sessions against the daemon's `--remote` socket,
+exit them, then count `node_repl` and `cua-repl.mjs` children of the daemon pid.
 
-upstream report draft (not sent): "codex app-server --managed-daemon 0.163.0 on
-macos keeps per-thread mcp server processes after their sessions end. after 4
-days, one daemon had 68 node_repl and 68 cua-repl.mjs children (~2.2 gib), while
-4 sessions were live. expected: a thread's mcp servers exit when the thread is
-unloaded or its last client detaches. repro: [steps above]."
+decisions (operator, 2026-10-21): the browser is unused, so the
+[macbook capacity plan](../macbook-capacity-plan.md) window removes the
+`node_repl` entry and disables the browser plugin. computer use stays, so its
+`cua_repl` leak continues and each later window's daemon restart clears it. no
+upstream report is sent.
 
-resolution: either configuration removes the leaking servers, or upstream fixes
-the lifecycle. after a week of normal use, the daemon has no mcp child older
-than its oldest live thread. until then, the window in the
-[macbook capacity plan](../macbook-capacity-plan.md) restarts the daemon.
+resolution: after a week of normal use following the window, the daemon has no
+`node_repl` child, and the `cua_repl` growth rate per day is recorded here. the
+record closes when an upstream release stops `cua_repl` accumulating.

@@ -45,10 +45,14 @@ repository uses colima. profile `c3nt` is deleted in the maintenance window afte
 its port session ends. hockey-stats has no container dependency; its leftover
 docker volume and containers are its own decision.
 
-d2 vm budget. docker desktop runs with 16 gib memory and 8 cpus. acceptance
+d2 vm budget. docker desktop runs with 8 gib memory and 8 cpus. guest memory
+the vm has touched stays with the host, resident or compressed, so the limit
+becomes the steady-state footprint; it is sized to peak work, not headroom. two
+lab stacks measured under 2 gib of container memory. acceptance
 includes the nexus macos release lane (systemd runner, gradle and android under
 rosetta) completing within that budget. if that lane fails for memory, it first
-takes the whole d3 slot budget; memory rises only if it still fails. the disk
+takes the whole d3 slot budget; memory rises to 12 gib only if it still fails.
+the 24 gib setting of 2026-09-05 recorded no memory failure at 8 gib. the disk
 image limit (`DiskSizeMiB`, now 2 tib with about
 246 gb used) stays unchanged until hockey-stats decides its 103 gb volume,
 because shrinking the image can destroy its contents.
@@ -109,13 +113,13 @@ d10 targets.
 | nexus lab and campaign harness, load instrument, image teardown, host slots, testing docs | nexus-web `docs/issues/lab-host-budget.md` and its item records, branch `host-budget-spec` |
 | skid tmux exec budget and launchd `ProcessType` | skidbladnir `docs/tmux-exec-budget.md` and its issue records, branch `tmux-exec-budget-spec`; sequenced by skid's cleanup campaign |
 | predecessor hockey store in docker desktop | hockey-stats `docs/issues/desktop-docker-retention.md`, branch `desktop-docker-retention-issue` |
-| docker desktop sizing, colima retirement, codex mcp leak, zsh completion cache, spotlight, the window | this plan |
+| docker desktop sizing, colima retirement, codex mcp leak, zsh completion cache, the window | this plan |
 
 ## machine-level changes
 
 ### docker desktop sizing (d2)
 
-set memory to 16 gib and cpus to 8 in docker desktop settings → resources during
+set memory to 8 gib and cpus to 8 in docker desktop settings → resources during
 the window. use the settings ui rather than editing `settings-store.json`, whose
 current keys are `MemoryMiB: 24576` with no cpu key. a nexus release-runner session
 raised memory from the 8 gib default on 2026-09-05. dev-server does not declare
@@ -139,12 +143,13 @@ lived on `/Volumes/Expansion` and was already deleted in hockey 03m.
 ### codex mcp process leak
 
 recorded in [codex-mcp-process-leak](issues/codex-mcp-process-leak.md). upstream
-codex owns daemon lifecycle (see the specification's codex daemon ownership). the
-window restarts the affected daemon. whether to keep the chatgpt-installed
-`[mcp_servers.node_repl]` entry and the browser and computer-use plugins in
-`~/.codex/config.toml` is the operator's choice: removing them stops the leak at
-the cost of those tools. the record includes an upstream report draft for the
-operator to send.
+codex owns daemon lifecycle (see the specification's codex daemon ownership).
+operator decisions, 2026-10-21: codex's browser is unused, so the window removes
+the chatgpt-installed `[mcp_servers.node_repl]` entry and disables
+`browser@openai-bundled` in `~/.codex/config.toml`. computer use stays, so
+`unified-computer-use`'s `cua_repl` server, about three quarters of the leaked
+memory, keeps accumulating; a daemon restart in each later window clears it. no
+upstream report is sent.
 
 ### zsh completion cache
 
@@ -152,16 +157,6 @@ recorded in [zsh-completion-cache-thrash](issues/zsh-completion-cache-thrash.md)
 the managed `assets/dotfiles/zshrc` adds homebrew's site functions to `fpath`
 before `compinit`, so login and non-login shells agree on the file set. this
 ships through ordinary apply as a `shell.config` change and needs no window.
-
-### spotlight (optional)
-
-spotlight indexes all 58 directories under `~/Documents/code`, including
-worktrees and `node_modules`. at inspection 32 `mdworker_shared` processes were
-running and `mds_stores` had used 72 cpu-minutes over 4.4 days (about 1% of a
-core on average); `corespotlightd` had written 1 gb. adding `~/Documents/code` to
-system settings → spotlight → search privacy removes that churn, at the cost of
-spotlight and finder search over code. this is the operator's choice; nothing
-else depends on it.
 
 ## maintenance window runbook (d6)
 
@@ -182,9 +177,13 @@ interrupts or deletes something.
    starts itself (skid `docs/session-recovery.md`); conversations resume by
    hand, as in the [tmux memory growth](issues/tmux-memory-growth.md) recovery.
    check that the new server and a fresh pane shell print priority 31.
-4. codex daemons. with no turn running, `CODEX_HOME=~/.codex codex app-server
-   daemon restart`; repeat for the work homes only if their leak counts warrant
-   it. check that no `node_repl` or `cua-repl.mjs` process predates the restart.
+4. codex daemons. with no turn running, remove `[mcp_servers.node_repl]` and
+   its `.env` table from `~/.codex/config.toml` and set
+   `[plugins."browser@openai-bundled"] enabled = false`. then
+   `CODEX_HOME=~/.codex codex app-server daemon restart`; repeat for the work
+   homes only if their leak counts warrant it. check that no `node_repl` or
+   `cua-repl.mjs` process predates the restart. after the next chatgpt app
+   update, check that it has not restored the removed entries.
 5. docker desktop. quit (`osascript -e 'quit app "Docker"'`), apply d2's memory
    and cpu settings, start. prune: remove `nexus-lab-*` worker images; run
    `docker volume prune` (anonymous dangling volumes only); run
@@ -204,8 +203,8 @@ interrupts or deletes something.
 - d10's machine target holds, with the measurement recorded.
 - skid serve, the tmux server and pane shells run at priority 31.
 - `colima` is absent and `docker context ls` shows only docker desktop.
-- the codex leak is either stopped by configuration or recorded as a recurring
-  upstream defect with its report sent.
+- the browser mcp server no longer starts; the remaining computer-use leak
+  is recorded with its growth rate.
 - after the zshrc change, alternating `zsh -ic exit` and `zsh -lic exit` leaves
   `~/.cache/zcompdump`'s header and mtime unchanged.
 
@@ -213,4 +212,6 @@ interrupts or deletes something.
 
 skid's fenced hub transfer and lagging fleet revisions (the operator handles
 those separately), nexus's unexplained docker writes (nexus-web spec), and the
-hockey store decision (hockey-stats).
+hockey store decision (hockey-stats). declined on 2026-10-21: excluding
+`~/Documents/code` from spotlight. inspection had found 32 `mdworker_shared`
+processes and `mds_stores` averaging about 1% of a core.
