@@ -144,12 +144,10 @@ lived on `/Volumes/Expansion` and was already deleted in hockey 03m.
 
 recorded in [codex-mcp-process-leak](issues/codex-mcp-process-leak.md). upstream
 codex owns daemon lifecycle (see the specification's codex daemon ownership).
-operator decisions, 2026-10-21: codex's browser is unused, so the window removes
-the chatgpt-installed `[mcp_servers.node_repl]` entry and disables
-`browser@openai-bundled` in `~/.codex/config.toml`. computer use stays, so
-`unified-computer-use`'s `cua_repl` server, about three quarters of the leaked
-memory, keeps accumulating; a daemon restart in each later window clears it. no
-upstream report is sent.
+operator decision, 2026-10-21: every plugin and mcp entry stays as configured,
+and no upstream report is sent. the daemon restart is the cleanup: it is the
+only exact one, because the leaked processes carry no thread identity. each
+window repeats it.
 
 ### zsh completion cache
 
@@ -177,13 +175,10 @@ interrupts or deletes something.
    starts itself (skid `docs/session-recovery.md`); conversations resume by
    hand, as in the [tmux memory growth](issues/tmux-memory-growth.md) recovery.
    check that the new server and a fresh pane shell print priority 31.
-4. codex daemons. with no turn running, remove `[mcp_servers.node_repl]` and
-   its `.env` table from `~/.codex/config.toml` and set
-   `[plugins."browser@openai-bundled"] enabled = false`. then
+4. codex daemons. with no turn running,
    `CODEX_HOME=~/.codex codex app-server daemon restart`; repeat for the work
    homes only if their leak counts warrant it. check that no `node_repl` or
-   `cua-repl.mjs` process predates the restart. after the next chatgpt app
-   update, check that it has not restored the removed entries.
+   `cua-repl.mjs` process predates the restart.
 5. docker desktop. quit (`osascript -e 'quit app "Docker"'`), apply d2's memory
    and cpu settings, start. prune: remove `nexus-lab-*` worker images; run
    `docker volume prune` (anonymous dangling volumes only); run
@@ -203,8 +198,8 @@ interrupts or deletes something.
 - d10's machine target holds, with the measurement recorded.
 - skid serve, the tmux server and pane shells run at priority 31.
 - `colima` is absent and `docker context ls` shows only docker desktop.
-- the browser mcp server no longer starts; the remaining computer-use leak
-  is recorded with its growth rate.
+- no codex mcp child predates its daemon's restart, and the leak's growth rate
+  is recorded.
 - after the zshrc change, alternating `zsh -ic exit` and `zsh -lic exit` leaves
   `~/.cache/zcompdump`'s header and mtime unchanged.
 

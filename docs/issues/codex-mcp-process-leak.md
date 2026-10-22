@@ -28,12 +28,14 @@ ever unloads threads.
 reproduce: run several codex sessions against the daemon's `--remote` socket,
 exit them, then count `node_repl` and `cua-repl.mjs` children of the daemon pid.
 
-decisions (operator, 2026-10-21): the browser is unused, so the
-[macbook capacity plan](../macbook-capacity-plan.md) window removes the
-`node_repl` entry and disables the browser plugin. computer use stays, so its
-`cua_repl` leak continues and each later window's daemon restart clears it. no
-upstream report is sent.
+no thread identity: the processes' environment and arguments name no thread,
+session or turn, so age relative to live sessions is the only way to pick out
+stale ones. at inspection, 30 processes were older than the oldest live session
+(19 h 24 min); the other ~110 could belong to live threads or their subagents.
 
-resolution: after a week of normal use following the window, the daemon has no
-`node_repl` child, and the `cua_repl` growth rate per day is recorded here. the
-record closes when an upstream release stops `cua_repl` accumulating.
+decisions (operator, 2026-10-21): all plugins and mcp entries stay, and no
+upstream report is sent. the cleanup is a daemon restart in each
+[macbook capacity plan](../macbook-capacity-plan.md) window.
+
+resolution: record the per-day growth after the first window's restart. the
+record closes when an upstream release stops the accumulation.
