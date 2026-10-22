@@ -18,12 +18,14 @@ release version, and to `skid uninstall`. only devbox receives the authoritative
 `skid apply`; membership and generated state stay owned by skid. host provider
 tools/accounts/daemon preparation remain independent.
 
-the reviewed release pin selects immutable `v0.20.0` from `acf4e17`; its
+the reviewed release pin selects immutable `v0.20.1` from `05511dc`; its
 version, source commit and bootstrap sha256 admit the public installer. do not deploy the
 old-wire v0.18 archive or restore a symlink across incompatible private state.
 the in-place upgrade preserves existing handles/order, hub, pairings and
 observer/device acknowledgement memory. no conversion or reenrollment belongs
-to this cut.
+to this cut. `v0.21.0` is skid's lockstep fresh-fleet cutover; its pin bump lands
+with that cutover's config changes, not alone (skid
+[`docs/issues/release-cutover.md`](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/issues/release-cutover.md)).
 
 ## native ai maintenance
 
