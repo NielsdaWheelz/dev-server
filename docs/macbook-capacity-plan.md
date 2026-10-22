@@ -48,17 +48,15 @@ docker volume and containers are its own decision.
 d2 vm budget. docker desktop runs with 8 gib memory and 8 cpus. guest memory
 the vm has touched stays with the host, resident or compressed, so the limit
 becomes the steady-state footprint; it is sized to peak work, not headroom. two
-lab stacks measured under 2 gib of container memory. acceptance
-includes the nexus macos release lane (systemd runner, gradle and android under
-rosetta) completing within that budget. if that lane fails for memory, it first
-takes the whole d3 slot budget; memory rises to 12 gib only if it still fails.
+lab stacks measured under 2 gib of container memory. acceptance is two concurrent
+ordinary nexus lab invocations completing with 8 gib memory and 8 cpus.
 the 24 gib setting of 2026-09-05 recorded no memory failure at 8 gib. the disk
 image limit (`DiskSizeMiB`, now 2 tib with about
 246 gb used) stays unchanged until hockey-stats decides its 103 gb volume,
 because shrinking the image can destroy its contents.
 
-d3 host slots. heavy nexus test work on the macbook (lab stacks, campaign cycles,
-release lanes) shares one host-wide budget of two concurrent stacks. a throttled
+d3 host slots. heavy nexus test work on the macbook (lab stacks and campaign
+cycles) shares one host-wide budget of two concurrent stacks. a throttled
 journey run takes the whole budget so its timings stay attributable. nexus-web
 tooling owns and enforces the budget; the lock lives outside any checkout.
 
@@ -188,13 +186,16 @@ interrupts or deletes something.
 6. colima. run the retirement steps above.
 7. stale completion dumps. remove `~/.zcompdump`, `~/.zcompdump-*` and
    `~/.zcompdump.*`; the managed cache lives at `~/.cache/zcompdump`.
-8. verify. memory pressure level 1 after docker restarts. then, during the next
-   campaign cycle with interactive work, level 1 throughout (d10). record the
-   results in [macbook-vm-memory](issues/macbook-vm-memory.md) and delete the
-   records this window resolves.
+8. verify. memory pressure level 1 after docker restarts. run two ordinary nexus
+   lab invocations concurrently; both must complete within d2's budget. then,
+   during the next campaign cycle with interactive work, level 1 throughout
+   (d10). record results in [macbook-vm-memory](issues/macbook-vm-memory.md) and
+   delete the records this window resolves.
 
 ## acceptance
 
+- two ordinary nexus lab invocations complete concurrently with 8 gib memory
+  and 8 cpus (d2).
 - d10's machine target holds, with the measurement recorded.
 - skid serve, the tmux server and pane shells run at priority 31.
 - `colima` is absent and `docker context ls` shows only docker desktop.
