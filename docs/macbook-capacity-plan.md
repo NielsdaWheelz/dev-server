@@ -47,8 +47,9 @@ docker volume and containers are its own decision.
 
 d2 vm budget. docker desktop runs with 16 gib memory and 8 cpus. acceptance
 includes the nexus macos release lane (systemd runner, gradle and android under
-rosetta) completing within that budget; memory rises only with evidence that the
-lane fails for memory. the disk image limit (`DiskSizeMiB`, now 2 tib with about
+rosetta) completing within that budget. if that lane fails for memory, it first
+takes the whole d3 slot budget; memory rises only if it still fails. the disk
+image limit (`DiskSizeMiB`, now 2 tib with about
 246 gb used) stays unchanged until hockey-stats decides its 103 gb volume,
 because shrinking the image can destroy its contents.
 
@@ -59,15 +60,18 @@ tooling owns and enforces the budget; the lock lives outside any checkout.
 
 d4 load. "under load" proves that journeys survive a slow machine, meaning a slow
 client. the instrument is per-page cpu throttling through playwright's cdp
-session (`Emulation.setCPUThrottlingRate`), optionally with network throttling.
-an optional slow-backend case limits api and worker container cpus. no host-wide
+session (`Emulation.setCPUThrottlingRate`). an optional slow-backend case adds
+page network latency and may limit worker container cpus; the lab api runs on the
+host, outside any cgroup, so latency is its only lever. no host-wide
 cpu burners and no host load-average criterion. calibration: the instrument must
 reproduce the base sha's known xfail before it replaces the burners. "survive"
 means journeys complete without user-visible errors under timeouts scaled by the
 throttle factor.
 
-d5 harness ownership. campaign harnesses are owned, versioned code in nexus-web.
-`nexus-web-campaign-artifacts` holds run outputs only, never the implementation
+d5 harness ownership. campaign infrastructure (stack, slots, throttle, browser
+helpers, verdict accounting) is owned, versioned code in nexus-web. journeys
+remain temporary cases under nexus-web's 2026-09-17 reset.
+`nexus-web-campaign-artifacts` holds run outputs only, never an implementation
 that later campaigns copy.
 
 d6 maintenance window. disruptive actions run once, operator-initiated, from the
@@ -102,8 +106,8 @@ d10 targets.
 
 | concern | owner |
 |---|---|
-| nexus lab and campaign harness, load instrument, image teardown, host slots, testing docs | nexus-web spec, branch `host-budget-spec` |
-| skid tmux exec budget and launchd `ProcessType` | skidbladnir spec, branch `tmux-exec-budget-spec` |
+| nexus lab and campaign harness, load instrument, image teardown, host slots, testing docs | nexus-web `docs/issues/lab-host-budget.md` and its item records, branch `host-budget-spec` |
+| skid tmux exec budget and launchd `ProcessType` | skidbladnir `docs/tmux-exec-budget.md` and its issue records, branch `tmux-exec-budget-spec`; sequenced by skid's cleanup campaign |
 | predecessor hockey store in docker desktop | hockey-stats `docs/issues/desktop-docker-retention.md`, branch `desktop-docker-retention-issue` |
 | docker desktop sizing, colima retirement, codex mcp leak, zsh completion cache, spotlight, the window | this plan |
 
@@ -173,10 +177,11 @@ interrupts or deletes something.
    `./workstation gateway apply skidbladnir`. check that
    `launchctl print gui/$(id -u)/dev.niels.skidbladnir` is running and that
    `ps -o pri= -p <serve pid>` prints 31.
-3. tmux server restart. save the workspace as in the
-   [tmux memory growth](issues/tmux-memory-growth.md) recovery, then stop the
-   server so serve starts a replacement. check that the new server and a fresh
-   pane shell print priority 31.
+3. tmux server restart. with agent work stopped, `tmux kill-server`. serve's
+   same-boot recovery rebuilds the layout as fresh shells under a server it
+   starts itself (skid `docs/session-recovery.md`); conversations resume by
+   hand, as in the [tmux memory growth](issues/tmux-memory-growth.md) recovery.
+   check that the new server and a fresh pane shell print priority 31.
 4. codex daemons. with no turn running, `CODEX_HOME=~/.codex codex app-server
    daemon restart`; repeat for the work homes only if their leak counts warrant
    it. check that no `node_repl` or `cua-repl.mjs` process predates the restart.
