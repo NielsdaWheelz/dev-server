@@ -120,8 +120,8 @@ d10 targets.
 ### docker desktop sizing (d2)
 
 set memory to 8 gib and cpus to 8 in docker desktop settings → resources during
-the window. use the settings ui rather than editing `settings-store.json`, whose
-current keys are `MemoryMiB: 24576` with no cpu key. a nexus release-runner session
+the window, or set `MemoryMiB` and `Cpus` in `settings-store.json` while docker
+is stopped; both were used on 2026-10-22. a nexus release-runner session
 raised memory from the 8 gib default on 2026-09-05. dev-server does not declare
 docker desktop settings: one drift in two months does not justify an apply
 consumer with container-aware deferral. d9 retires the memory record that
@@ -150,17 +150,17 @@ on 2026-10-22, after hockey's deletion returned about 96 gb, the data volume had
 
 | holder | size | owner and disposition |
 |---|---:|---|
-| docker desktop (`Docker.raw`) | 178 gb | this plan: reset to a 128 gib maximum in the window |
-| `~/.colima` plus `~/Library/Caches/lima` | 49 gb | this plan: colima retirement |
+| docker desktop (`Docker.raw`) | 178 gb | reset 2026-10-22 to a 128 gib maximum; 6.5 mb after |
+| `~/.colima` plus `~/Library/Caches/lima` | 49 gb | removed 2026-10-22 |
 | `~/.codex-personal` | 34 gb | deleted 2026-10-22 by operator decision: a former codex home, newest session 2026-09-05, with no path references |
 | `~/.codex-default-archive-20260519`, `~/.codex-home-migration-backups` | 9.3 gb | deleted 2026-10-22 by operator decision: migration leftovers |
-| `nexus-web-campaign-artifacts` | 33 gb | nexus-web (d5 outputs; `2026-10-14` alone is 12 gb) |
+| `nexus-web-campaign-artifacts` | 33 gb | retired 2026-10-22 by nexus-web (#754) |
 | regenerable caches | about 80 gb | optional: `~/Library/Caches/codapt` 18, `~/.cache/uv` 15, `~/.npm` 11, jetbrains 10, `go-build` 6, `~/.bun` 6, `~/.gradle` 4 |
 | personal and hockey data | about 100 gb | operator: steam 61, android sdk and avds 19, `~/Backups/hockey-stats` 11 (protected by hockey-stats), claude desktop 10 |
 | `/Applications`, `/Library`, homebrew, `/private/tmp`, `/private/var/folders` | 76 gb | system and transient |
 
-the window's docker and colima steps alone return about 100–150 gb, depending on
-how far docker's rebuilt steady state stays below its cap.
+after these removals the data volume had 444 gib free, against 191 that morning.
+docker's rebuilt steady state will take some of it back, at most its cap.
 
 ### codex mcp process leak
 
@@ -188,9 +188,12 @@ interrupts or deletes something.
    idle, because step 5 destroys every image and stack. codex sessions are daemon-owned (`--remote`) and
    claude conversations are resumable natively; skid recovery recreates the
    workspace with fresh shells, not running conversations.
-2. skid priority (d7). install the skid release that carries
-   `ProcessType=Interactive`: bump `assets/skidbladnir/release-pin.json`, then
-   `./workstation gateway apply skidbladnir`. check that
+2. skid priority (d7). the pin selects `v0.20.1`, the release that adds
+   `ProcessType=Interactive` and its install check. pull dev-server, then run
+   `./workstation gateway apply skidbladnir`, not the installed binary's
+   `skid update`, which runs the old release's installer and writes its plist.
+   do not pin `v0.21.0` for this: it is skid's lockstep fresh-fleet cutover
+   across three hosts and the phone. check that
    `launchctl print gui/$(id -u)/dev.niels.skidbladnir` is running and that
    `ps -o pri= -p <serve pid>` prints 31.
 3. tmux server restart. with agent work stopped, `tmux kill-server`. serve's
@@ -218,6 +221,25 @@ interrupts or deletes something.
    during the next campaign cycle with interactive work, level 1 throughout
    (d10). record results in [macbook-vm-memory](issues/macbook-vm-memory.md) and
    delete the records this window resolves.
+
+### 2026-10-22 daytime steps
+
+steps 5–7 ran on 2026-10-22; steps 2–4 and 8 remain for the operator.
+
+- docker: a nexus runner set 8 gib and 8 cpus at 09:59 (nexus-web #751). at
+  13:13 the reset ran with docker stopped: `DiskSizeMiB` set to 131072 in
+  `settings-store.json` and `Docker.raw` deleted, so docker created a fresh
+  128 gib image. nexus's storage cleanup (#754) had already removed every
+  container and volume. before: 43 gb allocated, 399 gib free. after: 6.5 mb,
+  444 gib free, `docker system df` empty, `NCPU=8`, `MemTotal` 8319770624.
+- `docker desktop stop` reports failure while android emulators run, because it
+  counts their qemu processes as its own, though its vm has stopped. `docker
+  desktop start` then claims docker is running; `open -a Docker` starts it.
+- colima: nexus deleted `c3nt` on 2026-10-21. `brew uninstall colima lima`
+  also autoremoved the orphaned `usage` and `libngtcp2`; `brew bundle check`
+  on `packages/Brewfile` still passes. `~/.colima`, `~/.lima` and
+  `~/Library/Caches/lima` are removed.
+- the stale `~/.zcompdump*` files are removed.
 
 ## acceptance
 

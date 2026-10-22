@@ -16,6 +16,11 @@ evidence (2026-10-21, 15:28–16:10 local): `kern.memorystatus_vm_pressure_level
 `settings-store.json` contained `MemoryMiB: 24576`; a nexus release-runner
 session raised it from the 8 gib default on 2026-09-05.
 
+progress (2026-10-22): d1 and d2's sizing are applied. nexus deleted `c3nt` on
+2026-10-21, and docker has run with 8 gib and 8 cpus since 09:59 (nexus-web
+#751). the pressure level read 1 at 12:12 with labs idle. neither check below
+has run since.
+
 resolution: the [macbook capacity plan](../macbook-capacity-plan.md) window applies
 d1 and d2. the pressure level then stays 1 through one campaign cycle plus
 interactive work, and two ordinary nexus lab invocations complete concurrently
