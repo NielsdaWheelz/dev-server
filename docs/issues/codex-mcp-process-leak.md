@@ -21,6 +21,12 @@ evidence (2026-10-21, codex 0.163.0, daemon pid 7426, up about 4.5 days):
   not manage them. the `~/.codex-work2` daemon had one such child;
   `~/.codex-work` had none.
 
+2026-10-22 13:17, same daemon, up 5.2 days: 70 browser `node_repl` (677 mib), 71
+`cua-repl.mjs` (1,337 mib) and their 71 `node_repl` children (936 mib), about
+2.9 gib in all. one process more than the evening before, so growth tracks new
+threads, not time. both kinds run from the chatgpt app's `cua_node/bin`, so
+count by parent pid and arguments, not by binary path.
+
 unverified: the exact lifecycle event that should release a thread's mcp
 servers (turn end, tui detach, or thread unload), and whether managed-daemon mode
 ever unloads threads.

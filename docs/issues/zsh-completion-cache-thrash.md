@@ -1,7 +1,8 @@
 # zsh completion cache thrash
 
 status: the source fix is in `assets/dotfiles/zshrc`. the record stays open
-until apply installs it on the macbook and the live check below passes.
+until apply installs it on the macbook and the live check below passes. the
+stale home dumps were removed on 2026-10-22.
 
 problem: compinit reuses `~/.cache/zcompdump` only while its `#files:` header
 matches the current count of completion files on `fpath`, and that count
@@ -38,6 +39,4 @@ under its own `ZDOTDIR` and `XDG_CACHE_HOME`, alternating `-ic` and `-lic`:
 | after | 994 throughout, reused after the first run | 994 throughout, reused after the first run |
 
 resolution: after apply, alternating `zsh -ic exit` and `zsh -lic exit` on the
-macbook leaves the dump's header and mtime unchanged after the first run. the
-stale dumps are removed in the [macbook capacity plan](../macbook-capacity-plan.md)
-window.
+macbook leaves the dump's header and mtime unchanged after the first run.
