@@ -152,8 +152,8 @@ on 2026-10-22, after hockey's deletion returned about 96 gb, the data volume had
 |---|---:|---|
 | docker desktop (`Docker.raw`) | 178 gb | this plan: reset to a 128 gib maximum in the window |
 | `~/.colima` plus `~/Library/Caches/lima` | 49 gb | this plan: colima retirement |
-| `~/.codex-personal` | 34 gb | operator. a former codex home, 33 gb of sessions, newest file 2026-09-05. no profile, wrapper or skid config points at the directory; `codex-personal` survives only as the memory profile name for `~/.codex` |
-| `~/.codex-default-archive-20260519`, `~/.codex-home-migration-backups` | 9.3 gb | operator: migration leftovers |
+| `~/.codex-personal` | 34 gb | deleted 2026-10-22 by operator decision: a former codex home, newest session 2026-09-05, with no path references |
+| `~/.codex-default-archive-20260519`, `~/.codex-home-migration-backups` | 9.3 gb | deleted 2026-10-22 by operator decision: migration leftovers |
 | `nexus-web-campaign-artifacts` | 33 gb | nexus-web (d5 outputs; `2026-10-14` alone is 12 gb) |
 | regenerable caches | about 80 gb | optional: `~/Library/Caches/codapt` 18, `~/.cache/uv` 15, `~/.npm` 11, jetbrains 10, `go-build` 6, `~/.bun` 6, `~/.gradle` 4 |
 | personal and hockey data | about 100 gb | operator: steam 61, android sdk and avds 19, `~/Backups/hockey-stats` 11 (protected by hockey-stats), claude desktop 10 |
