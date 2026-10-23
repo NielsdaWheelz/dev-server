@@ -71,6 +71,54 @@ policy restarted after handling termination with exit zero, and stayed stopped
 after an explicit stop. skid was recovered with the saved 16:31 layout; layout
 restoration alone does not resume conversations.
 
+third recurrence (2026-10-05): earlyoom pid 3835046 sent sigterm to the
+production `tmux: server` pid 3187241 at 15:31:57.960278 utc (08:31:58 pdt),
+reporting 5384 mib rss. available memory was below 10% and free swap was zero.
+the gateway listed three sessions at 15:31:54.136601 and zero at
+15:32:03.996616. read-only inspection subsequently found no tmux process and
+connection refusal on the production socket. the gateway stayed running;
+production ingress still targeted port 7341 and authenticated requests passed.
+the notification qa services had already been removed.
+
+the installed configuration and actual daemon argv both contain the corrected
+`tmux(: server)?` avoidance expression as one argument. this is exhaustion
+despite avoidance, not another name/quoting mismatch. the user reports nexus ci
+was running; its contribution at the kill is unmeasured. tmux's own 5384 mib
+allocation is established, but its cause is not. installed tmux is
+`3.4-1ubuntu0.1`; configured history-limit is 50000. neither fact establishes
+that retained scrollback caused the allocation. upstream's
+[rgb redraw allocation fix](https://github.com/tmux/tmux/pull/4862) and
+[follow-up](https://github.com/tmux/tmux/pull/4865) are investigation candidates,
+not a verified diagnosis of this incident.
+
+recovery observed at 16:27:21–22 utc: a new production tmux server pid 3117039
+contained three sessions. the stock desktop client's authenticated production
+inventory returned all three. the incident investigator performed no restart,
+creation, closure or memory-policy change; recovery occurred during inspection.
+this proves current terminal availability, not resumption of prior work.
+
+fourth recurrence (2026-10-07): earlyoom terminated the webstorm remote backend
+at 17:13:00 utc (pid 3737196, rss 1766 mib) and 17:46:36 utc (pid 3979685,
+rss 2059 mib). the second kill occurred with 770/7751 mib ram available and
+0/4095 mib swap free. the backend logged a clean shutdown at 17:46:37;
+this was a userspace sigterm, not an ide crash or a connection timeout.
+tailscale and ssh remained healthy, but gateway kept retrying the closed
+backend port 5990 and the client displayed no connection.
+
+inspect this incident with
+`ssh dev-server-deploy 'sudo -n journalctl -u earlyoom --since "2026-10-07 17:10:00" --until "2026-10-07 17:50:00" --no-pager'`.
+closing the disconnected remote window and reopening its recent ssh project
+relaunches the backend, but does not resolve memory pressure.
+
+after the kill, main tmux pid 3117039 held 2.61 gib rss and 3.56 gib swap.
+its four panes reported only about 28 mb of history, so ordinary scrollback
+alone does not explain its memory use; retained allocation or a leak remains
+unproven. a separate notification qa tmux held about 452 mib rss and 175 mib
+swap. these processes were preserved. establish why tmux retains this memory
+and which qa fixtures are still needed before reclaiming them; restarting
+tmux would interrupt its live sessions. restarting webstorm without more
+headroom risks repeating the same termination.
+
 follow-up: if terminations recur, inspect the earlyoom and kernel journals
 through the deployment account and identify the concurrent workload. reduce
 concurrent heavy jobs or explicitly choose a larger host. do not silently cap
