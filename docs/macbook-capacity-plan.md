@@ -48,12 +48,13 @@ leftover docker stores on 2026-10-22.
 d2 vm budget. docker desktop runs with 8 gib memory and 8 cpus. guest memory
 the vm has touched stays with the host, resident or compressed, so the limit
 becomes the steady-state footprint; it is sized to peak work, not headroom. two
-lab stacks measured under 2 gib of container memory. there is no dedicated
-acceptance run (operator, 2026-10-22): raising the limit is a settings change and
-a restart, so a nexus lab that fails for memory in ordinary work is the evidence
-to raise it. a container killed with exit 137, or a lab that stalls, points there
-first: `docker run --rm --privileged alpine dmesg | grep -i oom` lists the vm's
-out-of-memory kills.
+lab stacks measured under 2 gib of container memory. the parallel-labs change
+requires six full fake-provider labs on the unchanged 8 gib / 8 cpu allocation
+and existing disk limit. qualification records actual overlapping product work,
+host and container resources, pressure and abnormal exits. a measured capacity
+blocker returns to the owner; it does not authorize a larger vm or a lower
+accepted concurrency. exit 137 or a stalled lab requires diagnosis, including
+whether the container was oom-killed.
 the 24 gib setting of 2026-09-05 recorded no memory failure at 8 gib. the disk
 image maximum (`DiskSizeMiB`, now 2 tib) drops to 128 gib in the window.
 lowering it deletes the existing image, so this is a full docker reset. the
@@ -62,10 +63,17 @@ dev, test and cache state, including jarvis's local postgres; images and stacks
 rebuild on demand. the cap makes runaway image or cache growth fail builds
 loudly instead of consuming the host disk.
 
-d3 host slots. heavy nexus test work on the macbook (lab stacks and campaign
-cycles) shares one host-wide budget of two concurrent stacks. a throttled
-journey run takes the whole budget so its timings stay attributable. nexus-web
-tooling owns and enforces the budget; the lock lives outside any checkout.
+d3 lab slots. nexus-web owns one host-wide lab capacity policy, defaulting to
+six concurrent stacks. the optional
+`${XDG_STATE_HOME:-~/.local/state}/nexus-lab/capacity.json` is a closed object
+with sole key `max_parallel_labs`, for example `{"max_parallel_labs": 6}`;
+nexus's runtime owns validation and admission. all worktrees use the same
+absolute state home outside checkouts and docker binds.
+ordinary labs take one slot; `--client-throttle N`, including `N=1`, takes all
+configured slots so other labs cannot contaminate measurements. this excludes
+other labs, not unrelated host work. change capacity only with labs, waiters and
+owned runtimes drained. hard-cut old two-slot runners before activating the new
+harness; there is no mixed-version admission protocol.
 
 d4 load. "under load" proves that journeys survive a slow machine, meaning a slow
 client. the instrument is per-page cpu throttling through playwright's cdp
@@ -108,14 +116,14 @@ d10 targets.
 - skid: at 18 panes with no browser or phone open, at most 1.5 tmux execs/s and
   under 5% of one core for serve, its reaped children and the tmux server,
   measured from `proc_pid_rusage` deltas over 30 s.
-- nexus: no worker image rebuild when only application source changes; zero lab
-  images remain after `down`.
+- nexus: no worker image rebuild when only application source changes; each
+  invocation removes its owned runtime and preserves shared and peer images.
 
 ## owners
 
 | concern | owner |
 |---|---|
-| nexus lab and campaign harness, load instrument, image teardown, host slots, testing docs | nexus-web `docs/issues/lab-host-budget.md` and its item records, branch `host-budget-spec` |
+| nexus lab and campaign harness, load instrument, scoped teardown, lab slots, testing docs | nexus-web `docs/local-rules/testing-standards.md`; activation: `docs/issues/release-parallel-labs.md` |
 | skid tmux exec budget and launchd `ProcessType` | skidbladnir `docs/tmux-exec-budget.md` and its issue records, branch `tmux-exec-budget-spec`; sequenced by skid's cleanup campaign |
 | docker desktop sizing, colima retirement, codex mcp leak, zsh completion cache, the window | this plan |
 
@@ -244,8 +252,8 @@ steps 5–7 ran on 2026-10-22; steps 2–4 and 8 remain for the operator.
 
 ## acceptance
 
-- memory pressure level 1 after docker restarts. a later nexus lab that fails
-  for memory reopens d2.
+- memory pressure level 1 after docker restarts. six-way lab qualification keeps
+  d2 fixed; a capacity failure remains an explicit unresolved blocker.
 - docker's disk image maximum is 128 gib, and `Docker.raw` allocation and host
   free space are recorded before the reset, after it, and a day later.
 - skid serve, the tmux server and pane shells run at priority 31.
