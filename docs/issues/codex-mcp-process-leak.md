@@ -1,7 +1,8 @@
 # codex mcp process leak
 
 problem: the `~/.codex` app-server daemon starts mcp server processes for its
-threads and never reaps them. they accumulate for as long as the daemon runs.
+threads and keeps them after the threads go idle. they accumulate while the tuis
+that started them stay connected.
 
 impact: on 2026-10-21 the daemon held about 210 idle processes using about
 2.5 gib, and the count was still growing. that adds to host memory pressure until
@@ -27,9 +28,18 @@ evidence (2026-10-21, codex 0.163.0, daemon pid 7426, up about 4.5 days):
 threads, not time. both kinds run from the chatgpt app's `cua_node/bin`, so
 count by parent pid and arguments, not by binary path.
 
-unverified: the exact lifecycle event that should release a thread's mcp
-servers (turn end, tui detach, or thread unload), and whether managed-daemon mode
-ever unloads threads.
+after the window:
+- 2026-10-22 23:22 the operator restarted both codex account daemons. by
+  2026-10-23 23:39 the `~/.codex` daemon held 25 browser `node_repl` and 25
+  `cua-repl.mjs`: about 25 pairs, roughly 1 gib, in a day of ordinary use.
+- 2026-10-24 13:04 skid's recovery restart of tmux replaced every codex tui with
+  a resumed one; the daemon kept running. at 16:22 it held 2 of each, one pair
+  per connected `personal` tui. afaict a tui's stale pairs are reaped when it
+  disconnects, so a tmux restart clears them as well as a daemon restart.
+
+unverified: which event inside a connected tui leaves a pair behind (a thread
+switch, a resume, a subagent), and whether managed-daemon mode ever unloads
+threads.
 
 reproduce: run several codex sessions against the daemon's `--remote` socket,
 exit them, then count `node_repl` and `cua-repl.mjs` children of the daemon pid.
@@ -40,8 +50,7 @@ stale ones. at inspection, 30 processes were older than the oldest live session
 (19 h 24 min); the other ~110 could belong to live threads or their subagents.
 
 decisions (operator, 2026-10-21): all plugins and mcp entries stay, and no
-upstream report is sent. the cleanup is a daemon restart in each
-[macbook capacity plan](../macbook-capacity-plan.md) window.
+upstream report is sent. the cleanup is a daemon restart or skid's recovery
+restart of tmux ([macbook capacity plan](../macbook-capacity-plan.md) steps 3-4).
 
-resolution: record the per-day growth after the first window's restart. the
-record closes when an upstream release stops the accumulation.
+resolution: an upstream release stops the accumulation.
