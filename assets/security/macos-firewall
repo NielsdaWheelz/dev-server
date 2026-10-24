@@ -12,8 +12,8 @@ changed=0
 pfctl -n -a "$anchor" -f "$rules" >/dev/null 2>&1
 root_rules="$(pfctl -sr 2>/dev/null)"
 if ! grep -Fxq 'anchor "dev-server" all' <<<"$root_rules"; then
-  # Initial installation may add our hook to Apple's otherwise untouched root.
-  [[ "$root_rules" == $'scrub-anchor "com.apple/*" all fragment reassemble\nanchor "com.apple/*" all' ]] || {
+  # our boot job can run before Apple has loaded its default root rules.
+  [[ -z "$root_rules" || "$root_rules" == $'scrub-anchor "com.apple/*" all fragment reassemble\nanchor "com.apple/*" all' ]] || {
     printf '%s\n' 'foreign pf root rules require review before installing the firewall hook' >&2
     exit 1
   }
