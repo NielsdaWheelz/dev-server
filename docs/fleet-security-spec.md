@@ -21,7 +21,7 @@ are live activation results, distinct from the historical baseline below.
 
 | target | established | still pending |
 |---|---|---|
-| tailnet and retired computers | reviewed three-grant policy and fourteen policy tests active; live three-computer mesh and production containment passed; exact retired device identities absent from tailscale and skid; production has its restricted tag; phone opens macbook/devbox terminals | phone-to-arch terminal qualification; offline/shared credential custody and unknown github key attribution |
+| tailnet and retired computers | reviewed three-grant policy and fourteen policy tests active; six cross-computer skid paths and production containment passed; exact retired device identities absent from tailscale and skid; production has its restricted tag; phone opens macbook/devbox terminals | macbook self-8443 path repair; phone-to-arch terminal qualification; offline/shared credential custody and unknown github key attribution |
 | macbook | native packet/application boundaries and key-only ssh active; fresh arch ssh, lan ssh/media denial in both address families, loopback labs and ssh forwarding passed; repeat loader is inert; safari 27 and command line tools 26.6 updates confirmed installed | sleep, tailscale reconnect and reboot qualification; offered macos 26.7.1 minor update needs a no-use window |
 | arch | 194 repository updates and declared aur packages applied; rebooted into `7.2.11`; private ssh/8443, lan denial, docker publication controls and forwarding passed in both address families after reboot; no failed units or remaining repository updates | sleep/wake qualification |
 | devbox | native apt maintenance completed; kernel `6.8.0-147` matches installed; existing private provider/ufw boundary and key-only ssh verified; private `8443` mesh passed; active rootless docker retained its containers while rootful docker/containerd remain disabled and inactive | dbus/logind and existing user/ide session restarts deferred around active work; low disk headroom |
@@ -30,10 +30,10 @@ are live activation results, distinct from the historical baseline below.
 public api tls is verified, version responses are uncached, and the existing
 website dns record is unchanged. the tunnel has one connector and four edge
 connections; these are transport evidence, not proof of every client journey.
-the owner confirmed desktop document/ai use, extension account/destinations and
-android account/text reading. those checks do not establish the remaining asset
-and stream paths. account mfa/recovery and credential custody retain separate
-issue records. no blanket fleet or release acceptance is claimed.
+the owner confirmed desktop document/ai use and extension account/destinations.
+the agent verified android account/text reading. those checks do not establish
+the remaining asset and stream paths. account mfa/recovery and credential custody
+retain separate issue records. no blanket fleet or release acceptance is claimed.
 
 ## purpose and limits
 
