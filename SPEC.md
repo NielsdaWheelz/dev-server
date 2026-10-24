@@ -545,12 +545,14 @@ ghostty notification handling. the yaml names no hub; devbox is the hub because
 it bootstraps the fleet and the other computers join it. each profile's
 `resume_command` reopens a saved conversation during workspace recovery.
 
-when present, `${XDG_CONFIG_HOME:-~/.config}/dev-server/skidbladnir.yaml`
-replaces that committed source as the complete desired hub yaml. it is a
-host-owned private file, mode `0600`, retained outside git. apply copies the
-whole file; no yaml merge or fallback from an invalid present file occurs.
-optional firebase public options may live there; service-account private key
-bytes remain in the separately configured private file.
+the committed yaml is the whole desired hub yaml except `android_push`, whose
+firebase client options include a google api key that stays out of this public
+repository. when present, `${XDG_CONFIG_HOME:-~/.config}/dev-server/skidbladnir-android-push.yaml`
+holds only that top-level block: a host-owned private file, mode `0600`, outside
+git. apply appends it to the committed yaml and installs the result; a file with
+any other top-level key is refused. the retired complete override,
+`dev-server/skidbladnir.yaml`, is refused while present. service-account private
+key bytes remain in the separately configured private file.
 
 normal upgrades preserve skid/private state and provider data. `gateway remove`
 delegates to `skid uninstall`, retaining settings/private state, tmux, providers

@@ -28,6 +28,14 @@ converters. skid's [release cutover](https://github.com/NielsdaWheelz/skidbladni
 and [workspace recovery](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/session-recovery.md#cutover-and-qualification)
 own the steps.
 
+a skid release that changes the yaml schema needs one manual step on devbox.
+`lib/skidbladnir.sh` installs the desired yaml after the release installer, so
+the new serve first starts on the live `~/.config/skidbladnir/config.yaml`. no
+order works both ways: the old serve rejects new keys and the new serve rejects
+removed ones. before installing such a release, stop serve and edit the live
+file to parse under the new schema; dev-server's apply then replaces it with the
+desired yaml.
+
 ## native ai maintenance
 
 all personal account wrappers invoke
