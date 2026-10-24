@@ -13,8 +13,8 @@ one-user host configuration for `macbook`, `arch`, and the hetzner `devbox`.
 
 gateway commands use skid's ordinary standalone installer. only devbox receives
 the authoritative personal yaml. the reviewed standalone pin selects immutable
-`v0.20.1` from `05511dc`, which adds serve's interactive launchd priority to
-`v0.20.0`; the `v0.20.0` [installed qualification](docs/gateway-separation-validation.md#2026-10-21-terminal-only-v0200-installed-fleet)
+`v0.22.0` from `fd704c1`, skid's lockstep fresh-fleet release with hub attention
+and conversation recovery; the `v0.20.0` [installed qualification](docs/gateway-separation-validation.md#2026-10-21-terminal-only-v0200-installed-fleet)
 records installed results and remaining limits.
 
 `gateway remove skidbladnir` delegates to `skid uninstall`; settings/private state,
@@ -283,11 +283,12 @@ activation. [remaining host qualification](docs/issues/universal-memory-activati
 ## agent fleet
 
 [personal yaml](assets/skidbladnir/config.yaml) retains profile keys, labels,
-order and observation accounts, with ordinary command values. devbox is the desired hub;
-macbook keeps ghostty notifications, and each host retains its login shell and
-self-selection default. explicit root-owned enrollment/conversion preserves
-machine handles/order and notification memory. dev-server writes no roster or
-generated runtime config.
+order and observation accounts, with ordinary command values and the
+`resume_command` that workspace recovery uses. the yaml names no hub: devbox is
+the hub because it bootstraps the fleet and macbook and arch join it with
+`skid connect`/`skid join`. `terminal: ghostty` is fleet-wide and only the mac
+reads it; each host retains its login shell and self-selection default.
+dev-server writes no roster or generated runtime config.
 
 on devbox, `~/.config/dev-server/skidbladnir.yaml` (or the matching xdg config
 path) may supply the complete personal yaml instead of the committed file.
@@ -298,7 +299,7 @@ the service-account private key remains in its separately configured private fil
 `lib/skidbladnir.sh` delegates installation and removal to the standalone skid
 installer. the release pin names a version, source commit and bootstrap sha256;
 the ordinary bootstrap verifies signed archives. the pin selects reviewed
-immutable `v0.20.1`; publication alone does not establish installed parity. normal skid
+immutable `v0.22.0`; publication alone does not establish installed parity. normal skid
 updates own services/shell integration and preserve settings, tmux and providers.
 old ntfy, copied gateway/native helper assets and deployment rollback code are
 removed; there is no old-wire fallback. see [the maintenance runbook](docs/gateway-separation-runbook.md).

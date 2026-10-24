@@ -199,20 +199,21 @@ interrupts or deletes something.
    port session has finished, and nex-cleanup and the nexus host-budget runner are
    idle, because step 5 destroys every image and stack. codex sessions are daemon-owned (`--remote`) and
    claude conversations are resumable natively; skid recovery recreates the
-   workspace with fresh shells, not running conversations.
-2. skid priority (d7). the pin selects `v0.20.1`, the release that adds
-   `ProcessType=Interactive` and its install check. pull dev-server, then run
-   `./workstation gateway apply skidbladnir`, not the installed binary's
-   `skid update`, which runs the old release's installer and writes its plist.
-   do not pin `v0.21.0` for this: it is skid's lockstep fresh-fleet cutover
-   across three hosts and the phone. check that
+   workspace and requests each saved conversation, but a turn in flight is lost.
+2. skid priority (d7). the pin selects `v0.22.0`, whose installer writes
+   `ProcessType=Interactive` and checks it. it is skid's lockstep cutover across
+   three hosts and the phone ([runbook](gateway-separation-runbook.md)). pull
+   dev-server, then run `./workstation gateway apply skidbladnir`, not the
+   installed binary's `skid update`, which runs the old release's installer and
+   writes its plist. check that
    `launchctl print gui/$(id -u)/dev.niels.skidbladnir` is running and that
    `ps -o pri= -p <serve pid>` prints 31.
-3. tmux server restart. with agent work stopped, `tmux kill-server`. serve's
-   same-boot recovery rebuilds the layout as fresh shells under a server it
-   starts itself (skid `docs/session-recovery.md`); conversations resume by
-   hand, as in the [tmux memory growth](issues/tmux-memory-growth.md) recovery.
-   check that the new server and a fresh pane shell print priority 31.
+3. tmux server restart. once serve has saved a schema-2 `workspace.json`, and
+   with agent work stopped: stop the gateway, `tmux kill-server`, start the
+   gateway. its same-boot recovery rebuilds the layout under a server it starts
+   itself and requests each saved conversation through its profile's
+   `resume_command` (skid `docs/session-recovery.md`). check that the new server
+   and a fresh pane shell print priority 31.
 4. codex daemons. with no turn running,
    `CODEX_HOME=~/.codex codex app-server daemon restart`; repeat for the work
    homes only if their leak counts warrant it. check that no `node_repl` or
