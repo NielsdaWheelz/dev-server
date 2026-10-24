@@ -477,7 +477,7 @@ entrypoint and marker. combined gateway/cli/native journeys passed on Darwin
 input, same-tui a→b→a with captured native targeting, exact interruption, close
 races and unread acknowledgement. actual older-tui/newer-daemon skew passed.
 Claude 2.1.284 passed native background stop and SDK saved history/results.
-[upstream qualification](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/native-agent-qualification.md)
+[upstream qualification](https://github.com/NielsdaWheelz/skidbladnir/blob/12b1516/docs/native-agent-qualification.md)
 owns those boundaries; controlled local model responses supplied execution without
 real accounts. authenticated access, phone and fleet remain NOT_RUN. all owned
 fixtures/processes and temporary tests were removed.

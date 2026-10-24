@@ -426,7 +426,7 @@ activation leaves its active digest unchanged.
 connected profiles receive their own bearer environment variable and the native
 `jarvis-memory` streamable-http entry at the one declared `/v1/mcp` endpoint.
 native configuration owners preserve unrelated parser-backed settings. the
-shared shell environment and native helper/provider launchers load the private
+shared shell environment and provider launchers load the private
 client environment for future launches. existing native sessions and account
 daemons are not restarted; connection acceptance must be verified separately
 before claiming those existing consumers loaded the change. each connected
@@ -530,18 +530,20 @@ owns dependency handling, installation and removal. the same reviewed bootstrap 
 does not decode product receipts,
 copy binaries, install helper environments or own runtime/service assets.
 
-the pin selects immutable `v0.20.1` from
-`05511dc80147452e41291e98969f12aefe525086` and its reviewed public bootstrap.
+the pin selects immutable `v0.22.0` from
+`fd704c14b40b9ead42dd171bd7845b3e95a4898b` and its reviewed public bootstrap.
 only the strict version/source/bootstrap schema is accepted; v0.18's old-wire
 archive cannot be used for this target.
 
 only devbox receives `assets/skidbladnir/config.yaml` at its authoritative xdg
 configuration path, followed by `skid apply`. macbook/arch consume the ordinary
 installer and enrolled state; they receive no copied desired yaml. membership,
-order and stable machine handles belong to explicit skid enrollment/conversion,
-never a second roster here. omit shell to retain each host's login shell, and
-omit desktop default to retain self-selection. macbook keeps ghostty notification
-handling. hub placement is devbox.
+order and stable machine handles belong to skid's `connect`/`join`, never a
+second roster here. omit shell to retain each host's login shell, and omit
+desktop default to retain self-selection. `terminal: ghostty` keeps the mac's
+ghostty notification handling. the yaml names no hub; devbox is the hub because
+it bootstraps the fleet and the other computers join it. each profile's
+`resume_command` reopens a saved conversation during workspace recovery.
 
 when present, `${XDG_CONFIG_HOME:-~/.config}/dev-server/skidbladnir.yaml`
 replaces that committed source as the complete desired hub yaml. it is a
@@ -631,9 +633,3 @@ host-key continuity, private ingress, and standalone signed skid installation ar
 record unresolved work in `docs/issues/`, one file per issue, and remove resolved
 records. completed deployment plans and cutover instructions belong in git history.
 
-## native helper source
-
-skid's signed host release owns its native helper and locked dependencies.
-dev-server installs no helper checkout, source pin, shim or runtime environment.
-provider installation/accounts/settings/daemon lifecycle remain independent
-personal host responsibilities.

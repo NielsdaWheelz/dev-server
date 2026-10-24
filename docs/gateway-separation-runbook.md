@@ -18,14 +18,15 @@ release version, and to `skid uninstall`. only devbox receives the authoritative
 `skid apply`; membership and generated state stay owned by skid. host provider
 tools/accounts/daemon preparation remain independent.
 
-the reviewed release pin selects immutable `v0.20.1` from `05511dc`; its
+the reviewed release pin selects immutable `v0.22.0` from `fd704c1`; its
 version, source commit and bootstrap sha256 admit the public installer. do not deploy the
 old-wire v0.18 archive or restore a symlink across incompatible private state.
-the in-place upgrade preserves existing handles/order, hub, pairings and
-observer/device acknowledgement memory. no conversion or reenrollment belongs
-to this cut. `v0.21.0` is skid's lockstep fresh-fleet cutover; its pin bump lands
-with that cutover's config changes, not alone (skid
-[`docs/issues/release-cutover.md`](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/issues/release-cutover.md)).
+from a `v0.20.x` fleet this is skid's lockstep cutover of three hosts and the
+phone: a fresh fleet, hub attention and schema-2 workspace recovery, with no
+converters. skid's [release cutover](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/issues/release-cutover.md),
+[attention cutover](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/issues/attention-cutover.md)
+and [workspace recovery](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/session-recovery.md#cutover-and-qualification)
+own the steps.
 
 ## native ai maintenance
 

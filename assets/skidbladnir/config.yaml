@@ -1,26 +1,27 @@
 version: 1
-hub: devbox
 profiles:
   - name: personal
     label: "Codex · Personal"
     command: codex
     provider: codex
     home: ~/.codex
+    resume_command: 'codex resume "$1"'
   - name: work
     label: "Codex · Work"
     command: codex-work
     provider: codex
     home: ~/.codex-work
+    resume_command: 'codex-work resume "$1"'
   - name: work2
     label: "Codex · Work 2"
     command: codex-work2
     provider: codex
     home: ~/.codex-work2
+    resume_command: 'codex-work2 resume "$1"'
   - name: claude-work
     label: "Claude · Work"
     command: claude-work
     provider: claude
     home: ~/.claude-work
-machines:
-  macbook:
-    terminal: ghostty
+    resume_command: 'claude-work --resume "$1"'
+terminal: ghostty
