@@ -1,18 +1,19 @@
 # fleet security specification and implementation plan
 
-date: 2026-10-23. status: network boundaries active; maintenance, persistence
-and full client acceptance remain incomplete. this document is the
+date: 2026-10-23. status: network boundaries active; remaining maintenance,
+persistence and account recovery are tracked below. this document is the
 cross-repository plan. each repository retains ownership of its own deployment
 and runtime contracts.
 
 owner decisions: retire `skq-linux` and `niels-desktop`; keep macbook, arch,
 devbox, retirement and the shared tailnet policy in `dev-server`; keep both the
 nexus vps and public website changes in `nexus-web`. both retired computers'
-network memberships are removed; credential custody remains unverified.
+network memberships are removed; the owner confirms both disks remain securely
+retained, active ssh fingerprints are accounted for, and the unknown github key
+has been revoked.
 the api moves to `nexus-api.nielseriknandal.com` under the existing free
 certificate; the public website address stays unchanged. no subscription is added.
-remaining nexus application-traffic qualification is tracked in
-[its owning repository](../../nexus-web/docs/issues/release-security-hardening.md).
+nexus retains its own [deployment contract](../../nexus-web/deployment.md).
 
 ## current activation status
 
@@ -21,19 +22,26 @@ are live activation results, distinct from the historical baseline below.
 
 | target | established | still pending |
 |---|---|---|
-| tailnet and retired computers | reviewed three-grant policy and fourteen policy tests active; all nine hostname-based skid mesh paths and production containment passed; exact retired device identities absent from tailscale and skid; production has its restricted tag; phone opens macbook/devbox terminals | phone-to-arch terminal qualification; offline/shared credential custody and unknown github key attribution |
+| tailnet and retired computers | reviewed three-grant policy and fourteen policy tests active; all nine hostname-based skid mesh paths and production containment passed; retired devices absent from tailscale/skid, disks securely retained by owner; active ssh keys accounted for and unknown github key revoked; phone opened terminals on all three computers | none within the current secure-retention decision; review offline shared credentials before transfer/disposal |
 | macbook | native packet/application boundaries and key-only ssh active; fresh arch ssh, lan ssh/media denial in both address families, loopback labs and ssh forwarding passed; self-access repair `e32b35d` is active with ipv4 self-https passing and repeat loader inert; safari 27 and command line tools 26.6 updates confirmed installed | forced self-ipv6 https still times out; sleep, tailscale reconnect and reboot qualification; offered macos 26.7.1 minor update needs a no-use window |
-| arch | 194 repository updates and declared aur packages applied; rebooted into `7.2.11`; private ssh/8443, lan denial, docker publication controls and forwarding passed in both address families after reboot; no failed units or remaining repository updates | sleep/wake qualification |
-| devbox | native apt maintenance completed; kernel `6.8.0-147` matches installed; existing private provider/ufw boundary and key-only ssh verified; private `8443` mesh passed; active rootless docker retained its containers while rootful docker/containerd remain disabled and inactive | dbus/logind and existing user/ide session restarts deferred around active work; low disk headroom |
-| nexus | normal backend/vercel release serves `dc12792e0fd407361be846d73b74b3b332313a17`; private administration, closed public tcp/origin https and no docker host ports verified in both address families; cloudflare rules/tunnel and public health pass; old api dns removed; 58 upgrades and reboot into `6.8.0-147` completed, with private ssh before volume unlock, verified key unlock and all eight services recovered | extended asset, range, reading-copy and long-stream qualification in the owning nexus issue |
+| arch | 194 repository updates and declared aur packages applied; rebooted into `7.2.11`; S3 sleep/resume passed with unchanged boot identity; private ssh/8443 and lan denial passed in both address families afterward; docker controls/forwarding passed; no failed units or remaining repository updates | none |
+| devbox | native apt maintenance completed; kernel `6.8.0-147` matches installed; private boundary/ssh/8443 verified; scoped dbus/logind/user-bus/editor refresh preserved eleven codex tasks and skid identities; no failed units; rootless docker retained its containers, rootful docker/containerd remain inactive; observed 26.5 gib free | idle sd-pam mapping deferred until an all-agent no-use window |
+| nexus | normal backend/vercel release serves `dc12792e0fd407361be846d73b74b3b332313a17`; private administration, closed public tcp/origin https and no docker host ports verified in both address families; cloudflare rules/tunnel and public health pass; old api dns removed; 58 upgrades and reboot into `6.8.0-147` completed, with private ssh before volume unlock, verified key unlock and all eight services recovered | none for this server/ingress scope; extension distribution stays nexus-owned |
 
 public api tls is verified, version responses are uncached, and the existing
 website dns record is unchanged. the tunnel has one connector and four edge
 connections; these are transport evidence, not proof of every client journey.
 the owner confirmed desktop document/ai use and extension account/destinations.
-the agent verified android account/text reading. those checks do not establish
-the remaining asset and stream paths. account mfa/recovery and credential custody
-retain separate issue records. no blanket fleet or release acceptance is claimed.
+the agent verified android account/text reading. nexus's extended upload, range,
+reading-copy and long-stream checks also passed, with owned fixtures cleaned.
+
+offline shared credentials were neither inspected nor rotated; secure retention
+is the owner's accepted present custody, with review required before either
+retired disk is transferred or disposed of.
+
+the increased devbox headroom was observed without cleanup by this work; its
+cause is unestablished. account mfa/recovery retains an issue record. no blanket
+fleet or release acceptance is claimed.
 
 ## purpose and limits
 
@@ -384,12 +392,8 @@ temporary resources. update or delete resolved issue records.
 
 - [workstation security persistence](issues/workstation-security-persistence.md)
 - [macbook tailscale self-ipv6](issues/macbook-tailscale-self-ipv6.md)
-- [retired computer credential custody](issues/retired-computer-credential-custody.md)
 - [fleet account recovery](issues/fleet-account-recovery-review.md)
 - [native patching](issues/fleet-native-patching-pending.md)
-- [devbox disk headroom](issues/devbox-disk-headroom.md)
-- [phone-to-arch terminal qualification](issues/phone-arch-terminal-qualification.md)
-- [nexus asset and stream qualification](../../nexus-web/docs/issues/release-security-hardening.md)
 
 new failures get one issue each, with problem, impact, evidence and resolution
 proof. all rows above must pass before calling this scope complete; an explicit
