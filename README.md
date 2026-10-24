@@ -290,11 +290,11 @@ the hub because it bootstraps the fleet and macbook and arch join it with
 reads it; each host retains its login shell and self-selection default.
 dev-server writes no roster or generated runtime config.
 
-on devbox, `~/.config/dev-server/skidbladnir.yaml` (or the matching xdg config
-path) may supply the complete personal yaml instead of the committed file.
-keep it mode `0600`. this host-owned file is authoritative when present; apply
-copies it whole, without merging. optional firebase public options belong here;
-the service-account private key remains in its separately configured private file.
+on devbox, `~/.config/dev-server/skidbladnir-android-push.yaml` (or the matching
+xdg config path) holds only the yaml's `android_push` block, whose google api key
+stays out of this public repository. keep it mode `0600`. apply appends it to the
+committed yaml, so profiles and every other setting change only in git. the
+service-account private key remains in its separately configured private file.
 
 `lib/skidbladnir.sh` delegates installation and removal to the standalone skid
 installer. the release pin names a version, source commit and bootstrap sha256;
