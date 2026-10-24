@@ -49,6 +49,10 @@ when starting an interactive tmux server from automation, clear inherited
 automation setting to new panes and their applications.
 
 [the specification](SPEC.md) defines ownership, activation, and failure behavior.
+[fleet security](docs/fleet-security-spec.md) defines private ingress, the shared
+tailnet policy, retired devices and the coordinated nexus cutover. policy lives
+in `assets/security/tailnet-policy.hujson`; changing the account policy is an
+explicit provider operation, not a side effect of ordinary host apply.
 there is no retained test suite or repository ci workflow. changes use temporary
 integration tests and direct verification; evidence belongs in the pull request.
 
@@ -65,6 +69,13 @@ macos needs homebrew and the app store tailscale app, installed and signed in.
 linux support is limited to the owned arch host, with pacman and yay. both need
 git, curl, python 3, tmux, tailscale, and native service tools. existing github,
 ai-tool, ssh, tailscale, and skid credentials are preserved.
+
+arch's operator connections to macbook, devbox and nexus use the separate
+protected `~/.ssh/id_ed25519_fleet` key. its original ssh identity is retained
+for existing uses. encrypted backup and passphrase custody remain off-host in
+the macbook's private `~/.config/fleet-security/` directory; no private key or
+passphrase belongs in this repository. native ssh client configuration selects
+the fleet identity only for those named administration routes.
 
 arch operations run without a tty. supply `ARCH_PASS` through the environment
 or the ignored repo `.env`, as `ARCH_PASS=your-password`, with file mode `0600`.

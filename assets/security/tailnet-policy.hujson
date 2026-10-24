@@ -1,0 +1,342 @@
+{
+  "grants": [
+    {
+      "src": [
+        "macbook",
+        "macbook-v6"
+      ],
+      "dst": [
+        "arch",
+        "arch-v6",
+        "devbox",
+        "devbox-v6",
+        "tag:nexus-prod"
+      ],
+      "ip": [
+        "tcp:22"
+      ]
+    },
+    {
+      "src": [
+        "arch",
+        "arch-v6"
+      ],
+      "dst": [
+        "macbook",
+        "macbook-v6",
+        "devbox",
+        "devbox-v6",
+        "tag:nexus-prod"
+      ],
+      "ip": [
+        "tcp:22"
+      ]
+    },
+    {
+      "src": [
+        "macbook",
+        "macbook-v6",
+        "arch",
+        "arch-v6",
+        "devbox",
+        "devbox-v6",
+        "phone",
+        "phone-v6"
+      ],
+      "dst": [
+        "macbook",
+        "macbook-v6",
+        "arch",
+        "arch-v6",
+        "devbox",
+        "devbox-v6"
+      ],
+      "ip": [
+        "tcp:8443"
+      ]
+    }
+  ],
+  "ssh": [
+    {
+      "action": "accept",
+      "src": [
+        "autogroup:member"
+      ],
+      "dst": [
+        "autogroup:self"
+      ],
+      "users": [
+        "autogroup:nonroot"
+      ]
+    },
+    {
+      "action": "check",
+      "src": [
+        "autogroup:member"
+      ],
+      "dst": [
+        "autogroup:self"
+      ],
+      "users": [
+        "root"
+      ]
+    }
+  ],
+  "nodeAttrs": [],
+  "hosts": {
+    "macbook": "100.74.175.11",
+    "macbook-v6": "fd7a:115c:a1e0::3138:af0b",
+    "arch": "100.106.186.126",
+    "arch-v6": "fd7a:115c:a1e0::3438:ba7f",
+    "devbox": "100.109.88.95",
+    "devbox-v6": "fd7a:115c:a1e0::9e38:585f",
+    "phone": "100.68.99.68",
+    "phone-v6": "fd7a:115c:a1e0::2b01:6365",
+    "retired-skq": "100.77.53.32",
+    "retired-skq-v6": "fd7a:115c:a1e0::722f:3521",
+    "retired-desktop": "100.102.70.113",
+    "retired-desktop-v6": "fd7a:115c:a1e0::8a01:4674"
+  },
+  "tagOwners": {
+    "tag:nexus-prod": [
+      "NielsdaWheelz@github"
+    ]
+  },
+  "tests": [
+    {
+      "src": "macbook",
+      "proto": "tcp",
+      "accept": [
+        "arch:22",
+        "devbox:22",
+        "tag:nexus-prod:22",
+        "macbook:8443",
+        "arch:8443",
+        "devbox:8443"
+      ],
+      "deny": [
+        "tag:nexus-prod:8443",
+        "devbox:443",
+        "devbox:5432",
+        "retired-skq:22",
+        "retired-desktop:8443"
+      ]
+    },
+    {
+      "src": "arch",
+      "proto": "tcp",
+      "accept": [
+        "macbook:22",
+        "devbox:22",
+        "tag:nexus-prod:22",
+        "macbook:8443",
+        "arch:8443",
+        "devbox:8443"
+      ],
+      "deny": [
+        "tag:nexus-prod:8443",
+        "devbox:443",
+        "devbox:5432",
+        "retired-skq:22",
+        "retired-desktop:8443"
+      ]
+    },
+    {
+      "src": "devbox",
+      "proto": "tcp",
+      "accept": [
+        "macbook:8443",
+        "arch:8443",
+        "devbox:8443"
+      ],
+      "deny": [
+        "macbook:22",
+        "arch:22",
+        "tag:nexus-prod:22",
+        "tag:nexus-prod:8443",
+        "macbook:5432"
+      ]
+    },
+    {
+      "src": "phone",
+      "proto": "tcp",
+      "accept": [
+        "macbook:8443",
+        "arch:8443",
+        "devbox:8443"
+      ],
+      "deny": [
+        "macbook:22",
+        "arch:22",
+        "devbox:22",
+        "tag:nexus-prod:22",
+        "tag:nexus-prod:8443"
+      ]
+    },
+    {
+      "src": "retired-skq",
+      "proto": "tcp",
+      "deny": [
+        "macbook:22",
+        "arch:22",
+        "devbox:22",
+        "macbook:8443",
+        "arch:8443",
+        "devbox:8443",
+        "tag:nexus-prod:22",
+        "tag:nexus-prod:8443"
+      ]
+    },
+    {
+      "src": "retired-desktop",
+      "proto": "tcp",
+      "deny": [
+        "macbook:22",
+        "arch:22",
+        "devbox:22",
+        "macbook:8443",
+        "arch:8443",
+        "devbox:8443",
+        "tag:nexus-prod:22",
+        "tag:nexus-prod:8443"
+      ]
+    },
+    {
+      "src": "macbook-v6",
+      "proto": "tcp",
+      "accept": [
+        "arch-v6:22",
+        "devbox-v6:22",
+        "tag:nexus-prod:22",
+        "macbook-v6:8443",
+        "arch-v6:8443",
+        "devbox-v6:8443"
+      ],
+      "deny": [
+        "tag:nexus-prod:8443",
+        "devbox-v6:443",
+        "devbox-v6:5432",
+        "retired-skq-v6:22",
+        "retired-desktop-v6:8443"
+      ]
+    },
+    {
+      "src": "arch-v6",
+      "proto": "tcp",
+      "accept": [
+        "macbook-v6:22",
+        "devbox-v6:22",
+        "tag:nexus-prod:22",
+        "macbook-v6:8443",
+        "arch-v6:8443",
+        "devbox-v6:8443"
+      ],
+      "deny": [
+        "tag:nexus-prod:8443",
+        "devbox-v6:443",
+        "devbox-v6:5432",
+        "retired-skq-v6:22",
+        "retired-desktop-v6:8443"
+      ]
+    },
+    {
+      "src": "devbox-v6",
+      "proto": "tcp",
+      "accept": [
+        "macbook-v6:8443",
+        "arch-v6:8443",
+        "devbox-v6:8443"
+      ],
+      "deny": [
+        "macbook-v6:22",
+        "arch-v6:22",
+        "tag:nexus-prod:22",
+        "tag:nexus-prod:8443",
+        "macbook-v6:5432"
+      ]
+    },
+    {
+      "src": "phone-v6",
+      "proto": "tcp",
+      "accept": [
+        "macbook-v6:8443",
+        "arch-v6:8443",
+        "devbox-v6:8443"
+      ],
+      "deny": [
+        "macbook-v6:22",
+        "arch-v6:22",
+        "devbox-v6:22",
+        "tag:nexus-prod:22",
+        "tag:nexus-prod:8443"
+      ]
+    },
+    {
+      "src": "retired-skq-v6",
+      "proto": "tcp",
+      "deny": [
+        "macbook-v6:22",
+        "arch-v6:22",
+        "devbox-v6:22",
+        "macbook-v6:8443",
+        "arch-v6:8443",
+        "devbox-v6:8443",
+        "tag:nexus-prod:22",
+        "tag:nexus-prod:8443"
+      ]
+    },
+    {
+      "src": "retired-desktop-v6",
+      "proto": "tcp",
+      "deny": [
+        "macbook-v6:22",
+        "arch-v6:22",
+        "devbox-v6:22",
+        "macbook-v6:8443",
+        "arch-v6:8443",
+        "devbox-v6:8443",
+        "tag:nexus-prod:22",
+        "tag:nexus-prod:8443"
+      ]
+    },
+    {
+      "src": "tag:nexus-prod",
+      "proto": "tcp",
+      "deny": [
+        "macbook:22",
+        "macbook:443",
+        "macbook:5432",
+        "macbook:8443",
+        "macbook-v6:22",
+        "macbook-v6:443",
+        "macbook-v6:5432",
+        "macbook-v6:8443",
+        "arch:22",
+        "arch:443",
+        "arch:5432",
+        "arch:8443",
+        "arch-v6:22",
+        "arch-v6:443",
+        "arch-v6:5432",
+        "arch-v6:8443",
+        "devbox:22",
+        "devbox:443",
+        "devbox:5432",
+        "devbox:8443",
+        "devbox-v6:22",
+        "devbox-v6:443",
+        "devbox-v6:5432",
+        "devbox-v6:8443"
+      ]
+    },
+    {
+      "src": "macbook",
+      "proto": "udp",
+      "deny": [
+        "arch:22",
+        "devbox:8443",
+        "tag:nexus-prod:22"
+      ]
+    }
+  ]
+}

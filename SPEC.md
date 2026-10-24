@@ -68,6 +68,35 @@ when no deferral remains.
 
 ## ownership and execution
 
+### private host ingress
+
+`assets/security/tailnet-policy.hujson` owns the fleet's explicit device/port
+grants and native policy tests. provider activation is separate from ordinary
+host apply. production accepts operator ssh and initiates no peer application
+connections; skid retains its direct computer mesh and phone access on 8443.
+the two retired computers receive no grants and their membership is revoked.
+
+workstation apply installs key-only, non-root openssh for `nnandal`, preserving
+keys and required local forwarding. prove fresh operator-key login before
+activation; an encrypted but unloaded key is not proof of usable access.
+
+macos owns one pf anchor and its marked root hook before apple's filter anchor.
+its static rules combine exact tailnet addresses with reverse-path checking,
+loopback/outbound state and required network control traffic. no utun number or
+polling daemon is used. the native boot helper owns one pf enable reference;
+ordinary changes reload only the owned anchor, without flushing states or apple
+rules. initial root loading is admitted only against the observed default root
+filter rules. the application firewall is also enabled. existing processes stay
+running; initial state creation can briefly retransmit existing connections.
+
+arch owns the restrictive public zone and a public-to-docker deny policy,
+preserving host-local and inter-container traffic. native strict forward-port
+policy prevents docker publications bypassing the declared boundary.
+
+devbox retains its existing provider/ufw private boundary. all host activation
+requires fresh permitted and denied connections in both address families;
+configuration files and native syntax checks alone are insufficient.
+
 orchestrators select the exact host, check controller prerequisites, stage a
 coherent copy of declared input bytes and modes, and verify that copy before
 consumption. source edits during a run cannot mix configuration revisions.

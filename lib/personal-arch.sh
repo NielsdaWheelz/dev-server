@@ -35,6 +35,9 @@ personal_arch_validate_declared_inputs() {
     dotfiles/ghostty-xfce-helper.desktop
     dotfiles/xfce4-clipman-autostart.desktop
     dotfiles/xfce4-helpers.rc
+    security/workstation-sshd.conf
+    security/arch-public.xml
+    security/arch-docker-ingress.xml
   )
 
   personal_arch_owned_host || die "workstation apply supports only the owned arch host"
@@ -63,6 +66,7 @@ personal_arch_validate_declared_inputs() {
 
 personal_arch_require_runtime() {
   require_cmd cursor
+  require_cmd busctl
   require_cmd docker
   require_cmd dracut
   require_cmd eos-update
@@ -99,6 +103,14 @@ personal_arch_install_root_file() {
   *) die "invalid install result for $target: $dev_server_install_status" ;;
   esac
 }
+
+personal_arch_record_security_identity() (
+  local desired="$1" target="$2" temporary
+  temporary="$(mktemp -t dev-server-security.XXXXXX)" || return 1
+  trap 'rm -f "$temporary"' EXIT
+  printf '%s\n' "$desired" >"$temporary"
+  atomic_install_file_as_root "$temporary" "$target" 0600
+)
 
 personal_arch_reboot_pending() {
   [[ ! -d "/usr/lib/modules/$(uname -r)" ]]
@@ -559,47 +571,88 @@ personal_arch_configure_zram() {
 }
 
 personal_arch_configure_firewall() {
-  local permanent_status
-  local runtime_status
+  local assets strict desired recorded permanent runtime
+  local changed=0
 
   personal_arch_ensure_unit firewalld.service
-
-  if sudo firewall-cmd --quiet --permanent --zone=public --query-service=ssh; then
-    permanent_status=0
-  else
-    permanent_status=$?
+  assets="$(dev_server_assets_dir)/security"
+  personal_arch_install_root_file "$assets/arch-public.xml" \
+    /etc/firewalld/zones/public.xml 0644
+  [[ "$dev_server_install_status" == 'UP TO DATE' ]] || changed=1
+  if [[ ! -d /etc/firewalld/policies ]]; then
+    sudo mkdir -m 0755 /etc/firewalld/policies
   fi
-  if sudo firewall-cmd --quiet --zone=public --query-service=ssh; then
-    runtime_status=0
-  else
-    runtime_status=$?
-  fi
-  ((permanent_status == 0 || permanent_status == 1)) ||
-    die "failed to inspect permanent firewalld SSH policy"
-  ((runtime_status == 0 || runtime_status == 1)) ||
-    die "failed to inspect runtime firewalld SSH policy"
+  personal_arch_install_root_file "$assets/arch-docker-ingress.xml" \
+    /etc/firewalld/policies/dev-server-docker.xml 0644
+  [[ "$dev_server_install_status" == 'UP TO DATE' ]] || changed=1
 
-  if ((permanent_status == 0)); then
-    sudo firewall-cmd --quiet --permanent --zone=public --remove-service=ssh
-    sudo firewall-cmd --quiet --reload
-    render_result CHANGED firewalld "removed public SSH service"
+  strict="$(sudo busctl get-property org.fedoraproject.FirewallD1 \
+    /org/fedoraproject/FirewallD1/config org.fedoraproject.FirewallD1.config StrictForwardPorts)"
+  if [[ "$strict" != 's "yes"' ]]; then
+    sudo busctl set-property org.fedoraproject.FirewallD1 \
+      /org/fedoraproject/FirewallD1/config org.fedoraproject.FirewallD1.config StrictForwardPorts s yes
+    render_result CHANGED firewalld 'published docker ports require explicit firewall permission'
+    changed=1
+  fi
+  if [[ "$(sudo firewall-cmd --get-default-zone)" != public ]]; then
+    sudo firewall-cmd --set-default-zone=public >/dev/null
+    render_result CHANGED firewalld 'public is the default zone'
+    changed=1
+  fi
+  sudo firewall-cmd --check-config >/dev/null
+
+  # The receipt makes a failed reload retryable even after files were installed.
+  sudo install -d -m 0700 /var/lib/dev-server /var/lib/dev-server/active
+  desired="$(cat "$assets/arch-public.xml" "$assets/arch-docker-ingress.xml" | sha256sum | awk '{print $1}')"
+  recorded="$(sudo cat /var/lib/dev-server/active/arch-firewall.sha256 2>/dev/null || true)"
+  permanent="$(sudo firewall-cmd --permanent --zone=public --list-all | sed '1d; /interfaces:/d')"
+  runtime="$(sudo firewall-cmd --zone=public --list-all | sed '1d; /interfaces:/d')"
+  if ((changed)) || [[ "$desired" != "$recorded" || "$permanent" != "$runtime" ]]; then
+    sudo firewall-cmd --reload >/dev/null
     render_result RELOADED firewalld
-  elif ((runtime_status == 0)); then
-    sudo firewall-cmd --quiet --zone=public --remove-service=ssh
-    render_result RELOADED firewalld "removed transient public SSH service"
   fi
 
-  if sudo firewall-cmd --quiet --permanent --zone=public --query-service=ssh; then
-    die "permanent public SSH service remains enabled"
+  permanent="$(sudo firewall-cmd --permanent --zone=public --list-all | sed '1d; /interfaces:/d')"
+  runtime="$(sudo firewall-cmd --zone=public --list-all | sed '1d; /interfaces:/d')"
+  [[ "$permanent" == "$runtime" ]] || die 'public firewalld runtime differs from its declaration'
+  permanent="$(sudo firewall-cmd --permanent --policy=dev-server-docker --list-all | sed '1d')"
+  if runtime="$(sudo firewall-cmd --policy=dev-server-docker --list-all 2>/dev/null)"; then
+    runtime="$(sed '1d' <<<"$runtime")"
   else
-    permanent_status=$?
-    ((permanent_status == 1)) || die "failed to verify permanent firewalld SSH policy"
+    runtime=''
   fi
-  if sudo firewall-cmd --quiet --zone=public --query-service=ssh; then
-    die "runtime public SSH service remains enabled"
-  else
-    runtime_status=$?
-    ((runtime_status == 1)) || die "failed to verify runtime firewalld SSH policy"
+  if [[ "$permanent" != "$runtime" ]]; then
+    sudo firewall-cmd --reload >/dev/null
+    runtime="$(sudo firewall-cmd --policy=dev-server-docker --list-all | sed '1d')"
+    [[ "$permanent" == "$runtime" ]] || die 'docker ingress policy failed to activate'
+    render_result RELOADED firewalld
+  fi
+  if [[ "$recorded" != "$desired" ]]; then
+    personal_arch_record_security_identity "$desired" /var/lib/dev-server/active/arch-firewall.sha256
+  fi
+}
+
+personal_arch_configure_ssh() {
+  local source desired recorded effective address
+  source="$(dev_server_assets_dir)/security/workstation-sshd.conf"
+  sudo /usr/bin/sshd -t -f "$source"
+  personal_arch_install_root_file "$source" /etc/ssh/sshd_config.d/00-dev-server.conf 0644
+  sudo /usr/bin/sshd -t
+  for address in 100.74.175.11 fd7a:115c:a1e0::3138:af0b; do
+    effective="$(sudo /usr/bin/sshd -T -C "user=nnandal,host=macbook,addr=$address" |
+      awk '{$1=tolower($1); print}')"
+    for desired in 'passwordauthentication no' 'kbdinteractiveauthentication no' \
+      'permitrootlogin no' 'pubkeyauthentication yes' 'allowusers nnandal' 'gatewayports no'; do
+      grep -Fxq "$desired" <<<"$effective" || die "effective ssh policy differs: $desired"
+    done
+  done
+  sudo install -d -m 0700 /var/lib/dev-server /var/lib/dev-server/active
+  desired="$(dev_server_sha256 "$source")"
+  recorded="$(sudo cat /var/lib/dev-server/active/ssh.sha256 2>/dev/null || true)"
+  if [[ "$desired" != "$recorded" ]]; then
+    sudo systemctl reload sshd.service
+    personal_arch_record_security_identity "$desired" /var/lib/dev-server/active/ssh.sha256
+    render_result RELOADED sshd.service
   fi
 }
 
@@ -609,6 +662,7 @@ personal_arch_configure_services() {
   personal_arch_configure_zram
   personal_arch_configure_firewall
   personal_arch_ensure_unit sshd.service
+  personal_arch_configure_ssh
   personal_arch_ensure_unit docker.service 1 || [[ $? == 2 ]]
   personal_arch_ensure_unit tailscaled.service 1 || [[ $? == 2 ]]
 
