@@ -21,8 +21,8 @@ are live activation results, distinct from the historical baseline below.
 
 | target | established | still pending |
 |---|---|---|
-| tailnet and retired computers | reviewed three-grant policy and fourteen policy tests active; six cross-computer skid paths and production containment passed; exact retired device identities absent from tailscale and skid; production has its restricted tag; phone opens macbook/devbox terminals | macbook self-8443 path repair; phone-to-arch terminal qualification; offline/shared credential custody and unknown github key attribution |
-| macbook | native packet/application boundaries and key-only ssh active; fresh arch ssh, lan ssh/media denial in both address families, loopback labs and ssh forwarding passed; repeat loader is inert; safari 27 and command line tools 26.6 updates confirmed installed | sleep, tailscale reconnect and reboot qualification; offered macos 26.7.1 minor update needs a no-use window |
+| tailnet and retired computers | reviewed three-grant policy and fourteen policy tests active; all nine hostname-based skid mesh paths and production containment passed; exact retired device identities absent from tailscale and skid; production has its restricted tag; phone opens macbook/devbox terminals | phone-to-arch terminal qualification; offline/shared credential custody and unknown github key attribution |
+| macbook | native packet/application boundaries and key-only ssh active; fresh arch ssh, lan ssh/media denial in both address families, loopback labs and ssh forwarding passed; self-access repair `e32b35d` is active with ipv4 self-https passing and repeat loader inert; safari 27 and command line tools 26.6 updates confirmed installed | forced self-ipv6 https still times out; sleep, tailscale reconnect and reboot qualification; offered macos 26.7.1 minor update needs a no-use window |
 | arch | 194 repository updates and declared aur packages applied; rebooted into `7.2.11`; private ssh/8443, lan denial, docker publication controls and forwarding passed in both address families after reboot; no failed units or remaining repository updates | sleep/wake qualification |
 | devbox | native apt maintenance completed; kernel `6.8.0-147` matches installed; existing private provider/ufw boundary and key-only ssh verified; private `8443` mesh passed; active rootless docker retained its containers while rootful docker/containerd remain disabled and inactive | dbus/logind and existing user/ide session restarts deferred around active work; low disk headroom |
 | nexus | normal backend/vercel release serves `dc12792e0fd407361be846d73b74b3b332313a17`; private administration, closed public tcp/origin https and no docker host ports verified in both address families; cloudflare rules/tunnel and public health pass; old api dns removed; 58 upgrades and reboot into `6.8.0-147` completed, with private ssh before volume unlock, verified key unlock and all eight services recovered | extended asset, range, reading-copy and long-stream qualification in the owning nexus issue |
@@ -383,6 +383,7 @@ temporary resources. update or delete resolved issue records.
 ## tracked outstanding work
 
 - [workstation security persistence](issues/workstation-security-persistence.md)
+- [macbook tailscale self-ipv6](issues/macbook-tailscale-self-ipv6.md)
 - [retired computer credential custody](issues/retired-computer-credential-custody.md)
 - [fleet account recovery](issues/fleet-account-recovery-review.md)
 - [native patching](issues/fleet-native-patching-pending.md)
