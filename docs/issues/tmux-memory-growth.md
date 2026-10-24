@@ -36,6 +36,10 @@ with 18 codex and claude sessions, `vmmap -summary` reported a 10.7 mib physical
 footprint (11.3 mib peak). no growth so far, but that uptime is about a third of
 the original incident's.
 
+2026-10-24: pid 1328 ran 7.3 days until skid's recovery restart at 13:04; its
+final footprint was not measured. the replacement, pid 60637 on tmux 3.8, had a
+5.6 mib physical footprint after 3 h with 11 sessions.
+
 resolution: compare the replacement server's memory with its pane history over
 representative long-running codex workloads, ideally matching the original
 uptime. if disproportionate growth recurs, capture content-free allocation and

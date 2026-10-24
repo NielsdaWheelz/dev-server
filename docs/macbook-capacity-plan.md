@@ -179,14 +179,13 @@ docker's rebuilt steady state will take some of it back, at most its cap.
 recorded in [codex-mcp-process-leak](issues/codex-mcp-process-leak.md). upstream
 codex owns daemon lifecycle (see the specification's codex daemon ownership).
 operator decision, 2026-10-21: every plugin and mcp entry stays as configured,
-and no upstream report is sent. the daemon restart is the cleanup: it is the
-only exact one, because the leaked processes carry no thread identity. each
-window repeats it.
+and no upstream report is sent. a daemon restart, or skid's recovery restart of
+tmux, which reconnects every tui, is the cleanup. nothing finer is exact,
+because the leaked processes carry no thread identity.
 
 ### zsh completion cache
 
-recorded in [zsh-completion-cache-thrash](issues/zsh-completion-cache-thrash.md).
-the managed `assets/dotfiles/zshrc` adds homebrew's site functions to `fpath`
+fixed and verified on 2026-10-24. the managed `assets/dotfiles/zshrc` adds homebrew's site functions to `fpath`
 before `compinit`, so login and non-login shells agree on the file set. this
 ships through ordinary apply as a `shell.config` change and needs no window.
 
@@ -232,9 +231,10 @@ interrupts or deletes something.
 8. verify. memory pressure level 1 after docker restarts, then the acceptance
    list below. delete the records this window resolves.
 
-### 2026-10-22 daytime steps
+### 2026-10-22 to 2026-10-24
 
-steps 5–7 ran on 2026-10-22; steps 2–4 and 8 remain for the operator.
+steps 5–7 ran on 2026-10-22 and step 4 that night (operator, 23:21–23:22). steps
+2, 3 and 8 ran on 2026-10-24 with skid v0.22.0; the window is complete.
 
 - docker: a nexus runner set 8 gib and 8 cpus at 09:59 (nexus-web #751). at
   13:13 the reset ran with docker stopped: `DiskSizeMiB` set to 131072 in
@@ -250,6 +250,18 @@ steps 5–7 ran on 2026-10-22; steps 2–4 and 8 remain for the operator.
   on `packages/Brewfile` still passes. `~/.colima`, `~/.lima` and
   `~/Library/Caches/lima` are removed.
 - the stale `~/.zcompdump*` files are removed.
+- skid: v0.22.0 on all three hosts and the phone. after the 13:04 recovery
+  restart, serve, the tmux server and all 11 pane shells ran at priority 31, and
+  recovery rebuilt the 11 saved sessions.
+- zsh: after apply, alternating `zsh -ic exit` and `zsh -lic exit` left
+  `~/.cache/zcompdump` byte-identical (`#files: 993`). the thrash record is
+  deleted.
+- memory pressure level 1 after these steps.
+
+open from this plan: the six-lab qualification (d2, nexus-web), the macbook exec
+measurement (d10, skid `tmux-exec-overhead.md`), docker's week-later allocation
+([docker disk allocation](issues/docker-disk-allocation.md)) and the codex leak
+([codex mcp process leak](issues/codex-mcp-process-leak.md)).
 
 ## acceptance
 
