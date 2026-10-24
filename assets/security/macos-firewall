@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ "$EUID" == 0 && "$(uname -s)" == Darwin && $# == 0 ]] || exit 64
+
+anchor=dev-server
+rules=/etc/pf.anchors/dev-server
+identity=/var/run/dev-server-firewall.sha256
+reference=/var/run/dev-server-firewall.token
+changed=0
+
+pfctl -n -a "$anchor" -f "$rules" >/dev/null 2>&1
+root_rules="$(pfctl -sr 2>/dev/null)"
+if ! grep -Fxq 'anchor "dev-server" all' <<<"$root_rules"; then
+  # Initial installation may add our hook to Apple's otherwise untouched root.
+  [[ "$root_rules" == $'scrub-anchor "com.apple/*" all fragment reassemble\nanchor "com.apple/*" all' ]] || {
+    printf '%s\n' 'foreign pf root rules require review before installing the firewall hook' >&2
+    exit 1
+  }
+  pfctl -f /etc/pf.conf >/dev/null 2>&1
+  changed=1
+fi
+
+desired="$(shasum -a 256 "$rules" | awk '{print $1}')"
+recorded="$(cat "$identity" 2>/dev/null || true)"
+expected_rules="$(pfctl -nv -a "$anchor" -f "$rules" 2>/dev/null | sed '/^table /d')"
+active_rules="$(pfctl -a "$anchor" -sr 2>/dev/null)"
+if [[ "$recorded" != "$desired" || "$active_rules" != "$expected_rules" ]]; then
+  pfctl -a "$anchor" -f "$rules" >/dev/null 2>&1
+  umask 077
+  staging="$(mktemp "$identity.XXXXXX")"
+  printf '%s\n' "$desired" >"$staging"
+  mv -f "$staging" "$identity"
+  changed=1
+fi
+
+# Own one native enable reference; another component may release only its own.
+token="$(cat "$reference" 2>/dev/null || true)"
+references="$(pfctl -s References 2>/dev/null)"
+if [[ ! "$token" =~ ^[0-9]+$ ]] ||
+  ! grep -Eq "(^|[^0-9])$token([^0-9]|$)" <<<"$references"; then
+  enabled="$(pfctl -E 2>&1)"
+  token="$(awk '/^Token[[:space:]]*:/ {print $3}' <<<"$enabled")"
+  [[ "$token" =~ ^[0-9]+$ ]] || {
+    printf '%s\n' 'pf returned no enable reference' >&2
+    exit 1
+  }
+  umask 077
+  staging="$(mktemp "$reference.XXXXXX")"
+  printf '%s\n' "$token" >"$staging"
+  mv -f "$staging" "$reference"
+  changed=1
+fi
+if ! pfctl -s info 2>/dev/null | grep -Eq '^Status: Enabled[[:space:]]'; then
+  pfctl -e >/dev/null 2>&1
+  changed=1
+fi
+
+[[ "$(pfctl -a "$anchor" -sr 2>/dev/null)" == "$expected_rules" ]]
+pfctl -s info 2>/dev/null | grep -Eq '^Status: Enabled[[:space:]]'
+if ((changed)); then printf '%s\n' changed; else printf '%s\n' unchanged; fi
