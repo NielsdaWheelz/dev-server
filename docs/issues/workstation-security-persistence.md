@@ -1,21 +1,26 @@
-# macbook boundary persistence is unqualified
+# macbook pf root hook was lost during os upgrade
 
-problem: macbook's active network boundary has not been exercised through
-tailscale reconnect, sleep/wake or reboot.
+problem: macos replaced `/etc/pf.conf` with its factory configuration during the
+`27.0.1` upgrade. the owned anchor remained on disk but was absent from the live
+root rules. the installed loader loaded the factory file without verifying its
+root hook, then falsely reported success for an unreferenced owned anchor.
 
-evidence: on 2026-10-24 utc, fresh approved ssh and denied physical-interface
-ingress passed in both address families; local and authorized peer workflows
-survived. repeated native activation was inert on macbook. arch then rebooted
-into `7.2.11` and passed fresh private ssh/8443, physical-lan denial, docker
-publication controls and ssh forwarding in both address families. arch's later
-native S3 sleep/resume retained its boot identity and passed private ssh/8443 and
-physical-lan denial in both families; its persistence gap is resolved. macbook's
-remaining transitions were not run.
+evidence: boot was 2026-10-25 05:38 utc; the root file changed 28 seconds later.
+the 05:55 utc report showed only apple root anchors, despite the launch job's
+single exit-zero run. its helper matched the reviewed prior source; helper,
+anchor and plist files survived. the application firewall stayed enabled.
 
-impact: source and current runtime rules do not establish that those transitions
-retain denial and restore approved access. testing them can interrupt active
-work, so they need a suitable stopping point.
+impact: an enabled pf and populated owned anchor do not enforce that anchor
+unless the live root references it. prior lan-denial results do not qualify the
+post-upgrade boundary.
 
-resolved when each remaining transition passes with fresh approved
-ssh/skid access and physical-interface denial, including the re-established
-tailscale interface and effective native rules. retain local recovery access.
+source repair: the native loader now owns root-hook rendering and atomic
+installation, preserves apple configuration, refuses a required reload over
+foreign active root rules, and checks the live root hook before success.
+isolated regression proof does not establish installed/runtime acceptance.
+
+resolved when the reviewed repair is installed and fresh root-hook/owned-anchor
+inspection, approved ssh/skid access and physical-interface denial pass in both
+families. repeat activation must be inert, and reconnect/sleep/reboot must retain
+that boundary. privileged activation and these transition checks remain pending;
+retain local recovery access. arch's reboot and sleep/resume already passed.

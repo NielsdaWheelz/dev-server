@@ -1,25 +1,86 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
+export PATH=/usr/bin:/bin:/usr/sbin:/sbin
 
 [[ "$EUID" == 0 && "$(uname -s)" == Darwin && $# == 0 ]] || exit 64
 
 anchor=dev-server
 rules=/etc/pf.anchors/dev-server
+root_config=/etc/pf.conf
 identity=/var/run/dev-server-firewall.sha256
 reference=/var/run/dev-server-firewall.token
 changed=0
 
 pfctl -n -a "$anchor" -f "$rules" >/dev/null 2>&1
 root_rules="$(pfctl -sr 2>/dev/null)"
+reload_root=0
 if ! grep -Fxq 'anchor "dev-server" all' <<<"$root_rules"; then
   # our boot job can run before Apple has loaded its default root rules.
   [[ -z "$root_rules" || "$root_rules" == $'scrub-anchor "com.apple/*" all fragment reassemble\nanchor "com.apple/*" all' ]] || {
     printf '%s\n' 'foreign pf root rules require review before installing the firewall hook' >&2
     exit 1
   }
-  pfctl -f /etc/pf.conf >/dev/null 2>&1
+  reload_root=1
+fi
+
+# Own this block at boot as well as apply: macOS upgrades can replace pf.conf.
+candidate="$(mktemp "$root_config.dev-server.XXXXXX")"
+trap 'rm -f "$candidate"' EXIT
+awk '
+  function hook() {
+    print start
+    print "anchor \"dev-server\""
+    print "load anchor \"dev-server\" from \"/etc/pf.anchors/dev-server\""
+    print finish
+  }
+  BEGIN {
+    start = "# >>> dev-server firewall >>>"
+    finish = "# <<< dev-server firewall <<<"
+  }
+  {
+    lines[NR] = $0
+    if (index($0, start)) { starts++; first = NR; if ($0 != start) bad = 1 }
+    if (index($0, finish)) { ends++; last = NR; if ($0 != finish) bad = 1 }
+    text = $0
+    sub(/^[[:space:]]+/, "", text)
+    sub(/[[:space:]]+$/, "", text)
+    if (text == "anchor \"com.apple/*\"") { apples++; apple = NR }
+  }
+  END {
+    if (bad || ((starts || ends) && (starts != 1 || ends != 1 || first >= last))) {
+      print "invalid owned pf hook markers" > "/dev/stderr"
+      exit 1
+    }
+    if (!starts && apples != 1) {
+      print "expected one apple filter anchor before adding the owned hook" > "/dev/stderr"
+      exit 1
+    }
+    for (i = 1; i <= NR; i++) {
+      if (i == (starts ? first : apple)) {
+        hook()
+        if (starts) { i = last; continue }
+      }
+      print lines[i]
+    }
+  }
+' "$root_config" >"$candidate"
+pfctl -n -f "$candidate" >/dev/null 2>&1
+if ! cmp -s "$candidate" "$root_config"; then
+  chmod 0644 "$candidate"
+  mv -f "$candidate" "$root_config"
   changed=1
 fi
+rm -f "$candidate"
+trap - EXIT
+if ((reload_root)); then
+  pfctl -f "$root_config" >/dev/null 2>&1
+  changed=1
+fi
+root_rules="$(pfctl -sr 2>/dev/null)"
+grep -Fxq 'anchor "dev-server" all' <<<"$root_rules" || {
+  printf '%s\n' 'managed pf root hook is not active' >&2
+  exit 1
+}
 
 desired="$(shasum -a 256 "$rules" | awk '{print $1}')"
 recorded="$(cat "$identity" 2>/dev/null || true)"
@@ -57,5 +118,7 @@ if ! pfctl -s info 2>/dev/null | grep -Eq '^Status: Enabled[[:space:]]'; then
 fi
 
 [[ "$(pfctl -a "$anchor" -sr 2>/dev/null)" == "$expected_rules" ]]
+root_rules="$(pfctl -sr 2>/dev/null)"
+grep -Fxq 'anchor "dev-server" all' <<<"$root_rules"
 pfctl -s info 2>/dev/null | grep -Eq '^Status: Enabled[[:space:]]'
 if ((changed)); then printf '%s\n' changed; else printf '%s\n' unchanged; fi

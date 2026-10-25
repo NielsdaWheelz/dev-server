@@ -14,7 +14,7 @@ personal_macos_validate_declared_inputs() {
 }
 
 personal_macos_configure_security() {
-  local assets candidate asset target mode result effective desired address
+  local assets asset target mode result effective desired address
   local label=com.nielseriknandal.dev-server.firewall
   local plist_changed=0
   local loaded=0
@@ -55,51 +55,6 @@ FILES
       grep -Fxq "$desired" <<<"$effective" || die "effective ssh policy differs: $desired"
     done
   done
-
-  candidate="$(mktemp "${TMPDIR:-/tmp}/dev-server-macos-pf.XXXXXX")"
-  if ! python3 - /etc/pf.conf "$candidate" <<'PY'
-from pathlib import Path
-import sys
-
-source, target = map(Path, sys.argv[1:])
-text = source.read_text()
-start, end = "# >>> dev-server firewall >>>", "# <<< dev-server firewall <<<"
-block = '\n'.join([start, 'anchor "dev-server"',
-                   'load anchor "dev-server" from "/etc/pf.anchors/dev-server"', end])
-if start in text or end in text:
-    if text.count(start) != 1 or text.count(end) != 1 or text.index(start) >= text.index(end):
-        raise SystemExit("invalid owned pf hook markers")
-    before, remainder = text.split(start, 1)
-    _, after = remainder.split(end, 1)
-    text = before + block + after
-else:
-    hook = 'anchor "com.apple/*"'
-    lines = text.splitlines(keepends=True)
-    matches = [index for index, line in enumerate(lines) if line.strip() == hook]
-    if len(matches) != 1:
-        raise SystemExit("expected one apple filter anchor before adding the owned hook")
-    lines.insert(matches[0], block + '\n')
-    text = ''.join(lines)
-target.write_text(text)
-PY
-  then
-    rm -f "$candidate"
-    return 1
-  fi
-  if ! /sbin/pfctl -n -f "$candidate" >/dev/null 2>&1; then
-    rm -f "$candidate"
-    die 'managed macos pf configuration is invalid'
-  fi
-  if ! atomic_install_file_as_root "$candidate" /etc/pf.conf 0644; then
-    rm -f "$candidate"
-    return 1
-  fi
-  rm -f "$candidate"
-  case "$dev_server_install_status" in
-  INSTALLED | UPDATED) render_result "$dev_server_install_status" /etc/pf.conf ;;
-  UP\ TO\ DATE) ;;
-  *) die 'invalid pf hook install result' ;;
-  esac
 
   result="$(sudo /usr/local/libexec/dev-server-macos-firewall)" ||
     die 'could not activate private macos ingress'

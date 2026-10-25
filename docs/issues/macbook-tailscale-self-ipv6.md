@@ -10,12 +10,13 @@ also reached macbook over ipv6. the forced self-ipv6 probe still timed out and
 the privileged verification helper correctly returned nonzero for that gap.
 hostname success does not establish which address family worked.
 
-cause is unestablished. the active urpf quick-drop rule matched zero packets in
-the recorded probe window; loopback-pass and default-deny counters increased.
-these aggregate counters do not identify where the failed connection was lost.
-the kernel routes self-ipv6 through loopback; tailscale's interface-bound local
-listener is another possible factor, not a proven upstream bug. no firewall or
-grant relaxation is justified by these observations.
+cause is unestablished. pre-upgrade aggregate pf counters did not identify where
+the connection was lost. after the macos `27.0.1` reboot on 2026-10-25, self-ipv6
+still timed out while the live root contained only apple anchors: the owned
+anchor was unreferenced. these observations do not establish the owned rules as
+the cause. earlier inspection found a loopback self-route; tailscale's
+interface-bound local listener remains a possible interaction, not a proven
+upstream bug. no firewall or grant relaxation is justified.
 
 impact: literal self-ipv6 gateway access remains broken despite ordinary mesh
 success. keep the qualified-family check failing until its positive path works.
