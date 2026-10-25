@@ -1,6 +1,7 @@
 # fleet security specification and implementation plan
 
-date: 2026-10-23. status: network boundaries active; remaining maintenance,
+date: 2026-10-23. status: server/tailnet boundaries active; macbook's pf root
+hook was lost during its os upgrade and awaits repair activation. remaining
 persistence and account recovery are tracked below. this document is the
 cross-repository plan. each repository retains ownership of its own deployment
 and runtime contracts.
@@ -17,16 +18,16 @@ nexus retains its own [deployment contract](../../nexus-web/deployment.md).
 
 ## current activation status
 
-updated 2026-10-24 utc after native maintenance and the arch/nexus reboots. these
+updated 2026-10-25 utc after macbook's macos 27.0.1 reboot. these
 are live activation results, distinct from the historical baseline below.
 
 | target | established | still pending |
 |---|---|---|
 | tailnet and retired computers | reviewed three-grant policy and fourteen policy tests active; all nine hostname-based skid mesh paths and production containment passed; retired devices absent from tailscale/skid, disks securely retained by owner; active ssh keys accounted for and unknown github key revoked; phone opened terminals on all three computers | none within the current secure-retention decision; review offline shared credentials before transfer/disposal |
-| macbook | native packet/application boundaries and key-only ssh active; fresh arch ssh, lan ssh/media denial in both address families, loopback labs and ssh forwarding passed; self-access repair `e32b35d` is active with ipv4 self-https passing and repeat loader inert; safari 27 and command line tools 26.6 updates confirmed installed | forced self-ipv6 https still times out; sleep, tailscale reconnect and reboot qualification; offered macos 26.7.1 minor update needs a no-use window |
+| macbook | macos `27.0.1` build `26A434` installed and rebooted; application firewall remains enabled; owned pf anchor, helper and launch job persist; ipv4 self-https passes | os replaced `/etc/pf.conf`; live root has only apple anchors despite job exit zero. corrected native loader needs privileged activation and persistence qualification; forced self-ipv6 still times out |
 | arch | 194 repository updates and declared aur packages applied; rebooted into `7.2.11`; S3 sleep/resume passed with unchanged boot identity; private ssh/8443 and lan denial passed in both address families afterward; docker controls/forwarding passed; no failed units or remaining repository updates | none |
-| devbox | native apt maintenance completed; kernel `6.8.0-147` matches installed; private boundary/ssh/8443 verified; scoped dbus/logind/user-bus/editor refresh preserved eleven codex tasks and skid identities; no failed units; rootless docker retained its containers, rootful docker/containerd remain inactive; observed 26.5 gib free | idle sd-pam mapping deferred until an all-agent no-use window |
-| nexus | normal backend/vercel release serves `dc12792e0fd407361be846d73b74b3b332313a17`; private administration, closed public tcp/origin https and no docker host ports verified in both address families; cloudflare rules/tunnel and public health pass; old api dns removed; 58 upgrades and reboot into `6.8.0-147` completed, with private ssh before volume unlock, verified key unlock and all eight services recovered | none for this server/ingress scope; extension distribution stays nexus-owned |
+| devbox | native apt maintenance and runtime/pam refresh completed; kernel `6.8.0-147` matches installed; no failed units or needrestart service/session entries; skid and the same two rootless builders recovered with true ipv4/ipv6 https; rootful docker/containerd remain inactive; observed 26.5 gib free | none |
+| nexus | security cutover revision `dc12792e0fd407361be846d73b74b3b332313a17` qualified private administration, closed public tcp/origin https, no docker host ports, cloudflare ingress and reboot recovery; a later independent application deployment is now `c5cf4bc27a1f9838b630b177209e15c5bba87c99`, with all eight services healthy | subsequent application/compatibility qualification stays nexus-owned; the cutover proof does not establish its current wire version |
 
 public api tls is verified, version responses are uncached, and the existing
 website dns record is unchanged. the tunnel has one connector and four edge
@@ -199,7 +200,11 @@ effects of host apply.
 
 macbook needs both application and network enforcement. retain apple's existing
 pf anchors and unrelated rules; add one owned anchor and the smallest native
-persistent activation needed. do not flush the root ruleset, edit the sealed
+persistent activation needed. the native root loader owns the persistent hook,
+repairs it after an os reset, and verifies its live root-anchor postcondition;
+workstation apply installs and invokes that same owner. retain the strict
+empty/apple-only live-root guard before a required root reload. do not flush the
+root ruleset, edit the sealed
 apple ssh plist, or hard-code today's `utun` number. fail closed if the approved
 tailscale path is unavailable. the implementation must prove how its rules
 identify that path after interface changes. application firewall enablement or
@@ -393,7 +398,6 @@ temporary resources. update or delete resolved issue records.
 - [workstation security persistence](issues/workstation-security-persistence.md)
 - [macbook tailscale self-ipv6](issues/macbook-tailscale-self-ipv6.md)
 - [fleet account recovery](issues/fleet-account-recovery-review.md)
-- [native patching](issues/fleet-native-patching-pending.md)
 
 new failures get one issue each, with problem, impact, evidence and resolution
 proof. all rows above must pass before calling this scope complete; an explicit
