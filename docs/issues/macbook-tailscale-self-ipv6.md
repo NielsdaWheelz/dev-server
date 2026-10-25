@@ -10,6 +10,12 @@ also reached macbook over ipv6. the forced self-ipv6 probe still timed out and
 the privileged verification helper correctly returned nonzero for that gap.
 hostname success does not establish which address family worked.
 
+current qualification, 2026-10-25: the corrected root loader is installed and
+active; root hook, full owned rules/table and repeat activation pass. fresh
+remote ipv4/ipv6 ssh/https and physical-lan denial also pass after controlled
+tailscale reconnect. forced self-ipv6 still fails. this is a local self-path
+availability gap, separate from those verified ingress boundaries.
+
 cause is unestablished. pre-upgrade aggregate pf counters did not identify where
 the connection was lost. after the macos `27.0.1` reboot on 2026-10-25, self-ipv6
 still timed out while the live root contained only apple anchors: the owned

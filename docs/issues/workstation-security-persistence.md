@@ -1,26 +1,24 @@
-# macbook pf root hook was lost during os upgrade
+# macbook sleep and reboot verification is deferred
 
-problem: macos replaced `/etc/pf.conf` with its factory configuration during the
-`27.0.1` upgrade. the owned anchor remained on disk but was absent from the live
-root rules. the installed loader loaded the factory file without verifying its
-root hook, then falsely reported success for an unreferenced owned anchor.
+remaining scope: the owner explicitly deferred sleep/wake and reboot
+verification after the repaired boundary and controlled tailscale reconnect
+passed. these transitions have not been qualified with the installed repair.
 
-evidence: boot was 2026-10-25 05:38 utc; the root file changed 28 seconds later.
-the 05:55 utc report showed only apple root anchors, despite the launch job's
-single exit-zero run. its helper matched the reviewed prior source; helper,
-anchor and plist files survived. the application firewall stayed enabled.
+evidence from 2026-10-25 utc: the installed loader matches reviewed `c670e208`.
+persistent/live root hooks, full owned rules/table, enabled pf, application
+firewall and key-only ssh pass. repeat native activation is inert. fresh arch
+ssh/https passes in true ipv4/ipv6; physical-lan ssh/media denial passes with
+matching local listeners and valid peer routes/neighbors.
 
-impact: an enabled pf and populated owned anchor do not enforce that anchor
-unless the live root references it. prior lan-denial results do not qualify the
-post-upgrade boundary.
+the controlled tailscale down/up retained preferences, node identity, addresses
+and serve configuration; fresh peer allow/deny checks passed afterward. the
+earlier os-reset root-hook failure is repaired and activated.
 
-source repair: the native loader now owns root-hook rendering and atomic
-installation, preserves apple configuration, refuses a required reload over
-foreign active root rules, and checks the live root hook before success.
-isolated regression proof does not establish installed/runtime acceptance.
+impact: these results establish current enforcement and reconnect behavior, but
+not the two deferred transitions. the deferral is not an observed exposure.
 
-resolved when the reviewed repair is installed and fresh root-hook/owned-anchor
-inspection, approved ssh/skid access and physical-interface denial pass in both
-families. repeat activation must be inert, and reconnect/sleep/reboot must retain
-that boundary. privileged activation and these transition checks remain pending;
-retain local recovery access. arch's reboot and sleep/resume already passed.
+resolved when the owner chooses a suitable window and sleep/wake plus reboot
+retain the root hook, owned policy, fresh approved ssh/https access and
+physical-lan denial in both families. retain local recovery access. arch's
+corresponding transitions already passed; self-ipv6 remains a separate functional
+issue.

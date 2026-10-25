@@ -1,10 +1,10 @@
 # fleet security specification and implementation plan
 
-date: 2026-10-23. status: server/tailnet boundaries active; macbook's pf root
-hook was lost during its os upgrade and awaits repair activation. remaining
-persistence and account recovery are tracked below. this document is the
-cross-repository plan. each repository retains ownership of its own deployment
-and runtime contracts.
+date: 2026-10-23. status: fleet boundaries applied and core checks passed,
+including macbook's repaired root hook and tailscale reconnect. sleep/reboot
+verification is deferred by the owner; self-ipv6 and account checks remain
+tracked below. this document is the cross-repository plan. each repository
+retains ownership of its own deployment and runtime contracts.
 
 owner decisions: retire `skq-linux` and `niels-desktop`; keep macbook, arch,
 devbox, retirement and the shared tailnet policy in `dev-server`; keep both the
@@ -18,16 +18,16 @@ nexus retains its own [deployment contract](../../nexus-web/deployment.md).
 
 ## current activation status
 
-updated 2026-10-25 utc after macbook's macos 27.0.1 reboot. these
-are live activation results, distinct from the historical baseline below.
+updated 2026-10-25 utc after macbook's repair activation and controlled reconnect.
+these are live activation results, distinct from the historical baseline below.
 
 | target | established | still pending |
 |---|---|---|
-| tailnet and retired computers | reviewed three-grant policy and fourteen policy tests active; all nine hostname-based skid mesh paths and production containment passed; retired devices absent from tailscale/skid, disks securely retained by owner; active ssh keys accounted for and unknown github key revoked; phone opened terminals on all three computers | none within the current secure-retention decision; review offline shared credentials before transfer/disposal |
-| macbook | macos `27.0.1` build `26A434` installed and rebooted; application firewall remains enabled; owned pf anchor, helper and launch job persist; ipv4 self-https passes | os replaced `/etc/pf.conf`; live root has only apple anchors despite job exit zero. corrected native loader needs privileged activation and persistence qualification; forced self-ipv6 still times out |
+| tailnet and retired computers | reviewed three-grant policy and fourteen policy tests active; prior nine-path hostname mesh and production containment qualification passed; retired devices absent from tailscale/skid, disks securely retained by owner; active ssh keys accounted for and unknown github key revoked; phone opened terminals on all three computers | none within the current secure-retention decision; review offline shared credentials before transfer/disposal |
+| macbook | macos `27.0.1` build `26A434`; installed loader matches `c670e208`; persistent/live root hook, full owned rules/table and enabled pf verified; application firewall and key-only ssh remain correct; fresh arch ssh/https and physical-lan denial pass in true ipv4/ipv6; repeat loader inert; controlled tailscale reconnect preserved identity/preferences/serve and passed fresh peer checks | sleep/reboot verification deferred by owner; forced self-ipv6 remains a separate functional issue |
 | arch | 194 repository updates and declared aur packages applied; rebooted into `7.2.11`; S3 sleep/resume passed with unchanged boot identity; private ssh/8443 and lan denial passed in both address families afterward; docker controls/forwarding passed; no failed units or remaining repository updates | none |
 | devbox | native apt maintenance and runtime/pam refresh completed; kernel `6.8.0-147` matches installed; no failed units or needrestart service/session entries; skid and the same two rootless builders recovered with true ipv4/ipv6 https; rootful docker/containerd remain inactive; observed 26.5 gib free | none |
-| nexus | security cutover revision `dc12792e0fd407361be846d73b74b3b332313a17` qualified private administration, closed public tcp/origin https, no docker host ports, cloudflare ingress and reboot recovery; a later independent application deployment is now `c5cf4bc27a1f9838b630b177209e15c5bba87c99`, with all eight services healthy | subsequent application/compatibility qualification stays nexus-owned; the cutover proof does not establish its current wire version |
+| nexus | current independent deployment `c5cf4bc27a1f9838b630b177209e15c5bba87c99`, wire `15`, all eight services healthy; private perimeter passes in both families; security-cutover/recovery and extended asset/stream qualification complete; signed firefox `1.0.1` independently qualified with release ownership recorded in nexus | none for this scope |
 
 public api tls is verified, version responses are uncached, and the existing
 website dns record is unchanged. the tunnel has one connector and four edge
