@@ -530,8 +530,8 @@ owns dependency handling, installation and removal. the same reviewed bootstrap 
 does not decode product receipts,
 copy binaries, install helper environments or own runtime/service assets.
 
-the pin selects immutable `v0.22.0` from
-`fd704c14b40b9ead42dd171bd7845b3e95a4898b` and its reviewed public bootstrap.
+the pin selects immutable `v0.23.0` from
+`677bbb24682fddc0b1fdff20409cfd593a5aba5d` and its reviewed public bootstrap.
 only the strict version/source/bootstrap schema is accepted; v0.18's old-wire
 archive cannot be used for this target.
 
