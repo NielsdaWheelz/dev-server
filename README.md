@@ -13,8 +13,9 @@ one-user host configuration for `macbook`, `arch`, and the hetzner `devbox`.
 
 gateway commands use skid's ordinary standalone installer. only devbox receives
 the authoritative personal yaml. the reviewed standalone pin selects immutable
-`v0.22.0` from `fd704c1`, skid's lockstep fresh-fleet release with hub attention
-and conversation recovery; the `v0.20.0` [installed qualification](docs/gateway-separation-validation.md#2026-10-21-terminal-only-v0200-installed-fleet)
+`v0.23.0` from `677bbb2`: an ordinary update from v0.22.0 that adds readable
+fleet output, a signed checksum list and a new android signer, so the phone
+reinstalls and re-pairs once; the `v0.20.0` [installed qualification](docs/gateway-separation-validation.md#2026-10-21-terminal-only-v0200-installed-fleet)
 records installed results and remaining limits.
 
 `gateway remove skidbladnir` delegates to `skid uninstall`; settings/private state,
@@ -299,7 +300,7 @@ service-account private key remains in its separately configured private file.
 `lib/skidbladnir.sh` delegates installation and removal to the standalone skid
 installer. the release pin names a version, source commit and bootstrap sha256;
 the ordinary bootstrap verifies signed archives. the pin selects reviewed
-immutable `v0.22.0`; publication alone does not establish installed parity. normal skid
+immutable `v0.23.0`; publication alone does not establish installed parity. normal skid
 updates own services/shell integration and preserve settings, tmux and providers.
 old ntfy, copied gateway/native helper assets and deployment rollback code are
 removed; there is no old-wire fallback. see [the maintenance runbook](docs/gateway-separation-runbook.md).

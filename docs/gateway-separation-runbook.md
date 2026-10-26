@@ -18,7 +18,7 @@ release version, and to `skid uninstall`. only devbox receives the authoritative
 `skid apply`; membership and generated state stay owned by skid. host provider
 tools/accounts/daemon preparation remain independent.
 
-the reviewed release pin selects immutable `v0.22.0` from `fd704c1`; its
+the reviewed release pin selects immutable `v0.23.0` from `677bbb2`; its
 version, source commit and bootstrap sha256 admit the public installer. do not deploy the
 old-wire v0.18 archive or restore a symlink across incompatible private state.
 from a `v0.20.x` fleet this is skid's lockstep cutover of three hosts and the
