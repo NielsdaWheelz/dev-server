@@ -1,10 +1,11 @@
 # fleet security specification and implementation plan
 
 date: 2026-10-23. status: fleet boundaries applied and core checks passed,
-including macbook's repaired root hook and tailscale reconnect. sleep/reboot
-verification is deferred by the owner; self-ipv6 and account checks remain
-tracked below. this document is the cross-repository plan. each repository
-retains ownership of its own deployment and runtime contracts.
+including macbook's repaired root hook across tailscale reconnect, real boot and
+sleep/wake. fresh physical-lan denial after those transitions awaits a same-lan
+peer; self-ipv6 and account checks remain tracked below. this document is the
+cross-repository plan. each repository retains ownership of its own deployment
+and runtime contracts.
 
 owner decisions: retire `skq-linux` and `niels-desktop`; keep macbook, arch,
 devbox, retirement and the shared tailnet policy in `dev-server`; keep both the
@@ -18,13 +19,13 @@ nexus retains its own [deployment contract](../../nexus-web/deployment.md).
 
 ## current activation status
 
-updated 2026-10-25 utc after macbook's repair activation and controlled reconnect.
+macbook status updated 2026-10-27 utc after boot and sleep/wake qualification.
 these are live activation results, distinct from the historical baseline below.
 
 | target | established | still pending |
 |---|---|---|
 | tailnet and retired computers | reviewed three-grant policy and fourteen policy tests active; prior nine-path hostname mesh and production containment qualification passed; retired devices absent from tailscale/skid, disks securely retained by owner; active ssh keys accounted for and unknown github key revoked; phone opened terminals on all three computers | none within the current secure-retention decision; review offline shared credentials before transfer/disposal |
-| macbook | macos `27.0.1` build `26A434`; installed loader matches `c670e208`; 2026-10-26 real boot retained persistent/live root hook, full owned rules, enabled pf, application firewall and key-only ssh; boot job exited zero; fresh arch ssh/https pass in true ipv4/ipv6; earlier physical-lan denial and controlled tailscale reconnect passed | isolated post-wake report and fresh physical-lan denial with a same-lan peer; forced self-ipv6 remains a separate functional issue |
+| macbook | macos `27.0.1` build `26A434`; installed loader matches `c670e208`; real boot on 2026-10-26 and sleep/wake on 2026-10-27 retained persistent/live root hook, full owned rules, enabled pf, application firewall and key-only ssh; boot job exited zero; fresh arch ssh/https pass in true ipv4/ipv6 after each; earlier physical-lan denial and controlled tailscale reconnect passed | fresh physical-lan denial with a same-lan peer; forced self-ipv6 remains a separate functional issue |
 | arch | 194 repository updates and declared aur packages applied; rebooted into `7.2.11`; S3 sleep/resume passed with unchanged boot identity; private ssh/8443 and lan denial passed in both address families afterward; docker controls/forwarding passed; no failed units or remaining repository updates | none |
 | devbox | native apt maintenance and runtime/pam refresh completed; kernel `6.8.0-147` matches installed; no failed units or needrestart service/session entries; skid and the same two rootless builders recovered with true ipv4/ipv6 https; rootful docker/containerd remain inactive; observed 26.5 gib free | none |
 | nexus | current independent deployment `c5cf4bc27a1f9838b630b177209e15c5bba87c99`, wire `15`, all eight services healthy; private perimeter passes in both families; security-cutover/recovery and extended asset/stream qualification complete; signed firefox `1.0.1` independently qualified with release ownership recorded in nexus | none for this scope |
