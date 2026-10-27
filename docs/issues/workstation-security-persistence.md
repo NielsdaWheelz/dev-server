@@ -1,8 +1,8 @@
-# macbook post-wake boundary verification remains
+# macbook post-transition physical-lan verification remains
 
-remaining scope: inspect the boundary after sleep/wake before another reboot,
-and repeat controlled physical-lan denial when a peer is on the same network.
-boot persistence and approved private access passed on 2026-10-26.
+remaining scope: repeat controlled physical-lan denial when a peer is on the
+same network. boot and sleep/wake retained the firewall policy and approved
+private access. no further owner sleep/reboot steps are required for this check.
 
 evidence from 2026-10-25 utc: the installed loader matches reviewed `c670e208`.
 persistent/live root hooks, full owned rules/table, enabled pf, application
@@ -22,15 +22,20 @@ owned rules, enabled pf, application firewall and key-only ssh pass. fresh arch
 ssh and certificate-valid https pass over actual ipv4 and ipv6. no policy was
 reapplied before inspection.
 
-the intervening reboot prevents this report from proving the earlier post-wake
-state separately. macbook and arch are now on different physical networks, so
-the earlier physical-lan denial proof cannot be repeated from arch today.
-neither limitation is an observed exposure. the known forced self-ipv6 failure
+new evidence, 2026-10-27: native logs show sleep at 08:45:32 and full wake at
+08:57:25, america/los_angeles time. the owner's read-only report followed at
+08:59 without an intervening reboot; boot identity remains `1793029475`.
+persistent/live root hooks, full owned rules, enabled pf, application firewall
+and key-only ssh pass. installed loader bytes still match reviewed source.
+fresh arch pinned ssh and certificate-valid https pass in actual ipv4/ipv6.
+no policy was reapplied before inspection.
+
+macbook and arch remain on different physical networks, so the earlier
+physical-lan denial proof cannot be repeated from arch today. this missing
+effect check is not an observed exposure. the known forced self-ipv6 failure
 remains a separate functional issue; the helper still exits nonzero for it.
 
-resolved when a read-only report collected after wake, before another reboot,
-retains the root hook and owned policy, fresh approved ssh/https works in both
-families, and controlled physical-lan probes still fail in both families when a
-same-lan peer is available. retain local recovery access. another reboot is not
-required to establish the already verified boot result. arch's corresponding
-transitions already passed.
+resolved when controlled physical-lan ssh/media probes fail in both families
+with matching local-listener and peer-route controls, while approved private
+ssh/https still works in both families. retain local recovery access. arch's
+corresponding transitions already passed.
