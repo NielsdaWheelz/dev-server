@@ -215,6 +215,15 @@ loopback, established replies, required networking and approved tailscale traffi
 inventory apple discovery/sharing features; retain local-network exceptions only
 when their purpose and scope are explicit.
 
+the macbook uses airplay to the bedroom tv. on wi-fi (`en0`), allow bonjour udp
+5353 from the directly connected network to the local interface and mdns
+multicast groups, explicitly including ipv6 link-local addresses omitted by pf's
+interface shortcuts. allow negotiated udp timing/media callbacks only from the tv
+addresses in `dev_server_airplay` to the local interface and link-local ipv6
+destinations on wi-fi. this grants no new tcp ingress. keep the receiver
+allowlist current when its addresses change; do not
+replace it with an all-lan media grant. the application firewall remains enabled.
+
 on linux, verify actual input/forwarding rules and docker bindings, not merely
 ufw/firewalld status. ordinary developer listeners should bind loopback; no
 unapproved wildcard docker publications may bypass workstation ingress policy.
