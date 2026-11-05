@@ -92,12 +92,12 @@ tmux_report_binary_activation() {
   if tmux_server_present; then
     server_version="$(tmux -N display-message -p '#{version}' 2>/dev/null)" || {
       render_result DEFERRED tmux \
-        "running server version could not be observed; restart it manually"
+        "running server version unavailable; inspect it before maintenance"
       return 0
     }
     if [[ "$server_version" != "${client_version#tmux }" ]]; then
       render_result DEFERRED tmux \
-        "running sessions keep the prior server until manually restarted"
+        "running sessions use the prior server; finish work and pause session creation, then from outside tmux use skid update --restart-terminals if supported, or the reviewed release installer with --restart-terminals; this stops and reconstructs the workspace"
     fi
     return 0
   else
@@ -105,7 +105,7 @@ tmux_report_binary_activation() {
   fi
   if ((status != 1)); then
     render_result DEFERRED tmux \
-      "server state could not be observed; restart it manually"
+      "server state unavailable; inspect it before maintenance"
     return 0
   fi
 }
