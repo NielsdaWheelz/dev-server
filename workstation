@@ -17,20 +17,22 @@ source "$base_dir/lib/personal-macos.sh"
 source "$base_dir/lib/ai-tools.sh"
 # shellcheck source=lib/memory.sh
 source "$base_dir/lib/memory.sh"
+# shellcheck source=lib/skidbladnir.sh
+source "$base_dir/lib/skidbladnir.sh"
+# shellcheck source=lib/activation.sh
+source "$base_dir/lib/activation.sh"
 
 workstation_platform=''
 workstation_target=''
 workstation_declared_stage=''
-workstation_results_finished=0
 
 usage() {
   printf '%s\n' \
     'Usage: ./workstation apply' \
-    '       ./workstation gateway {apply|remove} skidbladnir' \
     '       ./workstation help' \
     '' \
     'apply updates rolling software and reconciles configuration and exact repository pins.' \
-    'gateway operations maintain skid and leave host tools alone.'
+    'codex daemon updates may interrupt active work; claude is adopted without update.'
 }
 
 workstation_select_target() {
@@ -81,11 +83,11 @@ workstation_snapshot() {
 
   case "$workstation_platform" in
   macos)
-    dev_server_declared_snapshot "$root" assets packages/Brewfile "${memory_inputs[@]}"
+    dev_server_declared_snapshot "$root" lib assets packages/Brewfile "${memory_inputs[@]}"
     ;;
   arch)
     dev_server_declared_snapshot "$root" \
-      assets packages/arch.pacman.txt packages/arch.aur.txt "${memory_inputs[@]}"
+      lib assets packages/arch.pacman.txt packages/arch.aur.txt "${memory_inputs[@]}"
     ;;
   *) return 1 ;;
   esac
@@ -93,27 +95,27 @@ workstation_snapshot() {
 
 workstation_cleanup_on_exit() {
   local rc=$?
-
   trap - EXIT HUP INT TERM
-  if ((rc == 2 && dev_server_result_actions > 0 && workstation_results_finished == 0)); then
-    workstation_results_finished=1
-    finish_results "$workstation_target" || true
-  fi
+  [[ -n "$workstation_target" ]] || workstation_target=workstation
   if [[ -n "$workstation_declared_stage" ]]; then
     case "$workstation_declared_stage" in
     "${TMPDIR:-/tmp}"/workstation-declared.??????)
-      if [[ -d "$workstation_declared_stage" &&
-        ! -L "$workstation_declared_stage" ]]; then
+      if [[ -d "$workstation_declared_stage" && ! -L "$workstation_declared_stage" ]]; then
         chmod -R u+rwX "$workstation_declared_stage" 2>/dev/null || rc=1
         rm -R -- "$workstation_declared_stage" || rc=1
-      elif [[ -e "$workstation_declared_stage" ||
-        -L "$workstation_declared_stage" ]]; then
+      elif [[ -e "$workstation_declared_stage" || -L "$workstation_declared_stage" ]]; then
         rc=1
       fi
       ;;
     *) rc=1 ;;
     esac
   fi
+  if ((rc != 0 && rc != 2 && dev_server_result_errors == 0)); then
+    render_result ERROR "$workstation_target" 'apply or cleanup failed; earlier changes may remain'
+  elif ((rc == 2 && dev_server_result_actions == 0 && dev_server_result_deferrals == 0)); then
+    render_result ACTION "$workstation_target" 'completion requires attention'
+  fi
+  if finish_results "$workstation_target"; then rc=0; else rc=$?; fi
   exit "$rc"
 }
 
@@ -131,6 +133,8 @@ workstation_stage_declared_inputs() {
     die 'could not stage workstation package inputs'
   cp -Rp "$base_dir/assets" "$workstation_declared_stage/assets" ||
     die 'could not stage workstation assets'
+  cp -Rp "$base_dir/lib" "$workstation_declared_stage/lib" ||
+    die 'could not stage workstation libraries'
   if [[ -d "$base_dir/secrets/memory/bundle/$workstation_target" ]]; then
     install -d -m 0700 "$workstation_declared_stage/secrets/memory/bundle" ||
       die 'could not stage private memory configuration'
@@ -158,31 +162,37 @@ workstation_stage_declared_inputs() {
   [[ "$staged_snapshot" == "$desired_snapshot" ]] ||
     die 'workstation inputs changed while staging; rerun'
 
-  # Read by the platform package library selected at runtime.
-  # shellcheck disable=SC2034
-  dev_server_root="$workstation_declared_stage"
-  dev_server_assets_root="$workstation_declared_stage/assets"
-}
-
-workstation_gateway_snapshot() {
-  dev_server_declared_snapshot "$1" lib/common.sh lib/skidbladnir.sh assets/skidbladnir
-}
-
-workstation_stage_gateway_inputs() {
-  local operation="$1" desired_snapshot staged_snapshot
-  desired_snapshot="$(workstation_gateway_snapshot "$base_dir" "$operation")" ||
-    die 'could not resolve standalone skid inputs'
-  workstation_declared_stage="$(mktemp -d "${TMPDIR:-/tmp}/workstation-declared.XXXXXX")" || return 1
-  chmod 0700 "$workstation_declared_stage" || return 1
-  install -d -m 0700 "$workstation_declared_stage/assets" "$workstation_declared_stage/lib" || return 1
-  cp -Rp "$base_dir/assets/skidbladnir" "$workstation_declared_stage/assets/" || return 1
-  cp -p "$base_dir/lib/common.sh" "$base_dir/lib/skidbladnir.sh" "$workstation_declared_stage/lib/" || return 1
-  staged_snapshot="$(workstation_gateway_snapshot "$workstation_declared_stage" "$operation")" || return 1
-  [[ "$staged_snapshot" == "$desired_snapshot" ]] || die 'skid inputs changed while staging; rerun'
+  # Execute the same libraries whose staged bytes were checked above.
   # shellcheck source=lib/common.sh
   source "$workstation_declared_stage/lib/common.sh"
+  # shellcheck source=lib/tmux.sh
+  source "$workstation_declared_stage/lib/tmux.sh"
+  # shellcheck source=lib/dotfiles.sh
+  source "$workstation_declared_stage/lib/dotfiles.sh"
+  # shellcheck source=lib/personal-arch.sh
+  source "$workstation_declared_stage/lib/personal-arch.sh"
+  # shellcheck source=lib/personal-macos.sh
+  source "$workstation_declared_stage/lib/personal-macos.sh"
+  # shellcheck source=lib/ai-tools.sh
+  source "$workstation_declared_stage/lib/ai-tools.sh"
+  # shellcheck source=lib/memory.sh
+  source "$workstation_declared_stage/lib/memory.sh"
   # shellcheck source=lib/skidbladnir.sh
   source "$workstation_declared_stage/lib/skidbladnir.sh"
+  # shellcheck source=lib/activation.sh
+  source "$workstation_declared_stage/lib/activation.sh"
+  case "$workstation_platform" in
+    macos)
+      # shellcheck source=lib/packages-macos.sh
+      source "$workstation_declared_stage/lib/packages-macos.sh"
+      ;;
+    arch)
+      # shellcheck source=lib/packages-arch.sh
+      source "$workstation_declared_stage/lib/packages-arch.sh"
+      ;;
+  esac
+  # shellcheck disable=SC2034 # read by platform package libraries.
+  dev_server_root="$workstation_declared_stage"
   dev_server_assets_root="$workstation_declared_stage/assets"
 }
 
@@ -222,12 +232,13 @@ workstation_preflight() {
 }
 
 workstation_apply() {
-  local memory_status
+  local memory_status status ai_status=0 before_pending
   trap workstation_cleanup_on_exit EXIT
   trap 'exit 129' HUP
   trap 'exit 130' INT
   trap 'exit 143' TERM
   workstation_preflight
+  if activation_check "$workstation_platform"; then :; else return $?; fi
   packages_install
   if [[ "$workstation_platform" == macos ]]; then
     tmux_verify_stable_version /opt/homebrew/bin/tmux
@@ -240,31 +251,35 @@ workstation_apply() {
   else
     personal_macos_apply
   fi
-  ai_install
+  before_pending=$((dev_server_result_actions + dev_server_result_deferrals))
+  # shellcheck disable=SC2119 # this helper deliberately accepts no arguments.
+  if ai_install; then :; else
+    ai_status=$?
+    ((ai_status == 2)) || return "$ai_status"
+    if ((dev_server_result_actions + dev_server_result_deferrals == before_pending)); then
+      render_result ACTION 'AI tools' 'installation requires attention'
+    fi
+  fi
   if memory_install "$workstation_platform" \
     "$workstation_declared_stage/secrets/memory/bundle/$workstation_target"; then :; else
     memory_status=$?
     ((memory_status == 2)) || die 'could not install universal memory host configuration'
   fi
+  if skidbladnir_apply "$workstation_platform"; then :; else
+    status=$?
+    ((status == 2)) || return "$status"
+  fi
+  if ((ai_status == 0)); then
+    before_pending=$((dev_server_result_actions + dev_server_result_deferrals))
+    if activation_apply "$workstation_platform" "$workstation_target"; then :; else
+      status=$?
+      ((status == 2)) || return "$status"
+      if ((dev_server_result_actions + dev_server_result_deferrals == before_pending)); then
+        render_result ACTION activation 'completion requires attention; inspect the activation result before retrying'
+      fi
+    fi
+  fi
   workstation_report_deferrals
-  workstation_results_finished=1
-  finish_results "$workstation_target"
-}
-
-workstation_gateway() {
-  local operation="$1"
-  trap workstation_cleanup_on_exit EXIT
-  trap 'exit 129' HUP
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
-  workstation_select_target
-  workstation_stage_gateway_inputs "$operation"
-  case "$operation" in
-  apply) skidbladnir_apply "$workstation_platform" ;;
-  remove) skidbladnir_remove "$workstation_platform" ;;
-  esac
-  workstation_results_finished=1
-  finish_results "$workstation_target"
 }
 
 main() {
@@ -278,14 +293,6 @@ main() {
   shift
 
   case "$operation" in
-  gateway)
-    (($# == 2)) && [[ "$1" == apply || "$1" == remove ]] &&
-      [[ "$2" == skidbladnir ]] || {
-      usage >&2
-      return 64
-    }
-    workstation_gateway "$1"
-    ;;
   apply)
     (($# == 0)) || {
       usage >&2

@@ -6,7 +6,15 @@
     dev_server_assets_root={{ ('/home/' ~ devbox_user ~ '/.local/share/dev-server/assets') | quote }}
     source {{ ('/home/' ~ devbox_user ~ '/.local/share/dev-server/lib/common.sh') | quote }}
     source {{ ('/home/' ~ devbox_user ~ '/.local/share/dev-server/lib/ai-tools.sh') | quote }}
-    ai_install
+    dev_server_result_jsonl={{ devbox_result_file.path | quote }}
+    before_pending=$((dev_server_result_actions + dev_server_result_deferrals))
+    if ai_install; then :; else
+      rc=$?
+      if ((rc == 2 && dev_server_result_actions + dev_server_result_deferrals == before_pending)); then
+        render_result ACTION 'AI tools' 'installation requires attention'
+      fi
+      exit "$rc"
+    fi
   args:
     executable: /bin/bash
   become: true
@@ -17,22 +25,4 @@
   register: ai_tools_apply
   changed_when: >-
     ai_tools_apply.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED)  ')
-  failed_when: >-
-    ai_tools_apply.rc not in [0, 2] or
-    (ai_tools_apply.rc == 2 and
-     not (ai_tools_apply.stdout is regex('(?m)^ACTION  ')))
-
-- name: Return the native AI result to the controller
-  ansible.builtin.copy:
-    content: "{{ {'rc': ai_tools_apply.rc, 'stdout': ai_tools_apply.stdout} | to_json }}"
-    dest: "{{ dev_server_ai_result_file }}"
-    mode: "0600"
-  delegate_to: localhost
-  become: false
-  changed_when: false
-  when: dev_server_ai_result_file is defined
-
-- name: Report native AI installation actions
-  ansible.builtin.debug:
-    msg: "{{ item }}"
-  loop: "{{ ai_tools_apply.stdout_lines | select('match', '^ACTION  ') | list }}"
+  failed_when: ai_tools_apply.rc not in [0, 2]

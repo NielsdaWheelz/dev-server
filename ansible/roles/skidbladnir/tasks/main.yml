@@ -1,0 +1,21 @@
+---
+- name: Reconcile skid
+  ansible.builtin.shell: |
+    set -euo pipefail
+    dev_server_home_dir={{ ('/home/' ~ devbox_user) | quote }}
+    dev_server_assets_root="$dev_server_home_dir/.local/share/dev-server/assets"
+    source "$dev_server_assets_root/../lib/common.sh"
+    source "$dev_server_assets_root/../lib/skidbladnir.sh"
+    dev_server_result_jsonl={{ devbox_result_file.path | quote }}
+    skidbladnir_apply devbox
+  args:
+    executable: /bin/bash
+  become_user: "{{ devbox_user }}"
+  environment:
+    HOME: "/home/{{ devbox_user }}"
+    PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+    XDG_RUNTIME_DIR: "/run/user/{{ base_user_uid.stdout }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ base_user_uid.stdout }}/bus"
+  register: skid_apply
+  changed_when: skid_apply.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED)  ')
+  failed_when: skid_apply.rc not in [0, 2]

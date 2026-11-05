@@ -15,6 +15,7 @@
     - assets/routers
     - assets/claude
     - assets/memory
+    - assets/skidbladnir
 
 - name: Install exact runtime libraries
   ansible.builtin.copy:
@@ -29,6 +30,9 @@
     - dotfiles.sh
     - ai-tools.sh
     - memory.sh
+    - skidbladnir.sh
+    - activation.sh
+    - activation.py
 
 - name: Install exact dotfile assets
   ansible.builtin.copy:
@@ -74,6 +78,14 @@
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../assets/memory/"
     dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/memory/"
+    owner: "{{ devbox_user }}"
+    group: "{{ devbox_user }}"
+    mode: preserve
+
+- name: Install skid configuration and bootstrap pin
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../assets/skidbladnir/"
+    dest: "/home/{{ devbox_user }}/.local/share/dev-server/assets/skidbladnir/"
     owner: "{{ devbox_user }}"
     group: "{{ devbox_user }}"
     mode: preserve
