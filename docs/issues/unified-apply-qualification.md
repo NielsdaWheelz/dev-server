@@ -1,8 +1,9 @@
 # unified apply needs native qualification
 
-problem: unified apply is implemented, but the reviewed skid bootstrap commit
-`12d25144238f5b9ee0f2fe0c3441daaebb0cd103` is not yet public and no qualifying
-signed release containing its action-required exit contract is published. the
+problem: unified apply is implemented, but no qualifying signed skid release
+containing its action-required exit contract is published. the reviewed bootstrap
+commit `12d25144238f5b9ee0f2fe0c3441daaebb0cd103` is publicly reachable and its
+downloaded bytes match the declared checksum. the
 mac terminal-runtime cutover remains held.
 
 impact: source checks do not establish installed fleet behavior. do not merge or
