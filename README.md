@@ -19,9 +19,8 @@ release. only devbox receives authoritative personal yaml. full removal uses
 standalone `skid uninstall`; host apply installs skid again. herdr and
 herdr-mobile commands are retired; apply does not discard workers.
 
-this source has not been deployed. the pinned bootstrap commit and a qualifying
-signed skid release must be public before merge or deployment; remaining native
-and provider checks are in [qualification](docs/issues/unified-apply-qualification.md).
+the bootstrap and signed skid v0.24.1 release are public and verified. installed
+host and provider checks remain in [qualification](docs/issues/unified-apply-qualification.md).
 there is no separate update, offline or configuration-only mode.
 
 exit `0` means requested in-scope work completed; `2` means pending activation,

@@ -1,8 +1,8 @@
 # unified apply
 
-implementation is in progress; source and disposable checks do not establish live
-acceptance. the bootstrap source and a qualifying signed skid release must be
-public before merge or deployment. the mac terminal-cutover hold remains; this
+implementation and disposable checks are complete; source checks do not establish
+live acceptance. the bootstrap and signed skid v0.24.1 release are public and
+verified. the mac terminal-cutover hold remains; this
 document does not authorize a live restart or install.
 
 ## contract
