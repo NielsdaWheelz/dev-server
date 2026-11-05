@@ -88,7 +88,7 @@ paths; standalone skid remains independently usable for repair/uninstall.
    during this maintenance command; do not add a separate no-op planner.
 4. independent final activation: for `codex`, `codex-work`, `codex-work2`, in that
    order, invoke each account wrapper's native `app-server daemon start`
-   (start/reuse), `update --yes`, then `version`. start also bootstraps a missing
+   (start/reuse), plain `update`, then `version`. start also bootstraps a missing
    native package; the updater owns activation. verify the running version.
    do not compare daemon versions to the cli or invent a release-selection API.
 5. owners perform eligible cleanup; fold cleanup failures into the final result,

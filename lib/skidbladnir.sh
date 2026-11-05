@@ -3,7 +3,7 @@
 # skid owns installation, services, dependencies, shell integration and removal.
 # dev-server owns the reviewed bootstrap pin and desired yaml on the hub.
 skidbladnir_apply() {
-  local platform="$1" home assets pin source_sha installer_sha config private android_push desired_config status
+  local platform="$1" home assets pin source_sha installer_sha config private android_push desired_config status diagnostic
   case "$platform" in macos | arch | devbox) ;; *) return 64 ;; esac
   home="$(dev_server_home)"
   assets="$(dev_server_assets_dir)/skidbladnir"
@@ -46,14 +46,17 @@ PY
       android_push=
     fi
   fi
-  if (
+  if { diagnostic="$(
     local stage
     stage="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-skid.XXXXXX")" || return 1
     # shellcheck disable=SC2329 # invoked by the exit trap.
     cleanup_skid_stage() {
       local rc=$?
       trap - EXIT
-      rm -R -- "$stage" || rc=1
+      if ! rm -R -- "$stage"; then
+        printf '%s' ' [temporary installer cleanup failed]'
+        rc=1
+      fi
       exit "$rc"
     }
     trap cleanup_skid_stage EXIT
@@ -66,16 +69,30 @@ PY
       -o "$stage/install" || return 1
     [[ "$(dev_server_sha256 "$stage/install")" == "$installer_sha" ]] ||
       die 'standalone skid bootstrap checksum differs from the reviewed pin'
-    bash "$stage/install"
-  ); then
+    if bash "$stage/install" >&3 2>"$stage/diagnostic"; then
+      cat "$stage/diagnostic" >&2 || return 1
+      return 0
+    else
+      status=$?
+    fi
+    python3 - "$stage/diagnostic" <<'PYDIAG' || return 1
+import sys
+with open(sys.argv[1], "rb") as stream:
+    encoded = stream.read(4097)
+text = encoded[:4096].decode("utf-8", errors="replace")
+detail = " ".join("".join(char if char.isprintable() else " " for char in text).split())
+print(detail + (" ..." if len(encoded) > 4096 else ""), end="")
+PYDIAG
+    return "$status"
+  )"; } 3>&1; then
     render_result CHANGED skid 'signed release installed; gateway ready'
   else
     status=$?
     if ((status == 2)); then
-      render_result ACTION skid 'installation requires action; see installer diagnostic above'
+      render_result ACTION skid "${diagnostic:-installation requires action; inspect skid before retrying}"
       return 2
     fi
-    render_result ERROR skid 'installation failed; see installer diagnostic above'
+    render_result ERROR skid "${diagnostic:-installation failed; inspect skid before retrying}"
     return 1
   fi
   # Only the authoritative hub receives desired configuration: the committed yaml

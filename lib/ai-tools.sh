@@ -397,8 +397,8 @@ ai_maintain_codex_daemons() {
     esac
     start_status='' update_status='' installed_version='' running_version=''
     for operation in start update version; do
+      # --yes requires --from-cli; the public-stable update is noninteractive.
       arguments=(app-server daemon "$operation")
-      [[ "$operation" != update ]] || arguments+=(--yes)
       if output="$(HOME="$home" CODEX_HOME="$account" "$home/bin/$command" "${arguments[@]}" </dev/null 2>/dev/null)"; then
         :
       else
