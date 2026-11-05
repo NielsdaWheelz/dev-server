@@ -1,29 +1,31 @@
 # skid gateway maintenance and retirement
 
-source work is separate from live acceptance. ordinary host apply manages shared
-host tools; it installs no herdr runtime, hook, gate or gateway. gateway apply
-installs only skid. retired-product installation and removal commands are gone.
+source work is separate from live acceptance. host apply maintains skid and
+shared tools; retired herdr installation and removal commands remain absent.
 
 ## current commands and ownership
 
 ```sh
-./workstation gateway apply skidbladnir
-./devbox gateway apply skidbladnir
-./workstation gateway remove skidbladnir
-./devbox gateway remove skidbladnir
+./workstation apply
+./devbox apply
 ```
 
-these commands delegate to the reviewed standalone bootstrap with its pinned
-release version, and to `skid uninstall`. only devbox receives the authoritative personal yaml and
-`skid apply`; membership and generated state stay owned by skid. host provider
-tools/accounts/daemon preparation remain independent.
+apply verifies the reviewed bootstrap source/checksum, then skid selects and
+verifies the latest signed stable release. only devbox receives the authoritative
+yaml and `skid apply`; membership and generated state remain skid-owned. standalone
+`skid uninstall` is the separate removal operation and retains its drain rule.
 
-the reviewed release pin selects immutable `v0.23.0` from `677bbb2`; its
-version, source commit and bootstrap sha256 admit the public installer. do not deploy the
-old-wire v0.18 archive or restore a symlink across incompatible private state.
-from a `v0.20.x` fleet this is skid's lockstep cutover of three hosts and the
-phone: a fresh fleet, hub attention and schema-2 workspace recovery, with no
-converters. skid's [release cutover](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/issues/release-cutover.md),
+this source is not deployed: the reviewed bootstrap commit and a signed release
+with its action-required exit contract must be public before merge or deployment.
+the mac terminal-runtime cutover remains held. for a refused runtime replacement,
+finish work and pause session creation; perform separately authorized maintenance
+from outside tmux using the reviewed release installer. it stops and reconstructs
+the workspace. see [qualification](issues/unified-apply-qualification.md).
+
+the earlier `v0.20.x` fleet migration was a lockstep cutover of three hosts and the
+phone. do not deploy old-wire v0.18 or restore incompatible private state.
+that migration introduced a fresh fleet, hub attention and schema-2 workspace
+recovery, with no converters. skid's [release cutover](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/issues/release-cutover.md),
 [attention cutover](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/issues/attention-cutover.md)
 and [workspace recovery](https://github.com/NielsdaWheelz/skidbladnir/blob/main/docs/session-recovery.md#cutover-and-qualification)
 own the steps.
@@ -70,7 +72,8 @@ working native claude is adopted without installer, updater or release lookup.
 missing claude still uses its official installer. its
 [activation-result defect](issues/claude-native-update-activation.md) blocks
 strict updater integration. normal apply preserves account update policy and
-does not restart providers or update separately owned account daemons.
+uses each codex wrapper to start/reuse, update and inspect its native daemon.
+upstream activation may interrupt active work.
 
 generated account wrappers, version inspection and the
 memory configuration writer clear the same five provenance keys before native
@@ -101,7 +104,7 @@ installation context above. keep `~/bin` before `~/.local/bin` in `PATH`.
 a broken link, script or invalid provider at the canonical path requires
 operator repair; apply preserves it and returns `ACTION`, status `2`.
 
-gateway rollback does not roll back provider installations or account data.
+skid service recovery does not roll back provider installations or account data.
 
 ## provider and jarvis contract
 
@@ -112,8 +115,9 @@ and account wrappers own permissions, account/home selection and memory.
 no flags/socket/plugin arguments are added. bare codex follows inherited
 `CODEX_HOME`; named work wrappers force their established account home.
 
-source publication/staging of the claude identity plugin is removed. installed
-cleanup is a separate coordinated cut. the verified plugin has only a
+the following are the earlier plugin-retirement instructions, not current apply
+behavior. source publication/staging of the claude identity plugin was removed;
+installed cleanup was a separate coordinated cut. the verified plugin has only a
 `SessionStart` identity hook whose failure does not block claude, with no other
 events or blocking-on-failure policy (see the [official hook failure contract](https://code.claude.com/docs/en/hooks#other-exit-codes)).
 that exact plugin may be removed while the existing claude process keeps running;
@@ -129,17 +133,15 @@ directories afterward. unexpected bytes, hook policy or content block cleanup.
 retain immutable skid installation generations. no recursive sweep, permanent
 cleanup machinery or compatibility shim. old inert tmux options need no migration.
 
-update only the four command values in devbox's private desired yaml before
-signed config application. preserve all other bytes/values and mode `0600`.
-stage matching signed artifacts for active host/android consumers and the exact
-release pin before coordinated activation. jarvis source is merged, but its
-runtime remains STOPPED and is not deployed in this cut. source changes do not
-update installed private configuration or claim installed parity.
+the earlier coordinated cutover changed only the four command values in the
+private desired yaml and staged matching host/android artifacts. jarvis source
+was merged with its runtime stopped; source changes alone do not establish
+installed parity.
 
-ordinary AI apply invokes `app-server daemon start` through each codex account
-wrapper. upstream owns start/reuse; failed preparation reports action and never
-forces a restart/upgrade. skid consumes existing daemons only. provider data,
-settings, history and running work remain intact.
+ordinary apply invokes native start/reuse, update and version through each codex
+account wrapper. it does not force a restart. update may interrupt clients; daemon
+readiness does not prove that conversations continued. skid consumes existing
+daemons only; provider data, settings and history remain upstream-owned.
 
 jarvis consumes the matching cli and `JARVIS_AGENT_STATE_DIRECTORY`, with no
 model/effort creation overrides or copied client-json reader. installed worker
@@ -176,7 +178,7 @@ the old eleven-file generation/rollback receipt and helper checkout are retired.
 skid's signed standalone archive and installer own release identity, immutable
 assets, locked helper dependencies, services, startup blocks and removal.
 dev-server reads none of those private receipt schemas. local bootstrap admission
-uses only its reviewed source commit/checksum and pinned release version.
+uses its reviewed bootstrap source commit/checksum; skid selects the signed release.
 
 ## verification and limits
 
