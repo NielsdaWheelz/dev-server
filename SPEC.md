@@ -444,7 +444,7 @@ production activation retain their own qualification.
 
 upstream codex owns each account daemon, discovery, packages, selection and
 updates. apply uses each `codex`, `codex-work` and `codex-work2` wrapper in
-order: native `app-server daemon start` (start/reuse), `update --yes`, then
+order: native `app-server daemon start` (start/reuse), plain `update`, then
 `version`. a failed or uncertain operation stops dependent work and requires
 inspection before retry. no forced restart or `--from-cli` pin is added; cli and
 daemon versions may differ. upstream activation may interrupt clients; a running
