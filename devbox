@@ -344,11 +344,11 @@ cleanup_on_exit() {
   local rc=$?
 
   trap - EXIT HUP INT TERM
-  [[ -z "$rendered_cloud_init" ]] || rm -f -- "$rendered_cloud_init"
-  [[ -z "$ssh_include_candidate" ]] || rm -f -- "$ssh_include_candidate"
-  [[ -z "$ssh_known_hosts_candidate" ]] || rm -f -- "$ssh_known_hosts_candidate"
-  [[ -z "$ssh_known_hosts_candidate_old" ]] || rm -f -- "$ssh_known_hosts_candidate_old"
-  [[ -z "$ansible_output" ]] || rm -f -- "$ansible_output"
+  [[ -z "$rendered_cloud_init" ]] || rm -f -- "$rendered_cloud_init" || rc=1
+  [[ -z "$ssh_include_candidate" ]] || rm -f -- "$ssh_include_candidate" || rc=1
+  [[ -z "$ssh_known_hosts_candidate" ]] || rm -f -- "$ssh_known_hosts_candidate" || rc=1
+  [[ -z "$ssh_known_hosts_candidate_old" ]] || rm -f -- "$ssh_known_hosts_candidate_old" || rc=1
+  [[ -z "$ansible_output" ]] || rm -f -- "$ansible_output" || rc=1
   if [[ -n "$devbox_declared_stage" ]]; then
     case "$devbox_declared_stage" in
     "${TMPDIR:-/tmp}"/devbox-declared.??????)

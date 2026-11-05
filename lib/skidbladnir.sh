@@ -8,7 +8,10 @@ skidbladnir_apply() {
   home="$(dev_server_home)"
   assets="$(dev_server_assets_dir)/skidbladnir"
   pin="$assets/bootstrap-pin.json"
-  dev_server_strict_json_file "$pin" 4096 || { render_result ERROR skid 'invalid bootstrap pin'; return 1; }
+  dev_server_strict_json_file "$pin" 4096 || {
+    render_result ERROR skid 'invalid bootstrap pin'
+    return 1
+  }
   pin="$(
     python3 - "$pin" <<'PY'
 import json
@@ -24,7 +27,10 @@ if (not isinstance(value, dict) or set(value) != {
     raise SystemExit("invalid standalone skid bootstrap pin")
 print("\t".join(value[key] for key in ("sourceSha", "installerSha256")))
 PY
-  )" || { render_result ERROR skid 'invalid bootstrap pin'; return 1; }
+  )" || {
+    render_result ERROR skid 'invalid bootstrap pin'
+    return 1
+  }
   IFS=$'\t' read -r source_sha installer_sha <<<"$pin"
   if [[ "$platform" == devbox ]]; then
     config="${XDG_CONFIG_HOME:-$home/.config}/skidbladnir"

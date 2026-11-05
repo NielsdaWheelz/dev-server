@@ -208,14 +208,66 @@ render_result() {
   *) die "invalid result status: $status" ;;
   esac
 
+  if [[ -n "${dev_server_result_jsonl:-}" ]]; then
+    if ! python3 - "$dev_server_result_jsonl" "$status" "$subject" "$*" <<'PY'
+import json
+import sys
+with open(sys.argv[1], "a", encoding="utf-8") as stream:
+    stream.write(json.dumps(dict(zip(("status", "subject", "detail"), sys.argv[2:]))) + "\n")
+PY
+    then
+      dev_server_result_errors=$((dev_server_result_errors + 1))
+      _dev_server_print_result ERROR result 'could not record structured result'
+      return 1
+    fi
+  fi
   _dev_server_print_result "$status" "$subject" "$@"
+}
+
+dev_server_replay_results() {
+  (($# == 2)) || return 64
+  local projection status subject detail replay_status=0
+  projection="$(mktemp "${TMPDIR:-/tmp}/dev-server-results.XXXXXX")" || return 1
+  if ! python3 - "$1" "$2" >"$projection" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as stream:
+    if sys.argv[2] == "report":
+        rows = json.load(stream)["results"]
+    elif sys.argv[2] == "jsonl":
+        rows = [json.loads(line) for line in stream]
+    else:
+        raise ValueError("unknown result format")
+if not isinstance(rows, list):
+    raise ValueError("invalid result rows")
+fields = []
+for row in rows:
+    for key in ("status", "subject", "detail"):
+        value = row[key]
+        if not isinstance(value, str) or "\0" in value or "\n" in value:
+            raise ValueError("invalid result field")
+        fields.append(value)
+sys.stdout.buffer.write(b"".join(value.encode("utf-8") + b"\0" for value in fields))
+PY
+  then
+    rm -f -- "$projection"
+    return 1
+  fi
+  while IFS= read -r -d '' status && IFS= read -r -d '' subject && IFS= read -r -d '' detail; do
+    if ! render_result "$status" "$subject" "$detail"; then
+      replay_status=1
+      break
+    fi
+  done <"$projection"
+  rm -f -- "$projection" || return 1
+  return "$replay_status"
 }
 
 finish_results() {
   (($# == 1)) || die 'finish_results needs one target name'
 
   local target="$1"
-  local detail
+  local detail summary_status
   [[ -n "$target" && "$target" != *$'\n'* ]] ||
     die 'summary target must be one nonempty line'
 
@@ -226,24 +278,24 @@ finish_results() {
     return 1
   fi
 
-  if ((dev_server_result_actions > 0)); then
-    detail="$dev_server_result_actions user action(s) required"
+  if ((dev_server_result_actions > 0 || dev_server_result_deferrals > 0)); then
+    summary_status=ACTION
+    if ((dev_server_result_actions > 0)); then
+      detail="$dev_server_result_actions user action(s) required"
+      ((dev_server_result_deferrals == 0)) || detail="$detail, $dev_server_result_deferrals deferral(s)"
+    else
+      summary_status=DEFERRED
+      detail="$dev_server_result_deferrals deferral(s) require action"
+    fi
     ((dev_server_result_mutations == 0)) || detail="$detail, $dev_server_result_mutations durable change(s) installed"
     ((dev_server_result_activations == 0)) || detail="$detail, $dev_server_result_activations activation(s)"
-    ((dev_server_result_deferrals == 0)) || detail="$detail, $dev_server_result_deferrals deferral(s)"
-    _dev_server_print_result ACTION "$target" "$detail"
+    _dev_server_print_result "$summary_status" "$target" "$detail"
     return 2
   fi
 
   if ((dev_server_result_mutations > 0 || dev_server_result_activations > 0)); then
     detail="$dev_server_result_mutations durable change(s), $dev_server_result_activations activation(s)"
-    ((dev_server_result_deferrals == 0)) || detail="$detail, $dev_server_result_deferrals deferral(s)"
     _dev_server_print_result UPDATED "$target" "$detail"
-    return 0
-  fi
-
-  if ((dev_server_result_deferrals > 0)); then
-    _dev_server_print_result DEFERRED "$target" "$dev_server_result_deferrals deferral(s); durable state installed"
     return 0
   fi
 

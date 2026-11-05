@@ -182,14 +182,14 @@ workstation_stage_declared_inputs() {
   # shellcheck source=lib/activation.sh
   source "$workstation_declared_stage/lib/activation.sh"
   case "$workstation_platform" in
-    macos)
-      # shellcheck source=lib/packages-macos.sh
-      source "$workstation_declared_stage/lib/packages-macos.sh"
-      ;;
-    arch)
-      # shellcheck source=lib/packages-arch.sh
-      source "$workstation_declared_stage/lib/packages-arch.sh"
-      ;;
+  macos)
+    # shellcheck source=lib/packages-macos.sh
+    source "$workstation_declared_stage/lib/packages-macos.sh"
+    ;;
+  arch)
+    # shellcheck source=lib/packages-arch.sh
+    source "$workstation_declared_stage/lib/packages-arch.sh"
+    ;;
   esac
   # shellcheck disable=SC2034 # read by platform package libraries.
   dev_server_root="$workstation_declared_stage"

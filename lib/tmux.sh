@@ -135,7 +135,8 @@ tmux_reload_if_changed() {
 
   # Stop delayed legacy restores before removing their entry points. Admit only
   # complete native commands naming exact owned aliases or immutable generations.
-  retired="$(python3 - "$home" <<'PY'
+  retired="$(
+    python3 - "$home" <<'PY'
 import re
 import shlex
 import subprocess
