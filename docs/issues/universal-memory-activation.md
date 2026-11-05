@@ -41,8 +41,9 @@ are removed after review.
 actual fleet package installation, service activation, tailscale serve mutation
 and loaded native MCP connections were not run. successful live claude work
 inference was waived by the owner after expired OAuth; this does not qualify
-installed fleet archive readers. native daemons and existing agents must not be
-restarted by ordinary apply.
+installed fleet archive readers. unified apply now owns codex daemon maintenance;
+its native updater may interrupt existing agents. the devbox apply reported action
+required because its private memory bundle was not supplied.
 
 resolved when: actual lane controllers/sharing and private credentials are
 supplied, each admitted native
