@@ -1,9 +1,10 @@
 # unified apply
 
-implementation and disposable checks are complete; source checks do not establish
-live acceptance. the bootstrap and signed skid v0.24.1 release are public and
-verified. the mac terminal-cutover hold remains; this
-document does not authorize a live restart or install.
+implementation is merged. signed skid v0.24.2 passed public release verification;
+the owner-authorized devbox cutover and ordinary apply ran, with memory and docker
+activation pending. the mac terminal-cutover hold remains and arch has not been
+deployed. [qualification](issues/unified-apply-qualification.md) records the
+remaining boundaries; this document does not authorize another live operation.
 
 ## contract
 
@@ -53,8 +54,8 @@ reconnection rather than constructing speculative client-relaunch machinery.
 tmux/runtime activation remains separate explicit maintenance. ordinary apply
 can install a new tmux binary while its running server retains the old one;
 report that pending activation and exit 2. never pass `--restart-terminals`, kill
-tmux or rewrite its checkpoint from host apply. the already-planned first runtime
-cutover remains separately approved and currently held.
+tmux or rewrite its checkpoint from host apply. the mac terminal-runtime
+cutover remains held and requires separate owner approval.
 
 exit codes: 0 = all requested in-scope operations completed and verified;
 2 = pending activation, required action or unknown completion; 1 = definite
@@ -212,9 +213,8 @@ their own diagnostics; no duplicate copy tables.
 | d: skid consumer | dev-server `lib/skidbladnir.sh`, `lib/tmux.sh`, bootstrap pin; delete old release pin and `ansible/playbooks/gateway.yml` |
 | integrator / designer | `lib/common.sh`, `SPEC.md`, `README.md`, runbook, this plan and directly affected issue records; shared results/copy/interfaces |
 
-freeze contracts first; a/b proceed independently; c/d integrate after the skid
-release. remove early daemon starts, gateway-only staging/commands and duplicated
-result paths. read-only adversarial review before each slice and final acceptance.
+the slices are integrated and reviewed. remaining native boundaries are tracked in
+[qualification](issues/unified-apply-qualification.md).
 
 prove with a few disposable integration/manual runs:
 

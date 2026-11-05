@@ -19,8 +19,11 @@ release. only devbox receives authoritative personal yaml. full removal uses
 standalone `skid uninstall`; host apply installs skid again. herdr and
 herdr-mobile commands are retired; apply does not discard workers.
 
-the bootstrap and signed skid v0.24.1 release are public and verified. installed
-host and provider checks remain in [qualification](docs/issues/unified-apply-qualification.md).
+signed skid v0.24.2 is public and verified. the owner-authorized devbox cutover
+and ordinary apply ran on the merged source; apply returned `2` for a missing
+memory bundle and busy docker activation. the mac cutover remains held and arch
+has not been deployed. remaining checks are in
+[qualification](docs/issues/unified-apply-qualification.md).
 there is no separate update, offline or configuration-only mode.
 
 exit `0` means requested in-scope work completed; `2` means pending activation,

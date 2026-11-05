@@ -24,9 +24,11 @@ configuration-only, offline or separate upgrade command. only devbox receives
 skid's authoritative yaml; standalone skid owns uninstall. apply does not discard
 workers or install retired herdr runtime, hooks or gates.
 
-this implementation is not deployed. the reviewed skid bootstrap source and a
-qualifying signed release must be public before merge or deployment; remaining
-qualification is recorded [here](docs/issues/unified-apply-qualification.md).
+signed skid v0.24.2 and this implementation are public. the owner-authorized
+devbox cutover and ordinary apply ran; apply returned `2` for a missing memory
+bundle and busy docker activation. mac deployment remains held and arch has not
+been deployed. remaining qualification is recorded
+[here](docs/issues/unified-apply-qualification.md).
 
 | owner | apply |
 |---|---|
