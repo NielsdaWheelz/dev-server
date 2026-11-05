@@ -5,37 +5,28 @@ one-user host configuration for `macbook`, `arch`, and the hetzner `devbox`.
 ```sh
 ./workstation apply
 ./devbox apply
-
-# gateway maintenance is independent of shared host tools
-./workstation gateway apply skidbladnir
-./devbox gateway apply skidbladnir
 ```
 
-gateway commands use skid's ordinary standalone installer. only devbox receives
-the authoritative personal yaml. the reviewed standalone pin selects immutable
-`v0.23.0` from `677bbb2`: an ordinary update from v0.22.0 that adds readable
-fleet output, a signed checksum list and a new android signer, so the phone
-reinstalls and re-pairs once; the `v0.20.0` [installed qualification](docs/gateway-separation-validation.md#2026-10-21-terminal-only-v0200-installed-fleet)
-records installed results and remaining limits.
+one apply maintains host packages, configuration, skid and the three codex
+account daemons. daemon updates can interrupt work; finish important turns
+first. claude remains bootstrap/adoption only. native package hooks can also
+interrupt services and workloads. tmux servers and panes are not restarted by
+host apply; an affected client may reconnect or need manual resume.
 
-`gateway remove skidbladnir` delegates to `skid uninstall`; settings/private state,
-tmux and shared packages are retained.
-provider homes and signing files remain. herdr and herdr-mobile installation and
-removal commands are retired. ordinary apply installs no herdr runtime, hook or gate and
-never discards workers. [the maintenance runbook](docs/gateway-separation-runbook.md)
-separates source changes from live acceptance.
+skid's reviewed [bootstrap pin](assets/skidbladnir/bootstrap-pin.json) selects
+an immutable installer, which verifies and installs the latest signed stable
+release. only devbox receives authoritative personal yaml. full removal uses
+standalone `skid uninstall`; host apply installs skid again. herdr and
+herdr-mobile commands are retired; apply does not discard workers.
 
-`apply` updates rolling packages, maintains native codex, bootstraps missing
-claude, reconciles exact repository pins, and installs shared host configuration. it replaces the former `upgrade`
-command; there is no separate update mode. each run checks upstream releases,
-so an unchanged checkout can still produce software updates. configuration-only
-and offline applies are not supported.
+the bootstrap and signed skid v0.24.1 release are public and verified. installed
+host and provider checks remain in [qualification](docs/issues/unified-apply-qualification.md).
+there is no separate update, offline or configuration-only mode.
 
-already-converged configuration and pinned components are left alone.
-native package managers and installers own update checks and bookkeeping. exit
-`0` means installed, with any deferred activation reported; `2` means an exact
-manual action is required; `1` means failure; `64` means invalid invocation.
-rerun after fixing the reported problem. `--help` lists the public commands.
+exit `0` means requested in-scope work completed; `2` means pending activation,
+manual action or unknown completion; `1` means failure; `64` means invalid
+invocation. after unknown completion, inspect the reported result before retrying.
+earlier completed changes remain after a failure.
 
 tmux follows the latest stable upstream release. homebrew and pacman install it
 on the workstations; ubuntu builds the official release into `/usr/local` because
@@ -43,8 +34,8 @@ its distribution package lags upstream. every host verifies the installed versio
 against upstream. a lagging workstation repository fails apply rather than
 silently accepting an older tmux. existing servers keep running until an explicit
 maintenance restart; installing a new binary does not upgrade a running server.
-after a version change, apply the skid gateway configuration before that restart
-so its own detection agrees with the installation.
+after a version change, use separately authorized terminal maintenance to activate
+the new server; the first mac terminal cutover remains held.
 when starting an interactive tmux server from automation, clear inherited
 `NO_COLOR` first (`env -u NO_COLOR tmux ...`); the server otherwise passes that
 automation setting to new panes and their applications.
@@ -59,9 +50,7 @@ integration tests and direct verification; evidence belongs in the pull request.
 
 skid owns tmux workspace recovery. host apply removes the owned resurrect and
 continuum entry points, preserving running sessions, saved layouts and inert
-plugin generations; existing tpm retirement remains. run host apply before
-activating a gateway with recovery. gateway-only apply does not perform this
-host cutover. recovered panes start fresh shells; resume agent conversations
+plugin generations; existing tpm retirement remains. recovered panes start fresh shells; resume agent conversations
 through their native commands.
 
 ## workstation
@@ -92,8 +81,8 @@ casks. the app store tailscale app remains separately owned: apply verifies
 and optionally starts it, but never installs, updates, replaces, or signs in to it.
 
 host configuration is applied in order: native packages, dotfiles, exact-host
-personal policy, ai tools, supplied memory configuration. gateway
-commands stage only their own inputs and reconcile only their own ingress. desktop login, reboot, busy containers, and tmux
+personal policy, ai tools, supplied memory configuration, skid and account daemon
+maintenance. desktop login, reboot, busy containers, and tmux
 binary activation are reported as `DEFERRED`. repo-owned activation never forces
 them. native package installation/upgrade scripts can still restart their
 services; schedule host applies accordingly. package changes have no automatic
@@ -146,8 +135,10 @@ claude retains bootstrap/adoption only: missing commands use the official
 installer; working native commands are not updated by apply. its
 [activation-result defect](docs/issues/claude-native-update-activation.md) blocks
 strict maintenance. invalid canonical commands are preserved and produce a
-repair `ACTION`. apply does not restart provider sessions, update account
-daemons, change account update settings or change npm's prefix.
+repair `ACTION`. daemon maintenance uses native start/reuse, update and version
+checks; it does not force a restart or change account update settings or npm's
+prefix. native update may interrupt clients. the official cli installer owns its
+eligible release cleanup; account-daemon retention is upstream-owned.
 
 future account and skid cli invocations follow the canonical selection without
 a repository edit or gateway restart. direct `codex update` is not the checked
@@ -186,12 +177,12 @@ recorded when installed; `codex-work` and `codex-work2` always select their name
 homes there, independently of runtime `HOME`. ordinary wrappers pass arguments
 unchanged. ordinary account commands are stock launches. bare `codex` follows
 inherited `CODEX_HOME`; named wrappers select their normal account homes.
-provider settings own ordinary daemon auto-start. independent host AI apply
-starts/reuses each account daemon; skid only observes existing account quota
+provider settings own ordinary daemon auto-start. host apply starts/reuses, updates
+and checks each account daemon; skid only observes existing account quota
 and terminal evidence. it neither manages daemon lifetime nor associates a
 provider conversation with a terminal.
 
-host-owned codex daemon starts pass through each ordinary account wrapper,
+host-owned codex daemon maintenance passes through each ordinary account wrapper,
 loading only its memory credential before native exec. skid does not manage
 daemon startup, upgrade or shutdown.
 
@@ -273,8 +264,8 @@ reports deferred activation without advancing the active digest.
 
 connected native profiles load a private bearer environment for future launches
 and the native `jarvis-memory` entry at `/v1/mcp`. they receive the exact product
-memory instruction; existing native agents and daemons remain running. the
-native configuration contracts are
+memory instruction. memory configuration itself does not restart agents; later
+daemon maintenance may interrupt them. the native configuration contracts are
 [codex MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli) and
 [claude MCP](https://code.claude.com/docs/en/mcp). actual loaded connections need
 their own acceptance. devbox owns only private HTTPS 443 `/v1`, preserving skid's
@@ -297,17 +288,16 @@ stays out of this public repository. keep it mode `0600`. apply appends it to th
 committed yaml, so profiles and every other setting change only in git. the
 service-account private key remains in its separately configured private file.
 
-`lib/skidbladnir.sh` delegates installation and removal to the standalone skid
-installer. the release pin names a version, source commit and bootstrap sha256;
-the ordinary bootstrap verifies signed archives. the pin selects reviewed
-immutable `v0.23.0`; publication alone does not establish installed parity. normal skid
-updates own services/shell integration and preserve settings, tmux and providers.
-old ntfy, copied gateway/native helper assets and deployment rollback code are
-removed; there is no old-wire fallback. see [the maintenance runbook](docs/gateway-separation-runbook.md).
+`lib/skidbladnir.sh` delegates installation to skid's reviewed bootstrap. the
+bootstrap pin fixes its source and checksum; skid selects and authenticates the
+latest signed stable release. only devbox receives the desired hub yaml. skid
+owns services, shell integration, release cleanup and standalone uninstall.
+ordinary apply does not reconstruct tmux; a runtime change needing a drained
+terminal is reported as action required. see [the maintenance runbook](docs/gateway-separation-runbook.md).
 
-ordinary host AI apply starts/reuses each declared codex daemon through upstream
-commands; it never restarts/upgrades that daemon. skid does no daemon lifecycle
-work. a later upstream cli change still needs compatibility qualification.
+codex daemon maintenance uses the account wrappers and upstream native commands.
+a verified running version does not prove that cold configuration was reloaded
+or that conversations continued.
 
 jarvis's source adapter uses the matching cli and live installed computer state,
 with no launch model/effort overrides. its service uid cannot read the enrolled
@@ -390,11 +380,11 @@ work one bounded slice per pr, following the
 and activation with the subsystem that owns the state.
 
 edit declarations, then apply on the intended host. apply includes rolling
-software updates; review exact git, extension and skid pin
+software updates; review exact git, extension and skid bootstrap pin
 changes in the repository. use subsystem-native status commands to investigate
 a failure. there is no separate doctor or compatibility layer.
 
 keep changes and verification proportional to this one-user system. record
 unresolved work in [`docs/issues/`](docs/issues/), one file per issue; delete the
 record when resolved. package-manager failures are repaired by rerunning their
-native operation. only skid has repository-owned service rollback.
+native operation. skid owns its own service and release recovery.

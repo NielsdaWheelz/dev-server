@@ -13,25 +13,20 @@ acceptance and cleanup.
 ```text
 ./workstation apply
 ./devbox apply
-./workstation gateway {apply|remove} skidbladnir
-./devbox gateway {apply|remove} skidbladnir
 ./workstation {help|--help|-h}
 ./devbox {help|--help|-h}
 ```
 
-`apply` updates rolling host packages, maintains shared native codex, bootstraps
-missing claude, reconciles exact repository pins, and applies configuration.
-rolling package versions come from upstream on each run; repository pins remain
-exact desired state. working native claude is adopted without maintenance.
-there is no configuration-only or offline mode and no `upgrade` command or alias.
+`apply` updates rolling host packages, the canonical codex cli and account
+daemons, installs skid, bootstraps missing claude and applies configuration.
+working native claude is adopted without maintenance. there is no gateway-only,
+configuration-only, offline or separate upgrade command. only devbox receives
+skid's authoritative yaml; standalone skid owns uninstall. apply does not discard
+workers or install retired herdr runtime, hooks or gates.
 
-gateway commands delegate to standalone skid install/uninstall without updating
-shared provider tools. only devbox, the authoritative hub, receives desired yaml.
-ordinary host apply installs no gateway, herdr runtime, worker hook or ssh gate.
-herdr and herdr-mobile installation and removal commands are retired. ordinary
-apply never discards workers.
-[the maintenance runbook](docs/gateway-separation-runbook.md) describes skid
-maintenance and the root-owned retirement evidence.
+this implementation is not deployed. the reviewed skid bootstrap source and a
+qualifying signed release must be public before merge or deployment; remaining
+qualification is recorded [here](docs/issues/unified-apply-qualification.md).
 
 | owner | apply |
 |---|---|
@@ -40,6 +35,7 @@ maintenance and the root-owned retirement evidence.
 | ubuntu apt | refresh metadata and reconcile declared packages to repository candidates |
 | upstream tmux | latest stable release; native packages on workstations, official source build in `/usr/local` on ubuntu |
 | codex official native installer | bootstrap missing codex; maintain working native codex on every apply, then revalidate |
+| skid bootstrap | verify the reviewed bootstrap, then install the latest signed stable release |
 | claude official native installer | bootstrap missing claude; adopt working native claude; maintenance awaits the upstream activation fix |
 | repo pins | install declared exact versions |
 
@@ -54,11 +50,12 @@ are not transactional or automatically rolled back; native package managers
 own partial-install repair.
 
 an unchanged checkout can resolve newer rolling software. already-converged
-managed configuration and pinned components must be left alone, except for an
-explicitly requested codex restart. unchanged ingress must stay untouched.
+managed configuration and pinned components must be left alone. unchanged ingress
+must stay untouched. native codex daemon updates may interrupt clients.
 native package managers and installers
 own metadata and maintenance bookkeeping. exit `0` means
-installed with explicit deferrals; `2` means manual action; `1` means failure;
+all requested in-scope work completed; `2` means deferral, manual action or
+unknown completion; `1` means failure;
 `64` means invalid invocation. no operation is implied when omitted.
 
 result vocabulary is `INSTALLED`, `UPDATED`, `CHANGED`, `STARTED`, `RELOADED`,
@@ -110,14 +107,16 @@ foreign sockets, and privileged ownership conflicts require explicit action.
 a later subsystem failure can leave earlier changes applied; rerun after repair.
 there is no whole-host transaction or duplicated all-host admission gate.
 
-workstation host apply orders native packages, dotfiles, exact-host personal
-policy, ai tools, then remaining postconditions. a gateway
-operation stages only its own declaration closure, checks its owned ingress,
-and applies/removes that gateway and handler. neither gateway operation runs
-retired runtime preflight or host-tool provisioning. linux is supported
-only on the exact owned arch host. arch elevation uses `ARCH_PASS` through
-askpass, including yay; values come from the environment or literal ignored
-repo `.env`, never evaluation. validate credentials before host changes.
+host apply stages its declared inputs, then installs packages, dotfiles, personal
+policy, ai tools, memory and skid before native daemon maintenance. the final
+activation runs in a target-local one-shot so it survives the invoking daemon's
+loss. an unresolved result blocks another activation; inspect
+`~/.local/state/dev-server/apply.json` and actual owners before retrying. this is
+not a whole-host transaction; one apply per host at a time is a precondition.
+linux workstation apply supports only the owned arch host. arch elevation uses
+`ARCH_PASS` through askpass, including yay; values come from the environment or
+literal ignored repo `.env`, never evaluation. validate credentials before host
+changes.
 
 ansible owns ubuntu packages, privileged configuration, and native handlers.
 it consumes the staged controller closure and reports real changes. native
@@ -193,9 +192,8 @@ server or replacing live work. its config-only identity advances after
 successful retirement and reload; failure remains retryable. repeated apply
 leaves converged state alone.
 
-run full host apply before activating a gateway with recovery; gateway-only
-operations keep their existing narrow scope. finish or stop any legacy restore
-already executing during maintenance; apply does not hunt processes. recovery
+finish or stop any legacy restore already executing during maintenance; apply
+does not hunt processes. recovery
 reconstructs the workspace with fresh shells. agent history remains native and
 the user resumes the desired conversation.
 
@@ -315,13 +313,12 @@ personal context and cwd rather than a work/project override. official installer
 reruns use the same installation context as bootstrap.
 a canonical selection change reaches future cli invocations without a dev-server
 edit, skid reapply or gateway restart. existing processes retain their loaded code
-until upstream activation or an operator action. ordinary apply does not
-restart provider sessions, update account daemons, change release-channel or
+until upstream activation or an operator action. ordinary apply updates the
+account daemons through native commands, but does not change release-channel or
 auto-update settings, configure npm's prefix or enforce ai-specific node/npm
 minimum versions. host package declarations still own node/npm where needed.
 
-skid gateway commands have no provider installation prerequisite. ordinary host
-apply separately owns providers, account wrappers and daemon preparation. upstream
+ordinary host apply owns providers, account wrappers and daemon maintenance. upstream
 cli/protocol changes can still need integration maintenance; shared canonical
 paths are not a promise of compatibility with every future release.
 
@@ -427,9 +424,10 @@ connected profiles receive their own bearer environment variable and the native
 `jarvis-memory` streamable-http entry at the one declared `/v1/mcp` endpoint.
 native configuration owners preserve unrelated parser-backed settings. the
 shared shell environment and provider launchers load the private
-client environment for future launches. existing native sessions and account
-daemons are not restarted; connection acceptance must be verified separately
-before claiming those existing consumers loaded the change. each connected
+client environment for future launches. memory configuration itself does not
+restart native sessions or daemons; later daemon maintenance may interrupt them.
+connection acceptance must be verified separately before claiming those existing
+consumers loaded the change. each connected
 profile receives exactly the product's owner-authored memory instruction; tool
 authority notices remain server-owned.
 
@@ -444,28 +442,16 @@ production activation retain their own qualification.
 
 ## codex daemon ownership
 
-upstream codex owns account daemon startup, discovery, reuse, command support,
-and remote semantics. this repository installs no codex service, discovery
-link, custom source build or daemon package policy. dev-server does not restart
-agents during cli bootstrap, maintenance or adoption. native update activation
-belongs to upstream and the operator. preserve account homes, credentials,
-configuration and history.
-
-shared installation means one cli installation per provider per host user.
-codex's account daemons may retain separate upstream-managed packages and
-updaters under their existing homes. cli and running daemon versions need not
-agree. dev-server does not merge those package directories, repoint their
-selection links, pin them to the cli or synchronize their versions. operators
-inspect and update a selected daemon through upstream commands when needed;
-daemon updates can interrupt that account's work.
-
-ordinary provider settings own daemon auto-start. ordinary AI apply invokes
-each codex account wrapper with `app-server daemon start`, using upstream
-start/reuse semantics and never restart/upgrade. failure reports action and
-preserves existing processes. skid reads quota from already-running account
-sockets and observes terminals; no provider-native conversation read/write,
-identity detection, stop or wait path remains in skid. independent cognition,
-provider archive/memory APIs and their host-owned services are unchanged.
+upstream codex owns each account daemon, discovery, packages, selection and
+updates. apply uses each `codex`, `codex-work` and `codex-work2` wrapper in
+order: native `app-server daemon start` (start/reuse), `update --yes`, then
+`version`. a failed or uncertain operation stops dependent work and requires
+inspection before retry. no forced restart or `--from-cli` pin is added; cli and
+daemon versions may differ. upstream activation may interrupt clients; a running
+version proves neither conversation continuity nor that settings requiring a
+restart were loaded. skid only observes existing daemons and terminal evidence.
+account homes, credentials and history remain upstream-owned. native installers
+own their supported cleanup; no independent daemon-package sweep is performed.
 
 ubuntu provisions the distro's bubblewrap apparmor profile and verifies user,
 network and pid namespace creation without disabling the global restriction.
@@ -519,21 +505,17 @@ unrelated settings, ssh access, serve handlers, native accounts/history and
 permanent signing backups. dated evidence remains in
 [the validation record](docs/gateway-separation-validation.md).
 
-## independent gateway installation
+## skid installation
 
-`lib/skidbladnir.sh` is a personal consumer of ordinary standalone skid.
-`assets/skidbladnir/release-pin.json` admits one exact release version plus the
-reviewed source commit and sha256 of its public `scripts/install` bootstrap.
-bootstrap downloads that immutable script over https, checks its pinned hash,
-then invokes it with the pinned version. skid verifies signed host archives and
-owns dependency handling, installation and removal. the same reviewed bootstrap handles fresh installs and upgrades. dev-server
-does not decode product receipts,
-copy binaries, install helper environments or own runtime/service assets.
-
-the pin selects immutable `v0.23.0` from
-`677bbb24682fddc0b1fdff20409cfd593a5aba5d` and its reviewed public bootstrap.
-only the strict version/source/bootstrap schema is accepted; v0.18's old-wire
-archive cannot be used for this target.
+`lib/skidbladnir.sh` downloads the reviewed bootstrap named by
+`assets/skidbladnir/bootstrap-pin.json`, verifies its sha256, and invokes it
+without a version. the bootstrap selects the latest stable release and verifies
+its signed host archive. the pin fixes the bootstrap source and checksum, not
+an application version. skid owns installation, dependencies, runtime admission,
+readiness and eligible release cleanup. a terminal-runtime replacement requiring
+maintenance returns action required; host apply never stops tmux or rewrites its
+checkpoint. an incompatible or unauthenticated release fails rather than changing
+trust.
 
 only devbox receives `assets/skidbladnir/config.yaml` at its authoritative xdg
 configuration path, followed by `skid apply`. macbook/arch consume the ordinary
@@ -554,14 +536,11 @@ any other top-level key is refused. the retired complete override,
 `dev-server/skidbladnir.yaml`, is refused while present. service-account private
 key bytes remain in the separately configured private file.
 
-normal upgrades preserve skid/private state and provider data. `gateway remove`
-delegates to `skid uninstall`, retaining settings/private state, tmux, providers
-and shared packages according to the product contract. there is no ntfy branch,
-legacy reader, generation rollback implementation or automatic conversion here.
-the root cutover preserves observer/device continuity and updates matching phone
-and host releases only after review. installed cutover is separate from source
-checks. no live apply, service operation, tmux/phone experiment or package update
-is implied by this source implementation.
+normal upgrades preserve skid/private state and provider data. standalone
+`skid uninstall` is a separate explicit operation and retains its drain
+requirement; host apply reinstalls declared skid. there is no legacy reader,
+automatic conversion or repository-owned release rollback. the first mac
+terminal-runtime cutover remains held for separate authorization.
 
 ## devbox boundary
 

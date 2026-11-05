@@ -44,12 +44,11 @@ devbox_declared_stage=''
 usage() {
   cat <<'EOF'
 Usage: ./devbox apply
-       ./devbox gateway {apply|remove} skidbladnir
        ./devbox help
 
 Create the devbox when absent, or apply its declared state over tailnet SSH.
 apply updates rolling software and reconciles configuration and exact repository pins.
-gateway operations maintain skid and leave host tools alone.
+codex daemon updates may interrupt active work; claude is adopted without update.
 
 An existing host must already have the dev-server-deploy principal, its
 deployment key, and a verified host key. There is no privileged-user or
@@ -322,7 +321,7 @@ print("enabled" if prefs["RunSSH"] else "disabled")
   if [[ "$state" == enabled ]]; then
     render_result ACTION 'devbox SSH cutover' \
       'from the Hetzner console run: sudo tailscale set --ssh=false; verify the OpenSSH host key, then rerun ./devbox apply'
-    finish_results devbox
+    return 2
   fi
 }
 
@@ -345,11 +344,11 @@ cleanup_on_exit() {
   local rc=$?
 
   trap - EXIT HUP INT TERM
-  [[ -z "$rendered_cloud_init" ]] || rm -f -- "$rendered_cloud_init"
-  [[ -z "$ssh_include_candidate" ]] || rm -f -- "$ssh_include_candidate"
-  [[ -z "$ssh_known_hosts_candidate" ]] || rm -f -- "$ssh_known_hosts_candidate"
-  [[ -z "$ssh_known_hosts_candidate_old" ]] || rm -f -- "$ssh_known_hosts_candidate_old"
-  [[ -z "$ansible_output" ]] || rm -f -- "$ansible_output"
+  [[ -z "$rendered_cloud_init" ]] || rm -f -- "$rendered_cloud_init" || rc=1
+  [[ -z "$ssh_include_candidate" ]] || rm -f -- "$ssh_include_candidate" || rc=1
+  [[ -z "$ssh_known_hosts_candidate" ]] || rm -f -- "$ssh_known_hosts_candidate" || rc=1
+  [[ -z "$ssh_known_hosts_candidate_old" ]] || rm -f -- "$ssh_known_hosts_candidate_old" || rc=1
+  [[ -z "$ansible_output" ]] || rm -f -- "$ansible_output" || rc=1
   if [[ -n "$devbox_declared_stage" ]]; then
     case "$devbox_declared_stage" in
     "${TMPDIR:-/tmp}"/devbox-declared.??????)
@@ -358,6 +357,12 @@ cleanup_on_exit() {
     *) rc=1 ;;
     esac
   fi
+  if ((rc != 0 && rc != 2 && dev_server_result_errors == 0)); then
+    render_result ERROR devbox 'apply or cleanup failed; earlier changes may remain'
+  elif ((rc == 2 && dev_server_result_actions == 0 && dev_server_result_deferrals == 0)); then
+    render_result ACTION devbox 'completion requires attention'
+  fi
+  if finish_results devbox; then rc=0; else rc=$?; fi
   exit "$rc"
 }
 
@@ -605,74 +610,6 @@ devbox_stage_declared_inputs() {
   template="$devbox_declared_stage/cloud-init-devbox.template.yaml"
 }
 
-devbox_gateway_snapshot() {
-  dev_server_declared_snapshot "$1" ansible.cfg ansible/inventory/devbox.yml \
-    ansible/group_vars/devbox.yml ansible/playbooks/gateway.yml \
-    lib/common.sh lib/skidbladnir.sh assets/skidbladnir
-}
-
-devbox_stage_gateway_inputs() {
-  local operation="$1" desired_snapshot staged_snapshot
-  desired_snapshot="$(devbox_gateway_snapshot "$base_dir" "$operation")" || return 1
-  devbox_declared_stage="$(mktemp -d "${TMPDIR:-/tmp}/devbox-declared.XXXXXX")" || return 1
-  chmod 0700 "$devbox_declared_stage" || return 1
-  mkdir -p "$devbox_declared_stage/ansible/inventory" \
-    "$devbox_declared_stage/ansible/group_vars" \
-    "$devbox_declared_stage/ansible/playbooks" \
-    "$devbox_declared_stage/assets" "$devbox_declared_stage/lib" || return 1
-  cp -p "$base_dir/ansible.cfg" "$devbox_declared_stage/" || return 1
-  cp -p "$base_dir/ansible/inventory/devbox.yml" "$devbox_declared_stage/ansible/inventory/" || return 1
-  cp -p "$base_dir/ansible/group_vars/devbox.yml" "$devbox_declared_stage/ansible/group_vars/" || return 1
-  cp -p "$base_dir/ansible/playbooks/gateway.yml" "$devbox_declared_stage/ansible/playbooks/" || return 1
-  cp -Rp "$base_dir/assets/skidbladnir" "$devbox_declared_stage/assets/" || return 1
-  cp -p "$base_dir/lib/common.sh" "$base_dir/lib/skidbladnir.sh" "$devbox_declared_stage/lib/" || return 1
-  staged_snapshot="$(devbox_gateway_snapshot "$devbox_declared_stage" "$operation")" || return 1
-  [[ "$staged_snapshot" == "$desired_snapshot" ]] || die 'skid inputs changed while staging; rerun'
-  ansible_config="$devbox_declared_stage/ansible.cfg"
-  ansible_inventory="$devbox_declared_stage/ansible/inventory/devbox.yml"
-  ansible_apply_playbook="$devbox_declared_stage/ansible/playbooks/gateway.yml"
-}
-
-devbox_gateway() {
-  local operation="$1" rc line status subject detail
-  trap cleanup_on_exit EXIT
-  trap 'exit 129' HUP
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
-  require_cmd python3 ssh uvx
-  [[ -f "$ssh_include" && ! -L "$ssh_include" ]] ||
-    die "missing verified devbox SSH include: $ssh_include"
-  [[ -f "$deploy_identity" && ! -L "$deploy_identity" ]] ||
-    die "missing devbox deployment key: $deploy_identity"
-  private_key_public "$deploy_identity" >/dev/null ||
-    die 'devbox deployment key is invalid'
-  ssh -T -o BatchMode=yes -o ConnectTimeout=10 -F "$ssh_include" "$deploy_user" true ||
-    die 'verified devbox deployment SSH is unavailable'
-  devbox_stage_gateway_inputs "$operation"
-  ansible_output="$(mktemp "${TMPDIR:-/tmp}/devbox-ansible.XXXXXX")" ||
-    die 'could not capture gateway result'
-  if ! ANSIBLE_CONFIG="$ansible_config" ANSIBLE_NOCOLOR=1 \
-    uvx --from ansible-core==2.19.2 ansible-playbook \
-    --ssh-common-args "-F $ssh_include" \
-    --extra-vars "{\"gateway_product\":\"skidbladnir\",\"gateway_operation\":\"$operation\"}" \
-    -i "$ansible_inventory" "$ansible_apply_playbook" >"$ansible_output" 2>&1; then
-    tail -c 65536 "$ansible_output" >&2 || true
-    die "skidbladnir gateway operation failed on devbox"
-  fi
-  while IFS= read -r line; do
-    status="${line%%  *}"
-    detail="${line#*  }"
-    subject="${detail%%: *}"
-    if [[ "$subject" == "$detail" ]]; then
-      render_result "$status" "$detail"
-    else
-      render_result "$status" "$subject" "${detail#*: }"
-    fi
-  done < <(grep -Eo '"msg": "(ACTION|INSTALLED|UPDATED|CHANGED|STARTED|RELOADED|RESTARTED)  [^"]*"' "$ansible_output" |
-    sed -e 's/^"msg": "//' -e 's/"$//' || true)
-  finish_results devbox
-}
-
 devbox_validate_declared_inputs() {
   local path
 
@@ -708,14 +645,14 @@ preflight() {
   if [[ ! -e "$deploy_identity" && ! -L "$deploy_identity" ]]; then
     render_result ACTION 'deployment key' \
       "create $deploy_identity (mode 0600), then rerun ./devbox apply"
-    finish_results devbox
+    return 2
   fi
   deploy_public_key="$(private_key_public "$deploy_identity")" ||
     die "deployment identity is not a valid private key: $deploy_identity"
   if [[ ! -e "$operator_identity" && ! -L "$operator_identity" ]]; then
     render_result ACTION 'operator key' \
       "create $operator_identity (mode 0600), then rerun ./devbox apply"
-    finish_results devbox
+    return 2
   fi
   operator_public_key="$(private_key_public "$operator_identity")" ||
     die "operator identity is not a valid private key: $operator_identity"
@@ -759,7 +696,7 @@ preflight() {
   if [[ ! -e "$tailscale_auth_key_file" && ! -L "$tailscale_auth_key_file" ]]; then
     render_result ACTION 'Tailscale enrollment' \
       "save a short-lived auth key to $tailscale_auth_key_file (mode 0600)"
-    finish_results devbox
+    return 2
   fi
   [[ -f "$tailscale_auth_key_file" && ! -L "$tailscale_auth_key_file" ]] ||
     die "Tailscale auth key is not a regular file: $tailscale_auth_key_file"
@@ -807,7 +744,7 @@ apply_existing_server() {
     *'Host key verification failed'* | *'Permission denied'*)
       render_result ACTION 'devbox cutover' \
         'verify the deployment principal and /etc/ssh/ssh_host_ed25519_key.pub in the Hetzner console; enroll that key locally under dev-server, then rerun ./devbox apply'
-      finish_results devbox
+      return 2
       ;;
     *) die "tailnet deployment SSH failed: ${ssh_error:-unknown error}" ;;
     esac
@@ -816,7 +753,7 @@ apply_existing_server() {
   if ! ssh_operator_remote "$tailnet_host" yes true >/dev/null 2>&1; then
     render_result ACTION 'devbox operator SSH' \
       'install the niels operator key and verify its OpenSSH host key, then rerun ./devbox apply'
-    finish_results devbox
+    return 2
   fi
 
   install_ssh_config
@@ -860,41 +797,11 @@ apply_new_server() {
 }
 
 # AI actions cross Ansible as JSON; callback formatting is not the interface.
-devbox_render_ai_result() {
-  local rows line detail subject
-  rows="$(python3 - "$1" <<'PYTHON'
-import json
-import sys
-
-with open(sys.argv[1], encoding="utf-8") as stream:
-    result = json.load(stream)
-if (not isinstance(result, dict) or result.keys() != {"rc", "stdout"}
-        or result["rc"] not in (0, 2) or not isinstance(result["stdout"], str)):
-    raise SystemExit("invalid native AI apply result")
-actions = [line for line in result["stdout"].split("\n") if line.startswith("ACTION  ")]
-if result["rc"] == 2 and not actions:
-    raise SystemExit("native AI action result has no action")
-for line in actions:
-    print(line)
-PYTHON
-  )" || return 1
-  while IFS= read -r line; do
-    [[ -n "$line" ]] || continue
-    detail="${line#ACTION  }"
-    subject="${detail%%: *}"
-    if [[ "$subject" == "$detail" ]]; then
-      render_result ACTION "$detail"
-    else
-      render_result ACTION "$subject" "${detail#*: }"
-    fi
-  done <<<"$rows"
-}
-
 run_ansible_apply() {
-  local rc ai_result_vars
+  local rc result_vars
 
-  ai_result_vars="$(python3 -c 'import json, sys; print(json.dumps({"dev_server_ai_result_file": sys.argv[1]}))' \
-    "$devbox_declared_stage/ai-result.json")" || return 1
+  result_vars="$(python3 -c 'import json, sys; print(json.dumps({"dev_server_result_file": sys.argv[1]}))' \
+    "$devbox_declared_stage/results.jsonl")" || return 1
 
   ansible_output="$(mktemp "${TMPDIR:-/tmp}/devbox-ansible.XXXXXX")"
   set +e
@@ -902,23 +809,22 @@ run_ansible_apply() {
     ANSIBLE_NOCOLOR=1 \
     uvx --from ansible-core==2.19.2 ansible-playbook \
     --ssh-common-args "-F $ssh_include" \
-    --extra-vars "$ai_result_vars" \
+    --extra-vars "$result_vars" \
     -i "$ansible_inventory" "$ansible_apply_playbook" \
     >"$ansible_output" 2>&1
   rc=$?
   set -e
-  if ((rc != 0)); then
-    tail -c 65536 "$ansible_output" >&2 || true
-    rm -f -- "$ansible_output"
-    ansible_output=''
-    render_result ERROR 'Ubuntu state' "Ansible apply failed with exit $rc"
-    return 1
+  if [[ -f "$devbox_declared_stage/results.jsonl" ]]; then
+    if ! dev_server_replay_results "$devbox_declared_stage/results.jsonl" jsonl; then
+      render_result ERROR 'devbox results' 'could not read typed target results'
+      return 1
+    fi
+  else
+    render_result ACTION 'devbox apply' 'completion unknown; inspect the target result before retrying'
+    return 2
   fi
-
-  if ! devbox_render_ai_result "$devbox_declared_stage/ai-result.json"; then
-    rm -f -- "$ansible_output"
-    ansible_output=''
-    render_result ERROR 'AI tool result' 'could not read the native AI apply result'
+  if ((rc != 0)); then
+    render_result ERROR 'Ubuntu state' "Ansible apply failed with exit $rc"
     return 1
   fi
   if grep -Eq '^devbox[[:space:]]*:.*changed=[1-9][0-9]*' "$ansible_output"; then
@@ -928,7 +834,7 @@ run_ansible_apply() {
     render_result DEFERRED docker.config 'running containers keep current daemon inputs'
   fi
   if grep -Fq DEV_SERVER_TMUX_DEFERRED "$ansible_output"; then
-    render_result DEFERRED tmux.config 'running sessions keep the prior tmux binary'
+    render_result DEFERRED tmux 'running sessions use the prior server; finish work and pause session creation, then from outside tmux use skid update --restart-terminals if supported, or the reviewed release installer with --restart-terminals; this stops and reconstructs the workspace'
   fi
   if grep -Fq DEV_SERVER_REBOOT_DEFERRED "$ansible_output"; then
     render_result DEFERRED system.reboot 'reboot-required is present'
@@ -990,29 +896,18 @@ cmd_apply() {
   else
     apply_new_server
   fi
-  if ! run_ansible_apply; then
-    finish_results devbox
-  fi
+  if run_ansible_apply; then :; else return $?; fi
   check_github_enrollment
   firewall_rules_match "$steady_rules" ||
     die 'devbox Hetzner firewall differs from the steady private rules'
   firewall_applies_only_to "$server_id" ||
     die 'devbox firewall attachment differs after apply'
-  finish_results devbox
 }
 
 main() {
   local command="${1:-}"
 
   case "$command" in
-  gateway)
-    (($# == 3)) && [[ "$2" == apply || "$2" == remove ]] &&
-      [[ "$3" == skidbladnir ]] || {
-      usage >&2
-      return 64
-    }
-    devbox_gateway "$2"
-    ;;
   apply)
     shift
     cmd_apply "$@"

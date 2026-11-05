@@ -15,16 +15,111 @@
           - ansible_facts['hostname'] == 'dev-server'
         fail_msg: Refusing to apply outside the exact Ubuntu devbox target
 
-  roles:
-    - role: base
-    - role: jarvis_host
-    - role: workspace_assets
-    - role: security
-    - role: shell
-    - role: github
-    - role: ai_tools
-    - role: memory
-    - role: rootless_docker
+    - name: Create private result stream
+      ansible.builtin.tempfile:
+        state: file
+        prefix: dev-server-results.
+      become_user: "{{ devbox_user }}"
+      register: devbox_result_file
+
+    - name: Check for unresolved target activation
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../../lib/activation.py') }}"
+          - check
+      become_user: "{{ devbox_user }}"
+      environment:
+        HOME: "/home/{{ devbox_user }}"
+        PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+      register: devbox_activation_check
+      changed_when: false
+      failed_when: false
+
+    - name: Record activation admission refusal
+      ansible.builtin.copy:
+        content: "{{ {'status': 'ACTION' if devbox_activation_check.rc == 2 else 'ERROR', 'subject': 'activation', 'detail': 'prior activation requires inspection' if devbox_activation_check.rc == 2 else 'could not inspect prior activation'} | to_json }}\n"
+        dest: "{{ devbox_result_file.path }}"
+        mode: "0600"
+      become_user: "{{ devbox_user }}"
+      changed_when: false
+      when: devbox_activation_check.rc != 0
+
+  tasks:
+    - name: Prepare and activate the host
+      when: devbox_activation_check.rc == 0
+      block:
+        - name: Apply host roles
+          ansible.builtin.include_role:
+            name: "{{ item }}"
+          loop: [base, jarvis_host, workspace_assets, security, shell, github, ai_tools, memory, skidbladnir, rootless_docker]
+
+        - name: Activate native account daemons
+          ansible.builtin.shell: |
+            set -euo pipefail
+            dev_server_home_dir={{ ('/home/' ~ devbox_user) | quote }}
+            source "$dev_server_home_dir/.local/share/dev-server/lib/common.sh"
+            source "$dev_server_home_dir/.local/share/dev-server/lib/activation.sh"
+            dev_server_result_jsonl={{ devbox_result_file.path | quote }}
+            before_pending=$((dev_server_result_actions + dev_server_result_deferrals))
+            if activation_apply devbox devbox; then :; else
+              rc=$?
+              if ((rc == 2 && dev_server_result_actions + dev_server_result_deferrals == before_pending)); then
+                render_result ACTION activation 'completion requires attention; inspect the activation result before retrying'
+              fi
+              exit "$rc"
+            fi
+          args:
+            executable: /bin/bash
+          become_user: "{{ devbox_user }}"
+          environment:
+            HOME: "/home/{{ devbox_user }}"
+            PATH: "/home/{{ devbox_user }}/bin:/home/{{ devbox_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+            XDG_RUNTIME_DIR: "/run/user/{{ base_user_uid.stdout }}"
+            DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ base_user_uid.stdout }}/bus"
+          when: ai_tools_apply.rc == 0
+          register: devbox_activation
+          changed_when: false
+          failed_when: devbox_activation.rc not in [0, 2]
+      rescue:
+        - name: Record failed preparation
+          ansible.builtin.set_fact:
+            devbox_roles_failed: true
+
+    - name: Read typed preparation and activation results
+      ansible.builtin.slurp:
+        src: "{{ devbox_result_file.path }}"
+      become_user: "{{ devbox_user }}"
+      register: devbox_result_stream
+      no_log: true
+
+    - name: Return typed results to controller
+      ansible.builtin.copy:
+        content: "{{ devbox_result_stream.content | b64decode }}"
+        dest: "{{ dev_server_result_file }}"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      no_log: true
+
+    - name: Remove remote result stream
+      ansible.builtin.file:
+        path: "{{ devbox_result_file.path }}"
+        state: absent
+      become_user: "{{ devbox_user }}"
+      changed_when: false
+
+    - name: Stop after failed preparation or admission
+      ansible.builtin.fail:
+        msg: devbox preparation or activation failed
+      when: devbox_activation_check.rc not in [0, 2] or devbox_roles_failed | default(false)
+
+    - name: Stop after unresolved activation admission
+      ansible.builtin.meta: end_play
+      when: devbox_activation_check.rc == 2
+
   post_tasks:
     - name: Activate notified consumers before verification
       ansible.builtin.meta: flush_handlers

@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 
 # skid owns installation, services, dependencies, shell integration and removal.
-# dev-server owns one personal release pin and the desired yaml on the hub.
+# dev-server owns the reviewed bootstrap pin and desired yaml on the hub.
 skidbladnir_apply() {
-  local platform="$1" home assets pin version source_sha installer_sha config private android_push desired_config status
+  local platform="$1" home assets pin source_sha installer_sha config private android_push desired_config status
   case "$platform" in macos | arch | devbox) ;; *) return 64 ;; esac
   home="$(dev_server_home)"
   assets="$(dev_server_assets_dir)/skidbladnir"
-  pin="$assets/release-pin.json"
-  dev_server_strict_json_file "$pin" 4096 || return 1
+  pin="$assets/bootstrap-pin.json"
+  dev_server_strict_json_file "$pin" 4096 || {
+    render_result ERROR skid 'invalid bootstrap pin'
+    return 1
+  }
   pin="$(
     python3 - "$pin" <<'PY'
 import json
@@ -16,18 +19,19 @@ import re
 import sys
 value = json.load(open(sys.argv[1], encoding="utf-8"))
 if (not isinstance(value, dict) or set(value) != {
-        "schemaVersion", "version", "sourceSha", "installerSha256"} or
+        "schemaVersion", "sourceSha", "installerSha256"} or
         type(value["schemaVersion"]) is not int or value["schemaVersion"] != 1 or
-        not isinstance(value["version"], str) or
-        re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", value["version"]) is None or
         any(not isinstance(value[key], str) or re.fullmatch(pattern, value[key]) is None
             for key, pattern in (("sourceSha", r"[0-9a-f]{40}"),
                                  ("installerSha256", r"[0-9a-f]{64}")))):
-    raise SystemExit("invalid standalone skid release pin")
-print("\t".join(value[key] for key in ("version", "sourceSha", "installerSha256")))
+    raise SystemExit("invalid standalone skid bootstrap pin")
+print("\t".join(value[key] for key in ("sourceSha", "installerSha256")))
 PY
-  )" || return 1
-  IFS=$'\t' read -r version source_sha installer_sha <<<"$pin"
+  )" || {
+    render_result ERROR skid 'invalid bootstrap pin'
+    return 1
+  }
+  IFS=$'\t' read -r source_sha installer_sha <<<"$pin"
   if [[ "$platform" == devbox ]]; then
     config="${XDG_CONFIG_HOME:-$home/.config}/skidbladnir"
     private="${XDG_CONFIG_HOME:-$home/.config}/dev-server"
@@ -42,10 +46,17 @@ PY
       android_push=
     fi
   fi
-  (
+  if (
     local stage
     stage="$(mktemp -d "${TMPDIR:-/tmp}/dev-server-skid.XXXXXX")" || return 1
-    trap 'rm -R -- "$stage"' EXIT
+    # shellcheck disable=SC2329 # invoked by the exit trap.
+    cleanup_skid_stage() {
+      local rc=$?
+      trap - EXIT
+      rm -R -- "$stage" || rc=1
+      exit "$rc"
+    }
+    trap cleanup_skid_stage EXIT
     trap 'exit 129' HUP
     trap 'exit 130' INT
     trap 'exit 143' TERM
@@ -55,8 +66,18 @@ PY
       -o "$stage/install" || return 1
     [[ "$(dev_server_sha256 "$stage/install")" == "$installer_sha" ]] ||
       die 'standalone skid bootstrap checksum differs from the reviewed pin'
-    bash "$stage/install" "$version" || return $?
-  ) || return $?
+    bash "$stage/install"
+  ); then
+    render_result CHANGED skid 'signed release installed; gateway ready'
+  else
+    status=$?
+    if ((status == 2)); then
+      render_result ACTION skid 'installation requires action; see installer diagnostic above'
+      return 2
+    fi
+    render_result ERROR skid 'installation failed; see installer diagnostic above'
+    return 1
+  fi
   # Only the authoritative hub receives desired configuration: the committed yaml
   # plus the host's private android_push block. membership and generated state
   # belong to skid; enrollment is an explicit cutover operation.
@@ -69,18 +90,17 @@ PY
     else
       status=1
     fi
-    rm -f -- "$desired_config"
-    ((status == 0)) || return 1
-    "$home/.local/bin/skid" apply || return $?
-  fi
-}
-
-skidbladnir_remove() {
-  local home
-  home="$(dev_server_home)"
-  if [[ -x "$home/.local/bin/skid" ]]; then
-    "$home/.local/bin/skid" uninstall
-  else
-    render_result 'UP TO DATE' skid 'standalone skid is not installed'
+    if ! rm -f -- "$desired_config"; then
+      render_result ERROR skid.config 'temporary configuration cleanup failed'
+      return 1
+    fi
+    if ((status != 0)); then
+      render_result ERROR skid.config 'could not install desired configuration'
+      return 1
+    fi
+    if ! "$home/.local/bin/skid" apply; then
+      render_result ERROR skid.config 'could not apply desired configuration'
+      return 1
+    fi
   fi
 }

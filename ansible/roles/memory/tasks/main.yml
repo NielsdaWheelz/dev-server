@@ -11,8 +11,14 @@
     memory_release_pin: "{{ lookup('ansible.builtin.file', playbook_dir ~ '/../../assets/memory/release-pin.json') | from_json }}"
 
 - name: Report pending memory activation
-  ansible.builtin.debug:
-    msg: "ACTION  memory: supply the private bundle and qualified central source pin before activation"
+  ansible.builtin.shell: |
+    source {{ ('/home/' ~ devbox_user ~ '/.local/share/dev-server/lib/common.sh') | quote }}
+    dev_server_result_jsonl={{ devbox_result_file.path | quote }}
+    render_result ACTION memory 'supply the private bundle and qualified central source pin before activation'
+  args:
+    executable: /bin/bash
+  become_user: "{{ devbox_user }}"
+  changed_when: false
   when: not memory_bundle.stat.exists or memory_release_pin.revision is none
 
 - name: Reconcile the explicitly supplied memory configuration
@@ -39,6 +45,7 @@
       ansible.builtin.shell: |
         set -euo pipefail
         source /usr/local/libexec/dev-server-gateway/common.sh
+        dev_server_result_jsonl={{ devbox_result_file.path | quote }}
         source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
         gateway_ingress_preflight 443 8768 /v1 jarvis.memory
         declared={{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../secrets/memory/bundle/devbox/collector.json') | from_json).service_url | quote }}
@@ -58,6 +65,7 @@
       ansible.builtin.shell: |
         set -euo pipefail
         source /usr/local/libexec/dev-server-gateway/common.sh
+        dev_server_result_jsonl={{ devbox_result_file.path | quote }}
         source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
         gateway_ingress_apply 443 8768 /v1 jarvis.memory
       args:
@@ -87,8 +95,8 @@
         source "$dev_server_assets_root/../lib/common.sh"
         source "$dev_server_assets_root/../lib/ai-tools.sh"
         source "$dev_server_assets_root/../lib/memory.sh"
+        dev_server_result_jsonl={{ devbox_result_file.path | quote }}
         memory_install devbox "$dev_server_home_dir/.local/share/dev-server/memory-input"
-        finish_results devbox
       args:
         executable: /bin/bash
       become_user: "{{ devbox_user }}"
@@ -101,30 +109,3 @@
       changed_when: memory_apply.stdout is regex('(?m)^(INSTALLED|UPDATED|CHANGED)  ')
       failed_when: memory_apply.rc not in [0, 2]
       when: memory_ingress_preflight.rc == 0
-
-    - name: Report memory configuration results
-      ansible.builtin.debug:
-        msg: "{{ item }}"
-      loop: >-
-        {{ ((memory_ingress_preflight.stdout_lines | default([]))
-            + (memory_apply.stdout_lines | default([]))
-            + (memory_ingress_apply.stdout_lines | default([])))
-           | select('match', '^(ACTION|DEFERRED|INSTALLED|UPDATED|CHANGED|STARTED|RESTARTED)  ')
-           | list }}
-
-- name: Return native configuration actions to the controller
-  ansible.builtin.copy:
-    # let yaml decode newline escapes before ansible templates and serializes stdout.
-    content: "{{ {'rc': ([ai_tools_apply.rc, memory_apply.rc | default(0), memory_ingress_preflight.rc | default(0)] | max)
-                   if memory_bundle.stat.exists and memory_release_pin.revision is not none else 2,
-          'stdout': ai_tools_apply.stdout ~ '\n' ~ (memory_apply.stdout | default('')) ~ '\n'
-                    ~ (memory_ingress_preflight.stdout | default('')) ~ '\n' ~ (memory_ingress_apply.stdout | default(''))
-                    ~ ('' if memory_bundle.stat.exists and memory_release_pin.revision is not none
-                         else '\nACTION  memory: supply the private bundle and qualified central source pin before activation')}
-         | to_json }}"
-    dest: "{{ dev_server_ai_result_file }}"
-    mode: "0600"
-  delegate_to: localhost
-  become: false
-  changed_when: false
-  when: dev_server_ai_result_file is defined

@@ -319,21 +319,129 @@ ai_install_claude_settings() {
   done
 }
 
-# Upstream owns daemon discovery and implementation. Personal provisioning asks
-# each declared account to start/reuse its daemon, never to restart or upgrade it.
-ai_start_codex_daemons() {
-  local home command account
+# Project only the supported result fields; never relay native account reports.
+# Released rust-v0.166.0 app-server-daemon/src/lib.rs owns these camelCase fields.
+ai_codex_daemon_result() {
+  python3 -c '
+import json
+import re
+import sys
+
+version_pattern = r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?"
+
+def valid_version(value):
+    return isinstance(value, str) and re.fullmatch(version_pattern, value)
+
+def unique_object(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("duplicate field")
+        value[key] = item
+    return value
+
+try:
+    value = json.load(sys.stdin, object_pairs_hook=unique_object)
+    if not isinstance(value, dict):
+        raise ValueError("expected object")
+    operation = sys.argv[1]
+    status = value.get("status")
+    if operation == "start":
+        if status not in ("started", "alreadyRunning"):
+            raise ValueError("unknown start outcome")
+        print(status)
+    elif operation == "update":
+        if status not in ("updated", "noUpdate", "unsupported"):
+            raise ValueError("unknown update outcome")
+        if status == "unsupported":
+            print(status)
+            raise SystemExit(0)
+        installed = value.get("installedVersion")
+        if not valid_version(installed) or value.get("runningVersion") != installed:
+            raise ValueError("updated daemon unavailable")
+        print(status, installed)
+    elif operation == "version":
+        version = value.get("appServerVersion")
+        if status != "running" or not valid_version(version):
+            raise ValueError("running version unavailable")
+        print(version)
+    else:
+        raise ValueError("unknown operation")
+except (ValueError, TypeError):
+    raise SystemExit(2)
+' "$1"
+}
+
+# Start/reuse first also bootstraps a missing native package. The updater owns
+# activation and leaves an already-current daemon running; never force restart.
+ai_maintain_codex_daemons() {
+  (($# == 0)) || return 64
+  local home command account operation output result native_status status=0
+  local start_status update_status installed_version running_version
+  local -a arguments
+
   home="$(dev_server_home)"
   for command in codex codex-work codex-work2; do
+    if ((status != 0)); then
+      render_result ACTION "AI daemon $command" 'not attempted after an earlier account did not complete'
+      continue
+    fi
+    if [[ ! -x "$home/bin/$command" ]] || ! command -v python3 >/dev/null 2>&1; then
+      render_result ERROR "AI daemon $command" 'not attempted; install the account wrapper and python3 before maintenance'
+      status=1
+      continue
+    fi
     case "$command" in
     codex) account="$home/.codex" ;;
     *) account="$home/.$command" ;;
     esac
-    if ! CODEX_HOME="$account" "$home/bin/$command" app-server daemon start >/dev/null 2>&1; then
-      render_result ACTION "AI daemon $command" 'inspect the account daemon with upstream codex commands; provisioning does not restart existing agents'
-      return 2
+    start_status='' update_status='' installed_version='' running_version=''
+    for operation in start update version; do
+      arguments=(app-server daemon "$operation")
+      [[ "$operation" != update ]] || arguments+=(--yes)
+      if output="$(HOME="$home" CODEX_HOME="$account" "$home/bin/$command" "${arguments[@]}" </dev/null 2>/dev/null)"; then
+        :
+      else
+        native_status=$?
+        render_result ACTION "AI daemon $command" "native $operation failed (exit $native_status); changes may have applied; inspect with $command app-server daemon version before retrying"
+        status=2
+        break
+      fi
+      if ! result="$(printf '%s' "$output" | ai_codex_daemon_result "$operation")"; then
+        render_result ACTION "AI daemon $command" "native $operation outcome unavailable; changes may have applied; inspect with $command app-server daemon version before retrying"
+        status=2
+        break
+      fi
+      case "$operation" in
+      start) start_status="$result" ;;
+      update)
+        read -r update_status installed_version <<<"$result"
+        if [[ "$update_status" == unsupported ]]; then
+          render_result ACTION "AI daemon $command" 'native update unsupported; inspect the account installation with upstream codex commands before retrying'
+          status=2
+          break
+        fi
+        ;;
+      version)
+        running_version="$result"
+        if [[ "$running_version" != "$installed_version" ]]; then
+          render_result ACTION "AI daemon $command" "native package $installed_version selected but running $running_version observed; inspect the account daemon before retrying"
+          status=2
+          break
+        fi
+        ;;
+      esac
+    done
+    ((status == 0)) || continue
+    if [[ "$update_status" == updated ]]; then
+      render_result UPDATED "AI daemon $command" "native package updated; running $running_version verified"
+    elif [[ "$start_status" == started ]]; then
+      render_result STARTED "AI daemon $command" "native package current; running $running_version verified"
+    else
+      render_result 'UP TO DATE' "AI daemon $command" "native package current; running $running_version verified"
     fi
   done
+  return "$status"
 }
 
 ai_install() {
@@ -345,5 +453,4 @@ ai_install() {
   ai_install_claude || return $?
   ai_install_profiles || return 1
   ai_install_instructions || return 1
-  ai_start_codex_daemons || return $?
 }
