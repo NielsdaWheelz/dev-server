@@ -1,9 +1,9 @@
 # unified apply
 
 implementation is merged. signed skid v0.24.2 passed public release verification;
-the owner-authorized devbox cutover and ordinary apply ran, with memory and docker
-activation pending. the mac terminal-cutover hold remains and arch has not been
-deployed. [qualification](issues/unified-apply-qualification.md) records the
+the approved macbook and devbox cutovers are complete. memory activation remains
+pending on both, and busy docker activation on devbox. arch is outside this
+rollout. [qualification](issues/unified-apply-qualification.md) records the
 remaining boundaries; this document does not authorize another live operation.
 
 ## contract
@@ -54,8 +54,8 @@ reconnection rather than constructing speculative client-relaunch machinery.
 tmux/runtime activation remains separate explicit maintenance. ordinary apply
 can install a new tmux binary while its running server retains the old one;
 report that pending activation and exit 2. never pass `--restart-terminals`, kill
-tmux or rewrite its checkpoint from host apply. the mac terminal-runtime
-cutover remains held and requires separate owner approval.
+tmux or rewrite its checkpoint from host apply. runtime cutovers require separate
+owner approval.
 
 exit codes: 0 = all requested in-scope operations completed and verified;
 2 = pending activation, required action or unknown completion; 1 = definite
