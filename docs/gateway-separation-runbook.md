@@ -15,9 +15,9 @@ verifies the latest signed stable release. only devbox receives the authoritativ
 yaml and `skid apply`; membership and generated state remain skid-owned. standalone
 `skid uninstall` is the separate removal operation and retains its drain rule.
 
-signed skid v0.24.2 is public and the owner-authorized devbox terminal cutover
-is complete. ordinary devbox apply returned `2` for a missing memory bundle and
-busy docker activation. mac deployment remains held; arch has not been deployed.
+signed skid v0.24.2 is deployed on macbook and devbox; their approved terminal
+cutovers are complete. private memory inputs remain missing, and devbox also
+defers busy docker activation. arch is outside this rollout.
 for a refused runtime replacement,
 finish work and pause session creation; perform separately authorized maintenance
 from outside tmux using the reviewed release installer. it stops and reconstructs

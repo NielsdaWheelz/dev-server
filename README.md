@@ -19,10 +19,9 @@ release. only devbox receives authoritative personal yaml. full removal uses
 standalone `skid uninstall`; host apply installs skid again. herdr and
 herdr-mobile commands are retired; apply does not discard workers.
 
-signed skid v0.24.2 is public and verified. the owner-authorized devbox cutover
-and ordinary apply ran on the merged source; apply returned `2` for a missing
-memory bundle and busy docker activation. the mac cutover remains held and arch
-has not been deployed. remaining checks are in
+signed skid v0.24.2 is deployed on macbook and devbox after their approved
+terminal cutovers. private memory inputs remain missing; devbox also defers docker
+activation while containers run. arch is outside this rollout. remaining checks are in
 [qualification](docs/issues/unified-apply-qualification.md).
 there is no separate update, offline or configuration-only mode.
 
@@ -38,7 +37,7 @@ against upstream. a lagging workstation repository fails apply rather than
 silently accepting an older tmux. existing servers keep running until an explicit
 maintenance restart; installing a new binary does not upgrade a running server.
 after a version change, use separately authorized terminal maintenance to activate
-the new server; the first mac terminal cutover remains held.
+the new server.
 when starting an interactive tmux server from automation, clear inherited
 `NO_COLOR` first (`env -u NO_COLOR tmux ...`); the server otherwise passes that
 automation setting to new panes and their applications.

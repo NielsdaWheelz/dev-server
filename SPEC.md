@@ -24,10 +24,10 @@ configuration-only, offline or separate upgrade command. only devbox receives
 skid's authoritative yaml; standalone skid owns uninstall. apply does not discard
 workers or install retired herdr runtime, hooks or gates.
 
-signed skid v0.24.2 and this implementation are public. the owner-authorized
-devbox cutover and ordinary apply ran; apply returned `2` for a missing memory
-bundle and busy docker activation. mac deployment remains held and arch has not
-been deployed. remaining qualification is recorded
+signed skid v0.24.2 and unified apply are deployed on macbook and devbox. their
+approved terminal cutovers are complete. private memory inputs remain missing;
+devbox also defers busy docker activation. arch is outside this rollout.
+remaining qualification is recorded
 [here](docs/issues/unified-apply-qualification.md).
 
 | owner | apply |
@@ -541,8 +541,7 @@ key bytes remain in the separately configured private file.
 normal upgrades preserve skid/private state and provider data. standalone
 `skid uninstall` is a separate explicit operation and retains its drain
 requirement; host apply reinstalls declared skid. there is no legacy reader,
-automatic conversion or repository-owned release rollback. the first mac
-terminal-runtime cutover remains held for separate authorization.
+automatic conversion or repository-owned release rollback.
 
 ## devbox boundary
 
