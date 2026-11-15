@@ -18,7 +18,8 @@ universal-memory `93e02af`, provider-runtime `70178ec` and llm-agent-kernel
 `native-archive.v3` preserves complete identity inventory while recording
 unreadable conversations as pending. healthy/new conversations can capture;
 recovery establishes a fresh future-only cut and never imports the gap. all
-established cuts, originals and checkpoint identities remain unchanged.
+established cuts and originals are preserved; normal capture can advance
+checkpoints.
 
 the matching central v3 endpoint and schema `0008a` are active. supported
 `memory_install` selected this release on macbook and devbox; authenticated v3
@@ -38,7 +39,7 @@ owner-authorized daemon refresh had already loaded all six tools.
 devbox's first codex-work2 head inventory began at `18:18Z` and is still running;
 its lane has no activation receipt yet. the collector and native endpoint remain
 responsive, with no reported inventory failure or retry. an independent source
-audit found no new paging loop: the inherited reader serially reads each full
+audit found no new paging loop: the inherited reader serially reads each readable
 history twice, using bounded turn/item pages, with per-rpc timeouts but no whole
 inventory deadline. performance work is deferred; current activation/capture
 proof remains open. no timeout, skipped identity or invented cut completes it.
