@@ -4,7 +4,8 @@
 gateway_ingress_observe() {
   local port="$1" backend="$2" path="$3" status serve
   [[ "$port" =~ ^[1-9][0-9]{0,4}$ && "$backend" =~ ^[1-9][0-9]{0,4}$ &&
-    ( "$path" == /v1 || "$path" == /v1/notifications || "$path" == / ) ]] || return 1
+    ( "$path" == /v1 || "$path" == /v1/notifications || "$path" == /v1/memory ||
+      "$path" == /v1/mcp || "$path" == / ) ]] || return 1
 
   if declare -F packages_macos_tailscale_cli >/dev/null; then
     gateway_ingress_cli="$(packages_macos_tailscale_cli 2>/dev/null || true)"

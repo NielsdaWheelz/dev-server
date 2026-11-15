@@ -211,7 +211,7 @@ optional 5-hour/weekly used quota from claude's structured statusline input.
 skid observes these displayed figures in tmux; absent or unrecognized usage stays
 unknown. the formatter stores no quota report.
 account update settings, project instructions, skills, other settings keys,
-history and authentication remain separately owned. both claude homes set
+history and authentication remain separately owned. all three claude homes set
 `cleanupPeriodDays` to 36,500; this retains other application data as well as
 conversation history and increases disk use. claude documents no supported
 disable sentinel. [claude directory reference](https://code.claude.com/docs/en/claude-directory).
@@ -220,7 +220,7 @@ disable sentinel. [claude directory reference](https://code.claude.com/docs/en/c
 
 jarvis owns the shared corpus, private server, admission and stopped cutover.
 this repository owns host collectors and native client configuration. the
-[default declaration](assets/memory/declaration.example.json) lists all sixteen
+[default declaration](assets/memory/declaration.example.json) lists all nineteen
 lanes with admission and connection disabled. record actual controllers,
 sharing authorization, recipients and processors before enabling a lane.
 native developer profiles do not grant nexus application chats access.
@@ -239,7 +239,8 @@ render the private bundle with the qualified central jarvis release's python:
 ```
 
 declare the same origin in the input; devbox requires its private tailscale
-HTTPS origin. rendering creates missing scoped bearers once and preserves
+HTTPS origin on port 8443. memory owns only `/v1/memory` and `/v1/mcp`, preserving
+skid's root handler. rendering creates missing scoped bearers once and preserves
 existing credentials. `--rotate capture:macbook` or
 `--rotate client:macbook:codex-personal` rotates only the named current identity.
 the entire generated bundle is private; only `server.json` contains hashes.

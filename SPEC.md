@@ -458,14 +458,22 @@ consumers loaded the change. each connected
 profile receives exactly the product's owner-authored memory instruction; tool
 authority notices remain server-owned.
 
-on devbox, memory owns only HTTPS 443 `/v1` in tailscale serve, forwarding to
-`http://127.0.0.1:8768/v1`. reuse the existing serve inspector/mutator, reject
-funnel or a foreign handler, and preserve every other port/path. the privileged
+on devbox, memory shares private HTTPS 8443 with skid and owns only
+`/v1/memory` and `/v1/mcp` in tailscale serve. each forwards to its identical
+path on `http://127.0.0.1:8768`; both `/v1/mcp` and `/v1/mcp/` must reach jarvis.
+reuse the existing serve inspector/mutator, reject funnel or a foreign handler,
+and preserve skid's root handler and every other port/path. the private bundle
+uses `https://<devbox-tailnet-host>:8443` as its origin. the privileged
 deployment principal owns that mutation. jarvis's listener and postgres remain
 loopback-only. jarvis deployment owns the server declaration at
 `/etc/jarvis/memory.json`, service maintenance and source cutover. configuring
 these files is source delivery; fleet installation, actual authorization and
 production activation retain their own qualification.
+
+publish native account configuration and instructions only while jarvis and its
+contained host are stopped. atomic instruction-file replacement invalidates the
+contained host's existing file masks. restart that same-release host after
+publication and qualify the effective thread before cognition resumes.
 
 ## codex daemon ownership
 

@@ -1,7 +1,7 @@
 # universal memory host activation
 
-status: current source and private declaration prepared; installed activation and
-native-client acceptance pending.
+status: macbook/devbox profile helpers and collectors installed; private endpoint
+repair, capture activation and native-client acceptance pending.
 
 the rollout declares eighteen native lanes plus `(devbox, jarvis)`, including the
 real `claude-work2` home on each host. the owner controls their content and has
@@ -25,9 +25,17 @@ for this narrow rollout. full apply also updates packages and native daemons;
 it is not a configuration-only installation path. preserve the owner's existing
 interactive permission aliases, including `claude-work2`; add no probe-only tool
 grants or new native permission policy. fresh cli processes, daemon-global tool
-discovery and already-running thread connections are distinct evidence. native
-configuration publication is held until the contained jarvis runtime is proved
-not to inherit these newly configured http mcp servers.
+discovery and already-running thread connections are distinct evidence.
+
+each host now has six configured profiles, their memory instructions and the
+selected immutable collector. repeat installation preserves profile/instruction
+bytes and inodes. endpoint verification remains pending: port 443 conflicts with
+caddy and is denied by the tailnet policy. the accepted repair reuses private
+8443 with only `/v1/memory` and `/v1/mcp`, preserving skid's root handler. changing
+that origin preserves credentials and all sharing declarations. publication
+requires stopped jarvis/contained services, followed by a fresh contained host
+and effective-thread proof; its file masks do not survive atomic account-file
+replacement. no native daemon has been restarted for memory adoption.
 
 owner-approved deferrals:
 

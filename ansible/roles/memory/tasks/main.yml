@@ -47,9 +47,10 @@
         source /usr/local/libexec/dev-server-gateway/common.sh
         dev_server_result_jsonl={{ devbox_result_file.path | quote }}
         source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
-        gateway_ingress_preflight 443 8768 /v1 jarvis.memory
+        gateway_ingress_preflight 8443 8768 /v1/memory jarvis.memory
+        gateway_ingress_preflight 8443 8768 /v1/mcp jarvis.memory
         declared={{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../secrets/memory/bundle/devbox/collector.json') | from_json).service_url | quote }}
-        [[ "$declared" == "https://$gateway_ingress_hostname" ]] || {
+        [[ "$declared" == "https://$gateway_ingress_hostname:8443" ]] || {
           render_result ERROR memory 'declared endpoint differs from this private Tailscale host'
           exit 1
         }
@@ -61,13 +62,14 @@
       changed_when: false
       failed_when: memory_ingress_preflight.rc not in [0, 2]
 
-    - name: Install only memory's private Serve handler
+    - name: Install only memory's private Serve handlers
       ansible.builtin.shell: |
         set -euo pipefail
         source /usr/local/libexec/dev-server-gateway/common.sh
         dev_server_result_jsonl={{ devbox_result_file.path | quote }}
         source /usr/local/libexec/dev-server-gateway/gateway-ingress.sh
-        gateway_ingress_apply 443 8768 /v1 jarvis.memory
+        gateway_ingress_apply 8443 8768 /v1/memory jarvis.memory
+        gateway_ingress_apply 8443 8768 /v1/mcp jarvis.memory
       args:
         executable: /bin/bash
       environment:
