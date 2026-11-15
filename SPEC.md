@@ -387,16 +387,37 @@ separate consumer handoff: native developer profiles do not grant nexus chats
 access or capture nexus conversations.
 
 the optional `nexus-owner` backend client is separate from those sixteen lanes.
-the same declaration names its configured viewer UUID, controller/authorization,
-independent connection and note admission, and complete Nexus model processor
-labels. rendering writes `nexus/client.json` with Nexus's closed owned-absence
-encoding: `{kind:"Absent"}` when disconnected/undeclared, otherwise
-`{kind:"Present",value:{client,owner_user_id,mcp_url,bearer,connect,admit,processors}}`.
-its credential belongs only to the Nexus backend; no native host receives it.
-Nexus owns installing that private file and selecting owner-chat grants. no
-automatic application conversation capture or automated-helper permission is
-implied. stopped sharing changes and explicit `client:nexus-owner` rotation use
-the existing declaration and one credential source.
+the same declaration names its configured viewer uuid, controller/authorization,
+independent connection, note admission and capture, and complete nexus model
+processor labels. required `capture` and nullable `capture_bearer_sha256` extend
+that declaration; jarvis validates the shared authority and distinct hashes.
+render two private files from it:
+
+- `nexus/client.json`: `{client,owner_user_id,mcp_url,bearer,connect,admit,capture,processors}`
+  for every configured owner, even when disconnected; `bearer` is null exactly
+  when `connect=false`. api and interactive workers use this file for admission
+  and optional memory tools. it contains no upload credential.
+- `nexus/capture.json`: `{owner_user_id,capture,admit,base_url,bearer}` only when
+  `capture && admit`; otherwise null. its upload-only bearer belongs to the
+  existing nexus background worker, which receives no memory read/save bearer.
+
+both files are literal null when the client is undeclared. no retired
+`Present`/`Absent` wrapper is accepted. `base_url` is the same private origin as
+the mcp endpoint, with no path, query or userinfo. `capture:nexus-owner` and
+`client:nexus-owner` are separate identities in the existing credential source;
+explicit rotation changes only the named active identity. disabling a scope
+removes its hash and published secret while retaining its private credential
+for later authorized re-enablement. no native host receives either nexus token.
+
+nexus owns private publication, validates matching owner/admit/capture fields,
+and mounts `MEMORY_CLIENT_CONFIG_PATH` only for api/interactive workers and
+`MEMORY_CAPTURE_CONFIG_PATH` only for the background publisher. release inputs
+are `NEXUS_MEMORY_CLIENT_CONFIG` and `NEXUS_MEMORY_CAPTURE_CONFIG`; compose uses
+`NEXUS_MEMORY_CAPTURE_CONFIG_FILE` at `/run/secrets/nexus-memory-capture.json`.
+capture is future-only and independent of `connect`; it grants no model tools.
+sharing changes remain stopped maintenance: drain admitted runs before changing
+owner/capture settings, retain pending exports on disable, and re-enable only
+the same source. historical import and owner migration remain out of scope.
 
 `scripts/memory-config.py` renders one private deployment bundle from the
 operator's declaration and existing credentials, using the pinned jarvis

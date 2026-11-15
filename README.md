@@ -246,13 +246,30 @@ the entire generated bundle is private; only `server.json` contains hashes.
 jarvis's installer consumes that file separately. distribute only each host's
 own directory under ignored `secrets/memory/bundle/<host>`.
 
-the optional `nexus_client` declaration names one configured viewer and the
-complete selected model processor labels. its separately scoped backend bearer
-is rendered only in `bundle/nexus/client.json`, consumed through Nexus's
-`MEMORY_CLIENT_CONFIG_PATH`. undeclared/disconnected clients receive the explicit
-`Absent` shape. `--rotate client:nexus-owner` rotates that credential only.
-owner send/rerun/regenerate may read shared memory and append admitted notes;
-other viewers, automated helpers and Nexus conversations gain no capture.
+the optional `nexus_client` declaration names one configured viewer, complete
+selected processor labels, and independent `connect`, `admit` and required
+`capture` flags. provide nullable `capture_bearer_sha256`; rendering fills hashes
+from the one private credential source. the two nexus files are separate:
+
+- `bundle/nexus/client.json` goes to api/interactive workers through
+  `MEMORY_CLIENT_CONFIG_PATH`. it remains present for a configured owner when
+  `connect=false`, with `bearer:null`, so capture admission stays independent of
+  memory tool access. `--rotate client:nexus-owner` rotates only its mcp token.
+- `bundle/nexus/capture.json` goes only to the existing background worker through
+  `MEMORY_CAPTURE_CONFIG_PATH`. it contains an upload-only token when
+  `capture && admit`, otherwise literal null. `--rotate capture:nexus-owner`
+  rotates only that token. it grants no memory reads, notes or model tools.
+
+both files are literal null when nexus is undeclared. nexus's stopped release
+publication accepts `NEXUS_MEMORY_CLIENT_CONFIG` and `NEXUS_MEMORY_CAPTURE_CONFIG`,
+validates their matching owner/admit/capture fields, and mounts the publisher at
+`/run/secrets/nexus-memory-capture.json` using `NEXUS_MEMORY_CAPTURE_CONFIG_FILE`.
+neither nexus token enters native host bundles. owner librarian send and
+failed/cancelled retry may read memory and append admitted notes; future terminal
+turns enter capture independently. other viewers and automated helpers receive
+no memory grant. drain admitted runs before changing capture settings; disabling
+capture preserves pending exports and captured history. historical import and
+owner migration are deferred.
 
 ordinary `apply` installs a collector from
 [`release-pin.json`](assets/memory/release-pin.json) and reconciles connected

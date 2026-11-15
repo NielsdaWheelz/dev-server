@@ -1,56 +1,43 @@
 # universal memory host activation
 
-status: source implemented and pinned; fleet activation pending.
+status: configuration source qualified; installed fleet activation pending.
 
-2026-10-13 repair handoff: `codex/memory-repairs` prepares corrected presentation,
-the single `native-archive.v2` codec and nexus client/build source. the network
-audit, source checks and real-postgres capture/retrieval/repair/save checks pass.
-remaining [native/inference](https://github.com/NielsdaWheelz/jarvis/issues/51),
-[nexus rows/routes](https://github.com/NielsdaWheelz/nexus-web/issues/570) and
-[image/secret](https://github.com/NielsdaWheelz/nexus-web/issues/571) qualification
-remain open. jarvis's [hosted verification](https://github.com/NielsdaWheelz/jarvis/issues/53)
-also needs its existing private-dependency actions secret. `assets/memory/release-pin.json` therefore retains
-the prior qualified source below. after the candidate passes the jarvis repair
-contract, advance this pin to its exact qualified commit and repeat source
-preparation; do not install or activate as part of that repair. original v1
-qualification does not qualify the changed codec. no real history was admitted.
+the completion handoff adds nexus future-only capture from the same central
+declaration as its owner-chat client. separate generated client/publisher files
+keep upload credentials out of native homes and api/interactive workers. a
+configured disconnected client retains owner admission with a null mcp bearer.
+the existing native lanes, collector installer and private routing are unchanged.
+
+temporary source proof passes against the actual jarvis and nexus validators,
+using pinned universal-memory `27d6f1b4e2ddcbc2aa831eb6066f384fccb552ad` without
+source overlays: capture-only and combined access, null absence, scoped rotation,
+disable/re-enable, credential separation, private modes, idempotent rendering and
+invalid-input preservation. nexus's actual publication validation rejects changed
+owner/admit/capture pairs and a missing required publisher before staging files.
+
+all fifteen native profile configurations reconcile in disposable host homes.
+the actual codex cli writes and reads its nine configurations; the existing
+claude json writer handles its six configurations. add, converge and removal
+preserve unrelated settings. this proves neither claude runtime loading nor
+installed daemon configuration. focused python/shell static checks pass.
 
 the collector must use the final qualified central jarvis commit and locked
-dependencies. `assets/memory/release-pin.json` declares qualified source
-`c62647a285457e0f61668947f50ab9274aa9bdaf`. controller/sharing declarations are default
-deny. configuration cannot substitute for permission or native reader qualification.
+dependencies selected in [`release-pin.json`](../../assets/memory/release-pin.json).
+advancing that pin requires current central qualification. earlier acceptance
+does not qualify changed native codecs or the current application composition.
+controller/sharing declarations remain default deny; no real history was admitted.
 
-temporary source proof passed: validated sixteen-lane bundle rendering and
-credential preservation/explicit rotation; actual stock codex MCP configuration
-writer/get and native profile convergence; private atomic collector installation
-and launchd/systemd unit rendering against the real authenticated jarvis metadata
-endpoint, with synthetic service supervisors; scoped serve mutation preserving
-unrelated paths/ports and rejecting the owned public or foreign boundary.
-final collector preparation used actual git fetch and frozen uv installation in
-disposable arch/macbook directory layouts on the local macos host, with the exact
-central source and all four dependency commits verified. supervision stayed
-synthetic; no fleet was activated.
-account-specific wrapper and fresh skid daemon launch environment proof passed;
-existing daemons were not restarted. the distinct owner-chat nexus bundle is
-validated through its actual backend contract and never enters a native host's
-credentials. its immutable private file publication and api/interactive-only
-mounts are source implemented in the separate nexus handoff.
-ansible syntax and focused shell/python static checks passed. temporary checks
-are removed after review.
-
-actual fleet package installation, service activation, tailscale serve mutation
-and loaded native MCP connections were not run. successful live claude work
-inference was waived by the owner after expired OAuth; this does not qualify
-installed fleet archive readers. unified apply now owns codex daemon maintenance;
-its native updater may interrupt existing agents. macbook and devbox apply reported
+actual fleet package installation, service activation, private endpoint routing,
+loaded native mcp connections and private nexus publication were not run. unified
+apply owns rolling codex daemon maintenance and can interrupt existing clients;
+do not use it as a configuration-only test. macbook and devbox previously reported
 action required because their private memory bundles were not supplied.
 
 resolved when: actual lane controllers/sharing and private credentials are
-supplied, each admitted native
-home meets jarvis's reader qualification, and the installed host collector,
-private endpoint and connected consumers pass the owning deployment acceptance.
-new collector preparation also requires owner-account git read authorization to
-the private memory dependency; deployment bundles do not supply that build credential.
-the nexus handoff also needs its configured viewer, complete processor grants
-and private backend publication at deployment; no nexus conversation capture
-is enabled.
+supplied, every admitted home meets jarvis's native reader qualification, and the
+installed collector, private endpoint and connected clients pass the owning
+deployment acceptance. source preparation needs ordinary read access to its exact
+dependency repositories under the owner account; bundles supply no build token.
+nexus additionally needs the configured owner, complete processor grants and both
+private files published under stopped maintenance. no fleet or nexus activation
+is implied by the source checks.

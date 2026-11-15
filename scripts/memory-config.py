@@ -54,7 +54,7 @@ def main() -> None:
         credential_keys = (
             {f"capture:{machine}" for machine in homes}
             | {f"client:{machine}:{account}" for machine, account in MEMORY_IDENTITIES}
-            | {"client:nexus-owner"}
+            | {"client:nexus-owner", "capture:nexus-owner"}
         )
         credentials = (
             json.loads(args.credentials.read_bytes())
@@ -78,6 +78,12 @@ def main() -> None:
             raise ValueError("invalid nexus client declaration")
         if nexus is not None and nexus.get("connect") is True:
             needed.add("client:nexus-owner")
+        if (
+            nexus is not None
+            and nexus.get("capture") is True
+            and nexus.get("admit") is True
+        ):
+            needed.add("capture:nexus-owner")
         if not set(args.rotate).issubset(needed):
             raise ValueError("rotation must name a current capture/connected client")
         for key in needed:
@@ -103,6 +109,11 @@ def main() -> None:
                 if nexus.get("connect") is True
                 else None
             )
+            nexus["capture_bearer_sha256"] = (
+                hashlib.sha256(credentials["capture:nexus-owner"].encode()).hexdigest()
+                if nexus.get("capture") is True and nexus.get("admit") is True
+                else None
+            )
         config = MemoryConfig.model_validate_json(json.dumps(declaration))
         if origin not in config.origins:
             raise ValueError("service URL must appear in declared origins")
@@ -112,22 +123,34 @@ def main() -> None:
         nexus = config.nexus_client
         nexus_config = (
             {
-                "kind": "Present",
-                "value": {
-                    "client": nexus.client,
-                    "owner_user_id": str(nexus.owner_user_id),
-                    "mcp_url": origin + "/v1/mcp",
-                    "bearer": credentials["client:nexus-owner"],
-                    "connect": nexus.connect,
-                    "admit": nexus.admit,
-                    "processors": list(config.processors.nexus_model_processors),
-                },
+                "client": nexus.client,
+                "owner_user_id": str(nexus.owner_user_id),
+                "mcp_url": origin + "/v1/mcp",
+                "bearer": credentials["client:nexus-owner"] if nexus.connect else None,
+                "connect": nexus.connect,
+                "admit": nexus.admit,
+                "capture": nexus.capture,
+                "processors": list(config.processors.nexus_model_processors),
             }
-            if nexus is not None and nexus.connect
-            else {"kind": "Absent"}
+            if nexus is not None
+            else None
+        )
+        capture_config = (
+            {
+                "owner_user_id": str(nexus.owner_user_id),
+                "capture": nexus.capture,
+                "admit": nexus.admit,
+                "base_url": origin,
+                "bearer": credentials["capture:nexus-owner"],
+            }
+            if nexus is not None and nexus.capture and nexus.admit
+            else None
         )
         rendered[args.output / "nexus/client.json"] = (
             json.dumps(nexus_config, indent=2) + "\n"
+        )
+        rendered[args.output / "nexus/capture.json"] = (
+            json.dumps(capture_config, indent=2) + "\n"
         )
         for machine, owner_home in homes.items():
             collector_homes = {}
