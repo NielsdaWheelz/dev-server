@@ -20,8 +20,10 @@ standalone `skid uninstall`; host apply installs skid again. herdr and
 herdr-mobile commands are retired; apply does not discard workers.
 
 signed skid v0.24.2 is deployed on macbook and devbox after their approved
-terminal cutovers. private memory inputs remain missing; devbox also defers docker
-activation while containers run. arch is outside this rollout. remaining checks are in
+terminal cutovers. memory profiles and collectors pass installed functional
+qualification; the owner-approved profile and host deferrals are tracked in the
+[activation issue](docs/issues/universal-memory-activation.md). devbox also defers
+docker activation while containers run. arch is outside this rollout. remaining checks are in
 [qualification](docs/issues/unified-apply-qualification.md).
 there is no separate update, offline or configuration-only mode.
 
@@ -276,9 +278,9 @@ ordinary `apply` installs a collector from
 [`release-pin.json`](assets/memory/release-pin.json) and reconciles connected
 profiles. it neither changes sharing authority nor rotates credentials. the
 collector is a launchd owner job on macbook or a systemd user unit on linux.
-before preparing a new release, supply ordinary authenticated git read access to
-the private universal-memory dependency under that owner account. this build
-authorization stays outside the bundle and collector/native runtime environment.
+before preparing a new release, ensure ordinary git read access to the pinned
+public universal-memory source under that owner account. build credentials stay
+outside the bundle and collector/native runtime environment.
 an absent bundle or pending source pin reports an action. verification failure
 reports deferred activation without advancing the active digest.
 
@@ -288,9 +290,10 @@ memory instruction. memory configuration itself does not restart agents; later
 daemon maintenance may interrupt them. the native configuration contracts are
 [codex MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli) and
 [claude MCP](https://code.claude.com/docs/en/mcp). actual loaded connections need
-their own acceptance. devbox owns only private HTTPS 443 `/v1`, preserving skid's
-8443 endpoint and unrelated handlers; funnel and foreign owned handlers refuse
-activation. [remaining host qualification](docs/issues/universal-memory-activation.md).
+their own acceptance. memory shares private HTTPS 8443 with skid and owns only
+`/v1/memory` and `/v1/mcp`; skid's root handler and unrelated handlers remain
+intact. funnel and foreign owned handlers refuse activation.
+[remaining host qualification](docs/issues/universal-memory-activation.md).
 
 ## agent fleet
 

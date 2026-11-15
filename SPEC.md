@@ -25,9 +25,10 @@ skid's authoritative yaml; standalone skid owns uninstall. apply does not discar
 workers or install retired herdr runtime, hooks or gates.
 
 signed skid v0.24.2 and unified apply are deployed on macbook and devbox. their
-approved terminal cutovers are complete. private memory inputs are prepared;
-installed memory activation remains pending. devbox also defers busy docker
-activation. arch is outside this rollout.
+approved terminal cutovers are complete. memory profiles and collectors pass
+installed functional qualification; owner-approved profile and host deferrals
+remain in the [activation issue](docs/issues/universal-memory-activation.md).
+devbox also defers busy docker activation. arch is outside this rollout.
 remaining qualification is recorded
 [here](docs/issues/unified-apply-qualification.md).
 
@@ -434,10 +435,12 @@ host apply cannot establish controller permission or rotate credentials.
 
 ordinary apply consumes the rendered host bundle when supplied, installing one
 collector as the owner: launchd on macbook, systemd user units on arch/devbox.
-the collector uses the exact central jarvis source revision and locked
-dependencies. preparing a new collector release requires ordinary contents-read
-git authorization to the private universal-memory repository under the owner
-account. that build credential is never copied into the deployment bundle,
+the collector uses an exact qualified jarvis source revision and locked
+dependencies. central and collector releases are independently qualified against
+their shared capture, configuration and api contracts; their application
+revisions need not match. preparing a new collector release requires ordinary
+git read access to the pinned public universal-memory source under the owner
+account. build credentials are never copied into the deployment bundle,
 collector environment or native profiles. dependency preparation fails before
 profile/service changes and removes its newly owned incomplete candidate.
 it sweeps every thirty seconds without overlap, has no inference
