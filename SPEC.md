@@ -25,7 +25,9 @@ skid's authoritative yaml; standalone skid owns uninstall. apply does not discar
 workers or install retired herdr runtime, hooks or gates.
 
 signed skid v0.24.2 and unified apply are deployed on macbook and devbox. their
-approved terminal cutovers are complete. private memory inputs remain missing;
+approved terminal cutovers are complete. memory profiles and collectors pass
+installed functional qualification; owner-approved profile and host deferrals
+remain in the [activation issue](docs/issues/universal-memory-activation.md).
 devbox also defers busy docker activation. arch is outside this rollout.
 remaining qualification is recorded
 [here](docs/issues/unified-apply-qualification.md).
@@ -327,19 +329,22 @@ paths are not a promise of compatibility with every future release.
 `ai_install_codex_profiles` owns codex wrapper rendering/publication and the shared
 memory credential helper. callers provide the existing owner home/assets context,
 prepare directories and admit native codex. `ai_install_profiles` validates the
-declared claude wrapper first, calls the codex owner, then publishes `claude-work`. no skid identity plugin is staged or published.
+declared claude wrapper first, calls the codex owner, then publishes `claude-work`
+and `claude-work2`. no skid identity plugin is staged or published.
 full host apply retains that composition; provider-specific publication adds no
 public command or selector.
 
 `codex` preserves a nonempty `CODEX_HOME`, defaulting to `owner_home/.codex`;
 the named work commands force `owner_home/.codex-work` or
 `owner_home/.codex-work2`. each executes the canonical cli with unchanged
-arguments. `ai-profile` supplies only `claude-work`; bare
+arguments. `ai-profile` supplies `claude-work` and `claude-work2`; bare
 claude resolves to its existing native executable. normal homes remain
 `.codex`, `.codex-work`, `.codex-work2`,
-`.claude` and `.claude-work`, with existing override and account-selection
+`.claude`, `.claude-work` and `.claude-work2`, with existing override and account-selection
 semantics. they are shared user state.
 preserve authentication, configuration, history, memories, plugins and trust.
+named claude wrappers select their matching `CLAUDE_CONFIG_DIR` and own bearer.
+new homes require their own login.
 
 `assets/skidbladnir/config.yaml` preserves the four profile keys, labels and
 order as personal desired state. command values are exactly `codex`, `codex-work`,
@@ -355,11 +360,11 @@ skid owns generic shell startup integration. dev-server no longer ships copied
 shell-init/terminal-context code or injects provider aliases into skid shells.
 provider settings and hooks remain personal configuration, not skid prerequisites.
 
-`assets/agent-instructions.md` supplies the five account instruction files,
+`assets/agent-instructions.md` supplies the six account instruction files,
 installed as mode `0600`. `assets/claude/statusline.sh` is installed as
-`~/bin/claude-statusline`, and both claude account `settings.json` files carry a
+`~/bin/claude-statusline`, and all three claude account `settings.json` files carry a
 repo-owned `statusLine` key pointing at it. `cleanupPeriodDays` is globally
-36,500 days on both claude homes, before any memory activation. this retains
+36,500 days on all three claude homes, before any memory activation. this retains
 other claude application data too; disk consumption is the deliberate cost.
 every other settings
 key, authentication, history, project instructions, and skills remain user-owned.
@@ -378,7 +383,7 @@ database, collector state store or inference service. the accepted product
 contract is jarvis's `docs/universal-memory.md`; jarvis's public `MemoryConfig`
 validator owns admission and sharing semantics.
 
-the declaration contains the fifteen native `(machine, account)` lanes and
+the declaration contains the eighteen native `(machine, account)` lanes and
 `(devbox, jarvis)`. one common recipient/processor declaration governs recorded
 controller sharing authorizations. admission and connection are independent;
 unresolved controllers, authorizations and client identities remain disabled.
@@ -386,17 +391,38 @@ the checked-in declaration denies every lane. nexus application access is a
 separate consumer handoff: native developer profiles do not grant nexus chats
 access or capture nexus conversations.
 
-the optional `nexus-owner` backend client is separate from those sixteen lanes.
-the same declaration names its configured viewer UUID, controller/authorization,
-independent connection and note admission, and complete Nexus model processor
-labels. rendering writes `nexus/client.json` with Nexus's closed owned-absence
-encoding: `{kind:"Absent"}` when disconnected/undeclared, otherwise
-`{kind:"Present",value:{client,owner_user_id,mcp_url,bearer,connect,admit,processors}}`.
-its credential belongs only to the Nexus backend; no native host receives it.
-Nexus owns installing that private file and selecting owner-chat grants. no
-automatic application conversation capture or automated-helper permission is
-implied. stopped sharing changes and explicit `client:nexus-owner` rotation use
-the existing declaration and one credential source.
+the optional `nexus-owner` backend client is separate from those nineteen lanes.
+the same declaration names its configured viewer uuid, controller/authorization,
+independent connection, note admission and capture, and complete nexus model
+processor labels. required `capture` and nullable `capture_bearer_sha256` extend
+that declaration; jarvis validates the shared authority and distinct hashes.
+render two private files from it:
+
+- `nexus/client.json`: `{client,owner_user_id,mcp_url,bearer,connect,admit,capture,processors}`
+  for every configured owner, even when disconnected; `bearer` is null exactly
+  when `connect=false`. api and interactive workers use this file for admission
+  and optional memory tools. it contains no upload credential.
+- `nexus/capture.json`: `{owner_user_id,capture,admit,base_url,bearer}` only when
+  `capture && admit`; otherwise null. its upload-only bearer belongs to the
+  existing nexus background worker, which receives no memory read/save bearer.
+
+both files are literal null when the client is undeclared. no retired
+`Present`/`Absent` wrapper is accepted. `base_url` is the same private origin as
+the mcp endpoint, with no path, query or userinfo. `capture:nexus-owner` and
+`client:nexus-owner` are separate identities in the existing credential source;
+explicit rotation changes only the named active identity. disabling a scope
+removes its hash and published secret while retaining its private credential
+for later authorized re-enablement. no native host receives either nexus token.
+
+nexus owns private publication, validates matching owner/admit/capture fields,
+and mounts `MEMORY_CLIENT_CONFIG_PATH` only for api/interactive workers and
+`MEMORY_CAPTURE_CONFIG_PATH` only for the background publisher. release inputs
+are `NEXUS_MEMORY_CLIENT_CONFIG` and `NEXUS_MEMORY_CAPTURE_CONFIG`; compose uses
+`NEXUS_MEMORY_CAPTURE_CONFIG_FILE` at `/run/secrets/nexus-memory-capture.json`.
+capture is future-only and independent of `connect`; it grants no model tools.
+sharing changes remain stopped maintenance: drain admitted runs before changing
+owner/capture settings, retain pending exports on disable, and re-enable only
+the same source. historical import and owner migration remain out of scope.
 
 `scripts/memory-config.py` renders one private deployment bundle from the
 operator's declaration and existing credentials, using the pinned jarvis
@@ -409,10 +435,12 @@ host apply cannot establish controller permission or rotate credentials.
 
 ordinary apply consumes the rendered host bundle when supplied, installing one
 collector as the owner: launchd on macbook, systemd user units on arch/devbox.
-the collector uses the exact central jarvis source revision and locked
-dependencies. preparing a new collector release requires ordinary contents-read
-git authorization to the private universal-memory repository under the owner
-account. that build credential is never copied into the deployment bundle,
+the collector uses an exact qualified jarvis source revision and locked
+dependencies. central and collector releases are independently qualified against
+their shared capture, configuration and api contracts; their application
+revisions need not match. preparing a new collector release requires ordinary
+git read access to the pinned public universal-memory source under the owner
+account. build credentials are never copied into the deployment bundle,
 collector environment or native profiles. dependency preparation fails before
 profile/service changes and removes its newly owned incomplete candidate.
 it sweeps every thirty seconds without overlap, has no inference
@@ -433,14 +461,22 @@ consumers loaded the change. each connected
 profile receives exactly the product's owner-authored memory instruction; tool
 authority notices remain server-owned.
 
-on devbox, memory owns only HTTPS 443 `/v1` in tailscale serve, forwarding to
-`http://127.0.0.1:8768/v1`. reuse the existing serve inspector/mutator, reject
-funnel or a foreign handler, and preserve every other port/path. the privileged
+on devbox, memory shares private HTTPS 8443 with skid and owns only
+`/v1/memory` and `/v1/mcp` in tailscale serve. each forwards to its identical
+path on `http://127.0.0.1:8768`; both `/v1/mcp` and `/v1/mcp/` must reach jarvis.
+reuse the existing serve inspector/mutator, reject funnel or a foreign handler,
+and preserve skid's root handler and every other port/path. the private bundle
+uses `https://<devbox-tailnet-host>:8443` as its origin. the privileged
 deployment principal owns that mutation. jarvis's listener and postgres remain
 loopback-only. jarvis deployment owns the server declaration at
 `/etc/jarvis/memory.json`, service maintenance and source cutover. configuring
 these files is source delivery; fleet installation, actual authorization and
 production activation retain their own qualification.
+
+publish native account configuration and instructions only while jarvis and its
+contained host are stopped. atomic instruction-file replacement invalidates the
+contained host's existing file masks. restart that same-release host after
+publication and qualify the effective thread before cognition resumes.
 
 ## codex daemon ownership
 
