@@ -1,7 +1,8 @@
 # universal memory host activation
 
-status: the initial macbook/devbox rollout is qualified. the per-conversation
-baseline collector update below is source-selected; installed proof is pending.
+status: both hosts run the selected v3 collector. macbook codex-work2 activation
+and capture/readback pass; devbox codex-work2 still awaits its first complete
+head inventory and capture proof. earlier model/host deferrals remain.
 
 the rollout declares eighteen native lanes plus `(devbox, jarvis)`, including the
 real `claude-work2` home on each host. the owner controls their content and has
@@ -19,10 +20,28 @@ unreadable conversations as pending. healthy/new conversations can capture;
 recovery establishes a fresh future-only cut and never imports the gap. all
 established cuts, originals and checkpoint identities remain unchanged.
 
-this collector requires the matching central v3 endpoint and schema `0008a`.
-replace the service and both collectors together; the earlier collector source
-was `a3afcdc` and central source was `3367413`. source qualification and the
-immutable release pin do not establish installed activation.
+the matching central v3 endpoint and schema `0008a` are active. supported
+`memory_install` selected this release on macbook and devbox; authenticated v3
+checks and collector service checks pass. all fifteen protected native config,
+instruction and private bundle files on each host retained exact bytes, inodes
+and modes. a converged repeat left both collector pids unchanged. no native
+daemon restart accompanied collector application. the earlier collector source
+was `a3afcdc` and central source was `3367413`.
+
+macbook codex-work2 activated at `2026-11-15T18:49:48Z`: its activation inventory
+retained 192 identities, 188 established cuts and four `unavailable` pending
+baselines. a new normal `codex-work2 exec` conversation then captured its owner
+and assistant events exactly once at `18:58:30Z`. actual installed `memory_open`
+returned the exact 77-byte synthetic owner marker and native provenance. the
+owner-authorized daemon refresh had already loaded all six tools.
+
+devbox's first codex-work2 head inventory began at `18:18Z` and is still running;
+its lane has no activation receipt yet. the collector and native endpoint remain
+responsive, with no reported inventory failure or retry. an independent source
+audit found no new paging loop: the inherited reader serially reads each full
+history twice, using bounded turn/item pages, with per-rpc timeouts but no whole
+inventory deadline. performance work is deferred; current activation/capture
+proof remains open. no timeout, skipped identity or invented cut completes it.
 
 [the earlier rollout source qualification](https://github.com/NielsdaWheelz/jarvis/blob/a3afcdc353029a8ea82425791cdc68fd42c5f759/docs/universal-memory.md#native-memory-rollout-source-qualification)
 records that earlier dependency set and acceptance. the six-profile renderer and account
@@ -59,7 +78,7 @@ the three model-waived claude profiles pass direct sdk save/exact-open using the
 own installed credentials; two also prove search, while macbook claude-personal's
 seed proof does not. their genuine failed native prompts are captured.
 
-the final recovery comparison preserves all ten activation timestamps and all
+the initial rollout recovery comparison preserved all ten activation timestamps and all
 4,783 prior native source identities/cuts. each collector restarts once without
 rebaselining. eleven selected owner events, five per host plus one genuine native
 turn while the central api was offline, appear exactly once with complete parts,
@@ -76,15 +95,13 @@ devbox `claude-personal`'s first sdk readback failed after saving with an
 unclassified exception group; the retained submission then returned the identical
 receipt and passed search/exact reopening. the original cause was not retained.
 
-owner-approved deferrals:
+remaining proof and owner-approved deferrals:
 
-- macbook `codex-work2`: the owner authorized daemon interruption; its normal
-  bootstrap now loads all six tools and an actual native open succeeds. capture
-  awaits the new collector rollout; active conversations may remain pending.
 - devbox `codex-work2`: the owner approved healthy/new capture with explicit
   pending baselines for twenty-one histories missing two native originals.
-  rollout proof remains pending. missing-source recovery remains separate;
-  neither identity omission nor checkpoint reset is authorized.
+  the installed collector still awaits its complete initial head inventory and
+  live capture proof. missing-source recovery remains separate; neither identity
+  omission nor checkpoint reset is authorized.
 - macbook and devbox `claude-personal`: capture and sdk proof pass; only the
   authenticated model journey waits for login.
 - macbook `claude-work2`: capture and sdk proof pass; only the model journey
