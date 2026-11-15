@@ -123,6 +123,10 @@ def main() -> None:
             for document in (value, updated):
                 servers = document.get("mcp_servers", {})
                 servers.pop("jarvis-memory", None)
+                # The native writer omits the empty stdio argument default.
+                for server in servers.values():
+                    if "command" in server and server.get("args") == []:
+                        server.pop("args")
                 if not servers:
                     document.pop("mcp_servers", None)
             if value != updated:
