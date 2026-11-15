@@ -11,9 +11,9 @@ release, which must adopt universal-memory `11f4220031d56f71d5a732b748a9bbb52c84
 or a qualified descendant before reading the new native provenance.
 
 [`release-pin.json`](../../assets/memory/release-pin.json) selects jarvis
-`dd212e2cc23e6c3bd18d7b39754eab5dfcf815db`, with universal-memory `11f4220`,
-provider-runtime `97c0475` and llm-agent-kernel `ba38f12`.
-[the central source qualification](https://github.com/NielsdaWheelz/jarvis/blob/dd212e2cc23e6c3bd18d7b39754eab5dfcf815db/docs/universal-memory.md#native-memory-rollout-source-qualification)
+`a3afcdc353029a8ea82425791cdc68fd42c5f759`, with universal-memory `11f4220`,
+provider-runtime `adf1b71` and llm-agent-kernel `419e5fe`.
+[the central source qualification](https://github.com/NielsdaWheelz/jarvis/blob/a3afcdc353029a8ea82425791cdc68fd42c5f759/docs/universal-memory.md#native-memory-rollout-source-qualification)
 owns exact dependencies and acceptance. the six-profile renderer and account
 contracts pass temporary real-postgres/configuration/mcp checks. native archive
 qualification repaired consumed metadata, workflow identity, native pagination
