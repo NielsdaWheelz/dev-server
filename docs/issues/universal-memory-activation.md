@@ -1,7 +1,7 @@
 # universal memory host activation
 
-status: macbook/devbox installed functional qualification is complete; the named
-owner-approved deferrals below remain.
+status: the initial macbook/devbox rollout is qualified. the per-conversation
+baseline collector update below is source-selected; installed proof is pending.
 
 the rollout declares eighteen native lanes plus `(devbox, jarvis)`, including the
 real `claude-work2` home on each host. the owner controls their content and has
@@ -10,16 +10,22 @@ native profiles; arch remains disabled. nexus deployment waits for its next
 release, which must adopt universal-memory `11f4220031d56f71d5a732b748a9bbb52c842e0e`
 or a qualified descendant before reading the new native provenance.
 
-[`release-pin.json`](../../assets/memory/release-pin.json) selects collector source jarvis
-`a3afcdc353029a8ea82425791cdc68fd42c5f759`, with universal-memory `11f4220`,
-provider-runtime `adf1b71` and llm-agent-kernel `419e5fe`.
-the separately activated central repair
-[`33674139c82ca5d2d7d0988de0b8ed771f1d4fd4`](https://github.com/NielsdaWheelz/jarvis/commit/33674139c82ca5d2d7d0988de0b8ed771f1d4fd4)
-fixes startup readiness and read-only activation inspection. for this repair,
-collector code, all four library pins and public contracts stayed unchanged,
-so the qualified collector remains `a3afcdc`.
-[the central source qualification](https://github.com/NielsdaWheelz/jarvis/blob/a3afcdc353029a8ea82425791cdc68fd42c5f759/docs/universal-memory.md#native-memory-rollout-source-qualification)
-owns exact dependencies and acceptance. the six-profile renderer and account
+[`release-pin.json`](../../assets/memory/release-pin.json) selects the qualified
+memory-only jarvis release `0fc3d6444231484f1762c14c83f15d8b166b7fd6`, with
+universal-memory `93e02af`, provider-runtime `70178ec` and llm-agent-kernel
+`da33773`. it keeps stock 0.160 cognition and excludes unactivated v2 behavior.
+`native-archive.v3` preserves complete identity inventory while recording
+unreadable conversations as pending. healthy/new conversations can capture;
+recovery establishes a fresh future-only cut and never imports the gap. all
+established cuts, originals and checkpoint identities remain unchanged.
+
+this collector requires the matching central v3 endpoint and schema `0008a`.
+replace the service and both collectors together; the earlier collector source
+was `a3afcdc` and central source was `3367413`. source qualification and the
+immutable release pin do not establish installed activation.
+
+[the earlier rollout source qualification](https://github.com/NielsdaWheelz/jarvis/blob/a3afcdc353029a8ea82425791cdc68fd42c5f759/docs/universal-memory.md#native-memory-rollout-source-qualification)
+records that earlier dependency set and acceptance. the six-profile renderer and account
 contracts pass temporary real-postgres/configuration/mcp checks. native archive
 qualification repaired consumed metadata, workflow identity, native pagination
 and bounded raw-record parsing; it preserves old event identities and strict
@@ -72,13 +78,13 @@ receipt and passed search/exact reopening. the original cause was not retained.
 
 owner-approved deferrals:
 
-- macbook `codex-work2`: capture and mcp are installed; activation waits for naturally
-  finished active turns. its old loaded daemon also awaits the same quiet
-  interval for credential adoption; fresh native cli tools already work. no
-  forced stop or invented frontier.
-- devbox `codex-work2`: mcp is installed; capture waits for recovery of two missing
-  native originals affecting twenty-one paginated histories. no skipped history
-  or checkpoint reset.
+- macbook `codex-work2`: the owner authorized daemon interruption; its normal
+  bootstrap now loads all six tools and an actual native open succeeds. capture
+  awaits the new collector rollout; active conversations may remain pending.
+- devbox `codex-work2`: the owner approved healthy/new capture with explicit
+  pending baselines for twenty-one histories missing two native originals.
+  rollout proof remains pending. missing-source recovery remains separate;
+  neither identity omission nor checkpoint reset is authorized.
 - macbook and devbox `claude-personal`: capture and sdk proof pass; only the
   authenticated model journey waits for login.
 - macbook `claude-work2`: capture and sdk proof pass; only the model journey
@@ -87,6 +93,6 @@ owner-approved deferrals:
 
 resolved when: each deferred profile or host has its named activation, model or
 connection proof. preserve strict native boundaries and exact reopening; never
-skip missing history or interrupt active turns to qualify a lane. existing
+omit unreadable identities or invent empty heads to qualify a lane. existing
 daemon/thread adoption needs its own proof. private credentials and transcript
 bodies never enter this record.
