@@ -29,6 +29,13 @@ and modes. a converged repeat left both collector pids unchanged. no native
 daemon restart accompanied collector application. the earlier collector source
 was `a3afcdc` and central source was `3367413`.
 
+a resumed-state comparison preserves all eleven pre-existing lane identities and
+activation timestamps, 4,811 conversation identities/cuts, 4,820 source originals,
+26 notes and 4,836 leaf links. three checkpoint identities changed without a
+reset; unchanged identities kept their exact digest. the comparison proves no
+duplicated or incomplete source parts and no originals for pending baselines.
+these preservation checks do not establish devbox's new activation/capture proof.
+
 macbook codex-work2 activated at `2026-11-15T18:49:48Z`: its activation inventory
 retained 192 identities, 188 established cuts and four `unavailable` pending
 baselines. a new normal `codex-work2 exec` conversation then captured its owner
@@ -36,13 +43,13 @@ and assistant events exactly once at `18:58:30Z`. actual installed `memory_open`
 returned the exact 77-byte synthetic owner marker and native provenance. the
 owner-authorized daemon refresh had already loaded all six tools.
 
-devbox's first codex-work2 head inventory began at `18:18Z` and is still running;
-its lane has no activation receipt yet. the collector and native endpoint remain
+devbox's first codex-work2 head inventory began at `18:18Z` and has run for over
+100 minutes without an activation receipt at this source integration. the collector and native endpoint remain
 responsive, with no reported inventory failure or retry. an independent source
 audit found no new paging loop: the inherited reader serially reads each readable
 history twice, using bounded turn/item pages, with per-rpc timeouts but no whole
-inventory deadline. performance work is deferred; current activation/capture
-proof remains open. no timeout, skipped identity or invented cut completes it.
+inventory deadline. performance work is deferred; installed devbox functional activation/capture
+acceptance remains open, not merely a performance follow-up. no timeout, skipped identity or invented cut completes it.
 
 [the earlier rollout source qualification](https://github.com/NielsdaWheelz/jarvis/blob/a3afcdc353029a8ea82425791cdc68fd42c5f759/docs/universal-memory.md#native-memory-rollout-source-qualification)
 records that earlier dependency set and acceptance. the six-profile renderer and account
