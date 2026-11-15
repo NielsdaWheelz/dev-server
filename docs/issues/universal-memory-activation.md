@@ -1,7 +1,8 @@
 # universal memory host activation
 
-status: macbook/devbox installed functional qualification is complete; the named
-owner-approved deferrals below remain.
+status: both hosts run the selected v3 collector. macbook codex-work2 activation
+and capture/readback pass; devbox codex-work2 still awaits its first complete
+head inventory and capture proof. earlier model/host deferrals remain.
 
 the rollout declares eighteen native lanes plus `(devbox, jarvis)`, including the
 real `claude-work2` home on each host. the owner controls their content and has
@@ -10,16 +11,48 @@ native profiles; arch remains disabled. nexus deployment waits for its next
 release, which must adopt universal-memory `11f4220031d56f71d5a732b748a9bbb52c842e0e`
 or a qualified descendant before reading the new native provenance.
 
-[`release-pin.json`](../../assets/memory/release-pin.json) selects collector source jarvis
-`a3afcdc353029a8ea82425791cdc68fd42c5f759`, with universal-memory `11f4220`,
-provider-runtime `adf1b71` and llm-agent-kernel `419e5fe`.
-the separately activated central repair
-[`33674139c82ca5d2d7d0988de0b8ed771f1d4fd4`](https://github.com/NielsdaWheelz/jarvis/commit/33674139c82ca5d2d7d0988de0b8ed771f1d4fd4)
-fixes startup readiness and read-only activation inspection. for this repair,
-collector code, all four library pins and public contracts stayed unchanged,
-so the qualified collector remains `a3afcdc`.
-[the central source qualification](https://github.com/NielsdaWheelz/jarvis/blob/a3afcdc353029a8ea82425791cdc68fd42c5f759/docs/universal-memory.md#native-memory-rollout-source-qualification)
-owns exact dependencies and acceptance. the six-profile renderer and account
+[`release-pin.json`](../../assets/memory/release-pin.json) selects the qualified
+memory-only jarvis release `0fc3d6444231484f1762c14c83f15d8b166b7fd6`, with
+universal-memory `93e02af`, provider-runtime `70178ec` and llm-agent-kernel
+`da33773`. it keeps stock 0.160 cognition and excludes unactivated v2 behavior.
+`native-archive.v3` preserves complete identity inventory while recording
+unreadable conversations as pending. healthy/new conversations can capture;
+recovery establishes a fresh future-only cut and never imports the gap. all
+established cuts and originals are preserved; normal capture can advance
+checkpoints.
+
+the matching central v3 endpoint and schema `0008a` are active. supported
+`memory_install` selected this release on macbook and devbox; authenticated v3
+checks and collector service checks pass. all fifteen protected native config,
+instruction and private bundle files on each host retained exact bytes, inodes
+and modes. a converged repeat left both collector pids unchanged. no native
+daemon restart accompanied collector application. the earlier collector source
+was `a3afcdc` and central source was `3367413`.
+
+a resumed-state comparison preserves all eleven pre-existing lane identities and
+activation timestamps, 4,811 conversation identities/cuts, 4,820 source originals,
+26 notes and 4,836 leaf links. three checkpoint identities changed without a
+reset; unchanged identities kept their exact digest. the comparison proves no
+duplicated or incomplete source parts and no originals for pending baselines.
+these preservation checks do not establish devbox's new activation/capture proof.
+
+macbook codex-work2 activated at `2026-11-15T18:49:48Z`: its activation inventory
+retained 192 identities, 188 established cuts and four `unavailable` pending
+baselines. a new normal `codex-work2 exec` conversation then captured its owner
+and assistant events exactly once at `18:58:30Z`. actual installed `memory_open`
+returned the exact 77-byte synthetic owner marker and native provenance. the
+owner-authorized daemon refresh had already loaded all six tools.
+
+devbox's first codex-work2 head inventory began at `18:18Z` and has run for over
+100 minutes without an activation receipt at this source integration. the collector and native endpoint remain
+responsive, with no reported inventory failure or retry. an independent source
+audit found no new paging loop: the inherited reader serially reads each readable
+history twice, using bounded turn/item pages, with per-rpc timeouts but no whole
+inventory deadline. performance work is deferred; installed devbox functional activation/capture
+acceptance remains open, not merely a performance follow-up. no timeout, skipped identity or invented cut completes it.
+
+[the earlier rollout source qualification](https://github.com/NielsdaWheelz/jarvis/blob/a3afcdc353029a8ea82425791cdc68fd42c5f759/docs/universal-memory.md#native-memory-rollout-source-qualification)
+records that earlier dependency set and acceptance. the six-profile renderer and account
 contracts pass temporary real-postgres/configuration/mcp checks. native archive
 qualification repaired consumed metadata, workflow identity, native pagination
 and bounded raw-record parsing; it preserves old event identities and strict
@@ -53,7 +86,7 @@ the three model-waived claude profiles pass direct sdk save/exact-open using the
 own installed credentials; two also prove search, while macbook claude-personal's
 seed proof does not. their genuine failed native prompts are captured.
 
-the final recovery comparison preserves all ten activation timestamps and all
+the initial rollout recovery comparison preserved all ten activation timestamps and all
 4,783 prior native source identities/cuts. each collector restarts once without
 rebaselining. eleven selected owner events, five per host plus one genuine native
 turn while the central api was offline, appear exactly once with complete parts,
@@ -70,15 +103,13 @@ devbox `claude-personal`'s first sdk readback failed after saving with an
 unclassified exception group; the retained submission then returned the identical
 receipt and passed search/exact reopening. the original cause was not retained.
 
-owner-approved deferrals:
+remaining proof and owner-approved deferrals:
 
-- macbook `codex-work2`: capture and mcp are installed; activation waits for naturally
-  finished active turns. its old loaded daemon also awaits the same quiet
-  interval for credential adoption; fresh native cli tools already work. no
-  forced stop or invented frontier.
-- devbox `codex-work2`: mcp is installed; capture waits for recovery of two missing
-  native originals affecting twenty-one paginated histories. no skipped history
-  or checkpoint reset.
+- devbox `codex-work2`: the owner approved healthy/new capture with explicit
+  pending baselines for twenty-one histories missing two native originals.
+  the installed collector still awaits its complete initial head inventory and
+  live capture proof. missing-source recovery remains separate; neither identity
+  omission nor checkpoint reset is authorized.
 - macbook and devbox `claude-personal`: capture and sdk proof pass; only the
   authenticated model journey waits for login.
 - macbook `claude-work2`: capture and sdk proof pass; only the model journey
@@ -87,6 +118,6 @@ owner-approved deferrals:
 
 resolved when: each deferred profile or host has its named activation, model or
 connection proof. preserve strict native boundaries and exact reopening; never
-skip missing history or interrupt active turns to qualify a lane. existing
+omit unreadable identities or invent empty heads to qualify a lane. existing
 daemon/thread adoption needs its own proof. private credentials and transcript
 bodies never enter this record.
