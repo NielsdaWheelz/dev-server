@@ -2,8 +2,8 @@
 set -euo pipefail
 
 case "${0##*/}" in
-claude-work)
-  state_dir="$HOME/.claude-work"
+claude-work | claude-work2)
+  state_dir="$HOME/.${0##*/}"
   export CLAUDE_CONFIG_DIR="$state_dir"
   real_binary="$HOME/.local/bin/claude"
   ;;
@@ -25,5 +25,5 @@ esac
 }
 # shellcheck disable=SC1091 # shared installed profile credential owner.
 source "$HOME/.local/share/dev-server/memory-profile.sh"
-jarvis_memory_profile_env "$HOME" claude-work
+jarvis_memory_profile_env "$HOME" "${0##*/}"
 exec "$real_binary" "$@"

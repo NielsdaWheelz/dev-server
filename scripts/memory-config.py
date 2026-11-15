@@ -50,7 +50,7 @@ def main() -> None:
         declaration = json.loads(args.declaration.read_bytes())
         lanes = declaration["lanes"]
         if {(lane["machine"], lane["account"]) for lane in lanes} != MEMORY_IDENTITIES:
-            raise ValueError("declare all sixteen lanes")
+            raise ValueError(f"declare all {len(MEMORY_IDENTITIES)} lanes")
         credential_keys = (
             {f"capture:{machine}" for machine in homes}
             | {f"client:{machine}:{account}" for machine, account in MEMORY_IDENTITIES}

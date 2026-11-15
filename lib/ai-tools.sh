@@ -30,7 +30,9 @@ ai_install_dirs() {
     fi
     ensure_directory "$home/$account" 0700 || return 1
   done
-  ensure_directory "$home/.claude-work" 0700 || return 1
+  for account in .claude-work .claude-work2; do
+    ensure_directory "$home/$account" 0700 || return 1
+  done
 }
 
 # The command is the installation interface; upstream owns its target layout.
@@ -205,15 +207,17 @@ PY
 }
 
 ai_install_profiles() {
-  local home profile
+  local home profile command
 
   home="$(dev_server_home)"
   profile="$(dev_server_assets_dir)/routers/ai-profile"
   [[ -f "$profile" && ! -L "$profile" ]] ||
     die "missing AI profile wrapper: $profile"
   ai_install_codex_profiles || return 1
-  install_managed_file "$profile" \
-    "$home/bin/claude-work" 0755 shell.config || return 1
+  for command in claude-work claude-work2; do
+    install_managed_file "$profile" \
+      "$home/bin/$command" 0755 shell.config || return 1
+  done
 }
 
 ai_install_instructions() {
@@ -225,7 +229,7 @@ ai_install_instructions() {
   instructions="$(dev_server_assets_dir)/agent-instructions.md"
   for relative in \
     .codex/AGENTS.md .codex-work/AGENTS.md .codex-work2/AGENTS.md \
-    .claude/CLAUDE.md .claude-work/CLAUDE.md; do
+    .claude/CLAUDE.md .claude-work/CLAUDE.md .claude-work2/CLAUDE.md; do
     account="${relative%%/*}"
     account="${account#.}"
     case "$account" in codex | claude) account="$account-personal" ;; esac
@@ -304,7 +308,7 @@ ai_install_claude_settings() {
   script="$home/bin/claude-statusline"
   install_managed_file "$(dev_server_assets_dir)/claude/statusline.sh" \
     "$script" 0755 claude.settings || return 1
-  for account in .claude .claude-work; do
+  for account in .claude .claude-work .claude-work2; do
     settings="$home/$account/settings.json"
     temporary="$(mktemp "$home/$account/.settings.json.XXXXXX")" || return 1
     if ! ai_claude_settings "$settings" "$script" >"$temporary"; then

@@ -25,8 +25,9 @@ skid's authoritative yaml; standalone skid owns uninstall. apply does not discar
 workers or install retired herdr runtime, hooks or gates.
 
 signed skid v0.24.2 and unified apply are deployed on macbook and devbox. their
-approved terminal cutovers are complete. private memory inputs remain missing;
-devbox also defers busy docker activation. arch is outside this rollout.
+approved terminal cutovers are complete. private memory inputs are prepared;
+installed memory activation remains pending. devbox also defers busy docker
+activation. arch is outside this rollout.
 remaining qualification is recorded
 [here](docs/issues/unified-apply-qualification.md).
 
@@ -327,19 +328,22 @@ paths are not a promise of compatibility with every future release.
 `ai_install_codex_profiles` owns codex wrapper rendering/publication and the shared
 memory credential helper. callers provide the existing owner home/assets context,
 prepare directories and admit native codex. `ai_install_profiles` validates the
-declared claude wrapper first, calls the codex owner, then publishes `claude-work`. no skid identity plugin is staged or published.
+declared claude wrapper first, calls the codex owner, then publishes `claude-work`
+and `claude-work2`. no skid identity plugin is staged or published.
 full host apply retains that composition; provider-specific publication adds no
 public command or selector.
 
 `codex` preserves a nonempty `CODEX_HOME`, defaulting to `owner_home/.codex`;
 the named work commands force `owner_home/.codex-work` or
 `owner_home/.codex-work2`. each executes the canonical cli with unchanged
-arguments. `ai-profile` supplies only `claude-work`; bare
+arguments. `ai-profile` supplies `claude-work` and `claude-work2`; bare
 claude resolves to its existing native executable. normal homes remain
 `.codex`, `.codex-work`, `.codex-work2`,
-`.claude` and `.claude-work`, with existing override and account-selection
+`.claude`, `.claude-work` and `.claude-work2`, with existing override and account-selection
 semantics. they are shared user state.
 preserve authentication, configuration, history, memories, plugins and trust.
+named claude wrappers select their matching `CLAUDE_CONFIG_DIR` and own bearer.
+new homes require their own login.
 
 `assets/skidbladnir/config.yaml` preserves the four profile keys, labels and
 order as personal desired state. command values are exactly `codex`, `codex-work`,
@@ -355,11 +359,11 @@ skid owns generic shell startup integration. dev-server no longer ships copied
 shell-init/terminal-context code or injects provider aliases into skid shells.
 provider settings and hooks remain personal configuration, not skid prerequisites.
 
-`assets/agent-instructions.md` supplies the five account instruction files,
+`assets/agent-instructions.md` supplies the six account instruction files,
 installed as mode `0600`. `assets/claude/statusline.sh` is installed as
-`~/bin/claude-statusline`, and both claude account `settings.json` files carry a
+`~/bin/claude-statusline`, and all three claude account `settings.json` files carry a
 repo-owned `statusLine` key pointing at it. `cleanupPeriodDays` is globally
-36,500 days on both claude homes, before any memory activation. this retains
+36,500 days on all three claude homes, before any memory activation. this retains
 other claude application data too; disk consumption is the deliberate cost.
 every other settings
 key, authentication, history, project instructions, and skills remain user-owned.
@@ -378,7 +382,7 @@ database, collector state store or inference service. the accepted product
 contract is jarvis's `docs/universal-memory.md`; jarvis's public `MemoryConfig`
 validator owns admission and sharing semantics.
 
-the declaration contains the fifteen native `(machine, account)` lanes and
+the declaration contains the eighteen native `(machine, account)` lanes and
 `(devbox, jarvis)`. one common recipient/processor declaration governs recorded
 controller sharing authorizations. admission and connection are independent;
 unresolved controllers, authorizations and client identities remain disabled.
@@ -386,7 +390,7 @@ the checked-in declaration denies every lane. nexus application access is a
 separate consumer handoff: native developer profiles do not grant nexus chats
 access or capture nexus conversations.
 
-the optional `nexus-owner` backend client is separate from those sixteen lanes.
+the optional `nexus-owner` backend client is separate from those nineteen lanes.
 the same declaration names its configured viewer uuid, controller/authorization,
 independent connection, note admission and capture, and complete nexus model
 processor labels. required `capture` and nullable `capture_bearer_sha256` extend

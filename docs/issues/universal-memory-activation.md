@@ -1,47 +1,49 @@
 # universal memory host activation
 
-status: configuration source qualified; installed fleet activation pending.
+status: current source and private declaration prepared; installed activation and
+native-client acceptance pending.
 
-the completion handoff adds nexus future-only capture from the same central
-declaration as its owner-chat client. separate generated client/publisher files
-keep upload credentials out of native homes and api/interactive workers. a
-configured disconnected client retains owner admission with a null mcp bearer.
-the existing native lanes, collector installer and private routing are unchanged.
+the rollout declares eighteen native lanes plus `(devbox, jarvis)`, including the
+real `claude-work2` home on each host. the owner controls their content and has
+authorized cross-personal/work/work2 sharing. macbook and devbox each enable six
+native profiles; arch remains disabled. nexus deployment waits for its next
+release, which must adopt universal-memory `11f4220031d56f71d5a732b748a9bbb52c842e0e`
+or a qualified descendant before reading the new native provenance.
 
-temporary source proof passes against the actual jarvis and nexus validators,
-using pinned universal-memory `27d6f1b4e2ddcbc2aa831eb6066f384fccb552ad` without
-source overlays: capture-only and combined access, null absence, scoped rotation,
-disable/re-enable, credential separation, private modes, idempotent rendering and
-invalid-input preservation. nexus's actual publication validation rejects changed
-owner/admit/capture pairs and a missing required publisher before staging files.
+[`release-pin.json`](../../assets/memory/release-pin.json) selects jarvis
+`dd212e2cc23e6c3bd18d7b39754eab5dfcf815db`, with universal-memory `11f4220`,
+provider-runtime `97c0475` and llm-agent-kernel `ba38f12`.
+[the central source qualification](https://github.com/NielsdaWheelz/jarvis/blob/dd212e2cc23e6c3bd18d7b39754eab5dfcf815db/docs/universal-memory.md#native-memory-rollout-source-qualification)
+owns exact dependencies and acceptance. the six-profile renderer and account
+contracts pass temporary real-postgres/configuration/mcp checks. native archive
+qualification repaired consumed metadata, workflow identity, native pagination
+and bounded raw-record parsing; it preserves old event identities and strict
+future-only activation. those checks do not prove installed client loading.
 
-all fifteen native profile configurations reconcile in disposable host homes.
-the actual codex cli writes and reads its nine configurations; the existing
-claude json writer handles its six configurations. add, converge and removal
-preserve unrelated settings. this proves neither claude runtime loading nor
-installed daemon configuration. focused python/shell static checks pass.
+use existing `ai_install_profiles` and `memory_install` with the private bundle
+for this narrow rollout. full apply also updates packages and native daemons;
+it is not a configuration-only installation path. preserve the owner's existing
+interactive permission aliases, including `claude-work2`; add no probe-only tool
+grants or new native permission policy. fresh cli processes, daemon-global tool
+discovery and already-running thread connections are distinct evidence. native
+configuration publication is held until the contained jarvis runtime is proved
+not to inherit these newly configured http mcp servers.
 
-the collector must use the final qualified central jarvis commit and locked
-dependencies selected in [`release-pin.json`](../../assets/memory/release-pin.json).
-the selected source is `d66e84057cb2468f23aacf3f359dac49453e0a3a`. a fresh
-exact-commit fetch, frozen production dependency installation, collector
-help and runtime dependency/manifest checks pass. this preparation uses the
-existing installer commands without service activation. central isolated functional
-proof passes; its full verification still reports 19 pre-existing dependency
-audit findings. earlier acceptance does not qualify a changed composition.
-controller/sharing declarations remain default deny; no real history was admitted.
+owner-approved deferrals:
 
-actual fleet package installation, service activation, private endpoint routing,
-loaded native mcp connections and private nexus publication were not run. unified
-apply owns rolling codex daemon maintenance and can interrupt existing clients;
-do not use it as a configuration-only test. macbook and devbox previously reported
-action required because their private memory bundles were not supplied.
+- macbook `codex-work2`: install capture and mcp; activation waits for naturally
+  finished active turns. no forced stop or invented frontier.
+- devbox `codex-work2`: install mcp; capture waits for recovery of two missing
+  native originals affecting twenty-one paginated histories. no skipped history
+  or checkpoint reset.
+- devbox `claude-personal`: install capture and mcp; the actual model journey waits
+  for login.
+- arch and nexus: installation remains deferred.
 
-resolved when: actual lane controllers/sharing and private credentials are
-supplied, every admitted home meets jarvis's native reader qualification, and the
-installed collector, private endpoint and connected clients pass the owning
-deployment acceptance. source preparation needs ordinary read access to its exact
-dependency repositories under the owner account; bundles supply no build token.
-nexus additionally needs the configured owner, complete processor grants and both
-private files published under stopped maintenance. no fleet or nexus activation
-is implied by the source checks.
+resolved when: installed macbook/devbox collectors use the selected immutable
+release, the private endpoint authenticates each scope, eligible lanes obtain a
+complete native boundary, and actual configured native journeys prove capture,
+save, retrieval and exact reopening. preserve the named deferrals until their
+separate evidence exists. restarting a collector must not replay its prefix;
+existing daemon/thread adoption needs its own proof without interrupting active
+work. private credentials and transcript bodies never enter this record.
