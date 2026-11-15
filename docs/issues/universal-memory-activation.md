@@ -23,8 +23,12 @@ installed daemon configuration. focused python/shell static checks pass.
 
 the collector must use the final qualified central jarvis commit and locked
 dependencies selected in [`release-pin.json`](../../assets/memory/release-pin.json).
-advancing that pin requires current central qualification. earlier acceptance
-does not qualify changed native codecs or the current application composition.
+the selected source is `d66e84057cb2468f23aacf3f359dac49453e0a3a`. a fresh
+exact-commit fetch, frozen production dependency installation, collector
+help and runtime dependency/manifest checks pass. this preparation uses the
+existing installer commands without service activation. central isolated functional
+proof passes; its full verification still reports 19 pre-existing dependency
+audit findings. earlier acceptance does not qualify a changed composition.
 controller/sharing declarations remain default deny; no real history was admitted.
 
 actual fleet package installation, service activation, private endpoint routing,
