@@ -36,6 +36,11 @@
     name: "postgresql-{{ devbox_postgresql_major }}-pgvector"
     selection: hold
 
+- name: Install native attachment inspection utilities # noqa package-latest
+  ansible.builtin.apt:
+    name: [file, poppler-utils, pandoc]
+    state: latest
+
 - name: Validate any existing Jarvis service identity
   ansible.builtin.command:
     argv:
