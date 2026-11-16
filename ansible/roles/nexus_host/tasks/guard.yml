@@ -1,0 +1,31 @@
+---
+- name: Require the Nexus-owned boot guard and resource slice
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        from pathlib import Path
+        import subprocess
+
+        paths = (
+            '/usr/local/sbin/nexus-codex-state-boot-guard',
+            '/etc/systemd/system/nexus-codex-state-boot-guard.service',
+            '/etc/systemd/system/docker.service.d/20-nexus-codex-state-guard.conf',
+            '/etc/systemd/system/system-nexus.slice',
+        )
+        for name in paths:
+            path = Path(name)
+            if not path.is_file():
+                raise SystemExit(f'{name} is missing; install the reviewed Nexus host inputs before devbox apply')
+            metadata = path.stat()
+            if metadata.st_uid != 0 or metadata.st_gid != 0 or metadata.st_mode & 0o022 or metadata.st_size == 0:
+                raise SystemExit(f'{name} is not a protected root-owned input; restore it from the reviewed Nexus checkout')
+        if not Path(paths[0]).stat().st_mode & 0o111:
+            raise SystemExit('the Nexus boot guard is not executable; restore its installed mode before devbox apply')
+        properties = dict(line.split('=', 1) for line in subprocess.check_output(
+            ['systemctl', 'show', 'docker.service', '-p', 'Requires', '-p', 'After'], text=True).splitlines())
+        if any('nexus-codex-state-boot-guard.service' not in properties.get(key, '').split()
+               for key in ('Requires', 'After')):
+            raise SystemExit('system Docker lacks the loaded Nexus boot guard; reload systemd after installing the reviewed inputs')
+  changed_when: false

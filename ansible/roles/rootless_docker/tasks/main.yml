@@ -36,44 +36,6 @@
     fail_msg: Invalid recorded active rootless Docker identity
   when: rootless_docker_active_identity.stat.exists
 
-- name: Inspect rootful Docker daemon state
-  ansible.builtin.service_facts:
-
-- name: Validate rootful Docker daemon state
-  ansible.builtin.assert:
-    that:
-      - "'docker.service' in ansible_facts.services"
-      - ansible_facts.services['docker.service'].source == 'systemd'
-      - ansible_facts.services['docker.service'].state in ['running', 'inactive', 'stopped', 'failed']
-    fail_msg: Rootful Docker service state is missing or ambiguous
-
-- name: Inspect rootful Docker containers before disabling its daemon
-  ansible.builtin.command:
-    argv: [docker, --host, "unix:///var/run/docker.sock", ps, -q]
-  register: rootless_docker_rootful_containers
-  changed_when: false
-  failed_when: rootless_docker_rootful_containers.rc != 0
-  when: ansible_facts.services['docker.service'].state == 'running'
-
-- name: Disable the unused rootful Docker daemon
-  ansible.builtin.systemd_service:
-    name: "{{ item }}"
-    enabled: false
-    state: stopped
-  loop:
-    - docker.socket
-    - docker.service
-  when: >-
-    ansible_facts.services['docker.service'].state != 'running' or
-    (rootless_docker_rootful_containers.stdout | default('') | trim == '')
-
-- name: Report deferred rootful Docker shutdown
-  ansible.builtin.debug:
-    msg: DEV_SERVER_DOCKER_DEFERRED
-  when:
-    - ansible_facts.services['docker.service'].state == 'running'
-    - rootless_docker_rootful_containers.stdout | trim != ""
-
 - name: Ensure rootless Docker config directory exists
   ansible.builtin.file:
     path: "/home/{{ devbox_user }}/.config/docker"

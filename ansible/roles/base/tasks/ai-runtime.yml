@@ -8,6 +8,27 @@
   environment:
     NEEDRESTART_MODE: l
 
+- name: Persist Ubuntu's AppArmor user namespace boundary
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/60-dev-server-userns.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      kernel.apparmor_restrict_unprivileged_userns=1
+
+- name: Read the active AppArmor user namespace boundary
+  ansible.builtin.command:
+    argv: [sysctl, -n, kernel.apparmor_restrict_unprivileged_userns]
+  register: base_userns_policy
+  changed_when: false
+
+- name: Activate the declared AppArmor user namespace boundary
+  ansible.builtin.command:
+    argv: [sysctl, -w, kernel.apparmor_restrict_unprivileged_userns=1]
+  when: base_userns_policy.stdout != '1'
+  changed_when: true
+
 - name: Install the Ubuntu bubblewrap user namespace profile
   ansible.builtin.copy:
     src: /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
