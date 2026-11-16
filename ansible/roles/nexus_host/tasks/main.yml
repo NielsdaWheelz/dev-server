@@ -1,0 +1,185 @@
+---
+- name: Create root-owned Nexus host directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  loop:
+    - /etc/nexus
+    - /etc/nexus/config
+    - /var/lib/nexus
+    - /var/lib/nexus/releases
+    - /var/backups/nexus
+    - /srv/nexus
+
+- name: Create Nexus parser scratch space
+  ansible.builtin.file:
+    path: /var/lib/nexus/parser-tmp
+    state: directory
+    owner: "10001"
+    group: "10001"
+    mode: "0700"
+
+- name: Protect the unmounted Nexus credential underlay
+  ansible.builtin.command:
+    argv: [/usr/local/sbin/nexus-codex-state-boot-guard]
+  changed_when: false
+
+- name: Create system Docker and journal configuration directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/docker
+    - /etc/systemd/system/docker.socket.d
+    - /etc/systemd/journald.conf.d
+    - "/etc/systemd/system/user-{{ base_user_uid.stdout }}.slice.d"
+
+- name: Declare the production Docker daemon boundary
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      {
+        "group": "root",
+        "exec-opts": ["native.cgroupdriver=systemd"]
+      }
+
+- name: Restrict system Docker socket activation to root
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/docker.socket.d/50-dev-server-authority.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Socket]
+      SocketUser=root
+      SocketGroup=root
+      SocketMode=0600
+
+- name: Bound persistent host journal storage
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/50-dev-server-storage.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Journal]
+      Storage=persistent
+      SystemMaxUse=256M
+  register: nexus_host_journal
+
+- name: Activate changed journal storage policy
+  ansible.builtin.systemd_service:
+    name: systemd-journald.service
+    state: restarted
+  when: nexus_host_journal.changed
+
+- name: Bound the complete development user subtree
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/user-{{ base_user_uid.stdout }}.slice.d/50-dev-server-memory.conf"
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Slice]
+      MemoryHigh={{ devbox_development_memory_high }}
+      MemoryMax={{ devbox_development_memory_max }}
+
+- name: Inspect the retained Nexus hardware runner
+  ansible.builtin.stat:
+    path: /etc/systemd/system/actions.runner.NielsdaWheelz-nexus-web.nexus-dev-server-2.service
+  register: nexus_host_runner
+
+- name: Create the retained runner's host policy directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/actions.runner.NielsdaWheelz-nexus-web.nexus-dev-server-2.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: nexus_host_runner.stat.exists
+
+- name: Include the retained hardware runner in the aggregate development budget
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/actions.runner.NielsdaWheelz-nexus-web.nexus-dev-server-2.service.d/50-dev-server-resources.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Service]
+      Slice=user-{{ base_user_uid.stdout }}.slice
+  when: nexus_host_runner.stat.exists
+
+- name: Load host resource and socket policy
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Ensure the guarded production engine remains enabled and active
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - nexus-codex-state-boot-guard.service
+    - system-nexus.slice
+    - docker.socket
+    - docker.service
+
+- name: Align the live system socket with its persistent root-only policy
+  ansible.builtin.file:
+    path: /var/run/docker.sock
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Verify the production engine and effective developer memory boundary
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json
+        from pathlib import Path
+        import pwd
+        import subprocess
+        import sys
+
+        user, high, maximum = sys.argv[1:]
+        uid = pwd.getpwnam(user).pw_uid
+        info = json.loads(subprocess.check_output([
+            'docker', '--host', 'unix:///var/run/docker.sock', 'info', '--format', '{% raw %}{{json .}}{% endraw %}'], text=True))
+        if info['CgroupDriver'] != 'systemd' or info['CgroupVersion'] != '2' or any('rootless' in option for option in info['SecurityOptions']):
+            raise SystemExit('system Docker has the wrong isolation mode; repair its host configuration before deploying Nexus')
+        properties = dict(line.split('=', 1) for line in subprocess.check_output([
+            'systemctl', 'show', f'user-{uid}.slice', '-p', 'ControlGroup', '-p', 'MemoryHigh', '-p', 'MemoryMax'], text=True).splitlines())
+        expected = {'MemoryHigh': str(int(high.removesuffix('G')) * 1024**3),
+                    'MemoryMax': str(int(maximum.removesuffix('G')) * 1024**3),
+                    'ControlGroup': f'/user.slice/user-{uid}.slice'}
+        if properties != expected:
+            raise SystemExit(f'development memory limits are not active: {properties}; activate the declared user slice before deploying Nexus')
+        cgroup = Path('/sys/fs/cgroup' + properties['ControlGroup'])
+        for name, field in (('memory.high', 'MemoryHigh'), ('memory.max', 'MemoryMax')):
+            if (cgroup / name).read_text().strip() != expected[field]:
+                raise SystemExit(f'{cgroup / name} differs from the declared limit; repair resource-controller activation before deploying Nexus')
+        forbidden = subprocess.run(['runuser', '-u', user, '--', 'docker', '--host',
+                                    'unix:///var/run/docker.sock', 'info'], capture_output=True)
+        if forbidden.returncode == 0:
+            raise SystemExit('development can control production Docker; remove that authority before deploying Nexus')
+        runner = 'actions.runner.NielsdaWheelz-nexus-web.nexus-dev-server-2.service'
+        running = subprocess.run(['systemctl', 'is-active', '--quiet', runner]).returncode == 0
+        if running:
+            group = subprocess.check_output(['systemctl', 'show', runner, '-p', 'ControlGroup', '--value'], text=True).strip()
+            if not group.startswith(f'/user.slice/user-{uid}.slice/'):
+                raise SystemExit(f'{runner} still runs outside the development budget; finish its job, restart that unit, then apply again')
+      - "{{ devbox_user }}"
+      - "{{ devbox_development_memory_high }}"
+      - "{{ devbox_development_memory_max }}"
+  changed_when: false

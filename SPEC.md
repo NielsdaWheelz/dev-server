@@ -71,8 +71,9 @@ when no deferral remains.
 
 `assets/security/tailnet-policy.hujson` owns the fleet's explicit device/port
 grants and native policy tests. provider activation is separate from ordinary
-host apply. production accepts operator ssh and initiates no peer application
-connections; skid retains its direct computer mesh and phone access on 8443.
+host apply. devbox retains operator ssh and its declared private skid/memory
+routes; co-located nexus publishes neither api nor database host ports. skid
+retains its direct computer mesh and phone access on 8443.
 the two retired computers receive no grants and their membership is revoked.
 
 workstation apply installs key-only, non-root openssh for `nnandal`, preserving
@@ -576,6 +577,27 @@ github enrollment is a manual action, not automatic account/key mutation.
 rootless docker activation identity covers package version, generated unit,
 and daemon config. immediately verify zero running containers before rebuilding
 or restarting; otherwise defer and do not record activation success.
+
+system docker hosts nexus production independently of developer rootless docker.
+the root-controlled socket is `/var/run/docker.sock`; production callers select
+it explicitly through `dev-server-deploy` elevation. `niels` has no effective
+sudo grant or system-socket access. removal includes inherited cloud-init grants;
+preserve the separately keyed deployment login before demotion.
+
+dev-server owns cryptsetup, bounded persistent journald, required
+directories and numeric container ownership, the private credential underlay and
+system-engine availability. it requires nexus's reviewed boot-guard script,
+unit and docker drop-in before engine activation; nexus owns those files, its
+compose/slice, encrypted account, release, database/roles, backups and recovery.
+an idle system engine remains enabled. no host apply mutates nexus application
+state, starts a release or unlocks credentials.
+
+development login scopes and rootless docker are bounded at `user-1000.slice`.
+system services need their own classification: any retained ci runner gets a
+development budget, while jarvis cognition remains production despite sharing
+the developer uid. limits must preserve required production headroom and are
+qualified against concurrent work; shared disk exhaustion remains a host-wide
+risk. nexus keeps its existing backend leaf limits and separate postgres image.
 
 provide utc time, postgresql 16, exactly qualified/held pgvector, the locked
 `jarvis` account, and base ownership at `/opt/jarvis`, `/var/lib/jarvis`, and

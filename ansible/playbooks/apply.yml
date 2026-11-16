@@ -15,6 +15,11 @@
           - ansible_facts['hostname'] == 'dev-server'
         fail_msg: Refusing to apply outside the exact Ubuntu devbox target
 
+    - name: Require Nexus boot protection before package or engine activation
+      ansible.builtin.import_role:
+        name: nexus_host
+        tasks_from: guard
+
     - name: Create private result stream
       ansible.builtin.tempfile:
         state: file
@@ -53,7 +58,7 @@
         - name: Apply host roles
           ansible.builtin.include_role:
             name: "{{ item }}"
-          loop: [base, jarvis_host, workspace_assets, security, shell, github, ai_tools, memory, skidbladnir, rootless_docker]
+          loop: [base, jarvis_host, workspace_assets, security, shell, github, ai_tools, memory, skidbladnir, rootless_docker, nexus_host]
 
         - name: Activate native account daemons
           ansible.builtin.shell: |

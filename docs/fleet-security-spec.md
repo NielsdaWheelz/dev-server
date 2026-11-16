@@ -7,6 +7,12 @@ peer; self-ipv6 and account checks remain tracked below. this document is the
 cross-repository plan. each repository retains ownership of its own deployment
 and runtime contracts.
 
+the later nexus backend relocation supersedes the old host/bootstrap coordinates
+below: dev-server owns shared host prerequisites and private administration;
+nexus retains application release and data ownership. see [the host contract](../SPEC.md)
+and [nexus deployment](../../nexus-web/deployment.md). the dated observations
+below remain historical evidence, including the formerly inactive system engine.
+
 owner decisions: retire `skq-linux` and `niels-desktop`; keep macbook, arch,
 devbox, retirement and the shared tailnet policy in `dev-server`; keep both the
 nexus vps and public website changes in `nexus-web`. both retired computers'
@@ -379,7 +385,7 @@ local/static proof, hosted ci and installed/live acceptance are distinct.
 
 | boundary | required evidence |
 |---|---|
-| source and bootstrap | focused policy/rendering checks; native syntax/config validation; future host apply and nexus provisioning preserve the same closed ingress; repeat apply is inert for unchanged owned policy |
+| source and bootstrap | focused policy/rendering checks; native syntax/config validation; future dev-server host applies and nexus releases preserve the same closed ingress; repeat apply is inert for unchanged owned policy |
 | operator access | fresh key-authenticated ssh from macbook and arch to each permitted destination; host-key verification preserved; existing editor/forwarding journey works |
 | tailnet containment | built-in policy allow/deny tests plus live denied production-to-workstation/devbox probes; use `22/8443` targets first proved listening and reachable from an allowed source in the same overlay family; production public egress still works |
 | skid | each computer reaches each peer; phone lists all peers and opens an existing terminal on each; pairing and active work survive; no funnel |
@@ -428,7 +434,8 @@ exception remains an exception, with its owner and consequence recorded.
   [edge certificate coverage](https://developers.cloudflare.com/ssl/edge-certificates/universal-ssl/limitations/),
   and [waf availability](https://developers.cloudflare.com/waf/).
 - sibling repository owners: `nexus-web/deployment.md`,
-  `deploy/hetzner/{release.py,provision.sh,cloud-init.yml,docker-compose.yml,Caddyfile,sync-env.sh}`,
-  `docs/runbooks/codex-personal-agent-host.md`; skid direct routing:
+  `deploy/hetzner/{release.py,docker-compose.yml,Caddyfile,sync-env.sh}` and
+  `docs/runbooks/codex-personal-agent-host.md`; shared host prerequisites now
+  belong to `ansible/roles/nexus_host/`. skid direct routing:
   `skidbladnir/internal/fleetclient/{config.go,client.go}` and android
   `GatewayClient.kt`.

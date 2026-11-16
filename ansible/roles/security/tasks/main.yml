@@ -65,10 +65,63 @@
     validate: "visudo -cf %s"
     content: "{{ devbox_deploy_user }} ALL=(ALL:ALL) NOPASSWD:ALL\n"
 
+- name: Keep deployment credentials in a private home
+  ansible.builtin.file:
+    path: "/home/{{ devbox_deploy_user }}"
+    state: directory
+    owner: "{{ devbox_deploy_user }}"
+    group: "{{ devbox_deploy_user }}"
+    mode: "0700"
+
 - name: Remove operator elevation policy
   ansible.builtin.file:
     path: "/etc/sudoers.d/90-devbox-{{ devbox_user }}"
     state: absent
+
+- name: Inspect the original cloud-init sudo policy
+  ansible.builtin.stat:
+    path: /etc/sudoers.d/90-cloud-init-users
+  register: security_cloud_init_sudo
+
+- name: Remove the retained cloud-init operator elevation grant
+  ansible.builtin.lineinfile:
+    path: /etc/sudoers.d/90-cloud-init-users
+    regexp: '^\s*{{ devbox_user }}\s+'
+    state: absent
+    validate: "visudo -cf %s"
+  when: security_cloud_init_sudo.stat.exists
+
+- name: Read operator group membership
+  ansible.builtin.command:
+    argv: [id, -nG, "{{ devbox_user }}"]
+  register: security_operator_groups
+  changed_when: false
+
+- name: Remove operator sudo and system Docker group authority
+  ansible.builtin.user:
+    name: "{{ devbox_user }}"
+    groups: "{{ security_operator_groups.stdout.split() | difference([devbox_user, 'sudo', 'docker']) | join(',') }}"
+    append: false
+  when: >-
+    'sudo' in security_operator_groups.stdout.split() or
+    'docker' in security_operator_groups.stdout.split()
+
+- name: Validate the complete sudo policy after operator removal
+  ansible.builtin.command:
+    argv: [visudo, -c]
+  changed_when: false
+
+- name: Verify the operator has no effective sudo policy
+  ansible.builtin.command:
+    argv: [sudo, -n, -l, -U, "{{ devbox_user }}"]
+  environment:
+    LC_ALL: C
+  register: security_operator_sudo
+  changed_when: false
+  failed_when: >-
+    security_operator_sudo.rc != 0 or
+    security_operator_sudo.stdout !=
+    ('User ' ~ devbox_user ~ ' is not allowed to run sudo on ' ~ ansible_facts['hostname'] ~ '.')
 
 - name: Install SSH daemon policy
   ansible.builtin.copy:

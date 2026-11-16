@@ -100,6 +100,7 @@
       - build-essential
       - ca-certificates
       - curl
+      - cryptsetup
       - dbus-user-session
       - direnv
       - docker-buildx-plugin

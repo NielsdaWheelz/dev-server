@@ -351,6 +351,19 @@ to jarvis.
 rootless docker setup is rebuilt only when its package, unit, or daemon config
 changes and no container is running; otherwise activation is deferred.
 
+nexus production uses the separate root-controlled system docker engine.
+production callers use `dev-server-deploy` and explicitly select
+`unix:///var/run/docker.sock`; `niels` remains unprivileged with its rootless
+engine. host apply preserves the system engine even when it is idle. nexus's
+reviewed boot guard must be installed before engine activation.
+
+`ansible/roles/nexus_host/` supplies host prerequisites and bounds development at
+`user-1000.slice`, including the retained system ci runner. nexus
+owns compose, the encrypted native account, application release, its dedicated
+postgres 15, database roles, backups and recovery. application commands remain in
+the [nexus deployment runbook](../nexus-web/deployment.md); host apply does not
+deploy nexus, unlock its account volume or change its data.
+
 this repository supplies jarvis's shared prerequisites: utc host time,
 postgresql 16 and qualified pgvector, the `jarvis` account, and ownership of
 `/opt/jarvis`, `/var/lib/jarvis`, and `/etc/jarvis`. the
