@@ -620,6 +620,11 @@ service, credentials, backups, and recovery. preserve those contents and nexus
 state. jarvis is independent of developer rootless docker and is not an apply
 postcondition.
 
+the jarvis host also installs `file`, poppler's pdf utilities and `pandoc` for
+native attachment inspection. python supplies ordinary csv/text handling.
+jarvis owns original storage, cache permissions and the native read-only mount;
+these packages add no extraction service or application activation.
+
 a reviewed pgvector pin change authorizes the exact package upgrade or rollback
 on apply. refresh package metadata, install the declared version and keep it
 held. qualification of application and database compatibility remains with
