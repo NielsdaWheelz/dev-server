@@ -1,114 +1,124 @@
 # native memory orientation rollout
 
-status: initial source merged and installed in all twelve online profile files.
-live checks found early task execution; the shared startup wording is repaired
-in source and awaiting publication/qualification. arch is offline.
+status: final source merged and installed in all twelve online profile files.
+four fresh macbook/devbox codex/claude sessions completed orientation before task
+work. one cursor-continuation deviation remains recorded below. arch is offline.
 
-problem: installed managed instructions make retrieval conditional on the agent
-already recognizing a need for history. fresh sessions can therefore miss prior
-preferences and decisions before beginning work.
+original problem: optional retrieval required agents to recognize missing history
+before looking for it. initial orientation wording also allowed task work to
+start before the view. the final shared guidance leads with startup orientation,
+separates it from optional provider-local recall, and explicitly orders task-file
+reads, commands, edits and delegation after complete frozen-view pagination.
 
-source owner: `assets/memory/instruction.md`, an exact snapshot of the shared
-library's `NATIVE_ORIENTATION_GUIDANCE`. `lib/ai-tools.sh:ai_install_instructions`
-distributes it through the existing macbook, arch and devbox apply paths to all
-six connected codex/claude personal/work/work2 profiles. jarvis's
-`docs/universal-memory.md#orientation-lifecycle-and-outages` owns lifecycle,
-coverage, note and outage semantics. capture and shared-tree merges stay host-owned.
+## source
 
-initial source verification, 2026-11-17: the 4,055-byte snapshot matched the export plus
-terminal newline from universal-memory
-`a788c885d5529227de55a9da9d8aa940da00eaba`, evaluated from that git object without
-importing dependencies. asset sha-256:
-`42f0b45730789e2d2af2a6de694e1a5805ef3b70093524cea43e65c664fba0de`.
-a temporary integration probe exercised the real instruction installer in
-isolated account homes: all six connected, each connected individually, all
-disconnected and absent client configuration. exact bytes, mode `0600`, unchanged
-inodes/mtimes on reapply, removal of disconnected guidance and preservation of
-unrelated account files passed. all three host declarations contain the six
-intended native profiles. shell syntax and diff checks passed. the probe and its
-fixtures were removed; no retained test suite was added.
-
-independent review confirmed the shared lifecycle and six-profile distribution.
-it found missing explicit note retry instructions in the upstream guidance; the
-adopted revision includes the correction: caller-supplied saves reuse one
-submission id and identical arguments, while host-bound saves retain host-owned
-identity and recovery.
-
-before deployment, 2026-11-17: read-only macbook inspection found the old conditional
-instruction in all six account instruction files, each mode `0600` and sha-256
-`8593176fa23ab0a5b253a2f87822fa3becea641596e0a247f2a1da432eac0192`.
-all six native configurations register `jarvis-memory`; claude-personal uses
-`~/.claude.json`, while work/work2 use their own account roots. these observations
-establish configuration only, not that an existing session loaded it.
-
-installed evidence, 2026-11-17:
-
-- [source pr 222](https://github.com/NielsdaWheelz/dev-server/pull/222) merged as
-  `cec89b0e4200d2521ec59db84ed64692f693178d`; its tree equals the reviewed
-  `55c5295` tree. this repository has no hosted checks for this change.
-- the existing instruction installer published all six account files on each
-  online host from the merged source. each is 12,089 bytes, mode `0600`, sha-256
-  `f939685668b1e88f99cd8872e8118153582124347c95247e07bbcf1b8cac5a97`.
-  macbook reapplication made no writes. sixteen macbook and eighteen devbox
-  protected configuration/authentication/collector files retained hashes, modes
-  and inodes. native providers, credentials, collectors and source cuts were not
-  changed. devbox's managed `assets/memory/instruction.md` also received the
-  exact snapshot, mode `0644`; its base agent instructions already matched.
-- the runtime owner cleanly stopped the devbox application and passive observer,
-  preserving canonical resume sequence 9, the pending genuine fixture and gmail
-  cursor. under `/opt/jarvis/.deploy.lock`, publication stopped the contained
-  host and restarted the same release `0c3edfc5bd102ae6db5e8f9768dc2ff0b6309530`.
-  new contained pid `3638198` started at `17:23:54Z`; service-identity
-  `codex-host verify` passed without a model turn. the host configuration hash
-  stayed `9ef16fd0a753d2bae00f14ef111816baef8245cdec5eacfd3e2ea56fec4ed98d`.
-  the runtime owner then initialized fresh passive capture at `17:49:03Z` and
-  restarted the same application at `17:49:17Z`, pid `3681457`, active/success
-  with zero restarts. its `17:51:02Z` database receipt preserves resume 9 and
-  the pending fixture, with no active native/uncertain action/unresolved read or
-  outbox obligation. the gmail source remains enabled and error-free. an
-  independent authenticated memory read succeeds; ready coverage `[0,3574)`
-  versus 5,290 admitted leaves is explicit, not a caught-up claim.
-- arch was unavailable through both skid and bounded ssh; no arch writes ran.
-
-startup-order repair: initial fresh marker probes on both hosts showed codex-work
-reading the file without a view; claude-work read it concurrently with tool
-discovery, then fetched two view pages. a macbook code-review probe confirmed
-claude reading the task source before completing orientation. the initial codex
-review used an artificially restricted mode that blocked the memory call; the
-ordinary configured `--yolo` alias subsequently completed view pagination before
-reading the task source. neither a restricted-mode failure nor an agent's claim
-that orientation happened first substitutes for recorded tool ordering.
-
-the source now adopts universal-memory
-[`c79cf1c03fa801291f9e6dee0384c6586a98d015`](https://github.com/NielsdaWheelz/universal-memory/pull/8).
-the exact 4,648-byte export plus newline has sha-256
+`assets/memory/instruction.md` is an exact snapshot of
+`universal_memory.tools.NATIVE_ORIENTATION_GUIDANCE` plus one terminal newline.
+the immutable source is
+[`c79cf1c03fa801291f9e6dee0384c6586a98d015`](https://github.com/NielsdaWheelz/universal-memory/blob/c79cf1c03fa801291f9e6dee0384c6586a98d015/src/universal_memory/tools.py):
+4,648 bytes, sha-256
 `fabc89711bdd4f7f312fbf5207bb2ef46696a91860bc21155a559c187f352e15`.
-startup now leads the native guidance, separates shared orientation from optional
-provider-local recall, and makes task execution wait rather than run concurrently.
-common affirmative/save wording and lifecycle/grant exceptions are unchanged.
-this is a prompt repair; actual loaded-session qualification remains required.
+jarvis's `docs/universal-memory.md#orientation-lifecycle-and-outages` owns the
+common lifecycle, coverage, note and outage contract. automatic capture and
+shared-tree merges remain host-owned; this change adds no store or dependency.
 
-| boundary | evidence for this change |
+[source pr 222](https://github.com/NielsdaWheelz/dev-server/pull/222) merged the
+initial adoption as `cec89b0e4200d2521ec59db84ed64692f693178d`.
+[startup repair pr 223](https://github.com/NielsdaWheelz/dev-server/pull/223)
+merged the final snapshot as `d3b5c7a792008ddadb733d50aa106cfc0cbfa7c0`.
+each merged tree equaled its reviewed source tree. the repository has no hosted
+checks for this change.
+
+source verification, 2026-11-17:
+
+- the snapshot matched the export from its immutable git object. the safe ast
+  evaluator resolved prior string constants and concatenation without importing
+  dependencies. common affirmative and save guidance remain byte-identical.
+- the real `ai_install_instructions` function passed isolated checks with all six
+  accounts connected, each individually connected, all disconnected and no
+  client configuration. exact bytes, `0600`, idempotent inodes/mtimes, removal of
+  disconnected guidance and preservation of unrelated files passed. all three
+  host declarations include the six intended profiles; they share this installer.
+- independent review confirmed lifecycle and distribution. its note-retry finding
+  was fixed upstream before adoption: external retries use the same submission
+  id and identical arguments, including association; host-bound saves retain
+  host-owned identity and recovery. shell syntax and diff checks passed.
+
+## installed publication
+
+all six destinations in [the spec](../../SPEC.md#native-memory-orientation) were
+checked on each online host. each final instruction file is 12,682 bytes, mode
+`0600`, sha-256
+`8590c23d7d2c3cd2359bd4184d7c57e3ed63a5a0ef586e803d5d88280a205bae`.
+devbox's managed memory asset also matches the source above, mode `0644`.
+
+| host | final publication evidence, 2026-11-17 |
 | --- | --- |
-| source snapshot and six-profile rendering | exact upstream bytes and isolated installer checks passed |
-| macbook installation | all six files installed, byte/mode/preservation checks passed |
-| devbox installation | all six files installed; same-release contained-host verification passed |
-| arch installation | offline; not run |
-| fresh-session orientation | initial wording failed ordering checks; repaired wording pending qualification |
-| compaction and child behavior | not run |
-| actual recall usefulness | not evaluated |
+| macbook | six exact files; sixteen protected configuration/authentication/collector files unchanged at publication |
+| devbox | six exact files and managed asset; eighteen protected files unchanged at publication |
+| arch | skid unavailable; bounded ssh still timed out at 18:21Z; no writes |
 
-rollout retains the existing stopped jarvis/contained-host publication boundary:
-atomic replacement invalidates the contained host's file masks. restart and
-qualify that same-release host before cognition resumes.
+protected comparisons include hashes, modes and inodes. after native session
+checks, provider-owned `.claude-work/.claude.json` differed from the publication
+baseline on both online hosts; the checks do not attribute its writer. those files
+were retained, not restored. publication preservation does not claim unchanged
+runtime state after launching sessions.
 
-resolved when: normal host apply installs the verified snapshot into every
-intended connected profile; fresh sessions demonstrate complete frozen-view
-pagination before substantive work, relevant zoom/open/search and receipt-backed
-useful notes. verify inherited orientation, missing orientation after compaction,
-granted and ungranted children, stale cursors and explicit outages without new
-grants or client-owned tree merges. record each host/profile's actual outcome and
-any remaining deferral; installed bytes alone do not prove agent behavior. reuse
-the [existing activation record](universal-memory-activation.md) for outstanding
-host/account access rather than treating its earlier qualification as proof of
-this instruction change.
+devbox publication requires a stopped application, passive observer and contained
+host because atomic replacement invalidates existing file masks. after the final
+explicit runtime-owner handoff, publication held `/opt/jarvis/.deploy.lock`,
+restarted contained pid `3731846` at `18:17:16Z`, and passed service-identity
+`codex-host verify` without generation. the application and observer remained
+stopped at handback. selected release
+`0c3edfc5bd102ae6db5e8f9768dc2ff0b6309530` and mapping sha-256
+`9ef16fd0a753d2bae00f14ef111816baef8245cdec5eacfd3e2ea56fec4ed98d`
+were unchanged. the runtime owner independently verified publication, initialized
+fresh capture at `18:19:19Z`, and started the same application at `18:19:29Z`,
+pid `3735981`, active/success with zero restarts. its stopped/restart receipts
+preserve canonical resume 9, the pending genuine fixture and gmail cursor, with
+no entered native/action/work/read/outbox obligations. memory availability
+returned. no canonical control, migration, provider/collector upgrade or source-cut
+reset was performed by this publication.
+
+## loaded-session qualification
+
+initial marker probes on both hosts showed codex reading the task without a view
+and claude reading concurrently with tool discovery. a substantive macbook review
+confirmed claude reading task source before finishing orientation. this motivated
+the shared startup repair. an initially restricted codex review blocked memory
+access; that probe mode is not evidence of an ordinary-profile connection failure.
+
+final probes review the same small code fixture through each provider's ordinary
+configured shell alias, without a model override. raw tool ordering is the
+criterion; an agent's self-report is insufficient.
+
+| host/profile | final observed result |
+| --- | --- |
+| macbook/codex-work | three calls, two unique pages of one snapshot, `[0,3664)`, admitted 6,556; complete before task work; exit 0 |
+| macbook/claude-work | two pages of one snapshot, `[0,3664)`, admitted 6,556; oversized retained results read in full before task work; exit 0 |
+| devbox/codex-work | three calls: first snapshot abandoned, second completed in two pages; `[0,3693)`, admitted 7,118; complete before task work; exit 0 |
+| devbox/claude-work | two pages of one snapshot, `[0,3693)`, admitted 7,118; retained first page read in full before task work; exit 0 |
+
+devbox codex opened a new snapshot instead of continuing the first cursor. it
+subsequently completed the second snapshot without observed splicing, but this
+did not follow the partial-read continuation instruction. the startup ordering
+check passed; complete adherence to the guidance is not established. no further
+wording change or publication window was taken on this evidence.
+
+private receipts retain native session identifiers, transcript hashes, cursor
+bounds and tool order. original native histories remain intact. qualification
+evidence stays outside central memory, whose final reset is owned by the separate
+runtime journey. complete ready coverage is not proof that capture is caught up.
+these bounded sessions establish observed ordering, not general reliability or
+useful recall. compaction/child behavior, stale cursors and outages were not
+exercised live by this change; their required behavior comes from the common
+contract and remains subject to separate qualification.
+
+resolved when: arch's intended connected profiles receive and verify the same
+snapshot, and the remaining behavioral boundaries have explicit outcomes or
+recorded deferrals. fresh sessions must complete the frozen ready view before task
+work, then use relevant zoom/open/search and receipt-backed useful notes when
+warranted. verify inherited and absent orientation across compaction/children,
+stale cursors and outages within existing grants. reuse the
+[activation record](universal-memory-activation.md) for outstanding host/account
+access; earlier activation evidence does not qualify this instruction change.
