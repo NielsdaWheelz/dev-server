@@ -207,7 +207,7 @@ is installed into all six personal/work/work2 codex and claude account homes as
 `AGENTS.md` or `CLAUDE.md`. connected profiles also receive
 [`assets/memory/instruction.md`](assets/memory/instruction.md), the shared native
 memory guidance. fresh sessions must read a complete paged `memory_view` before
-substantive work, use relevant zoom then existing search when needed, and save
+task-file reads or commands, use relevant zoom then existing search when needed, and save
 useful durable conclusions without duplicating captured conversation. the
 [common lifecycle contract](SPEC.md#native-memory-orientation) covers inherited
 orientation, compaction, children and outages. edit the repo sources; apply
