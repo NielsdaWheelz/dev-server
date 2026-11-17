@@ -203,10 +203,18 @@ severe memory pressure, builds and editors can still be killed; the preference
 does not make agents immune.
 
 [`assets/agent-instructions.md`](assets/agent-instructions.md)
-is installed into the five account homes as `AGENTS.md` or `CLAUDE.md`. edit the
-repo source; apply replaces the installed copies. new sessions load changes.
+is installed into all six personal/work/work2 codex and claude account homes as
+`AGENTS.md` or `CLAUDE.md`. connected profiles also receive
+[`assets/memory/instruction.md`](assets/memory/instruction.md), the shared native
+memory guidance. fresh sessions must read a complete paged `memory_view` before
+substantive work, use relevant zoom then existing search when needed, and save
+useful durable conclusions without duplicating captured conversation. the
+[common lifecycle contract](SPEC.md#native-memory-orientation) covers inherited
+orientation, compaction, children and outages. edit the repo sources; apply
+replaces installed copies. new sessions load changes; source verification and
+[installed rollout](docs/issues/memory-orientation-rollout.md) remain separate.
 [`assets/claude/statusline.sh`](assets/claude/statusline.sh) is installed as
-`~/bin/claude-statusline` and set as the `statusLine` command in both claude
+`~/bin/claude-statusline` and set as the `statusLine` command in all three claude
 account `settings.json` files; running sessions pick it up on the next update.
 every host installs the same display-only command. it renders context usage and
 optional 5-hour/weekly used quota from claude's structured statusline input.

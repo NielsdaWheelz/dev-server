@@ -458,9 +458,8 @@ shared shell environment and provider launchers load the private
 client environment for future launches. memory configuration itself does not
 restart native sessions or daemons; later daemon maintenance may interrupt them.
 connection acceptance must be verified separately before claiming those existing
-consumers loaded the change. each connected
-profile receives exactly the product's owner-authored memory instruction; tool
-authority notices remain server-owned.
+consumers loaded the change. each connected profile receives the shared native
+memory instruction specified below.
 
 on devbox, memory shares private HTTPS 8443 with skid and owns only
 `/v1/memory` and `/v1/mcp` in tailscale serve. each forwards to its identical
@@ -473,6 +472,44 @@ loopback-only. jarvis deployment owns the server declaration at
 `/etc/jarvis/memory.json`, service maintenance and source cutover. configuring
 these files is source delivery; fleet installation, actual authorization and
 production activation retain their own qualification.
+
+### native memory orientation
+
+the common contract is jarvis's
+[`docs/universal-memory.md`, orientation lifecycle and outages](https://github.com/NielsdaWheelz/jarvis/blob/main/docs/universal-memory.md#orientation-lifecycle-and-outages).
+`assets/memory/instruction.md` is an exact checked-in snapshot of
+`universal_memory.tools.NATIVE_ORIENTATION_GUIDANCE`, including the shared
+affirmative `ORIENTATION_GUIDANCE`, with one terminal newline. the library owns
+the wording; dev-server owns its adoption and distribution. the snapshot is from
+universal-memory [`a788c885d5529227de55a9da9d8aa940da00eaba`](https://github.com/NielsdaWheelz/universal-memory/blob/a788c885d5529227de55a9da9d8aa940da00eaba/src/universal_memory/tools.py).
+updating the snapshot requires recording the immutable upstream revision and
+comparing its bytes.
+installation adds no library dependency, memory service or alternate note store.
+
+`ai_install_instructions` appends the snapshot to `assets/agent-instructions.md`
+only for accounts declared in the installed private client environment. both
+ordinary ai installation and memory configuration use this same function on
+macbook, arch and devbox. the six destinations are:
+
+| account | instruction file |
+| --- | --- |
+| codex-personal | `.codex/AGENTS.md` |
+| codex-work | `.codex-work/AGENTS.md` |
+| codex-work2 | `.codex-work2/AGENTS.md` |
+| claude-personal | `.claude/CLAUDE.md` |
+| claude-work | `.claude-work/CLAUDE.md` |
+| claude-work2 | `.claude-work2/CLAUDE.md` |
+
+fresh sessions read every page of one frozen ready view before substantive work.
+completed orientation may survive native compaction or pass to a child in its
+handoff; absent or insufficient orientation requires a new read within existing
+grants. incomplete reads remain explicit during outages. complete ready coverage
+does not establish complete capture or an empty backlog. relevant zoom, exact
+originals and existing keyword/semantic search follow the shared guidance.
+useful nonredundant notes require save receipts; parents integrate shared child
+findings. automatic capture and shared-tree merges remain host-owned. native
+compaction remains provider-owned. source rendering, installed instruction bytes
+and actual fresh-session behavior require separate evidence.
 
 publish native account configuration and instructions only while jarvis and its
 contained host are stopped. atomic instruction-file replacement invalidates the
