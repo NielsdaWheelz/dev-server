@@ -26,8 +26,8 @@ shared-tree merges remain host-owned; this change adds no store or dependency.
 initial adoption as `cec89b0e4200d2521ec59db84ed64692f693178d`.
 [startup repair pr 223](https://github.com/NielsdaWheelz/dev-server/pull/223)
 merged the final snapshot as `d3b5c7a792008ddadb733d50aa106cfc0cbfa7c0`.
-each merged tree equaled its reviewed source tree. the repository has no hosted
-checks for this change.
+each merged tree equaled its reviewed source tree. source checks and installed
+session evidence are reported separately below.
 
 source verification, 2026-11-17:
 
