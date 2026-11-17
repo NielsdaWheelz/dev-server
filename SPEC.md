@@ -481,7 +481,7 @@ the common contract is jarvis's
 `universal_memory.tools.NATIVE_ORIENTATION_GUIDANCE`, including the shared
 affirmative `ORIENTATION_GUIDANCE`, with one terminal newline. the library owns
 the wording; dev-server owns its adoption and distribution. the snapshot is from
-universal-memory [`a788c885d5529227de55a9da9d8aa940da00eaba`](https://github.com/NielsdaWheelz/universal-memory/blob/a788c885d5529227de55a9da9d8aa940da00eaba/src/universal_memory/tools.py).
+universal-memory [`c79cf1c03fa801291f9e6dee0384c6586a98d015`](https://github.com/NielsdaWheelz/universal-memory/blob/c79cf1c03fa801291f9e6dee0384c6586a98d015/src/universal_memory/tools.py).
 updating the snapshot requires recording the immutable upstream revision and
 comparing its bytes.
 installation adds no library dependency, memory service or alternate note store.
@@ -500,7 +500,10 @@ macbook, arch and devbox. the six destinations are:
 | claude-work | `.claude-work/CLAUDE.md` |
 | claude-work2 | `.claude-work2/CLAUDE.md` |
 
-fresh sessions read every page of one frozen ready view before substantive work.
+fresh sessions read every page of one frozen ready view before task execution.
+necessary tool discovery and instruction/bootstrap reads may precede orientation;
+task-file reads, commands, edits and delegation wait and cannot run concurrently
+with it. provider-local recall heuristics do not make shared startup optional.
 completed orientation may survive native compaction or pass to a child in its
 handoff; absent or insufficient orientation requires a new read within existing
 grants. incomplete reads remain explicit during outages. complete ready coverage
