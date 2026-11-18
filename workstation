@@ -245,7 +245,7 @@ workstation_apply() {
   else
     tmux_verify_stable_version /usr/bin/tmux
   fi
-  dotfiles_install
+  dotfiles_install "$workstation_platform"
   if [[ "$workstation_platform" == arch ]]; then
     personal_arch_apply
   else
