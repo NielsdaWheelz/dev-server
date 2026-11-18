@@ -23,7 +23,7 @@ dotfiles_validate_declared_inputs() {
 }
 
 dotfiles_install_dirs() {
-  local home
+  local platform="$1" home
 
   home="$(dev_server_home)"
   ensure_directory "$home/bin" 0755 || return 1
@@ -37,10 +37,12 @@ dotfiles_install_dirs() {
   ensure_directory "$home/.zsh" 0755 || return 1
   ensure_directory "$home/.tmux" 0755 || return 1
   ensure_directory "$home/.tmux/plugins" 0755 || return 1
-  ensure_directory "$home/src" 0755 || return 1
-  ensure_directory "$home/src/work" 0755 || return 1
-  ensure_directory "$home/src/personal" 0755 || return 1
-  ensure_directory "$home/.ai-images" 0755 || return 1
+  if [[ "$platform" == arch ]]; then
+    ensure_directory "$home/src" 0755 || return 1
+    ensure_directory "$home/src/work" 0755 || return 1
+    ensure_directory "$home/src/personal" 0755 || return 1
+    ensure_directory "$home/.ai-images" 0755 || return 1
+  fi
 }
 
 dotfiles_install_zshrc() {
@@ -318,7 +320,7 @@ dotfiles_install() {
   tmux_report_binary_activation
   dotfiles_validate_declared_inputs
   require_cmd find git python3
-  dotfiles_install_dirs || return 1
+  dotfiles_install_dirs "$1" || return 1
   dotfiles_install_files || return 1
   tmux_reload_if_changed || return 1
   dotfiles_retire_tmux_plugins || return 1

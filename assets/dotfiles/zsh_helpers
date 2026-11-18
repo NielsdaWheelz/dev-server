@@ -22,9 +22,19 @@ fi
 
 alias gs='git status --short --branch'
 alias t='tmux new -A -s main'
-alias work='cd ~/src/work'
-alias personal='cd ~/src/personal'
 alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
+
+if [[ -d ~/src/work ]]; then
+  alias work='cd ~/src/work'
+elif [[ ${aliases[work]-} == 'cd ~/src/work' ]]; then
+  unalias work
+fi
+
+if [[ -d ~/src/personal ]]; then
+  alias personal='cd ~/src/personal'
+elif [[ ${aliases[personal]-} == 'cd ~/src/personal' ]]; then
+  unalias personal
+fi
 
 # default agent permissions for interactive shells; `command` bypasses aliases.
 alias claude='claude --dangerously-skip-permissions'
