@@ -371,19 +371,13 @@ every other settings
 key, authentication, history, project instructions, and skills remain user-owned.
 instruction updates affect new sessions; status line updates apply live.
 every host invokes `ai_install` without arguments and installs the same
-display-only statusline command. the final row shows directory, git branch or
-detached commit, model and effort, context use and available five-hour and
-weekly used percentages. each quota percentage must be finite and in 0–100. print
-its integer floor, including zero.
-
-when that window also has a finite, representable `resets_at`, floor its unix
-seconds and show the instant in host-local time, using the offset at the
-deadline. a supplied past date can appear. the optional preceding row reads
-`resets 7d YYYY-MM-DD HH:MM:SS ±HHMM · 5h YYYY-MM-DD HH:MM:SS ±HHMM`.
-with at least 70 columns show every available date. at 39–69 show one date,
-weekly first. at smaller or unknown widths omit the reset row. skid owns passive
-observation and disclosure of the displayed values. the formatter stores no
-report. [claude status-line fields](https://code.claude.com/docs/en/statusline#rate-limit-usage)
+display-only statusline command. its single row shows directory, git branch or
+detached commit, model and effort, and context use. it appends the used
+percentages returned by `~/.local/bin/skid claude-usage` in 5h, 7d, fable order.
+that local command reads the active profile's claude cache. the footer still
+shows the session fields when the command or a fresh reading is unavailable.
+at a known width, drop trailing quota items until the full suffix fits with
+four cells of margin. the desktop usage band owns reset countdowns.
 
 ## universal memory host configuration
 
