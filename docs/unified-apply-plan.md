@@ -2,9 +2,10 @@
 
 implementation is merged. signed skid v0.24.2 passed public release verification;
 the approved macbook and devbox cutovers are complete. memory activation remains
-pending on both, and busy docker activation on devbox. arch is outside this
-rollout. [qualification](issues/unified-apply-qualification.md) records the
-remaining boundaries; this document does not authorize another live operation.
+pending on both, and busy docker activation on devbox. arch codex daemon
+maintenance passed a separate cold start and repeat apply. remaining native
+boundaries are tracked in the [qualification record](issues/unified-apply-qualification.md).
+live operations require current owner authorization.
 
 ## contract
 

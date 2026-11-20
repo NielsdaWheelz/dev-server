@@ -28,7 +28,8 @@ signed skid v0.24.2 and unified apply are deployed on macbook and devbox. their
 approved terminal cutovers are complete. memory profiles and collectors pass
 installed functional qualification; owner-approved profile and host deferrals
 remain in the [activation issue](docs/issues/universal-memory-activation.md).
-devbox also defers busy docker activation. arch is outside this rollout.
+devbox also defers busy docker activation. arch has since passed cold and
+repeat codex daemon activation.
 remaining qualification is recorded
 [here](docs/issues/unified-apply-qualification.md).
 
