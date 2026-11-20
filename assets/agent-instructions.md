@@ -54,5 +54,8 @@
       i value composable modules with explicit interfaces and hidden internals. do not introduce abstractions solely to accommodate hypothetical future implementations. unix and plan 9’s composable mechanisms and uniform interfaces, parnas’s information hiding, meyer’s design by contract, jackson’s independently understandable concepts, and ousterhout’s deep modules align with this preference. components should depend on one another’s explicit contracts; implementation changes that preserve those contracts should not require changes in consumers. judge abstractions by how much complexity they absorb and how well they support understanding of both the parts and the whole.
 
 
+- development placement
+    - run large builds, integration databases, rehearsals, and restores on `macbook`. wait if the mac is unavailable. existing release pipelines use their declared hosts.
+    - for a new detached rehearsal, use dev-server's `scripts/rehearse-worktree`. store named evidence outside scratch, reopen and hash it, then report the check and cleanup outcomes separately. inner checks own fixture teardown. preserve existing hetzner scratch until the owner approves disposal.
 - agent control
     - use native subagents and workflows when useful. use skid to manage independent codex and claude-code sessions. run `skid --help` for commands and automation guidance.

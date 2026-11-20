@@ -1,0 +1,253 @@
+#!/usr/bin/env python3
+"""Run one Mac rehearsal with evidence that outlives its checkout."""
+
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+
+RECEIPT = "receipt.json"
+
+
+def git(directory, *args, input=None):
+    return subprocess.run(
+        ["git", "--no-optional-locks", "-C", directory, *args],
+        input=input, capture_output=True, check=True, text=True,
+    ).stdout
+
+
+def group_exists(pid):
+    try:
+        os.killpg(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def run_command(command, checkout, evidence, lock_fd, interruption):
+    if interruption:
+        raise RuntimeError("interrupted before starting the command")
+    child = subprocess.Popen(
+        command, cwd=checkout, env={**os.environ, "REHEARSAL_EVIDENCE_DIR": str(evidence)},
+        start_new_session=True, pass_fds=(lock_fd,),
+    )
+    while child.poll() is None and not interruption:
+        time.sleep(0.1)
+    if interruption:
+        for signum in (interruption[0], signal.SIGTERM, signal.SIGKILL):
+            child.poll()
+            try:
+                os.killpg(child.pid, signum)
+            except ProcessLookupError:
+                break
+            except PermissionError:
+                # Darwin can report a group whose leader exited before it was reaped.
+                pass
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
+                child.poll()
+                if not group_exists(child.pid):
+                    break
+                time.sleep(0.1)
+            if not group_exists(child.pid):
+                break
+    return child.wait(timeout=1), group_exists(child.pid)
+
+
+def hash_evidence(directory, promises):
+    files = []
+    for relative in promises:
+        path = directory / relative
+        if path.resolve(strict=True) != path or not path.is_file():
+            raise RuntimeError(f"promised evidence must be a regular, nonsymlink file: {path}")
+        with path.open("rb") as handle:
+            files.append({"path": str(path), "sha256": hashlib.file_digest(handle, "sha256").hexdigest()})
+    return files
+
+
+def require_unused(scratch, evidence):
+    # The managed Mac has one local daemon. Include stopped containers.
+    docker = ["docker", "--context", "desktop-linux"]
+    containers = subprocess.check_output([*docker, "container", "ls", "-aq"], text=True, timeout=30).split()
+    sources = []
+    local_volumes = set()
+    if containers:
+        records = json.loads(subprocess.check_output([*docker, "container", "inspect", *containers], timeout=30))
+        for record in records:
+            for mount in record["Mounts"] or []:
+                if mount["Type"] == "bind":
+                    sources.append((record["Id"][:12], Path(mount["Source"])))
+                if mount["Type"] == "volume" and mount["Driver"] == "local":
+                    local_volumes.add(mount["Name"])
+    if local_volumes:
+        records = json.loads(
+            subprocess.check_output([*docker, "volume", "inspect", *sorted(local_volumes)], timeout=30),
+        )
+        for record in records:
+            options = record["Options"] or {}
+            if {"bind", "rbind"}.intersection(options.get("o", "").split(",")):
+                sources.append((record["Name"], Path(options["device"])))
+    for owner, source in sources:
+        # Docker's local volume driver accepts the VM's host mount prefix.
+        prefix = Path("/host_mnt")
+        if source.is_relative_to(prefix):
+            source = Path("/") / source.relative_to(prefix)
+        source = source.resolve()
+        if scratch.is_relative_to(source) or source.is_relative_to(scratch):
+            raise RuntimeError(f"container mount still present ({owner}, {source})")
+
+    # Darwin lsof can return 1 even when it reports matching files.
+    opened = subprocess.run(
+        ["/usr/sbin/lsof", "-nP", "-Fp", "+D", scratch, "+D", evidence], capture_output=True, text=True, timeout=30,
+    )
+    if opened.returncode not in (0, 1) or opened.stderr:
+        raise RuntimeError("open-file inspection was inconclusive")
+    processes = {line[1:] for line in opened.stdout.splitlines() if line.startswith("p")}
+    processes.discard(str(os.getpid()))
+    if processes:
+        raise RuntimeError(f"open users still present (pids {', '.join(sorted(processes))})")
+
+
+def write_receipt(path, receipt):
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as handle:
+        json.dump(receipt, handle, indent=2)
+        handle.write("\n")
+    os.replace(handle.name, path)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        usage="%(prog)s REPO REV NEW_EVIDENCE_DIR [--expect FILE]… -- COMMAND [ARG...]",
+    )
+    parser.add_argument("repo", type=Path)
+    parser.add_argument("rev")
+    parser.add_argument("evidence", type=Path)
+    parser.add_argument("--expect", action="append", default=[], type=Path)
+    if "--" not in sys.argv:
+        parser.parse_args()
+        parser.error("separate the command with --")
+    separator = sys.argv.index("--")
+    args = parser.parse_args(sys.argv[1:separator])
+    command = sys.argv[separator + 1:]
+    if not command:
+        parser.error("a command is required")
+    if sys.platform != "darwin":
+        parser.error("run heavy rehearsals on macbook")
+    if sys.version_info < (3, 11):
+        parser.error("rehearsals require python 3.11 or later")
+    for relative in args.expect:
+        if relative.is_absolute() or not relative.parts or ".." in relative.parts or relative.parts[0] == RECEIPT:
+            parser.error("--expect must name a relative evidence file outside receipt.json")
+    if len(set(args.expect)) != len(args.expect):
+        parser.error("each promised file must be listed once")
+
+    if any(key in os.environ for key in ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")):
+        parser.error("use REPO to select the repository and unset git working-tree overrides")
+    repo = args.repo.resolve(strict=True)
+    commit = git(repo, "rev-parse", "--verify", "--end-of-options", f"{args.rev}^{{commit}}").strip()
+    if not git(repo, "for-each-ref", "--contains", commit, "--count=1"):
+        parser.error("make REV reachable from a retained git ref, such as a branch or tag")
+    scratch_parent = Path.home() / ".local/state/dev-server/rehearsals"
+    scratch_parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    scratch_parent = scratch_parent.resolve()
+    evidence = args.evidence.absolute()
+    evidence = evidence.parent.resolve(strict=True) / evidence.name
+    volatile = (Path(tempfile.gettempdir()).resolve(), Path("/private/tmp"), Path("/private/var/tmp"), Path("/private/var/folders"))
+    if evidence.is_relative_to(scratch_parent) or any(evidence.is_relative_to(directory) for directory in volatile):
+        parser.error("evidence needs a persistent directory outside rehearsal scratch and system temporary storage")
+    interruption = []
+    for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, lambda delivered, _: interruption.append(delivered))
+
+    evidence.mkdir(mode=0o700)
+    scratch = Path(tempfile.mkdtemp(prefix="rehearsal-", dir=scratch_parent))
+    checkout = scratch / "checkout"
+    receipt_path = evidence / RECEIPT
+    print(f"checkout {checkout}\nreceipt {receipt_path}", file=sys.stderr, flush=True)
+    lock_fd = os.open(scratch, os.O_RDONLY)
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        receipt = {
+            "source_repository": str(repo),
+            "source_commit": commit,
+            "argv": command,
+            "worktree": str(checkout),
+            "check": {"exit_code": None, "signal": None},
+            "promised_evidence": [str(path) for path in args.expect],
+            "evidence": [],
+            "cleanup": {
+                "status": "retained",
+                "path": str(scratch),
+                "reason": "run did not finish",
+                "next_action": "acquire the scratch lock and repeat the cleanup checks",
+            },
+        }
+        write_receipt(receipt_path, receipt)
+        next_action = "inspect the retained scratch and register any unique work before retrying cleanup"
+        try:
+            git(repo, "worktree", "add", "--detach", checkout, commit)
+            returncode, live_group = run_command(command, checkout, evidence, lock_fd, interruption)
+            receipt["check"] = {
+                "exit_code": returncode if returncode >= 0 else None,
+                "signal": signal.Signals(-returncode).name if returncode < 0 else None,
+            }
+            if interruption:
+                raise RuntimeError(f"rehearsal interrupted by {signal.Signals(interruption[0]).name}")
+            if returncode < 0:
+                raise RuntimeError(f"command exited on {signal.Signals(-returncode).name}")
+            if live_group:
+                raise RuntimeError("the command process group is still active")
+            next_action = "save unique commits under a branch and preserve changed or untracked files before retrying cleanup"
+            if git(checkout, "status", "--porcelain=v1", "--untracked-files=all", "--ignored=matching"):
+                raise RuntimeError("the checkout still contains modified, untracked or ignored files")
+            heads = git(checkout, "reflog", "show", "--format=%H", "HEAD").splitlines()
+            if not heads:
+                raise RuntimeError("the checkout HEAD reflog is missing")
+            refs = git(repo, "for-each-ref", "--format=^%(refname)").splitlines()
+            head = git(checkout, "rev-parse", "HEAD").strip()
+            if git(repo, "rev-list", "--max-count=1", "--stdin", input="\n".join([head, *heads, *refs, ""])):
+                raise RuntimeError("the checkout contains a commit unreachable from repository refs")
+            next_action = "inspect active users and local docker desktop before retrying cleanup"
+            require_unused(scratch, evidence)
+            next_action = "finish and verify the promised evidence before retrying cleanup"
+            receipt["evidence"] = hash_evidence(evidence, args.expect)
+            next_action = "acquire the scratch lock and repeat the cleanup checks"
+            if interruption:
+                raise RuntimeError(f"rehearsal interrupted by {signal.Signals(interruption[0]).name}")
+            git(repo, "worktree", "remove", checkout)
+            scratch.rmdir()
+            receipt["cleanup"] = {"status": "removed"}
+        except (OSError, RuntimeError, subprocess.SubprocessError, ValueError, KeyError) as error:
+            receipt["cleanup"] = {
+                "status": "retained",
+                "path": str(checkout if checkout.exists() else scratch),
+                "reason": str(error),
+                "next_action": next_action,
+            }
+
+        if interruption:
+            receipt["interruption"] = signal.Signals(interruption[0]).name
+        write_receipt(receipt_path, receipt)
+    finally:
+        os.close(lock_fd)
+
+    if receipt["cleanup"]["status"] == "retained":
+        print(receipt["cleanup"]["reason"], file=sys.stderr)
+        return 1
+    return 128 + interruption[0] if interruption else returncode
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (OSError, subprocess.SubprocessError) as exc:
+        sys.exit(str(exc))

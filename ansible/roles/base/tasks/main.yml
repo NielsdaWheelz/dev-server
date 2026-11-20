@@ -279,3 +279,6 @@
       mode: "0700"
     - path: "/home/{{ devbox_user }}/.claude-work"
       mode: "0700"
+
+- name: Arm production disk capacity monitoring
+  ansible.builtin.import_tasks: disk-capacity.yml

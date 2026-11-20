@@ -1,0 +1,92 @@
+#!/usr/bin/python3
+import json
+import os
+import shlex
+import subprocess
+import sys
+from datetime import UTC, datetime
+
+
+def output(*argv: str) -> str:
+    return subprocess.check_output(
+        argv, stderr=subprocess.DEVNULL, text=True, timeout=5
+    ).rstrip("\n")
+
+
+def sample(major: int, byte_floor: int, inode_floor: int) -> dict:
+    record = {
+        "utc": datetime.now(UTC).isoformat(timespec="seconds"),
+        "filesystem": None,
+        "available_bytes": None,
+        "available_inodes": None,
+        "byte_floor": byte_floor,
+        "inode_floor": inode_floor,
+        "reasons": [],
+        "inspect": f"journalctl -u postgresql@{major}-main.service -n 30",
+    }
+    try:
+        directory = output(
+            "/usr/bin/psql", "--cluster", f"{major}/main", "-XwAtd", "postgres",
+            "-c", "SELECT current_setting('data_directory')"
+            f" WHERE current_setting('server_version_num')::int / 10000 = {major}",
+        )
+        if not os.path.isabs(directory) or "\n" in directory:
+            raise ValueError("invalid data directory")
+    except (OSError, subprocess.SubprocessError, ValueError):
+        record["reasons"].append("postgres_data_directory_unknown")
+        return record
+
+    record["inspect"] = f"findmnt --target {shlex.quote(directory)}"
+    try:
+        fd = os.open(directory, os.O_DIRECTORY | os.O_RDONLY)
+    except OSError:
+        record["reasons"].append("filesystem_sample_failed")
+        return record
+    try:
+        try:
+            mounts = json.loads(output(
+                "/usr/bin/findmnt", "--target", directory, "--json",
+                "--output", "TARGET,SOURCE,MAJ:MIN",
+            ))["filesystems"]
+            mount, = mounts
+            device_id = os.fstat(fd).st_dev
+            device = f"{os.major(device_id)}:{os.minor(device_id)}"
+            if not mount["target"] or not mount["source"] or mount["maj:min"] != device:
+                raise ValueError("incomplete or changed mount identity")
+        except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+            record["reasons"].append("filesystem_identity_unknown")
+            return record
+
+        record["filesystem"] = {
+            "target": mount["target"],
+            "source": mount["source"],
+            "device": device,
+        }
+        try:
+            stats = os.fstatvfs(fd)
+            if not (
+                stats.f_frsize > 0
+                and 0 <= stats.f_bavail <= stats.f_blocks
+                and 0 <= stats.f_favail <= stats.f_files
+            ):
+                raise ValueError("invalid filesystem counters")
+        except (OSError, ValueError):
+            record["reasons"].append("filesystem_sample_failed")
+            return record
+    finally:
+        os.close(fd)
+
+    record["inspect"] = f"df --output=target,source,avail,iavail {shlex.quote(directory)}"
+    record["available_bytes"] = stats.f_bavail * stats.f_frsize
+    record["available_inodes"] = stats.f_favail
+    if record["available_bytes"] < byte_floor:
+        record["reasons"].append("bytes_below_floor")
+    if record["available_inodes"] < inode_floor:
+        record["reasons"].append("inodes_below_floor")
+    return record
+
+
+if __name__ == "__main__":
+    major, byte_floor, inode_floor = map(int, sys.argv[1:])
+    record = sample(major, byte_floor, inode_floor)
+    print(json.dumps(record), flush=True)
