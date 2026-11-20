@@ -162,16 +162,21 @@ exit 2. keep one atomic last-run report at the owner's existing state root,
 
 ```text
 {schemaVersion:1, run:string, target:"macbook"|"arch"|"devbox",
- state:"running"|"finished", jobAccepted:boolean, exitCode:null|0|1|2,
+ state:"running"|"awaitingVerification"|"finished", jobAccepted:boolean, exitCode:null|0|1|2,
  results:[{status:string, subject:string, detail:string}]}
 ```
 
 `run` matches the submitted job; only that job sets `jobAccepted:true` as its
 ownership acknowledgement. false is not proof that submission failed; only a
 definite pre-dispatch rejection permits caller cleanup. only finished has an exit
-code. missing/corrupt
-report, or dead job with unfinished report, means unknown; inspect actual owners
-before explicit retry. the report is a result/handoff aid, never a resumption
+code. a missing or corrupt report, or a dead job still marked `running`, requires
+inspection before explicit retry. on linux the worker hands completed maintenance
+to the observer in `awaitingVerification` with `maintenanceExitCode` and each
+successful account's `expectedVersions` entry. after systemd teardown the
+observer checks those accounts using only native `version`. it records the
+observations before removing staged inputs. after caller loss, run
+`python3 lib/activation.py check` on the target to finish those reads.
+the report is a result/handoff aid, never a resumption
 ledger. retain unknown scratch until repair; prune completed run inputs. no
 terminal bytes, prompts, objectives, credentials or provider account data.
 

@@ -537,6 +537,13 @@ restart were loaded. skid only observes existing daemons and terminal evidence.
 account homes, credentials and history remain upstream-owned. native installers
 own their supported cleanup; no independent daemon-package sweep is performed.
 
+on linux, each native start or update runs in a user scope that can outlive the
+activation job. the worker retains its activation lock. after the job exits,
+apply reads each successfully maintained account's running version and compares
+it with the version selected by its native updater. if the caller disconnects,
+`python3 lib/activation.py check` can complete the pending reads from the staged
+inputs. a missing socket or version mismatch requires operator attention.
+
 ubuntu provisions the distro's bubblewrap apparmor profile and verifies user,
 network and pid namespace creation without disabling the global restriction.
 earlyoom remains enabled and prefers preserving codex and claude. compare its
