@@ -216,10 +216,10 @@ replaces installed copies. new sessions load changes; source verification and
 [`assets/claude/statusline.sh`](assets/claude/statusline.sh) is installed as
 `~/bin/claude-statusline` and set as the `statusLine` command in all three claude
 account `settings.json` files; running sessions pick it up on the next update.
-every host installs the same display-only command. it renders context usage and
-optional 5-hour/weekly used quota from claude's structured statusline input.
-skid observes these displayed figures in tmux; absent or unrecognized usage stays
-unknown. the formatter stores no quota report.
+every host installs the same display-only command. it shows context usage and
+the five-hour and weekly percentages supplied by claude. when space permits, a
+row above them shows each supplied reset in host-local time with its utc offset.
+weekly takes priority when only one date fits. skid reads these rows in tmux.
 account update settings, project instructions, skills, other settings keys,
 history and authentication remain separately owned. all three claude homes set
 `cleanupPeriodDays` to 36,500; this retains other application data as well as
