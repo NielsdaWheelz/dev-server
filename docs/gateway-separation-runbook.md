@@ -110,8 +110,8 @@ skid service recovery does not roll back provider installations or account data.
 ## provider and jarvis contract
 
 personal yaml command values are exactly `codex`, `codex-work`, `codex-work2`,
-`claude-work`. retain profile labels/order, provider/home observation metadata,
-hub/machine overrides and private options. ordinary initialized shell aliases
+`claude-work` and `claude-work2`. retain profile labels/order, provider/home
+observation metadata, hub/machine overrides and private options. ordinary initialized shell aliases
 and account wrappers own permissions, account/home selection and memory.
 no flags/socket/plugin arguments are added. bare codex follows inherited
 `CODEX_HOME`; named work wrappers force their established account home.
