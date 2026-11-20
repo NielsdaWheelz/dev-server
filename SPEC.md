@@ -481,7 +481,7 @@ the common contract is jarvis's
 `universal_memory.tools.NATIVE_ORIENTATION_GUIDANCE`, including the shared
 affirmative `ORIENTATION_GUIDANCE`, with one terminal newline. the library owns
 the wording; dev-server owns its adoption and distribution. the snapshot is from
-universal-memory [`c79cf1c03fa801291f9e6dee0384c6586a98d015`](https://github.com/NielsdaWheelz/universal-memory/blob/c79cf1c03fa801291f9e6dee0384c6586a98d015/src/universal_memory/tools.py).
+universal-memory [`25ed86556f9580154806d901375ec06e8902ecaa`](https://github.com/NielsdaWheelz/universal-memory/blob/25ed86556f9580154806d901375ec06e8902ecaa/src/universal_memory/tools.py).
 updating the snapshot requires recording the immutable upstream revision and
 comparing its bytes.
 installation adds no library dependency, memory service or alternate note store.
