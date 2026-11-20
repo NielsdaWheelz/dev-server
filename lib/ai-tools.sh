@@ -376,12 +376,20 @@ except (ValueError, TypeError):
 ' "$1"
 }
 
+# Optional leading command (systemd-run) encloses the wrapper and its children.
+ai_codex_daemon_native() {
+  local home="$1" command="$2" operation="$3"
+  shift 3
+  case "$command" in codex | codex-work | codex-work2) ;; *) return 64 ;; esac
+  HOME="$home" CODEX_HOME="$home/.$command" "$@" "$home/bin/$command" app-server daemon "$operation" </dev/null 2>/dev/null 9>&-
+}
+
 # Start/reuse first also bootstraps a missing native package. The updater owns
 # activation and leaves an already-current daemon running; never force restart.
 ai_maintain_codex_daemons() {
-  (($# == 0)) || return 64
-  local home command account operation output result native_status status=0
-  local start_status update_status installed_version running_version
+  (($# <= 1)) || return 64
+  local versions="${1:-}" home command operation output result native_status status=0
+  local start_status update_status installed_version running_version observation
   local -a arguments
 
   home="$(dev_server_home)"
@@ -395,15 +403,14 @@ ai_maintain_codex_daemons() {
       status=1
       continue
     fi
-    case "$command" in
-    codex) account="$home/.codex" ;;
-    *) account="$home/.$command" ;;
-    esac
     start_status='' update_status='' installed_version='' running_version=''
     for operation in start update version; do
       # --yes requires --from-cli; the public-stable update is noninteractive.
-      arguments=(app-server daemon "$operation")
-      if output="$(HOME="$home" CODEX_HOME="$account" "$home/bin/$command" "${arguments[@]}" </dev/null 2>/dev/null)"; then
+      arguments=("$home" "$command" "$operation")
+      if [[ -n "$versions" && "$operation" != version ]]; then
+        arguments+=(systemd-run --user --scope --quiet --)
+      fi
+      if output="$(ai_codex_daemon_native "${arguments[@]}")"; then
         :
       else
         native_status=$?
@@ -437,12 +444,21 @@ ai_maintain_codex_daemons() {
       esac
     done
     ((status == 0)) || continue
+    observation="running $running_version verified"
+    if [[ -n "$versions" ]]; then
+      if ! printf '%s\t%s\n' "$command" "$installed_version" >>"$versions"; then
+        render_result ACTION "AI daemon $command" 'could not record selected version for observation after activation'
+        status=2
+        continue
+      fi
+      observation="selected $installed_version"
+    fi
     if [[ "$update_status" == updated ]]; then
-      render_result UPDATED "AI daemon $command" "native package updated; running $running_version verified"
+      render_result UPDATED "AI daemon $command" "native package updated; $observation"
     elif [[ "$start_status" == started ]]; then
-      render_result STARTED "AI daemon $command" "native package current; running $running_version verified"
+      render_result STARTED "AI daemon $command" "native package current; $observation"
     else
-      render_result 'UP TO DATE' "AI daemon $command" "native package current; running $running_version verified"
+      render_result 'UP TO DATE' "AI daemon $command" "native package current; $observation"
     fi
   done
   return "$status"

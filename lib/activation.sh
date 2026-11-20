@@ -31,7 +31,7 @@ activation_apply() {
   esac
 }
 
-if [[ "${1:-}" == --worker ]]; then
+if [[ "${BASH_SOURCE[0]}" == "$0" && ( "${1:-}" == --worker || "${1:-}" == --version ) ]]; then
   (($# == 2)) || exit 64
   set -euo pipefail
   activation_library="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,7 +40,17 @@ if [[ "${1:-}" == --worker ]]; then
   # shellcheck source=lib/ai-tools.sh
   source "$activation_library/ai-tools.sh"
   dev_server_home_dir="$HOME"
+  if [[ "$1" == --version ]]; then
+    output="$(ai_codex_daemon_native "$HOME" "$2" version)"
+    printf '%s' "$output" | ai_codex_daemon_result version
+    exit
+  fi
   dev_server_result_jsonl="$2/results.jsonl"
   dev_server_acquire_lock "$HOME/.local/state/dev-server/activation.lock" 9 activation
-  ai_maintain_codex_daemons
+  if [[ "$(uname -s)" == Linux ]]; then
+    : >"$2/versions"
+    ai_maintain_codex_daemons "$2/versions"
+  else
+    ai_maintain_codex_daemons
+  fi
 fi
