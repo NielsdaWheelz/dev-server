@@ -1,11 +1,12 @@
 # unified apply needs remaining native qualification
 
-problem: installed current-version maintenance is qualified on macbook and devbox;
-actual provider upgrades and reconnection, arch supervision, and fault or
-lost-caller handling at live boundaries remain unqualified.
+problem: current-version maintenance passed on macbook and devbox. cold and
+repeat account-daemon activation passed on arch. a real package upgrade on the
+repaired path, client reconnection, mac privacy consent and live interrupted
+or lost-caller outcomes still need qualification.
 
-impact: a running daemon version and resume requests do not prove that provider
-turns continued or cold configuration loaded. arch is outside this rollout.
+impact: the version probe establishes reachability. continued provider turns
+and activation of restart-only settings require their own observations.
 
 evidence: signed immutable skid v0.24.2 at source
 `d4afbfcec963b1f231fc117675120eff1685e881` passed the public release gate for
@@ -37,9 +38,36 @@ continuity or continued provider turns.
 
 an isolated ubuntu arm64 container also exercised real systemd supervision with
 fake providers. actual ubuntu 24.04 amd64 and macos launchd supervision and
-current-version daemon maintenance were exercised. actual provider version upgrade
-and client reconnection, model turns, mac privacy consent, arch supervision and
-live fault or lost-caller cases remain not_run.
+current-version daemon maintenance were exercised in that rollout.
+
+on 2026-11-20, `./workstation apply` at `7f6e250` upgraded the arch cli from
+`0.162.1` to `0.171.0`. inside its transient systemd unit, activation reported
+updated packages for `codex` and `codex-work2` and a started daemon for
+`codex-work`. after the unit exited, a new ssh login found all three control
+sockets missing. manual native starts restored them. that host apply returned
+`2` for the missing memory bundle, desktop logout and reboot.
+
+the same day, two ordinary arch applies at `e6df115` qualified the lifetime
+repair. all three native daemons and their idle updaters were stopped before
+the cold run. `apply-h7f6undg` started all three accounts. after the job and
+initiating ssh login exited, a fresh login verified `0.171.0` through each
+account wrapper. all six processes lived in systemd user scopes outside the
+activation service. `apply-jj8wogu1` then reused all six pid/start identities.
+both activation reports finished `0`. both host applies returned `2` for the
+missing private memory bundle and pending reboot. both activation stages were
+removed, and an independent process acquired and released the activation lock.
+
+a disposable macbook fixture reproduced the former false success. it also
+exercised a lost caller, overlapping observers, an interrupted worker, a
+partial update and failed post-exit probes. both arch runs used current
+packages. the live upgrade and reconnection cases remain open.
+
+the run and fixture records are under
+`~/Documents/code/.rehearsal-evidence/dev-server/codex-daemon-lifetime-20261120/`
+on macbook. `arch.json` has sha256
+`16cc9e19b608bdba03de6979752c8e91151f595f0ee1bb53d5fb080ef52c2920`.
+`fixture.txt` has sha256
+`fa62a568ca7e8a5d31e6e59d9433c21a363088afb45c51f44168cea11ed4da6a`.
 
 resolution: with current owner authorization, qualify those remaining native
 and provider boundaries, including interrupted or unknown outcomes, cleanup and

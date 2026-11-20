@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """One target-local native activation job and its private last-run result."""
 
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -68,7 +69,9 @@ def running():
         return False
     if result.returncode != 0 or "ActiveState" not in properties:
         return None
-    return properties["ActiveState"] in ("active", "activating", "deactivating", "reloading")
+    if properties["ActiveState"] in ("inactive", "failed"):
+        return False
+    return True
 
 
 def check(path):
@@ -76,6 +79,16 @@ def check(path):
     if not path.exists():
         return 0
     report = json.loads(path.read_text(encoding="utf-8"))
+    run_name = report["run"]
+    if not isinstance(run_name, str) or not run_name.startswith("apply-") or Path(run_name).name != run_name:
+        return 2
+    previous = path.parent / run_name
+    if report["state"] == "awaitingVerification":
+        status = verify_after_exit(path, previous)
+        if status is None:
+            print(f"activation still completing; inspect {path} before retrying", file=sys.stderr)
+            return 2
+        return status
     if report["state"] != "finished" or report["exitCode"] not in (0, 1, 2):
         print(f"activation completion unresolved; inspect {path} before retrying", file=sys.stderr)
         return 2
@@ -87,10 +100,6 @@ def check(path):
         result = native(["systemctl", "--user", "stop", UNIT])
         if result.returncode not in (0, 5):
             return 2
-    run_name = report["run"]
-    if not isinstance(run_name, str) or not run_name.startswith("apply-") or Path(run_name).name != run_name:
-        return 2
-    previous = path.parent / run_name
     if previous.exists():
         shutil.rmtree(previous)
     return 0
@@ -117,6 +126,8 @@ def submit(stage, target):
 def finish(path, report, stage, status):
     try:
         shutil.rmtree(stage)
+    except FileNotFoundError:
+        pass
     except OSError:
         status = 1
         report["results"].append({"status": "ERROR", "subject": "activation cleanup",
@@ -124,6 +135,51 @@ def finish(path, report, stage, status):
     report.update(state="finished", exitCode=status)
     save(path, report)
     return status
+
+
+def verify_after_exit(path, stage):
+    # A returning caller and a later "check" may both observe the same handoff.
+    with (path.parent / "activation.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return None
+        report = json.loads(path.read_text(encoding="utf-8"))
+        if report["run"] != stage.name:
+            return 2
+        if report["state"] == "finished":
+            return report["exitCode"]
+        if report["state"] != "awaitingVerification":
+            return 2
+        active = running()
+        if active is True:
+            return None
+        if active is not False:
+            return 2
+
+        status = report["maintenanceExitCode"]
+        rows = {row["subject"]: row for row in report["results"]}
+        for command, expected in report.pop("expectedVersions", {}).items():
+            subject = f"AI daemon {command}"
+            row = rows[subject]
+            try:
+                probe = native(["/bin/bash", str(stage / "activation.sh"), "--version", command])
+                actual = probe.stdout.strip() if probe.returncode == 0 else ""
+            except (OSError, subprocess.TimeoutExpired):
+                actual = ""
+            if actual == expected:
+                row["detail"] += f"; running {actual} verified after activation"
+            else:
+                detail = f"running {actual}" if actual else "daemon version unavailable"
+                report["results"].append({"status": "ACTION", "subject": subject,
+                                          "detail": f"{detail} after activation; expected {expected}"})
+                if status == 0:
+                    status = 2
+        # A disconnect during cleanup can now finish from this report alone.
+        report["maintenanceExitCode"] = status
+        save(path, report)
+        del report["maintenanceExitCode"]
+        return finish(path, report, stage, status)
 
 
 def apply(path, target, library):
@@ -160,14 +216,18 @@ def apply(path, target, library):
             return 2
         if observed["state"] == "finished":
             return observed["exitCode"]
-        if not observed["jobAccepted"]:
+        if observed["state"] == "awaitingVerification":
+            status = verify_after_exit(path, stage)
+            if status is not None:
+                return status
+        elif not observed["jobAccepted"]:
             if time.monotonic() >= startup_deadline:
                 return 2
         elif running() is False:
             observed = json.loads(path.read_text(encoding="utf-8"))
-            if observed["run"] == stage.name and observed["state"] == "finished":
-                return observed["exitCode"]
-            return 2
+            if observed["run"] != stage.name or observed["state"] == "running":
+                return 2
+            continue
         time.sleep(1)
     # Bound observation only; never kill a still-running activation.
     return 2
@@ -186,12 +246,24 @@ def run(path, target, stage):
     with open(stage / "results.jsonl", encoding="utf-8") as stream:
         report["results"] = [json.loads(line) for line in stream]
     if status not in (0, 1, 2):
-        status = 2
         report["results"].append({"status": "ACTION", "subject": "activation",
                                   "detail": "process stopped unexpectedly; inspect the result before retrying"})
+        save(path, report)
+        return 2
     if status == 1 and not any(row["status"] == "ERROR" for row in report["results"]):
         report["results"].append({"status": "ERROR", "subject": "activation",
                                   "detail": "activation process failed; inspect the result before retrying"})
+    versions = stage / "versions"
+    if sys.platform == "linux" and (status == 0 or versions.exists()):
+        expected = dict(line.split("\t") for line in versions.read_text(encoding="utf-8").splitlines())
+        successful = {row["subject"] for row in report["results"]
+                      if row["status"] in ("UPDATED", "STARTED", "UP TO DATE")}
+        if successful != {f"AI daemon {command}" for command in expected} or (not expected and status == 0):
+            raise ValueError("incomplete daemon maintenance results")
+        if expected:
+            report.update(state="awaitingVerification", maintenanceExitCode=status, expectedVersions=expected)
+            save(path, report)
+            return status
     return finish(path, report, stage, status)
 
 
