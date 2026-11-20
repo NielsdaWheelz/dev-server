@@ -1,0 +1,10 @@
+[Unit]
+Description=Check PostgreSQL filesystem headroom every ten minutes
+
+[Timer]
+OnActiveSec=1s
+OnUnitActiveSec=10min
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

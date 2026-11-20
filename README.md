@@ -381,6 +381,26 @@ to jarvis.
 rootless docker setup is rebuilt only when its package, unit, or daemon config
 changes and no container is running; otherwise activation is deferred.
 
+### postgresql disk capacity
+
+devbox apply arms `dev-server-disk-capacity.timer` and samples immediately,
+then every ten minutes. set the reserves in
+[`ansible/group_vars/devbox.yml`](ansible/group_vars/devbox.yml). size them
+for the largest measured production burst plus growth during the time it
+takes to respond.
+
+the sampler writes each reading to the local journal. start the service for
+an immediate reading.
+
+```sh
+ssh dev-server-deploy 'sudo -n systemctl start dev-server-disk-capacity.service'
+ssh dev-server-deploy 'sudo -n journalctl -u dev-server-disk-capacity.service -o cat -n 10 --no-pager'
+```
+
+read the latest journal record's `reasons` to distinguish healthy, low and
+unknown. use the included inspection command to investigate. if readings stop,
+check the timer and its last service run.
+
 nexus production uses the separate root-controlled system docker engine.
 production callers use `dev-server-deploy` and explicitly select
 `unix:///var/run/docker.sock`; `niels` remains unprivileged with its rootless

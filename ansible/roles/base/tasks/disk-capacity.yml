@@ -1,0 +1,39 @@
+---
+- name: Validate the PostgreSQL capacity floors
+  ansible.builtin.assert:
+    that:
+      - devbox_disk_capacity_byte_floor is integer
+      - devbox_disk_capacity_byte_floor > 0
+      - devbox_disk_capacity_inode_floor is integer
+      - devbox_disk_capacity_inode_floor > 0
+
+- name: Install the PostgreSQL capacity sampler
+  ansible.builtin.copy:
+    src: dev-server-disk-capacity
+    dest: /usr/local/sbin/dev-server-disk-capacity
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the PostgreSQL capacity service and configured floors
+  ansible.builtin.template:
+    src: dev-server-disk-capacity.service.j2
+    dest: /etc/systemd/system/dev-server-disk-capacity.service
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the PostgreSQL capacity timer
+  ansible.builtin.copy:
+    src: dev-server-disk-capacity.timer
+    dest: /etc/systemd/system/dev-server-disk-capacity.timer
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Arm the PostgreSQL capacity timer
+  ansible.builtin.systemd_service:
+    name: dev-server-disk-capacity.timer
+    daemon_reload: true
+    enabled: true
+    state: started

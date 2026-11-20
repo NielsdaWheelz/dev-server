@@ -1,0 +1,11 @@
+[Unit]
+Description=Sample PostgreSQL filesystem headroom
+After=postgresql@{{ devbox_postgresql_major }}-main.service
+
+[Service]
+Type=oneshot
+User=postgres
+ExecStart=/usr/local/sbin/dev-server-disk-capacity {{ devbox_postgresql_major }} {{ devbox_disk_capacity_byte_floor }} {{ devbox_disk_capacity_inode_floor }}
+TimeoutStartSec=30s
+NoNewPrivileges=yes
+ProtectSystem=strict
