@@ -374,8 +374,10 @@ every host invokes `ai_install` without arguments and installs the same
 display-only statusline command. its single row shows directory, git branch or
 detached commit, model and effort, and context use. it appends the used
 percentages returned by `~/.local/bin/skid claude-usage` in 5h, 7d, fable order.
-that local command reads the active profile's claude cache. the footer still
-shows the session fields when the command or a fresh reading is unavailable.
+that command reads the active login's local cache and skid's saved fleet
+readings. each percentage stays until a newer measurement for the same account
+replaces it. a missing helper or a login with no known usage leaves the session
+fields visible.
 at a known width, drop trailing quota items until the full suffix fits with
 four cells of margin. the desktop usage band owns reset countdowns.
 

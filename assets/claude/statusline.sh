@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# claude supplies the session fields. skid reads this profile's quota cache locally.
+# claude supplies the session fields. skid supplies the account's last known percentages.
 
 # a directory may contain newlines or shell field separators.
 {

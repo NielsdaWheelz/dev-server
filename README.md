@@ -217,9 +217,10 @@ replaces installed copies. new sessions load changes; source verification and
 `~/bin/claude-statusline` and set as the `statusLine` command in all three claude
 account `settings.json` files; running sessions pick it up on the next update.
 the footer shows the directory, git branch, model, effort and context use. it
-calls the local `skid claude-usage` command for cached 5h, 7d and fable used
-percentages from the active claude account. available figures share one line.
-the desktop usage band shows the corresponding reset countdowns.
+calls the local `skid claude-usage` command for the active account's 5h, 7d
+and fable used percentages. skid remembers each reading across restarts and
+uses the newest measurement from any enrolled machine. available figures share
+one line. the desktop usage band counts down each last known reset.
 account update settings, project instructions, skills, other settings keys,
 history and authentication remain separately owned. all three claude homes set
 `cleanupPeriodDays` to 36,500; this retains other application data as well as
