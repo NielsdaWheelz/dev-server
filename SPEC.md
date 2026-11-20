@@ -371,10 +371,15 @@ every other settings
 key, authentication, history, project instructions, and skills remain user-owned.
 instruction updates affect new sessions; status line updates apply live.
 every host invokes `ai_install` without arguments and installs the same
-display-only statusline command. the formatter reads claude's structured stdin
-and renders context usage plus optional 5-hour/weekly used quota. it owns no
-quota file or publication. skid owns passive terminal observation and disclosure;
-displayed figures do not establish backend freshness or reset times.
+display-only statusline command. its single row shows directory, git branch or
+detached commit, model and effort, and context use. it appends the used
+percentages returned by `~/.local/bin/skid claude-usage` in 5h, 7d, fable order.
+that command reads the active login's local cache and skid's saved fleet
+readings. each percentage stays until a newer measurement for the same account
+replaces it. a missing helper or a login with no known usage leaves the session
+fields visible.
+at a known width, drop trailing quota items until the full suffix fits with
+four cells of margin. the desktop usage band owns reset countdowns.
 
 ## universal memory host configuration
 
