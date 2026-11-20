@@ -8,7 +8,7 @@
     group: root
     mode: "0644"
 
-- name: Allow the PostgreSQL archive only for pgvector
+- name: Select the qualified pgvector version and exclude other archived builds
   ansible.builtin.copy:
     dest: /etc/apt/preferences.d/jarvis-pgvector
     owner: root
@@ -16,8 +16,8 @@
     mode: "0644"
     content: |
       Package: postgresql-{{ devbox_postgresql_major }}-pgvector
-      Pin: origin apt-archive.postgresql.org
-      Pin-Priority: 1
+      Pin: version {{ devbox_pgvector_package_version }}
+      Pin-Priority: 1001
 
       Package: *
       Pin: origin apt-archive.postgresql.org
