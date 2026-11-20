@@ -94,7 +94,8 @@ def check(path):
         return 2
     if sys.platform == "darwin":
         result = native(["launchctl", "bootout", f"gui/{os.getuid()}/{LABEL}"])
-        if result.returncode not in (0, 113):
+        # An absent service can report ESRCH (3) or service not found (113).
+        if result.returncode not in (0, 3, 113):
             return 2
     else:
         result = native(["systemctl", "--user", "stop", UNIT])
