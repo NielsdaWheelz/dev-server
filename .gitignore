@@ -9,6 +9,7 @@ secrets/
 
 # Local editor/tool state.
 .cursor/
+.idea/
 .vscode/
 
 # Ansible local retry/cache files.
