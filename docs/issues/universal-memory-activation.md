@@ -107,3 +107,31 @@ resolve each deferred profile or host with its named model, connection or captur
 proof. preserve explicit source gaps, immutable native boundaries and exact
 reopening. private credentials and transcript bodies never enter this record;
 synthetic verification records remain under the append-only contract.
+
+### devbox missing-source audit, 2026-11-19
+
+at `d9fe3bcf6a3162824e4ecf546ce5cc0c274cd977`, [ai setup](../../lib/ai-tools.sh)
+removes its downloaded installer and the temporary files used to publish
+wrappers, settings and instructions. its `cleanupPeriodDays=36500` applies to
+all three claude homes. the codex work2 wrapper selects its native account home. daemon
+maintenance invokes upstream `app-server daemon start`, `update` and `version`.
+[collector setup](../../lib/memory.sh) prunes its own staging directory and
+release directories under `.local/share/jarvis-memory`. the
+[profile writer](../../assets/memory/profile-config.py) runs codex `mcp add`
+or `remove` in a temporary copy of configuration and publishes the validated
+profile file. none of the fleet-owned removal targets is a native rollout.
+
+source inspection of the official installers on that date found codex package
+release pruning under `packages/standalone` or `packages/app-server-daemon`
+(script sha256 `b698d8eb50c0fbe0214ea57b5bf2af439054108404c6d2b872989db02f4bd574`).
+the claude bootstrap removes its downloads and delegates installation to the
+downloaded native executable (script sha256
+`2c5506d110560bf618bbe88f678f2c2a0047c86a9c6585fc84976120b1de0b44`).
+vendor executable internals and the historical cause of disappearance remain
+unverified.
+
+the devbox app-server's 08:04 utc metadata reads identified two missing
+segments serving 14 and seven pending conversations. no retained original is
+known. the [jarvis source issue](https://github.com/NielsdaWheelz/jarvis/blob/main/docs/issues/devbox-work2-native-source.md)
+tracks recovery if the owner designates a copy. the audit found no destructive
+fleet path to repair.
