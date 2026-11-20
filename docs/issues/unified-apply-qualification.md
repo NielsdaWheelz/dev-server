@@ -40,6 +40,17 @@ an isolated ubuntu arm64 container also exercised real systemd supervision with
 fake providers. actual ubuntu 24.04 amd64 and macos launchd supervision and
 current-version daemon maintenance were exercised in that rollout.
 
+on 2026-11-13, ordinary devbox apply installed `claude-work2`, selected codex
+`0.169.0` and verified all three daemons at that version. it returned `2` for
+missing memory inputs, busy docker activation and a required reboot. devbox
+and macbook both applied skid configuration revision `2`. macbook's initial
+apply stopped at sudo. the user-owned account configuration was installed
+separately. the owner's subsequent interactive apply completed provider and
+daemon maintenance and reported a [skid terminal replacement refusal](macbook-skid-activation.md).
+both hosts passed their installed account file and settings checks, ran all three
+codex daemons at `0.169.0` and authenticated `claude-work2`. arch was unreachable
+over ssh during that check.
+
 on 2026-11-20, `./workstation apply` at `7f6e250` upgraded the arch cli from
 `0.162.1` to `0.171.0`. inside its transient systemd unit, activation reported
 updated packages for `codex` and `codex-work2` and a started daemon for

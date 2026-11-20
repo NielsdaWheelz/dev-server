@@ -348,10 +348,11 @@ preserve authentication, configuration, history, memories, plugins and trust.
 named claude wrappers select their matching `CLAUDE_CONFIG_DIR` and own bearer.
 new homes require their own login.
 
-`assets/skidbladnir/config.yaml` preserves the four profile keys, labels and
-order as personal desired state. command values are exactly `codex`, `codex-work`,
-`codex-work2`, `claude-work`. initialized shell aliases and account wrappers own
-permission defaults, account/home selection and memory credentials. bare codex
+`assets/skidbladnir/config.yaml` declares the profile keys, labels and order
+as personal desired state. command values are exactly `codex`, `codex-work`,
+`codex-work2`, `claude-work` and `claude-work2`. initialized shell aliases and
+account wrappers own permission defaults, account/home selection and memory
+credentials. bare codex
 respects inherited `CODEX_HOME`; named work wrappers force their normal homes.
 skid evaluates command text once unchanged: no permission/socket/plugin flags
 or conversation association. metadata homes support observation only; ambiguity

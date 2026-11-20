@@ -24,4 +24,10 @@ profiles:
     provider: claude
     home: ~/.claude-work
     resume_command: 'claude-work --resume "$1"'
+  - name: claude-work2
+    label: "Claude · Work 2"
+    command: claude-work2
+    provider: claude
+    home: ~/.claude-work2
+    resume_command: 'claude-work2 --resume "$1"'
 terminal: ghostty

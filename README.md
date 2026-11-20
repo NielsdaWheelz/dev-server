@@ -2,6 +2,9 @@
 
 one-user host configuration for `macbook`, `arch`, and the hetzner `devbox`.
 
+nexus and jarvis run on devbox. heavy development runs on macbook until the
+[desktop handoff](docs/desktop.md).
+
 ```sh
 ./workstation apply
 ./devbox apply
@@ -112,15 +115,16 @@ reload with `cmd+shift+,` or reopen ghostty. running terminals are left alone.
 
 ## ai accounts and services
 
-ordinary shells keep the established provider binaries and account
-commands: `.codex`, `.codex-work`, `.codex-work2`, `.claude`, `.claude-work`.
+the provider account homes are `.codex`, `.codex-work`, `.codex-work2`,
+`.claude`, `.claude-work` and `.claude-work2`.
 their authentication, configuration, history, memories, plugins and trust stay
 in place. existing environment-override semantics remain intact.
 
 the configured skid profile commands are exactly `codex`, `codex-work`,
-`codex-work2` and `claude-work`. ordinary shell aliases/wrappers own permissions,
-account selection and memory credentials. skid evaluates the configured command
-once after normal shell startup; it adds no flags, sockets or identity plugin.
+`codex-work2`, `claude-work` and `claude-work2`. ordinary shell aliases and
+wrappers own permissions, account selection and memory credentials. skid
+evaluates the configured command once after normal shell startup. skid adds no flags,
+sockets or identity plugin.
 [the runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract)
 records the consumer and blocked jarvis deployment boundary.
 
@@ -173,6 +177,7 @@ personal yaml uses those ordinary command names, so the same shell defaults appl
 ```sh
 codex-work login
 codex-work2 resume
+claude-work2 auth login
 ```
 
 codex owns each account's native daemon and discovery socket. `codex` honors
