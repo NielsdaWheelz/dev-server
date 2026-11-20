@@ -681,9 +681,10 @@ qualified against concurrent work; shared disk exhaustion remains a host-wide
 risk. nexus keeps its existing backend leaf limits and separate postgres image.
 
 provide utc time, postgresql 16, exactly qualified/held pgvector, the locked
-`jarvis` account, and base ownership at `/opt/jarvis`, `/var/lib/jarvis`, and
-`/etc/jarvis`. jarvis owns its release, environment, database/roles, migrations,
-service, credentials, backups, and recovery. preserve those contents and nexus
+`jarvis` account, and base ownership at `/opt/jarvis` and `/var/lib/jarvis`.
+jarvis creates `/etc/jarvis` and manages its ownership, permissions, and contents.
+it owns its release, environment, database/roles, migrations, service,
+credentials, backups, and recovery. preserve those contents and nexus
 state. jarvis is independent of developer rootless docker and is not an apply
 postcondition.
 

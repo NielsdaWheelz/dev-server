@@ -165,7 +165,6 @@
         [[ "$(stat -c '%U|%G|%a' /opt/jarvis)" == 'root|root|755' ]]
         [[ "$(stat -c '%U|%G|%a' /opt/jarvis/releases)" == 'root|root|755' ]]
         [[ "$(stat -c '%U|%G|%a' /var/lib/jarvis)" == 'jarvis|jarvis|700' ]]
-        [[ "$(stat -c '%U|%G|%a' /etc/jarvis)" == 'root|jarvis|750' ]]
       args:
         executable: /bin/bash
       changed_when: false
