@@ -703,8 +703,9 @@ these packages add no extraction service or application activation.
 
 a reviewed pgvector pin change authorizes the exact package upgrade or rollback
 on apply. refresh package metadata, install the declared version and keep it
-held. qualification of application and database compatibility remains with
-jarvis; no other pgvector version is a fallback.
+held. the signed postgresql archive supplies older pgvector builds for the
+declared postgres major. jarvis qualifies application and database compatibility.
+apply requires the exact pin.
 
 ## verification and development
 

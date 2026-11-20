@@ -8,17 +8,32 @@
     group: root
     mode: "0644"
 
-- name: Install the PostgreSQL apt repository
+- name: Allow the PostgreSQL archive only for pgvector
+  ansible.builtin.copy:
+    dest: /etc/apt/preferences.d/jarvis-pgvector
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      Package: postgresql-{{ devbox_postgresql_major }}-pgvector
+      Pin: origin apt-archive.postgresql.org
+      Pin-Priority: 1
+
+      Package: *
+      Pin: origin apt-archive.postgresql.org
+      Pin-Priority: -1
+
+- name: Install the PostgreSQL apt repository and its signed archive
+  vars:
+    pgdg_source_options: "arch={{ base_apt_architecture }} signed-by=/etc/apt/keyrings/postgresql.asc"
   ansible.builtin.copy:
     dest: /etc/apt/sources.list.d/postgresql.list
     owner: root
     group: root
     mode: "0644"
-    content: >-
-      deb [arch={{ base_apt_architecture }}
-      signed-by=/etc/apt/keyrings/postgresql.asc]
-      https://apt.postgresql.org/pub/repos/apt
-      {{ ansible_facts['distribution_release'] }}-pgdg main
+    content: |
+      deb [{{ pgdg_source_options }}] https://apt.postgresql.org/pub/repos/apt {{ ansible_facts['distribution_release'] }}-pgdg main
+      deb [{{ pgdg_source_options }}] https://apt-archive.postgresql.org/pub/repos/apt {{ ansible_facts['distribution_release'] }}-pgdg-archive main
 
 - name: Install PostgreSQL and the qualified pgvector package # noqa package-latest
   ansible.builtin.apt:
