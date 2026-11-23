@@ -25,4 +25,5 @@ brew "zsh-autosuggestions"
 brew "zsh-syntax-highlighting"
 
 cask "font-meslo-for-powerlevel10k"
+cask "gcloud-cli"
 cask "ghostty"
