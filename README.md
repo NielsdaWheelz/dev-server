@@ -421,8 +421,9 @@ deploy nexus, unlock its account volume or change its data.
 
 this repository supplies jarvis's shared prerequisites: utc host time,
 postgresql 16 and qualified pgvector, the `jarvis` account, and ownership of
-`/opt/jarvis`, `/var/lib/jarvis`, and `/etc/jarvis`. the
-[jarvis repository](https://github.com/NielsdaWheelz/jarvis) owns releases,
+`/opt/jarvis` and `/var/lib/jarvis`. the
+[jarvis repository](https://github.com/NielsdaWheelz/jarvis) creates
+`/etc/jarvis` and manages its permissions and contents. it owns releases, the
 python environment, database/roles, migrations, service, credentials, and
 backup/recovery. dev-server never deploys jarvis or touches nexus application
 state. jarvis is independent of developer rootless docker.

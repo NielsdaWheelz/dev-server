@@ -8,17 +8,32 @@
     group: root
     mode: "0644"
 
-- name: Install the PostgreSQL apt repository
+- name: Select the qualified pgvector version and exclude other archived builds
+  ansible.builtin.copy:
+    dest: /etc/apt/preferences.d/jarvis-pgvector
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      Package: postgresql-{{ devbox_postgresql_major }}-pgvector
+      Pin: version {{ devbox_pgvector_package_version }}
+      Pin-Priority: 1001
+
+      Package: *
+      Pin: origin apt-archive.postgresql.org
+      Pin-Priority: -1
+
+- name: Install the PostgreSQL apt repository and its signed archive
+  vars:
+    pgdg_source_options: "arch={{ base_apt_architecture }} signed-by=/etc/apt/keyrings/postgresql.asc"
   ansible.builtin.copy:
     dest: /etc/apt/sources.list.d/postgresql.list
     owner: root
     group: root
     mode: "0644"
-    content: >-
-      deb [arch={{ base_apt_architecture }}
-      signed-by=/etc/apt/keyrings/postgresql.asc]
-      https://apt.postgresql.org/pub/repos/apt
-      {{ ansible_facts['distribution_release'] }}-pgdg main
+    content: |
+      deb [{{ pgdg_source_options }}] https://apt.postgresql.org/pub/repos/apt {{ ansible_facts['distribution_release'] }}-pgdg main
+      deb [{{ pgdg_source_options }}] https://apt-archive.postgresql.org/pub/repos/apt {{ ansible_facts['distribution_release'] }}-pgdg-archive main
 
 - name: Install PostgreSQL and the qualified pgvector package # noqa package-latest
   ansible.builtin.apt:
@@ -108,15 +123,6 @@
     owner: "{{ jarvis_service_user }}"
     group: "{{ jarvis_service_group }}"
     mode: "0700"
-
-- name: Create root-owned Jarvis configuration directory
-  ansible.builtin.file:
-    path: /etc/jarvis
-    state: directory
-    follow: false
-    owner: root
-    group: "{{ jarvis_service_group }}"
-    mode: "0750"
 
 - name: Exclude Jarvis credentials from the root-local etckeeper repository
   ansible.builtin.lineinfile:
