@@ -10,9 +10,9 @@ nexus and jarvis run on devbox. heavy development runs on macbook until the
 ./devbox apply
 ```
 
-one apply maintains host packages, configuration, skid and the three codex
-account daemons. daemon updates can interrupt work; finish important turns
-first. claude remains bootstrap/adoption only. native package hooks can also
+one apply maintains host packages, configuration, skid, antigravity cli and the
+three codex account daemons. finish important turns before daemon updates.
+claude uses bootstrap/adoption. native package hooks can also
 interrupt services and workloads. tmux servers and panes are not restarted by
 host apply; an affected client may reconnect or need manual resume.
 
@@ -138,6 +138,11 @@ work-account selectors.
 `UPDATED` means the before/after version differs; equal versions prove only no
 observed version change. completed earlier operations remain after a failure;
 there is no fallback or automatic rollback.
+
+apply installs the antigravity cli as `~/.local/bin/agy` on all three hosts and
+runs `agy update` on an existing native installation. sign in interactively by
+running `agy`. remove old launchers or gemini cli and repair conflicts manually.
+keep `~/.gemini` if you remove the gemini cli package. antigravity uses it too.
 
 claude retains bootstrap/adoption only: missing commands use the official
 installer; working native commands are not updated by apply. its

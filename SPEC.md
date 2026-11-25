@@ -281,6 +281,16 @@ executable and expected provider version output without requiring a particular
 version, absolute symlink target or release
 directory schema. the canonical command is the installation interface.
 
+on all three hosts, apply also installs the antigravity cli at
+`owner_home/.local/bin/agy`. bootstrap runs the checked official installer from
+`https://antigravity.google/cli/install.sh` in a temporary home, verifies the native
+binary and publishes it at the canonical path. an existing regular native
+binary is maintained with `agy update` using the owner's home. apply verifies the
+resulting version and reports installation, version change or unchanged version.
+an invalid canonical command or symlink produces an `ACTION` for manual repair.
+the operator owns sign-in, migration, uninstallation and cleanup of legacy
+launchers or gemini cli.
+
 claude maintenance is deferred because its native updater can return success
 after launcher activation fails. preserve bootstrap/adoption until the
 [upstream activation contract](docs/issues/claude-native-update-activation.md)
