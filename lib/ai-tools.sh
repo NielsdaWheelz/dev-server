@@ -66,6 +66,10 @@ PYTHON
     output="$(env -u CLAUDE_CONFIG_DIR HOME="$home" "$binary" --version)" || return 1
     [[ "$output" =~ ^([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)' (Claude Code)'$ ]] || return 1
     ;;
+  agy)
+    output="$(HOME="$home" "$binary" --version)" || return 1
+    [[ "$output" =~ ^([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?)$ ]] || return 1
+    ;;
   *) return 1 ;;
   esac
   printf '%s\n' "${BASH_REMATCH[1]}"
@@ -154,6 +158,57 @@ ai_install_claude() {
   version="$(ai_native_version claude "$binary")" ||
     die "claude native installation is invalid; partial state may remain; rerun https://claude.ai/install.sh with HOME=$home and CLAUDE_CONFIG_DIR unset"
   render_result INSTALLED 'AI tool' "claude@$version"
+}
+
+ai_bootstrap_antigravity() (
+  local binary="$1" stage installer candidate
+
+  # The upstream installer also edits shell profiles. Keep that setup in staging.
+  stage="$(mktemp -d "$(dirname "$binary")/.agy-install.XXXXXX")" || return 1
+  trap 'rm -rf -- "$stage"' EXIT
+  installer="$stage/install.sh"
+  candidate="$stage/.local/bin/agy"
+  dev_server_download https://antigravity.google/cli/install.sh "$installer" || return 1
+  [[ -s "$installer" ]] && bash -n "$installer" || return 1
+  if ! HOME="$stage" ZDOTDIR="$stage" XDG_CONFIG_HOME="$stage/.config" \
+    bash "$installer" </dev/null >"$stage/install.log" 2>&1 ||
+    ! ai_native_version agy "$candidate" >/dev/null; then
+    cat "$stage/install.log" >&2
+    return 1
+  fi
+  # Publish the checked file without replacing a concurrent installation.
+  python3 -c 'import os, sys; os.link(sys.argv[1], sys.argv[2])' "$candidate" "$binary"
+)
+
+ai_install_antigravity() {
+  local home binary version previous_version=''
+  home="$(dev_server_home)"
+  binary="$home/.local/bin/agy"
+  if [[ -e "$binary" || -L "$binary" ]]; then
+    if [[ -L "$binary" ]] || ! previous_version="$(ai_native_version agy "$binary")"; then
+      render_result ACTION 'AI tool agy' "unexpected command at $binary; inspect and repair it manually before applying again"
+      return 2
+    fi
+    if ! HOME="$home" "$binary" update </dev/null; then
+      render_result ERROR 'AI tool agy' "native update failed; inspect $binary before applying again"
+      return 1
+    fi
+  elif ! ai_bootstrap_antigravity "$binary"; then
+    render_result ERROR 'AI tool agy' "official installer failed; inspect $binary before applying again"
+    return 1
+  fi
+
+  if ! version="$(ai_native_version agy "$binary")"; then
+    render_result ERROR 'AI tool agy' "native version verification failed; inspect $binary before applying again"
+    return 1
+  fi
+  if [[ -z "$previous_version" ]]; then
+    render_result INSTALLED 'AI tool' "agy@$version"
+  elif [[ "$version" != "$previous_version" ]]; then
+    render_result UPDATED 'AI tool' "agy@$version"
+  else
+    render_result 'UP TO DATE' 'AI tool' "agy@$version (version unchanged)"
+  fi
 }
 
 ai_install_profile_env() {
@@ -473,4 +528,5 @@ ai_install() {
   ai_install_claude || return $?
   ai_install_profiles || return 1
   ai_install_instructions || return 1
+  ai_install_antigravity
 }
