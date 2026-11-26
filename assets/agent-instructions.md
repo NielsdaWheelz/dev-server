@@ -59,4 +59,5 @@
     - for a new detached rehearsal, use dev-server's `scripts/rehearse-worktree`. store named evidence outside scratch, reopen and hash it, then report the check and cleanup outcomes separately. inner checks own fixture teardown. preserve existing hetzner scratch until the owner approves disposal.
 - agent control
     - use native subagents and workflows when useful. use skid to manage independent codex and claude-code sessions. run `skid --help` for commands and automation guidance.
+    - use `skid start --delegate` for sessions you supervise. use ordinary `skid start` for sessions the user will own.
     - when starting a skid worker, specify any model or effort the assignment requires. omit either only if the destination profile's default suits the task.
