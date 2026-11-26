@@ -30,7 +30,7 @@ def configure(binary, account):
     fields.append("weekly-limit")
     settings = {"status_line": fields, "status_line_use_colors": True}
     config = account / "config.toml"
-    if config.is_symlink() or account.is_symlink():
+    if config.is_symlink() or account.is_symlink() or (config.exists() and not config.is_file()):
         raise ValueError(f"expected a regular codex configuration in {account}")
 
     def matches():
