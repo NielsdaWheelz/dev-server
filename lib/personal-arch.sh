@@ -92,7 +92,7 @@ personal_arch_install_root_file() {
   local target="$2"
   local mode="$3"
 
-  atomic_install_file_as_root "$source" "$target" "$mode"
+  atomic_install_file_as_root "$source" "$target" "$mode" || return 1
   # Assigned by atomic_install_file_as_root.
   # shellcheck disable=SC2154
   case "$dev_server_install_status" in
@@ -317,8 +317,53 @@ personal_arch_configure_xfce() {
   fi
 }
 
+personal_arch_configure_gui_defaults() {
+  local assets stage name policies existing
+  assets="$(personal_arch_asset desktop-apps)" || return 1
+  stage=${workstation_declared_stage:?}
+  ensure_directory_as_root /etc/xdg 0755 || return 1
+  # Plasma and XDG resolve each user's preferences ahead of these system defaults.
+  for name in kdeglobals mimeapps.list; do
+    python3 "$assets/render-defaults.py" "/etc/xdg/$name" "$assets/$name" >"$stage/$name" || return 1
+    personal_arch_install_root_file "$stage/$name" "/etc/xdg/$name" 0644 || return 1
+  done
+
+  ensure_directory_as_root /etc/firefox 0755 || return 1
+  ensure_directory_as_root /etc/firefox/policies 0755 || return 1
+  policies=/etc/firefox/policies/policies.json
+  existing=$policies
+  if [[ ! -e "$existing" ]]; then
+    # Firefox on Arch consults the distribution file until a system policy exists.
+    existing=/usr/lib/firefox/distribution/policies.json
+  fi
+  if [[ -f "$existing" ]]; then
+    jq -s '.[0] * .[1]' "$existing" "$assets/firefox-policies.json" >"$stage/firefox-policies.json" || return 1
+  else
+    cp "$assets/firefox-policies.json" "$stage/firefox-policies.json" || return 1
+  fi
+  personal_arch_install_root_file "$stage/firefox-policies.json" "$policies" 0644 || return 1
+  personal_arch_ensure_unit fstrim.timer || return 1
+  personal_arch_ensure_unit paccache.timer
+}
+
+# xfce reads this file directly for its preferred browser and terminal.
+personal_arch_xfce_helpers() {
+  local current="$1" defaults="$2"
+  [[ -f "$current" ]] || current=/dev/null
+  awk -F= '
+    FILENAME == ARGV[1] { defaults[$1] = $0; next }
+    $1 == "TerminalEmulator" { print defaults[$1]; terminal = 1; next }
+    $1 == "WebBrowser" { browser = 1 }
+    { print }
+    END {
+      if (!terminal) print defaults["TerminalEmulator"]
+      if (!browser) print defaults["WebBrowser"]
+    }
+  ' "$defaults" "$current"
+}
+
 personal_arch_configure_session_files() {
-  local home asset target
+  local home asset target helpers
 
   home="$(dev_server_home)"
   ensure_directory "$home/.config/autostart" 0755
@@ -342,8 +387,14 @@ ghostty-autostart.desktop .config/autostart/ghostty.desktop
 ghostty.config .config/ghostty/config.ghostty
 ghostty-xfce-helper.desktop .local/share/xfce4/helpers/ghostty.desktop
 xfce4-clipman-autostart.desktop .config/autostart/xfce4-clipman-plugin-autostart.desktop
-xfce4-helpers.rc .config/xfce4/helpers.rc
 FILES
+
+  helpers="$home/.config/xfce4/helpers.rc"
+  personal_arch_xfce_helpers "$helpers" "$(personal_arch_asset dotfiles/xfce4-helpers.rc)" >"$workstation_declared_stage/xfce4-helpers.rc" || return 1
+  install_managed_file "$workstation_declared_stage/xfce4-helpers.rc" "$helpers" 0644 desktop.session || return 1
+  if [[ "$dev_server_install_status" != 'UP TO DATE' ]]; then
+    personal_arch_desktop_deferred=1
+  fi
 }
 
 personal_arch_configure_cursor() {
@@ -695,7 +746,6 @@ personal_arch_configure_services() {
   personal_arch_ensure_unit reflector.timer
   personal_arch_ensure_unit fwupd-refresh.timer
   personal_arch_ensure_unit pkgfile-update.timer
-  personal_arch_ensure_unit paccache.timer
   personal_arch_ensure_unit smartd.service
   if personal_arch_intel_cpu; then
     personal_arch_ensure_unit thermald.service
@@ -705,6 +755,7 @@ personal_arch_configure_services() {
 personal_arch_apply() {
   personal_arch_validate_inputs
   personal_arch_configure_root_files
+  personal_arch_configure_gui_defaults || return 1
   personal_arch_configure_session_files
   personal_arch_configure_cursor
   personal_arch_configure_xfce

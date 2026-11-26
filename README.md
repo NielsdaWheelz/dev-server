@@ -69,6 +69,14 @@ endeavouros, pacman and yay. the tower uses stock arch and pacman. workstations 
 git, curl, python 3, tmux, tailscale, and native service tools. existing github,
 ai-tool, ssh, tailscale, and skid credentials are preserved.
 
+both linux workstations install firefox, its 1password extension, vlc with
+codecs, and weekly ssd trim and package-cache cleanup. firefox handles web
+links and vlc handles mp4 and mkv by default. plasma starts in breeze dark.
+personal application and theme choices take precedence. steam, the nvidia
+driver and the saved three-display layout belong to the tower. the
+[huawei plasma reinstall](docs/issues/huawei-plasma-reinstall.md) is a
+separate step from applying these defaults to the current laptop.
+
 arch's operator connections to macbook, devbox and nexus use the separate
 protected `~/.ssh/id_ed25519_fleet` key. its original ssh identity is retained
 for existing uses. encrypted backup and passphrase custody remain off-host in
@@ -187,6 +195,12 @@ codex-work2 resume
 claude-work2 auth login
 ```
 
+on a fresh workstation, sign in from the interactive codex profile you intend
+to use. a daemon started before a separate cli login can still show the
+sign-in screen even when `codex-work login status` succeeds. once that
+profile's daemon sessions are idle, `codex-work app-server daemon restart`
+loads its saved login. use the command for the affected profile only.
+
 codex owns each account's native daemon and discovery socket. `codex` honors
 a nonempty `CODEX_HOME`, otherwise selecting `.codex` under the host-user home
 recorded when installed; `codex-work` and `codex-work2` always select their named
@@ -225,6 +239,11 @@ useful durable conclusions without duplicating captured conversation. the
 orientation, compaction, children and outages. edit the repo sources; apply
 replaces installed copies. new sessions load changes; source verification and
 [installed rollout](docs/issues/memory-orientation-rollout.md) remain separate.
+each codex account has the same coloured terminal footer across hosts. it shows
+the model and reasoning effort, current directory, context used and weekly
+limit. `codex-work` also shows its five-hour limit. apply writes only those
+two tui settings through codex's own config api. open a new tui to see them.
+
 [`assets/claude/statusline.sh`](assets/claude/statusline.sh) is installed as
 `~/bin/claude-statusline` and set as the `statusLine` command in all three claude
 account `settings.json` files; running sessions pick it up on the next update.
@@ -346,15 +365,47 @@ dev-server writes no roster or generated runtime config.
    admit desktop lanes. render the owner declaration and install the private
    desktop bundle before running workstation apply. verify the collector
    baseline, a native memory read, and capture under the intended profile.
-5. reboot and leave the tower at graphical login. from the mac, run
-   `skid status` and `skid start --machine desktop --terminal`. attach to
-   the reported handle and verify `hostnamectl --static` prints `desktop`.
-   close the test terminal. request a desktop worker from jarvis and verify
-   its handle opens on the tower.
+5. reboot and leave the tower at graphical login. run the
+   [post-reboot checks](#verify-a-workstation-after-reboot) from the mac.
 
 on reinstall, verify the new ssh host key at the tower, retire superseded
 tailnet and skid identities, and enroll the replacement. restore owner data
 from backup and sign in to the required providers.
+
+### verify a workstation after reboot
+
+leave the machine at the graphical login screen. from the mac, use the ssh
+alias whose host key you already verified at the physical console.
+
+```sh
+scripts/verify-workstation desktop
+scripts/verify-workstation desktop --skid-terminal
+```
+
+use `arch` for the huawei. the first form opens a fresh key-only ssh
+connection, reports the boot id, queries the local docker engine, and checks
+the user collector and its authenticated capture baseline for each configured
+profile. compare the boot id with the previous run to prove a reboot occurred.
+an absent or pending lane is reported by account. the second form also starts
+one plain skid terminal, verifies its hostname against ssh and closes the
+exact terminal it created. either form exits nonzero on a failed selected
+check. neither form sends a provider or jarvis request.
+
+two checks need a real request. record their results separately.
+
+- for each intended signed-in native profile, start a persistent session on
+  the target and send a unique disposable phrase. ask it to use its connected
+  `memory_view` and reply with the phrase. verify the tool call succeeded and
+  that the profile read the full paginated snapshot under normal startup
+  instructions. from an enrolled profile on a second machine, search for the
+  phrase and open the captured request and reply. verify both records show
+  the intended source machine and account. a signed-out or skipped profile
+  stays unverified. an active baseline alone does not prove a new turn was captured.
+- to verify jarvis placement, ask jarvis in its ordinary owner chat to start
+  a worker on the named machine, run `hostnamectl --static`, and return the
+  output and terminal handle. inspect that exact handle with `skid info` and
+  `skid read` on the mac and verify its machine and result. close only this
+  test worker. if you skip the owner request, jarvis dispatch stays untested.
 
 ### hub configuration
 

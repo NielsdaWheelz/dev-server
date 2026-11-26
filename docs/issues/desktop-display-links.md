@@ -16,9 +16,11 @@ displayport alt mode. the card's hdmi 2.0b output limits full-rgb refresh at
   if the target mode is missing, try the monitor's high-resolution usb-c
   prioritization setting.
 
-check the physical labels against plasma's display identification. inspect the
-negotiated modes with `kscreen-doctor -o` while both displays are connected.
-test adaptive sync in a game with a varying frame rate.
+on november 26, 2026, `kscreen-doctor -j` reported 3840 × 2160 at 120 hz
+simultaneously on both dells and 60 hz on the tv. the middle dell was primary.
+with the displays awake, pipewire exposed three separate display sinks and
+routed vlc stereo to the selected dell. negotiated colour format and adaptive
+sync during a game still need a physical check.
 
 close after recording both displays' simultaneous resolution, refresh, colour
 format and vrr behavior, plus any accepted limits, in the

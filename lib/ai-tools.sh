@@ -567,6 +567,7 @@ ai_install() {
   ai_install_dirs || return 1
   ai_install_claude_settings || return 1
   ai_install_codex || return $?
+  python3 "$(dev_server_assets_dir)/../lib/codex-statusline.py" "$(dev_server_home)" || return 1
   ai_install_claude || return $?
   ai_install_skid_worker || return 1
   ai_install_profiles || return 1

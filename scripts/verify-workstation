@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# Run from the operator's Mac after reboot and before local graphical login.
+set -euo pipefail
+
+usage() { printf '%s\n' 'usage: scripts/verify-workstation desktop|arch [--skid-terminal]'; }
+if [[ ${1:-} == --help || ${1:-} == -h ]]; then usage; exit 0; fi
+case ${1:-} in desktop|arch) machine=$1 ;; *) usage >&2; exit 64 ;; esac
+if (( $# > 2 )) || [[ $# == 2 && $2 != --skid-terminal ]]; then usage >&2; exit 64; fi
+
+# Bypass existing ssh masters so this checks a fresh operator-key login.
+remote_status=0
+hostname=$(ssh -T -o BatchMode=yes -o StrictHostKeyChecking=yes -o UpdateHostKeys=no \
+  -o VerifyHostKeyDNS=no -o PreferredAuthentications=publickey -o ControlPath=none -o ClearAllForwardings=yes \
+  -o ConnectTimeout=10 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 "$machine" bash -s -- "$machine" <<'REMOTE'
+set -euo pipefail
+machine=$1
+name=$(hostnamectl --static)
+[[ -n "$name" && ( "$machine" != desktop || "$name" == desktop ) ]] || { echo 'unexpected static hostname' >&2; exit 1; }
+printf '%s\n' "$name"
+printf 'ssh: %s, boot %s\n' "$name" "$(cat /proc/sys/kernel/random/boot_id)" >&2
+status=0
+if [[ "$machine" == desktop && $(loginctl show-user "$(id -un)" --property=Linger --value) != yes ]]; then
+  echo 'desktop user services need linger for pre-login startup' >&2; status=1
+fi
+if version=$(docker --host unix:///var/run/docker.sock version --format '{{.Server.Version}}') && [[ -n "$version" ]]; then
+  printf 'docker api: %s\n' "$version" >&2
+else
+  echo 'local docker engine did not answer' >&2; status=1
+fi
+unit=jarvis-memory-collector.service
+if systemctl --user is-enabled --quiet "$unit" && systemctl --user is-active --quiet "$unit"; then
+  echo 'local memory collector: enabled and active' >&2
+else
+  echo 'local memory collector is disabled or inactive' >&2; status=1
+fi
+config="$HOME/.config/jarvis-memory"
+if [[ ! -r "$config/collector.env" ]]; then echo 'capture credentials are missing' >&2; exit 1; fi
+. "$config/collector.env"
+"$HOME/.local/share/jarvis-memory/current/.venv/bin/python" - "$machine" "$config/collector.json" >&2 <<'PYMEM' || status=1
+import os
+import sys
+from pathlib import Path
+
+import httpx
+from jarvis.collector import CollectorConfig
+from jarvis.memory_capture import CaptureLanes
+from provider_runtime.agent_runtime.archive import ARCHIVE_CONTRACT_REVISION
+
+config = CollectorConfig.load(Path(sys.argv[2]))
+if config.machine != sys.argv[1] or not config.homes:
+    sys.exit("unexpected collector machine or empty profile set")
+try:
+    with httpx.Client(trust_env=False, follow_redirects=False, timeout=10) as client:
+        response = client.get(config.service_url + "/v1/memory/lanes",
+                              headers={"Authorization": "Bearer " + os.environ[config.bearer_env]})
+        response.raise_for_status()
+        result = CaptureLanes.model_validate_json(response.content)
+except (httpx.HTTPError, ValueError, KeyError):
+    sys.exit("authenticated capture-lane request failed")
+if result.contract_revision != ARCHIVE_CONTRACT_REVISION:
+    sys.exit("incompatible capture contract")
+statuses = {}
+for entry in result.lanes:
+    account = entry.lane.account
+    if (entry.lane.machine != config.machine or account not in config.homes
+            or entry.lane.provider != config.homes[account].provider or account in statuses):
+        sys.exit("unexpected capture lane")
+    if entry.status == "active" and (entry.receipt is None or entry.receipt.lane != entry.lane):
+        sys.exit("active capture lane has no matching receipt")
+    statuses[account] = entry.status
+for account in sorted(config.homes):
+    print(f"capture baseline {account}: {statuses.get(account, 'not admitted')}")
+if any(statuses.get(account) != "active" for account in config.homes):
+    sys.exit("some configured profiles have no active capture baseline")
+PYMEM
+exit "$status"
+REMOTE
+) || remote_status=$?
+[[ $remote_status != 255 && -n "$hostname" ]] || { echo 'could not verify the ssh host' >&2; exit 1; }
+
+echo 'manual: native memory read and cross-machine capture for each intended profile, plus jarvis worker dispatch'
+if (( $# == 1 )); then
+  echo 'skid terminal: untested (use --skid-terminal)'
+  exit "$remote_status"
+fi
+
+name="bootcheck-$(uuidgen | tr '[:upper:]' '[:lower:]')"
+start_status=0
+reply=$(skid start "$name" --machine "$machine" --terminal --json) || start_status=$?
+ref=$(jq -er '.result | select(.creation == "created") | .target | strings | select(length > 0)' <<<"$reply") || {
+  echo "skid did not return a created terminal reference; inspect $name before retrying" >&2; exit 1
+}
+# shellcheck disable=SC2329 # invoked by the EXIT trap.
+cleanup() {
+  local status=$?
+  trap - EXIT
+  if ! skid close --ref "$ref" --terminal-only --json >/dev/null; then
+    echo "could not confirm cleanup of $name; inspect that terminal" >&2; status=1
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+(( start_status == 0 )) || { echo "skid start was partial" >&2; exit 1; }
+# The echoed command contains %s. Only its executed output contains the expected line.
+marker=${name:0:17}
+skid text --ref "$ref" "printf '$marker:%s\\n' \"\$(hostnamectl --static)\"" --json |
+  jq -e '.ok and .result.outcome == "written"' >/dev/null
+for ((attempt=0; attempt<15; attempt++)); do
+  view=$(skid read --ref "$ref" --max-bytes 4096 --json)
+  if jq -e --arg expected "$marker:$hostname" \
+    '.ok and (.result.text | split("\n") | any(sub("[[:space:]]+$"; "") == $expected))' <<<"$view" >/dev/null; then
+    printf 'skid terminal: verified %s\n' "$hostname"
+    exit "$remote_status"
+  fi
+  sleep 1
+done
+echo 'skid terminal did not return the expected hostname' >&2
+exit 1
