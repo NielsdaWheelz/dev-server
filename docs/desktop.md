@@ -148,13 +148,12 @@ detection and stability, disk health and both monitor links under arch.
 use kde plasma/wayland, steam/proton, ssh, tailscale and skid. use one
 worktree per agent and one compose project per development stack on one docker
 engine. start with a single heavy integration run and pause it while gaming
-if resources compete. the desktop needs its own host policy and fresh fleet
-enrollment before taking development work. [host migration issue](issues/desktop-host-migration.md).
+if resources compete. complete the [development handoff](issues/desktop-host-migration.md)
+before moving those workloads.
 
-use stock arch boot and full package upgrades. the november driver plan listed
-`nvidia-open` for the standard kernel or `nvidia-open-lts` for `linux-lts`,
-with matching `lib32-nvidia-utils` for steam. recheck the packages for the
-installed kernel and rtx 2080 at installation. [arch nvidia guidance](https://wiki.archlinux.org/title/NVIDIA).
+the desktop manifest selects the stock linux kernel, `nvidia-open`,
+`nvidia-utils` and `lib32-nvidia-utils` for steam. verify that the installed
+kernel loaded the matching driver. [package manifest](../packages/desktop.pacman.txt)
 
 use the witcher 3, total war and the blood of dawnwalker as representative
 gaming workloads. measure gameplay on the existing gpu at acceptable settings.
