@@ -1,0 +1,5 @@
+dolphin
+kwallet-pam
+plasma-meta
+xdg-desktop-portal-kde
+xorg-xwayland

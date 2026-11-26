@@ -1,6 +1,4 @@
-dolphin
 intel-ucode
-kwallet-pam
 lib32-nvidia-utils
 linux
 linux-firmware
@@ -9,11 +7,8 @@ nvidia-open
 nvidia-utils
 pipewire-alsa
 pipewire-pulse
-plasma-meta
 solaar
 steam
 vim
 vulkan-tools
 wireplumber
-xdg-desktop-portal-kde
-xorg-xwayland

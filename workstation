@@ -52,11 +52,11 @@ workstation_select_target() {
     workstation_platform=arch
     if personal_arch_owned_host; then
       workstation_target=arch
-      workstation_manifests=(packages/arch.common.txt packages/arch.pacman.txt packages/arch.aur.txt)
+      workstation_manifests=(packages/arch.common.txt packages/plasma.pacman.txt packages/arch.pacman.txt packages/arch.aur.txt)
     elif [[ -f /etc/arch-release && "$(< /proc/sys/kernel/hostname)" == desktop ]] && personal_desktop_board; then
       [[ "$(id -un)" == nnandal ]] || die 'run desktop apply as the operator nnandal'
       workstation_target=desktop
-      workstation_manifests=(packages/arch.common.txt packages/desktop.pacman.txt)
+      workstation_manifests=(packages/arch.common.txt packages/plasma.pacman.txt packages/desktop.pacman.txt)
     else
       die 'workstation apply supports only the owned arch laptop and desktop'
     fi
@@ -208,8 +208,8 @@ workstation_prepare_arch_sudo() {
       break
     done <"$base_dir/.env"
   fi
-  if [[ "$workstation_target" == desktop && -z "${ARCH_PASS:-}" && -t 0 ]]; then
-    IFS= read -r -s -p 'desktop sudo password: ' ARCH_PASS || die 'could not read the local sudo password'
+  if [[ -z "${ARCH_PASS:-}" && -t 0 ]]; then
+    IFS= read -r -s -p 'workstation sudo password: ' ARCH_PASS || die 'could not read the local sudo password'
     printf '\n' >&2
   fi
   [[ -n "${ARCH_PASS:-}" ]] || die 'set ARCH_PASS in the environment or the repo .env for arch apply'

@@ -57,17 +57,5 @@ personal_desktop_apply() {
     sudo loginctl enable-linger "$user"
     render_result CHANGED "$user" 'user services start before login'
   fi
-  # Keep the local console available while the first apply is running.
-  if ! systemctl is-enabled --quiet plasmalogin.service; then
-    sudo systemctl enable plasmalogin.service
-    render_result CHANGED plasmalogin.service enabled
-  fi
-  if [[ "$(systemctl get-default)" != graphical.target ]]; then
-    sudo systemctl set-default graphical.target
-    render_result CHANGED 'boot target' graphical.target
-  fi
-  if ! systemctl is-active --quiet plasmalogin.service || personal_arch_reboot_pending; then
-    # shellcheck disable=SC2034 # read by workstation_report_deferrals.
-    personal_arch_reboot_deferred=1
-  fi
+  personal_arch_enable_plasma_login
 }

@@ -24,6 +24,7 @@ personal_arch_validate_declared_inputs() {
   local -a assets=(
     dracut/90-dev-server.conf
     endeavouros/eos-update.conf
+    kde/huawei-powerdevilrc
     reflector/reflector.conf
     systemd-boot/loader.conf
     systemd/zram-generator.conf
@@ -344,6 +345,21 @@ personal_arch_configure_gui_defaults() {
   personal_arch_install_root_file "$stage/firefox-policies.json" "$policies" 0644 || return 1
   personal_arch_ensure_unit fstrim.timer || return 1
   personal_arch_ensure_unit paccache.timer
+}
+
+personal_arch_enable_plasma_login() {
+  # Replace the boot alias without touching the active graphical session.
+  if ! systemctl is-enabled --quiet plasmalogin.service; then
+    sudo systemctl enable --force plasmalogin.service || die 'could not enable Plasma Login Manager'
+    render_result CHANGED plasmalogin.service enabled
+  fi
+  if [[ "$(systemctl get-default)" != graphical.target ]]; then
+    sudo systemctl set-default graphical.target || die 'could not set the graphical boot target'
+    render_result CHANGED 'boot target' graphical.target
+  fi
+  if ! systemctl is-active --quiet plasmalogin.service || personal_arch_reboot_pending; then
+    personal_arch_reboot_deferred=1
+  fi
 }
 
 # xfce reads this file directly for its preferred browser and terminal.
@@ -756,13 +772,10 @@ personal_arch_apply() {
   personal_arch_validate_inputs
   personal_arch_configure_root_files
   personal_arch_configure_gui_defaults || return 1
+  personal_arch_install_root_file "$(personal_arch_asset kde/huawei-powerdevilrc)" /etc/xdg/powerdevilrc 0644
   personal_arch_configure_session_files
   personal_arch_configure_cursor
   personal_arch_configure_xfce
   personal_arch_configure_services
-  if personal_arch_reboot_pending; then
-    # Read by workstation_report_deferrals.
-    # shellcheck disable=SC2034
-    personal_arch_reboot_deferred=1
-  fi
+  personal_arch_enable_plasma_login
 }
