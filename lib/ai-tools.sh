@@ -245,7 +245,8 @@ for account, root in (("codex-personal", ".codex"), ("codex-work", ".codex-work"
 print(f'  *) jarvis_memory_profile_env {shlex.quote(home)} "" ;;\nesac')
 print('unset CODEX_MANAGED_BY_NPM CODEX_MANAGED_BY_BUN CODEX_MANAGED_BY_PNPM '
       'CODEX_MANAGED_BY_VITE_PLUS CODEX_MANAGED_PACKAGE_ROOT')
-print(f'exec {shlex.quote(home + "/.local/bin/codex")} "$@"')
+print(f'source {shlex.quote(home + "/.local/share/dev-server/skid-agent-launch")}')
+print(f'skid_profile_launch codex {shlex.quote(home + "/.local/bin/codex")} "$@"')
 PY
   then
     rm -f -- "$codex_profile"
@@ -261,6 +262,45 @@ PY
   ((status == 0)) || return 1
 }
 
+# Install the managed coding worker from the same immutable source and lock on
+# every host. Its absolute environment path is final before uv writes scripts.
+ai_install_skid_worker() {
+  local home pin root source environment link
+  home="$(dev_server_home)"
+  pin="$(cat "$(dev_server_assets_dir)/skidbladnir/worker-pin")" || return 1
+  [[ "$pin" =~ ^[0-9a-f]{40}$ ]] || die 'invalid skid worker source pin'
+  root="$home/.local/share/dev-server/skid-workers"
+  source="$root/$pin/source"
+  environment="$root/$pin/environment"
+  ensure_directory "$home/.local/share/dev-server" 0755 || return 1
+  ensure_directory "$root" 0700 || return 1
+  ensure_directory "$root/$pin" 0700 || return 1
+  ensure_directory "$source" 0700 || return 1
+  if [[ "$(git -C "$source" rev-parse --verify HEAD 2>/dev/null)" != "$pin" ]]; then
+    git -C "$source" init -q || return 1
+    git -C "$source" fetch -q --no-tags --depth=1 https://github.com/NielsdaWheelz/llm-calling.git "$pin" || return 1
+    [[ "$(git -C "$source" rev-parse --verify FETCH_HEAD)" == "$pin" ]] ||
+      die 'skid worker checkout does not match its pin'
+    git -C "$source" checkout --quiet --detach "$pin" || return 1
+  fi
+  UV_PROJECT_ENVIRONMENT="$environment" uv sync --project "$source" --frozen \
+    --python 3.12 --no-dev --no-editable --extra worker || return 1
+  "$environment/bin/provider-runtime-worker" --help >/dev/null || return 1
+  link="$home/.local/share/dev-server/skid-worker"
+  python3 - "$environment" "$link" <<'PYLINK'
+from pathlib import Path
+import os
+import sys
+import tempfile
+
+target, link = map(Path, sys.argv[1:])
+with tempfile.TemporaryDirectory(prefix=".skid-worker-", dir=link.parent) as stage:
+    next_link = Path(stage) / "linked"
+    next_link.symlink_to(target, target_is_directory=True)
+    os.replace(next_link, link)
+PYLINK
+}
+
 ai_install_profiles() {
   local home profile command
 
@@ -268,6 +308,8 @@ ai_install_profiles() {
   profile="$(dev_server_assets_dir)/routers/ai-profile"
   [[ -f "$profile" && ! -L "$profile" ]] ||
     die "missing AI profile wrapper: $profile"
+  install_managed_file "$(dev_server_assets_dir)/routers/skid-agent-launch" \
+    "$home/.local/share/dev-server/skid-agent-launch" 0644 shell.config || return 1
   ai_install_codex_profiles || return 1
   for command in claude-work claude-work2; do
     install_managed_file "$profile" \
@@ -526,6 +568,7 @@ ai_install() {
   ai_install_claude_settings || return 1
   ai_install_codex || return $?
   ai_install_claude || return $?
+  ai_install_skid_worker || return 1
   ai_install_profiles || return 1
   ai_install_instructions || return 1
   ai_install_antigravity
