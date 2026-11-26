@@ -272,6 +272,9 @@ ai_install_skid_worker() {
   root="$home/.local/share/dev-server/skid-workers"
   source="$root/$pin/source"
   environment="$root/$pin/environment"
+  ensure_directory "$home/.local/share/dev-server" 0755 || return 1
+  ensure_directory "$root" 0700 || return 1
+  ensure_directory "$root/$pin" 0700 || return 1
   ensure_directory "$source" 0700 || return 1
   if [[ "$(git -C "$source" rev-parse --verify HEAD 2>/dev/null)" != "$pin" ]]; then
     git -C "$source" init -q || return 1
