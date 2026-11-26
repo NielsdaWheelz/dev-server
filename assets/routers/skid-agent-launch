@@ -1,0 +1,74 @@
+# shellcheck shell=bash
+# Sourced by the installed coding profile wrappers after account setup.
+skid_profile_launch() {
+  local provider="$1" executable="$2" address
+  shift 2
+  unset SKID_REPLY_TO
+  if [[ -n "${TMUX_PANE:-}" && -t 0 && -t 1 ]] &&
+    address="$(skid peer-address "$provider" "$$")"; then
+    export SKID_REPLY_TO="$address"
+  fi
+  if [[ -z "${SKID_MANAGED_SOCKET:-}" ]]; then
+    if [[ "$provider" == codex && -n "${SKID_REPLY_TO:-}" ]]; then
+      # Codex preserves a loaded daemon thread's tool environment on rejoin.
+      # Bind the tool environment to this pane's native client for its lifetime.
+      set -- --no-daemon -c "shell_environment_policy.set.SKID_REPLY_TO=\"$SKID_REPLY_TO\"" "$@"
+    fi
+    exec "$executable" "$@"
+  fi
+  local -a options=()
+  local model='' effort=''
+  while (($#)); do
+    case "$provider:$1" in
+      codex:--yolo | codex:--dangerously-bypass-approvals-and-sandbox)
+        options+=(--approval-policy never --sandbox danger-full-access)
+        shift
+        ;;
+      claude:--dangerously-skip-permissions)
+        options+=(--permission-mode bypassPermissions)
+        shift
+        ;;
+      *:--model)
+        (($# > 1)) || return 64
+        model="$2"
+        shift 2
+        ;;
+      claude:--effort)
+        (($# > 1)) || return 64
+        effort="$2"
+        shift 2
+        ;;
+      codex:-c)
+        (($# > 1)) || return 64
+        case "$2" in
+          model_reasoning_effort=\"*\")
+            effort="${2#model_reasoning_effort=\"}"
+            effort="${effort%\"}"
+            ;;
+          *)
+            printf '%s\n' 'skid worker: unsupported codex profile override' >&2
+            return 64
+            ;;
+        esac
+        shift 2
+        ;;
+      *)
+        printf '%s\n' 'skid worker: unsupported profile option' >&2
+        return 64
+        ;;
+    esac
+  done
+  if [[ -n "$model" ]]; then
+    options+=(--model "$model")
+  fi
+  if [[ -n "$effort" ]]; then
+    options+=(--effort "$effort")
+  fi
+  case "$provider" in
+    codex) export SKID_MANAGED_PROVIDER=Codex ;;
+    claude) export SKID_MANAGED_PROVIDER=Claude ;;
+  esac
+  exec "$HOME/.local/share/dev-server/skid-worker/bin/provider-runtime-worker" "$provider" \
+    --executable "$executable" --socket "$SKID_MANAGED_SOCKET" --results "$SKID_MANAGED_RESULTS" \
+    "${options[@]}"
+}

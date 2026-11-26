@@ -5,29 +5,34 @@ profiles:
     command: codex
     provider: codex
     home: ~/.codex
+    managed: true
     resume_command: 'codex resume "$1"'
   - name: work
     label: "Codex · Work"
     command: codex-work
     provider: codex
     home: ~/.codex-work
+    managed: true
     resume_command: 'codex-work resume "$1"'
   - name: work2
     label: "Codex · Work 2"
     command: codex-work2
     provider: codex
     home: ~/.codex-work2
+    managed: true
     resume_command: 'codex-work2 resume "$1"'
   - name: claude-work
     label: "Claude · Work"
     command: claude-work
     provider: claude
     home: ~/.claude-work
+    managed: true
     resume_command: 'claude-work --resume "$1"'
   - name: claude-work2
     label: "Claude · Work 2"
     command: claude-work2
     provider: claude
     home: ~/.claude-work2
+    managed: true
     resume_command: 'claude-work2 --resume "$1"'
 terminal: ghostty
