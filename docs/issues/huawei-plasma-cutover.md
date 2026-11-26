@@ -2,7 +2,8 @@
 
 the huawei mach-wx9 currently runs endeavouros and xfce. apply installs the
 tower's plasma session and schedules its login manager for the next boot. the
-laptop keeps its bootloader, kernel, wi-fi setup, user files and xfce session.
+laptop keeps its bootloader, lts kernel track, wi-fi setup, user files and xfce
+session.
 laptop power defaults keep ac jobs awake and suspend on battery after five
 idle minutes. steam, tower graphics drivers and monitor configuration stay on
 the tower.
