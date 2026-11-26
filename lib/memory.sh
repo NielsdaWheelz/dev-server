@@ -19,7 +19,7 @@ memory_install() {
 }
 
 _memory_install() (
-  local platform="$1" bundle="$2" owner_home base config stage repository revision release
+  local platform="$1" machine="$2" bundle="$3" owner_home base config stage repository revision release
   local launcher unit service desired state candidate target previous='' uv new_release=''
   local changed=0 mode
   [[ -d "$bundle" ]] || {
@@ -80,11 +80,12 @@ PY
     render_result INSTALLED memory.collector "central Jarvis source $revision"
   fi
   [[ "$(git -C "$release" rev-parse HEAD)" == "$revision" ]] || return 1
-  "$release/.venv/bin/python" - "$bundle/collector.json" <<'PY' || return 1
+  "$release/.venv/bin/python" - "$bundle/collector.json" "$machine" <<'PY' || return 1
 from pathlib import Path
 import sys
 from jarvis.collector import CollectorConfig
-CollectorConfig.load(Path(sys.argv[1]))
+if CollectorConfig.load(Path(sys.argv[1])).machine != sys.argv[2]:
+    raise SystemExit("memory bundle belongs to another machine")
 PY
   "$release/.venv/bin/python" "$(dev_server_assets_dir)/memory/profile-config.py" \
     "$bundle/profiles.json" "$bundle/collector.json" "$owner_home" \

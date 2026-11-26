@@ -141,11 +141,27 @@ would also authorize old or newly enrolled devices.
 |---|---|---|
 | macbook, arch | devbox, nexus production | tcp `22`, ordinary openssh |
 | macbook, arch | the other operator workstation | tcp `22`, ordinary openssh |
-| macbook, arch, devbox | macbook, arch, devbox | tcp `8443`, direct skid peer access |
-| enrolled android phone | macbook, arch, devbox | tcp `8443`, direct skid client access |
+| macbook | desktop | tcp `22`, ordinary openssh |
+| macbook, arch, devbox, desktop | macbook, arch, devbox, desktop | tcp `8443`, direct skid peer access |
+| enrolled android phone | macbook, arch, devbox, desktop | tcp `8443`, direct skid client access |
 | production | any other tailnet device | none |
 | retired `skq-linux`, `niels-desktop` | any device | none; revoke membership and associated access |
 | other unidentified devices | any device | none until explicitly admitted |
+
+the tracked [tailscale policy](../assets/security/tailnet-policy.hujson) and
+[mac firewall anchor](../assets/security/macos.pf.conf) are the defaults
+before desktop enrollment. keep the two full policies for an enrolled tower
+under `~/.config/fleet-security/desktop/` and back them up privately.
+
+- start `tailnet-policy.hujson` from the tracked policy. add both tower
+  addresses as hosts, extend the grants and allow/deny tests for each
+  address family according to the table, then review and apply the full
+  policy in the tailscale admin console.
+- start `macos.pf.conf` from the tracked anchor. add the tower's two
+  addresses to the `dev_server_skid` peer table. run `./workstation apply`
+  on the mac to stage and load this private anchor. if the private file is
+  missing and the installed anchor has extra skid peers, apply stops.
+  restore the private source before applying again.
 
 this is the minimum intended matrix, not executable policy. preflight must
 compare it with actual editor, terminal and automation routes. report any

@@ -5,7 +5,7 @@ s2725qc monitors from the rtx 2080. the monitors have hdmi and usb-c with
 displayport alt mode. the card's hdmi 2.0b output limits full-rgb refresh at
 4k. the selected linux driver, cable and display modes need a physical test.
 [dell manual](https://dl.dell.com/content/manual22980564-dell-s-27-4k-usb-c-monitor-s2725qc-user-s-guide.pdf?language=en-us),
-[evga product sheet](https://cdn.cnetcontent.com/25/9f/259f0aa3-6403-40b1-9cde-ec08ac942ecb.pdf),
+[evga ftw3 ultra product sheet](https://www.bhphotovideo.com/lit_files/439156.pdf),
 [nvidia usb-c display support](https://nvidia.custhelp.com/app/answers/detail/a_id/4711).
 
 - connect the card's usb-c output to the first monitor with its supplied video cable.
@@ -15,6 +15,10 @@ displayport alt mode. the card's hdmi 2.0b output limits full-rgb refresh at
 - use the rear 65 w upstream usb-c port on both monitors. select usb-c input.
   if the target mode is missing, try the monitor's high-resolution usb-c
   prioritization setting.
+
+check the physical labels against plasma's display identification. inspect the
+negotiated modes with `kscreen-doctor -o` while both displays are connected.
+test adaptive sync in a game with a varying frame rate.
 
 close after recording both displays' simultaneous resolution, refresh, colour
 format and vrr behavior, plus any accepted limits, in the

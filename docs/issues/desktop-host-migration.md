@@ -1,19 +1,12 @@
-# desktop host migration
+# desktop development handoff
 
-the planned arch gaming and development desktop needs an explicit host
-policy. `workstation_select_target` accepts only the owned huawei laptop on
-linux. its arch policy assumes laptop hardware, xfce and its efi layout.
-activation currently recognizes macbook, arch and devbox. the retired
-desktop's old fleet identity has been revoked. [workstation entry point](../../workstation),
-[arch policy](../../lib/personal-arch.sh), [activation](../../lib/activation.py),
-[fleet security record](../fleet-security-spec.md).
+the desktop install and workstation target cover the operating system and
+software. an install alone cannot establish that development data is
+recoverable or that the tower can run the intended workloads.
 
-enroll the refurbished desktop as a fresh device and add a host policy for
-its chosen arch setup. inventory the development repositories, unpushed work,
-account state and persistent data before moving them. nexus, jarvis and the
-skid hub stay on the hetzner devbox.
-
-close when ordinary desktop apply passes, remote access works after boot
-without a graphical login, the required development state has transferred,
-and a representative integration suite passes. macbook owns heavy
-development until the handoff. [development placement](../desktop.md#development-placement).
+inventory repositories, unpushed changes and persistent data. restore the
+required items and keep backups of unique desktop state. verify ordinary
+apply, headless access after reboot and a representative integration suite
+before moving heavy development to the tower. record the test revision and
+result privately. [install and recovery](../desktop-install.md) ·
+[development placement](../desktop.md#development-placement)

@@ -43,10 +43,10 @@ def main() -> None:
     try:
         origin = memory_origin(args.url)
         homes = dict(value.split("=", 1) for value in args.home)
-        if set(homes) != {"macbook", "arch", "devbox"} or any(
+        if set(homes) != {machine for machine, _ in MEMORY_IDENTITIES} or any(
             not Path(value).is_absolute() for value in homes.values()
         ):
-            raise ValueError("declare all three absolute host homes")
+            raise ValueError("declare an absolute home for each memory host")
         declaration = json.loads(args.declaration.read_bytes())
         lanes = declaration["lanes"]
         if {(lane["machine"], lane["account"]) for lane in lanes} != MEMORY_IDENTITIES:

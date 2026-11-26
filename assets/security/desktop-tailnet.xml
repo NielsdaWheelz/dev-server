@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<zone target="DROP">
+  <short>desktop tailnet</short>
+  <interface name="tailscale0"/>
+  <service name="ssh"/>
+  <port protocol="tcp" port="8443"/>
+</zone>

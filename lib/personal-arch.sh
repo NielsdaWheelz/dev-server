@@ -573,6 +573,7 @@ personal_arch_configure_zram() {
 personal_arch_configure_firewall() {
   local assets strict desired recorded permanent runtime
   local changed=0
+  local -a declarations
 
   personal_arch_ensure_unit firewalld.service
   assets="$(dev_server_assets_dir)/security"
@@ -585,6 +586,13 @@ personal_arch_configure_firewall() {
   personal_arch_install_root_file "$assets/arch-docker-ingress.xml" \
     /etc/firewalld/policies/dev-server-docker.xml 0644
   [[ "$dev_server_install_status" == 'UP TO DATE' ]] || changed=1
+  declarations=("$assets/arch-public.xml" "$assets/arch-docker-ingress.xml")
+  if [[ "${workstation_target:?workstation target required}" == desktop ]]; then
+    personal_arch_install_root_file "$assets/desktop-tailnet.xml" \
+      /etc/firewalld/zones/desktop-tailnet.xml 0644
+    [[ "$dev_server_install_status" == 'UP TO DATE' ]] || changed=1
+    declarations+=("$assets/desktop-tailnet.xml")
+  fi
 
   strict="$(sudo busctl get-property org.fedoraproject.FirewallD1 \
     /org/fedoraproject/FirewallD1/config org.fedoraproject.FirewallD1.config StrictForwardPorts)"
@@ -603,7 +611,7 @@ personal_arch_configure_firewall() {
 
   # The receipt makes a failed reload retryable even after files were installed.
   sudo install -d -m 0700 /var/lib/dev-server /var/lib/dev-server/active
-  desired="$(cat "$assets/arch-public.xml" "$assets/arch-docker-ingress.xml" | sha256sum | awk '{print $1}')"
+  desired="$(cat "${declarations[@]}" | sha256sum | awk '{print $1}')"
   recorded="$(sudo cat /var/lib/dev-server/active/arch-firewall.sha256 2>/dev/null || true)"
   permanent="$(sudo firewall-cmd --permanent --zone=public --list-all | sed '1d; /interfaces:/d')"
   runtime="$(sudo firewall-cmd --zone=public --list-all | sed '1d; /interfaces:/d')"
@@ -656,10 +664,9 @@ personal_arch_configure_ssh() {
   fi
 }
 
-personal_arch_configure_services() {
+personal_arch_configure_remote_services() {
   local user
 
-  personal_arch_configure_zram
   personal_arch_configure_firewall
   personal_arch_ensure_unit sshd.service
   personal_arch_configure_ssh
@@ -674,7 +681,11 @@ personal_arch_configure_services() {
     # shellcheck disable=SC2034
     personal_arch_desktop_deferred=1
   fi
+}
 
+personal_arch_configure_services() {
+  personal_arch_configure_zram
+  personal_arch_configure_remote_services
   personal_arch_ensure_unit reflector.timer
   personal_arch_ensure_unit fwupd-refresh.timer
   personal_arch_ensure_unit pkgfile-update.timer

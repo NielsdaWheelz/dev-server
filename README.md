@@ -1,6 +1,7 @@
 # dev-server
 
-one-user host configuration for `macbook`, `arch`, and the hetzner `devbox`.
+one-user host configuration for `macbook`, the huawei laptop `arch`, the
+gaming workstation `desktop`, and the hetzner `devbox`.
 
 nexus and jarvis run on devbox. heavy development runs on macbook until the
 [desktop handoff](docs/desktop.md).
@@ -49,9 +50,9 @@ automation setting to new panes and their applications.
 
 [the specification](SPEC.md) defines ownership, activation, and failure behavior.
 [fleet security](docs/fleet-security-spec.md) defines private ingress, the shared
-tailnet policy, retired devices and the coordinated nexus cutover. policy lives
-in `assets/security/tailnet-policy.hujson`; changing the account policy is an
-explicit provider operation, not a side effect of ordinary host apply.
+tailnet policy, retired devices and the coordinated nexus cutover. the tracked
+policy is the baseline. desktop enrollment adds its assigned addresses to a
+private copy. the administrator applies the chosen policy in tailscale.
 there is no retained test suite or repository ci workflow. changes use temporary
 integration tests and direct verification; evidence belongs in the pull request.
 
@@ -63,7 +64,8 @@ through their native commands.
 ## workstation
 
 macos needs homebrew and the app store tailscale app, installed and signed in.
-linux support is limited to the owned arch host, with pacman and yay. both need
+linux targets the owned huawei laptop and gigabyte tower. the laptop uses
+endeavouros, pacman and yay. the tower uses stock arch and pacman. workstations need
 git, curl, python 3, tmux, tailscale, and native service tools. existing github,
 ai-tool, ssh, tailscale, and skid credentials are preserved.
 
@@ -128,7 +130,7 @@ sockets or identity plugin.
 [the runbook](docs/gateway-separation-runbook.md#provider-and-jarvis-contract)
 records the consumer and blocked jarvis deployment boundary.
 
-normal `apply` on macbook, arch and devbox maintains codex through the checked
+normal `apply` on the managed hosts maintains codex through the checked
 official installer even when its native command already works. this requires network
 access, can advance the version on an unchanged checkout and can fail. upstream
 defaults to latest unless its release selector, such as `CODEX_RELEASE`, says
@@ -139,7 +141,7 @@ work-account selectors.
 observed version change. completed earlier operations remain after a failure;
 there is no fallback or automatic rollback.
 
-apply installs the antigravity cli as `~/.local/bin/agy` on all three hosts and
+apply installs the antigravity cli as `~/.local/bin/agy` on each host and
 runs `agy update` on an existing native installation. sign in interactively by
 running `agy`. remove old launchers or gemini cli and repair conflicts manually.
 keep `~/.gemini` if you remove the gemini cli package. antigravity uses it too.
@@ -241,8 +243,8 @@ disable sentinel. [claude directory reference](https://code.claude.com/docs/en/c
 
 jarvis owns the shared corpus, private server, admission and stopped cutover.
 this repository owns host collectors and native client configuration. the
-[default declaration](assets/memory/declaration.example.json) lists all nineteen
-lanes with admission and connection disabled. record actual controllers,
+[default declaration](assets/memory/declaration.example.json) lists every
+lane with admission and connection disabled. record actual controllers,
 sharing authorization, recipients and processors before enabling a lane.
 native developer profiles do not grant nexus application chats access.
 
@@ -256,6 +258,7 @@ render the private bundle with the qualified central jarvis release's python:
   --url "$MEMORY_URL" \
   --home "macbook=$MACBOOK_HOME" \
   --home "arch=$ARCH_HOME" \
+  --home "desktop=$DESKTOP_HOME" \
   --home "devbox=$DEVBOX_HOME"
 ```
 
@@ -297,6 +300,8 @@ ordinary `apply` installs a collector from
 [`release-pin.json`](assets/memory/release-pin.json) and reconciles connected
 profiles. it neither changes sharing authority nor rotates credentials. the
 collector is a launchd owner job on macbook or a systemd user unit on linux.
+desktop uses its own collector and client credentials. supply its private bundle
+after jarvis accepts the desktop lanes. [desktop enrollment](#enroll-the-desktop).
 before preparing a new release, ensure ordinary git read access to the pinned
 public universal-memory source under that owner account. build credentials stay
 outside the bundle and collector/native runtime environment.
@@ -319,10 +324,39 @@ intact. funnel and foreign owned handlers refuse activation.
 [personal yaml](assets/skidbladnir/config.yaml) retains profile keys, labels,
 order and observation accounts, with ordinary command values and the
 `resume_command` that workspace recovery uses. the yaml names no hub: devbox is
-the hub because it bootstraps the fleet and macbook and arch join it with
+the hub because it bootstraps the fleet and the workstations join it with
 `skid connect`/`skid join`. `terminal: ghostty` is fleet-wide and only the mac
 reads it; each host retains its login shell and self-selection default.
 dev-server writes no roster or generated runtime config.
+
+### enroll the desktop
+
+1. sign the tower into tailscale with `sudo tailscale up`, then run
+   `sudo tailscale set --operator="$USER"`. record its `tailscale ip -4` and
+   `tailscale ip -6` in the private network policies. follow the
+   [policy and firewall steps](docs/fleet-security-spec.md#tailnet-policy).
+2. authorize the mac operator's ssh public key on the tower. compare
+   `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` at the tower with the
+   fingerprint shown on the first connection from the mac.
+3. confirm the running jarvis worker contract accepts the `desktop` machine.
+   run `skid connect` on the mac and enter its private invitation with
+   `skid join --name desktop` on the tower. run `skid connect` on the tower
+   once to publish its gateway. sign in to the profiles you intend to use.
+4. shared memory has its own enrollment. the serving jarvis release must
+   admit desktop lanes. render the owner declaration and install the private
+   desktop bundle before running workstation apply. verify the collector
+   baseline, a native memory read, and capture under the intended profile.
+5. reboot and leave the tower at graphical login. from the mac, run
+   `skid status` and `skid start --machine desktop --terminal`. attach to
+   the reported handle and verify `hostnamectl --static` prints `desktop`.
+   close the test terminal. request a desktop worker from jarvis and verify
+   its handle opens on the tower.
+
+on reinstall, verify the new ssh host key at the tower, retire superseded
+tailnet and skid identities, and enroll the replacement. restore owner data
+from backup and sign in to the required providers.
+
+### hub configuration
 
 on devbox, `~/.config/dev-server/skidbladnir-android-push.yaml` (or the matching
 xdg config path) holds only the yaml's `android_push` block, whose google api key

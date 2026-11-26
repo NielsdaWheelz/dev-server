@@ -11,6 +11,8 @@ source "$base_dir/lib/tmux.sh"
 source "$base_dir/lib/dotfiles.sh"
 # shellcheck source=lib/personal-arch.sh
 source "$base_dir/lib/personal-arch.sh"
+# shellcheck source=lib/personal-desktop.sh
+source "$base_dir/lib/personal-desktop.sh"
 # shellcheck source=lib/personal-macos.sh
 source "$base_dir/lib/personal-macos.sh"
 # shellcheck source=lib/ai-tools.sh
@@ -25,6 +27,7 @@ source "$base_dir/lib/activation.sh"
 workstation_platform=''
 workstation_target=''
 workstation_declared_stage=''
+workstation_manifests=()
 
 usage() {
   printf '%s\n' \
@@ -40,14 +43,22 @@ workstation_select_target() {
   Darwin)
     workstation_platform=macos
     workstation_target=macbook
+    workstation_manifests=(packages/Brewfile)
     # shellcheck source=lib/packages-macos.sh
     source "$base_dir/lib/packages-macos.sh"
     ;;
   Linux)
-    personal_arch_owned_host ||
-      die 'workstation apply supports only the owned arch host'
     workstation_platform=arch
-    workstation_target=arch
+    if personal_arch_owned_host; then
+      workstation_target=arch
+      workstation_manifests=(packages/arch.common.txt packages/arch.pacman.txt packages/arch.aur.txt)
+    elif [[ -f /etc/arch-release && "$(< /proc/sys/kernel/hostname)" == desktop ]] && personal_desktop_board; then
+      [[ "$(id -un)" == nnandal ]] || die 'run desktop apply as the operator nnandal'
+      workstation_target=desktop
+      workstation_manifests=(packages/arch.common.txt packages/desktop.pacman.txt)
+    else
+      die 'workstation apply supports only the owned arch laptop and desktop'
+    fi
     # shellcheck source=lib/packages-arch.sh
     source "$base_dir/lib/packages-arch.sh"
     ;;
@@ -81,16 +92,7 @@ workstation_snapshot() {
     memory_inputs=("secrets/memory/bundle/$workstation_target")
   fi
 
-  case "$workstation_platform" in
-  macos)
-    dev_server_declared_snapshot "$root" lib assets packages/Brewfile "${memory_inputs[@]}"
-    ;;
-  arch)
-    dev_server_declared_snapshot "$root" \
-      lib assets packages/arch.pacman.txt packages/arch.aur.txt "${memory_inputs[@]}"
-    ;;
-  *) return 1 ;;
-  esac
+  dev_server_declared_snapshot "$root" lib assets "${workstation_manifests[@]}" "${memory_inputs[@]}"
 }
 
 workstation_cleanup_on_exit() {
@@ -120,7 +122,7 @@ workstation_cleanup_on_exit() {
 }
 
 workstation_stage_declared_inputs() {
-  local desired_snapshot staged_snapshot
+  local desired_snapshot staged_snapshot manifest
 
   desired_snapshot="$(workstation_snapshot "$base_dir")" ||
     die 'could not resolve workstation desired inputs'
@@ -142,21 +144,10 @@ workstation_stage_declared_inputs() {
       "$workstation_declared_stage/secrets/memory/bundle/" ||
       die 'could not stage private memory inputs'
   fi
-  case "$workstation_platform" in
-  macos)
-    cp -p "$base_dir/packages/Brewfile" \
-      "$workstation_declared_stage/packages/Brewfile" ||
-      die 'could not stage workstation package manifest'
-    ;;
-  arch)
-    cp -p \
-      "$base_dir/packages/arch.pacman.txt" \
-      "$base_dir/packages/arch.aur.txt" \
-      "$workstation_declared_stage/packages/" ||
-      die 'could not stage workstation package manifests'
-    ;;
-  *) die "unsupported workstation platform: $workstation_platform" ;;
-  esac
+  for manifest in "${workstation_manifests[@]}"; do
+    cp -p "$base_dir/$manifest" "$workstation_declared_stage/$manifest" ||
+      die "could not stage workstation manifest $manifest"
+  done
   staged_snapshot="$(workstation_snapshot "$workstation_declared_stage")" ||
     die 'could not verify staged workstation desired inputs'
   [[ "$staged_snapshot" == "$desired_snapshot" ]] ||
@@ -171,8 +162,13 @@ workstation_stage_declared_inputs() {
   source "$workstation_declared_stage/lib/dotfiles.sh"
   # shellcheck source=lib/personal-arch.sh
   source "$workstation_declared_stage/lib/personal-arch.sh"
+  # shellcheck source=lib/personal-desktop.sh
+  source "$workstation_declared_stage/lib/personal-desktop.sh"
   # shellcheck source=lib/personal-macos.sh
   source "$workstation_declared_stage/lib/personal-macos.sh"
+  if [[ "$workstation_platform" == macos ]]; then
+    personal_macos_stage_firewall "$workstation_declared_stage/assets/security" /etc/pf.anchors/dev-server || return 1
+  fi
   # shellcheck source=lib/ai-tools.sh
   source "$workstation_declared_stage/lib/ai-tools.sh"
   # shellcheck source=lib/memory.sh
@@ -211,6 +207,10 @@ workstation_prepare_arch_sudo() {
       break
     done <"$base_dir/.env"
   fi
+  if [[ "$workstation_target" == desktop && -z "${ARCH_PASS:-}" && -t 0 ]]; then
+    IFS= read -r -s -p 'desktop sudo password: ' ARCH_PASS || die 'could not read the local sudo password'
+    printf '\n' >&2
+  fi
   [[ -n "${ARCH_PASS:-}" ]] || die 'set ARCH_PASS in the environment or the repo .env for arch apply'
   export ARCH_PASS
   SUDO_ASKPASS="$(dev_server_assets_dir)/routers/arch-sudo-askpass"
@@ -239,6 +239,9 @@ workstation_apply() {
   trap 'exit 143' TERM
   workstation_preflight
   if activation_check "$workstation_platform"; then :; else return $?; fi
+  if [[ "$workstation_target" == desktop ]]; then
+    personal_desktop_prepare_packages
+  fi
   packages_install
   if [[ "$workstation_platform" == macos ]]; then
     tmux_verify_stable_version /opt/homebrew/bin/tmux
@@ -246,11 +249,11 @@ workstation_apply() {
     tmux_verify_stable_version /usr/bin/tmux
   fi
   dotfiles_install "$workstation_platform"
-  if [[ "$workstation_platform" == arch ]]; then
-    personal_arch_apply
-  else
-    personal_macos_apply
-  fi
+  case "$workstation_target" in
+  arch) personal_arch_apply ;;
+  desktop) personal_desktop_apply ;;
+  macbook) personal_macos_apply ;;
+  esac
   before_pending=$((dev_server_result_actions + dev_server_result_deferrals))
   # shellcheck disable=SC2119 # this helper deliberately accepts no arguments.
   if ai_install; then :; else
@@ -260,7 +263,7 @@ workstation_apply() {
       render_result ACTION 'AI tools' 'installation requires attention'
     fi
   fi
-  if memory_install "$workstation_platform" \
+  if memory_install "$workstation_platform" "$workstation_target" \
     "$workstation_declared_stage/secrets/memory/bundle/$workstation_target"; then :; else
     memory_status=$?
     ((memory_status == 2)) || die 'could not install universal memory host configuration'

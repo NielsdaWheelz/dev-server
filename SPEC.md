@@ -1,6 +1,7 @@
 # host configuration contract
 
-`dev-server` manages the three owned hosts: `macbook`, `arch`, and `devbox`.
+`dev-server` manages `macbook`, `arch` (huawei laptop), `desktop` (gigabyte
+tower) and `devbox` (hetzner).
 its job is to install declared state, activate affected consumers, verify the
 critical result, and report mutations, deferrals, or required actions.
 
@@ -72,9 +73,10 @@ when no deferral remains.
 
 ### private host ingress
 
-`assets/security/tailnet-policy.hujson` owns the fleet's explicit device/port
-grants and native policy tests. provider activation is separate from ordinary
-host apply. devbox retains operator ssh and its declared private skid/memory
+`assets/security/tailnet-policy.hujson` supplies the baseline device/port
+grants and native tests. the enrolled desktop's evaluated policy lives in
+`~/.config/fleet-security/desktop/tailnet-policy.hujson`. the administrator
+activates the chosen policy in tailscale. devbox retains operator ssh and its declared private skid/memory
 routes; co-located nexus publishes neither api nor database host ports. skid
 retains its direct computer mesh and phone access on 8443.
 the two retired computers receive no grants and their membership is revoked.
@@ -84,7 +86,9 @@ keys and required local forwarding. prove fresh operator-key login before
 activation; an encrypted but unloaded key is not proof of usable access.
 
 macos owns one pf anchor and its marked root hook before apple's filter anchor.
-its static rules combine exact tailnet addresses with reverse-path checking,
+apply stages `~/.config/fleet-security/desktop/macos.pf.conf` when present.
+otherwise it stages the tracked anchor after checking that the installed skid
+table has no additional peers. its static rules combine exact tailnet addresses with reverse-path checking,
 loopback/outbound state and required network control traffic. no utun number or
 polling daemon is used. the native boot helper owns one pf enable reference;
 ordinary changes reload only the owned anchor, without flushing states or apple
@@ -119,7 +123,11 @@ activation runs in a target-local one-shot so it survives the invoking daemon's
 loss. an unresolved result blocks another activation; inspect
 `~/.local/state/dev-server/apply.json` and actual owners before retrying. this is
 not a whole-host transaction; one apply per host at a time is a precondition.
-linux workstation apply supports only the owned arch host. arch elevation uses
+linux workstation apply selects the owned huawei laptop or gigabyte tower.
+the two share the arch package machinery, dotfiles, provider accounts and
+signed skid installer. each has its own host policy and package manifest.
+the tower runs stock arch, kde and steam. disk installation runs separately
+from apply. arch elevation uses
 `ARCH_PASS` through askpass, including yay; values come from the environment or
 literal ignored repo `.env`, never evaluation. validate credentials before host
 changes.
@@ -172,7 +180,7 @@ more privileged consumer. interrupted activation must remain retryable.
 | `tailscale.serve` | reconcile private mapping; no tailscale restart |
 | `system.reboot` | report only |
 
-tmux version selection and activation belong to `lib/tmux.sh` on all three hosts.
+tmux version selection and activation belong to `lib/tmux.sh` on each host.
 resolve the latest stable tag from the official release endpoint and verify the
 installed executable against it. homebrew and pacman retain workstation package
 ownership; fail apply if their candidate has not caught up. ubuntu apt supplies
@@ -281,7 +289,7 @@ executable and expected provider version output without requiring a particular
 version, absolute symlink target or release
 directory schema. the canonical command is the installation interface.
 
-on all three hosts, apply also installs the antigravity cli at
+on each host, apply also installs the antigravity cli at
 `owner_home/.local/bin/agy`. bootstrap runs the checked official installer from
 `https://antigravity.google/cli/install.sh` in a temporary home, verifies the native
 binary and publishes it at the canonical path. an existing regular native
@@ -395,13 +403,18 @@ four cells of margin. the desktop usage band owns reset countdowns.
 
 ## universal memory host configuration
 
+the configured native machines are macbook, arch, desktop and devbox.
+each machine uses its own collector configuration and credentials. the
+installer verifies the collector declares the intended machine before applying
+its bundle. [desktop enrollment](README.md#enroll-the-desktop).
+
 jarvis hosts the single archive/tree/view/search library and private memory
 server. dev-server owns its host configuration, not another server, corpus,
 database, collector state store or inference service. the accepted product
 contract is jarvis's `docs/universal-memory.md`; jarvis's public `MemoryConfig`
 validator owns admission and sharing semantics.
 
-the declaration contains the eighteen native `(machine, account)` lanes and
+the declaration contains the twenty-four native `(machine, account)` lanes and
 `(devbox, jarvis)`. one common recipient/processor declaration governs recorded
 controller sharing authorizations. admission and connection are independent;
 unresolved controllers, authorizations and client identities remain disabled.
@@ -409,7 +422,7 @@ the checked-in declaration denies every lane. nexus application access is a
 separate consumer handoff: native developer profiles do not grant nexus chats
 access or capture nexus conversations.
 
-the optional `nexus-owner` backend client is separate from those nineteen lanes.
+the optional `nexus-owner` backend client is separate from these lanes.
 the same declaration names its configured viewer uuid, controller/authorization,
 independent connection, note admission and capture, and complete nexus model
 processor labels. required `capture` and nullable `capture_bearer_sha256` extend
@@ -452,7 +465,7 @@ configuration changes use jarvis's stopped maintenance boundary; an ordinary
 host apply cannot establish controller permission or rotate credentials.
 
 ordinary apply consumes the rendered host bundle when supplied, installing one
-collector as the owner: launchd on macbook, systemd user units on arch/devbox.
+collector as the owner: launchd on macbook, systemd user units on arch, desktop and devbox.
 the collector uses an exact qualified jarvis source revision and locked
 dependencies. central and collector releases are independently qualified against
 their shared capture, configuration and api contracts; their application
@@ -506,7 +519,7 @@ installation adds no library dependency, memory service or alternate note store.
 `ai_install_instructions` appends the snapshot to `assets/agent-instructions.md`
 only for accounts declared in the installed private client environment. both
 ordinary ai installation and memory configuration use this same function on
-macbook, arch and devbox. the six destinations are:
+macbook, arch, desktop and devbox. the six destinations are:
 
 | account | instruction file |
 | --- | --- |
@@ -621,7 +634,7 @@ checkpoint. an incompatible or unauthenticated release fails rather than changin
 trust.
 
 only devbox receives `assets/skidbladnir/config.yaml` at its authoritative xdg
-configuration path, followed by `skid apply`. macbook/arch consume the ordinary
+configuration path, followed by `skid apply`. workstations consume the ordinary
 installer and enrolled state; they receive no copied desired yaml. membership,
 order and stable machine handles belong to skid's `connect`/`join`, never a
 second roster here. omit shell to retain each host's login shell, and omit
@@ -734,10 +747,10 @@ commit, push, merge, and clean up before starting the next slice. run syntax
 and native checks appropriate to the boundary; temporary tests do not provide
 ongoing regression coverage.
 
-use the owned arch host for live arch acceptance. a service check is not a
+use each owned workstation for its physical hardware acceptance. a service check is not a
 provider model turn or device acceptance claim.
 
-keep implementation proportional to one user and three hosts. prefer native
+keep implementation proportional to the single-user fleet. prefer native
 mechanisms and explicit subsystem contracts. add abstraction only when it
 absorbs real complexity or enforces a named invariant. atomicity, credentials,
 host-key continuity, private ingress, and standalone signed skid installation are retained.

@@ -64,6 +64,9 @@ gaming and remote development. the desktop may be offline during maintenance.
 leave idle suspend off and start development services at boot. nexus and
 jarvis run on the hetzner devbox. the existing skid hub stays there.
 
+the [desktop wipe, install and recovery plan](desktop-install.md) covers the
+fresh arch installation, repeatable workstation apply and fleet enrollment.
+
 the main components date from about 2019. the pc was disassembled at
 inventory. identify disks and back up existing data before repartitioning.
 
@@ -71,12 +74,17 @@ inventory. identify disks and back up existing data before repartitioning.
 |---|---|
 | processor and board | intel i7-9700k, eight cores and eight threads, lga1151. gigabyte z390 aorus ultra, full atx, three m.2 slots |
 | memory | corsair dominator platinum `CMD32GX4M2C3200C16`, two 16 gb ddr4-3200 cl16 udimms |
-| graphics | evga rtx 2080 black `08G-P4-2081-KR`, 8 gb, about 269 mm long, dual-slot |
+| graphics | evga rtx 2080 ftw3 ultra gaming, 8 gb, 302 mm long, 2.75 slots, two 8-pin pcie power sockets. [evga specifications](https://www.bhphotovideo.com/lit_files/439156.pdf) |
 | power | nzxt e650, 650 w gold, 150 mm long, modular atx |
 | cooling | nzxt kraken x62 `RL-KRX62-02`, 280 mm radiator with two aer p140 fans |
 | spare fans | six noctua nf-a12x25 flx, 120 mm, three-pin dc speed control |
 | displays | two 27-inch dell s2725qc ips monitors, 3840 × 2160, up to 120 hz |
-| storage | one reported adata xpg sx8200 pro 1 tb m.2-2280 pcie 3.0 x4 nvme, model and capacity to confirm. two external hard drives to inventory for capacity, health and contents |
+| storage | the installer requires a whole internal nvme drive. record its model, serial and capacity before selecting it |
+
+in plasma display configuration, identify the physical screens, arrange them
+and select the primary display. the volume menu can switch between monitor
+and television outputs. for analog headphones or speakers, select the
+built-in audio device and its analog stereo profile in sound settings.
 
 check for the original e650 modular cables, x62 backplate, standoffs, radiator
 screws and pump leads. assembly needs a duster, paste, a ph2 screwdriver, a
@@ -121,10 +129,11 @@ check wider or rear-connector boards individually. [lancool specification](https
 for the 207, start with the supplied two 140 mm front and two 120 mm lower
 intakes, the kraken fans exhausting through the top and an empty rear mount.
 the 120 mm noctuas fit the lower or rear positions. the 207 front mounts and
-x62 radiator take 140 mm fans. for the d41, use two or three spare 120 mm
-fans as bottom intake if the drive layout permits, the kraken as top exhaust
-and optionally a rear exhaust. the spare noctuas need dc fan control. compare
-temperatures and noise before adding or replacing fans.
+x62 radiator take 140 mm fans. for the d41, use three 120 mm noctuas as
+bottom intake, one as rear exhaust and the two kraken fans as top exhaust.
+check floor and rear clearance before mounting. use dc control for the
+noctuas and compare load temperatures and noise with the case closed.
+[assembly and fan tuning](jonsbo-d41-walkthrough.html).
 
 hold fan blades during cleaning and leave the psu enclosure closed. clean the
 cpu and cold plate, repaste and mount the existing cooler evenly. the kraken's
@@ -139,13 +148,12 @@ detection and stability, disk health and both monitor links under arch.
 use kde plasma/wayland, steam/proton, ssh, tailscale and skid. use one
 worktree per agent and one compose project per development stack on one docker
 engine. start with a single heavy integration run and pause it while gaming
-if resources compete. the desktop needs its own host policy and fresh fleet
-enrollment before taking development work. [host migration issue](issues/desktop-host-migration.md).
+if resources compete. complete the [development handoff](issues/desktop-host-migration.md)
+before moving those workloads.
 
-use stock arch boot and full package upgrades. the november driver plan listed
-`nvidia-open` for the standard kernel or `nvidia-open-lts` for `linux-lts`,
-with matching `lib32-nvidia-utils` for steam. recheck the packages for the
-installed kernel and rtx 2080 at installation. [arch nvidia guidance](https://wiki.archlinux.org/title/NVIDIA).
+the desktop manifest selects the stock linux kernel, `nvidia-open`,
+`nvidia-utils` and `lib32-nvidia-utils` for steam. verify that the installed
+kernel loaded the matching driver. [package manifest](../packages/desktop.pacman.txt)
 
 use the witcher 3, total war and the blood of dawnwalker as representative
 gaming workloads. measure gameplay on the existing gpu at acceptable settings.
