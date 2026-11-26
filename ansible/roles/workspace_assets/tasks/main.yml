@@ -29,6 +29,7 @@
     - tmux.sh
     - dotfiles.sh
     - ai-tools.sh
+    - codex-statusline.py
     - memory.sh
     - skidbladnir.sh
     - activation.sh

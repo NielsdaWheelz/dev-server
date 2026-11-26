@@ -563,10 +563,16 @@ ai_maintain_codex_daemons() {
 
 ai_install() {
   (($# == 0)) || die 'ai_install accepts no arguments'
+  local footers row footer_status=0
   ai_validate_inputs
   ai_install_dirs || return 1
   ai_install_claude_settings || return 1
   ai_install_codex || return $?
+  footers="$(python3 "$(dev_server_assets_dir)/../lib/codex-statusline.py" "$(dev_server_home)")" || footer_status=$?
+  while IFS= read -r row; do
+    [[ -z "$row" ]] || render_result "${row%%  *}" "${row#*  }"
+  done <<<"$footers"
+  ((footer_status == 0)) || return "$footer_status"
   ai_install_claude || return $?
   ai_install_skid_worker || return 1
   ai_install_profiles || return 1

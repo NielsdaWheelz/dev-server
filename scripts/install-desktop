@@ -55,7 +55,7 @@ lsblk -d -o PATH,MODEL,SERIAL,SIZE "$disk"
 esp=${disk}p1
 rootpart=${disk}p2
 marker=.dev-server-installing
-packages=(base linux mkinitcpio linux-firmware intel-ucode networkmanager sudo git python zsh)
+packages=(base linux mkinitcpio linux-firmware intel-ucode networkmanager sudo git python zsh firewalld openssh tailscale)
 # Check the mirror and package names while failure is still cheap. This is the live environment.
 pacman -Sy --noconfirm
 pacman -Sp --print-format '%n' -- "${packages[@]}" >/dev/null
@@ -107,7 +107,18 @@ printf '%s\n' 'LANG=en_US.UTF-8' >"$target/etc/locale.conf"
 sed -i 's/^#en_US.UTF-8 UTF-8$/en_US.UTF-8 UTF-8/' "$target/etc/locale.gen"
 arch-chroot "$target" locale-gen
 ln -sfn /usr/share/zoneinfo/America/Los_Angeles "$target/etc/localtime"
-arch-chroot "$target" systemctl enable NetworkManager systemd-timesyncd
+# Install the permanent ingress rules before the installed system can start ssh.
+install -D -m 0644 "$repo/assets/security/arch-public.xml" "$target/etc/firewalld/zones/public.xml"
+install -D -m 0644 "$repo/assets/security/desktop-tailnet.xml" "$target/etc/firewalld/zones/desktop-tailnet.xml"
+install -D -m 0644 "$repo/assets/security/workstation-sshd.conf" "$target/etc/ssh/sshd_config.d/00-dev-server.conf"
+install -D -m 0644 "$repo/assets/security/sshd-firewall.conf" "$target/etc/systemd/system/sshd.service.d/10-firewall.conf"
+arch-chroot "$target" firewall-offline-cmd --check-config
+arch-chroot "$target" ssh-keygen -A
+arch-chroot "$target" /usr/bin/sshd -t
+arch-chroot "$target" systemctl enable NetworkManager systemd-timesyncd firewalld tailscaled
+if [[ -n $operator_key ]]; then
+  arch-chroot "$target" systemctl enable sshd
+fi
 arch-chroot "$target" bootctl --esp-path=/boot --no-variables install
 
 root_uuid=$(blkid -s PARTUUID -o value "$rootpart")
@@ -162,4 +173,4 @@ printf '%s\n' 'set the local password for nnandal. it will also authorize workst
 arch-chroot "$target" passwd nnandal
 rm -- "$target/$marker"
 printf '%s\n' 'installed. remove the usb after shutdown, then start the tower.' \
-  'log in as nnandal and open ~/Projects/dev-server for workstation apply.'
+  'log in as nnandal and follow docs/desktop-bootstrap.md for network sign-in and private restore before apply.'

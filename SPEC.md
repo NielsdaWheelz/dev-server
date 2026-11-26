@@ -148,7 +148,8 @@ deployment declarations own host paths, pins, identities, and launch arguments.
 managed files use compare-before-write and same-filesystem atomic promotion.
 verify bytes and mode before rename; preserve credentials and account state.
 a managed file is entirely repo-owned except explicitly named parser-backed
-keys, currently cursor's `remote.SSH.remotePlatform`, claude's `statusLine` and
+keys, currently cursor's `remote.SSH.remotePlatform`, codex's `tui.status_line`
+and `tui.status_line_use_colors`, claude's `statusLine` and
 `cleanupPeriodDays`, and the native `jarvis-memory` MCP server entry.
 `~/.zshrc` also preserves standalone skid's existing `skidbladnir managed zsh
 prompt` preamble and `skidbladnir managed shell` suffix byte-for-byte. the

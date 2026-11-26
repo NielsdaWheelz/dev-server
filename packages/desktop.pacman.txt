@@ -1,5 +1,4 @@
 dolphin
-firefox
 intel-ucode
 kwallet-pam
 lib32-nvidia-utils

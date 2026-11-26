@@ -9,6 +9,7 @@ docker-buildx
 docker-compose
 eza
 fd
+firefox
 firewalld
 fwupd
 fzf
@@ -38,6 +39,8 @@ thermald
 tmux
 ttf-meslo-nerd
 uv
+vlc
+vlc-plugins-all
 yazi
 zoxide
 zsh

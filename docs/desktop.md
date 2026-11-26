@@ -81,10 +81,17 @@ inventory. identify disks and back up existing data before repartitioning.
 | displays | two 27-inch dell s2725qc ips monitors, 3840 × 2160, up to 120 hz |
 | storage | the installer requires a whole internal nvme drive. record its model, serial and capacity before selecting it |
 
-in plasma display configuration, identify the physical screens, arrange them
-and select the primary display. the volume menu can switch between monitor
-and television outputs. for analog headphones or speakers, select the
-built-in audio device and its analog stereo profile in sound settings.
+the desk has the tv on the left at 4k/60, the primary dell in the middle
+and the other dell on the right, both at 4k/120. plasma stores this arrangement
+in `~/.config/kwinoutputconfig.json`, keyed to the connected displays. back
+up that file privately after changing the layout. during a reinstall, pass
+the saved file to `scripts/restore-workstation-private desktop` with
+`--display-layout FILE` before the first plasma login. existing user display
+settings take precedence.
+
+with the displays awake, the volume menu offers the two dells, tv and optical
+output separately. for analog headphones or speakers, select the built-in
+audio device and its analog stereo profile in sound settings.
 
 check for the original e650 modular cables, x62 backplate, standoffs, radiator
 screws and pump leads. assembly needs a duster, paste, a ph2 screwdriver, a

@@ -138,10 +138,7 @@ packages_install() {
 
   dev_server_prepare_active_dir
   docker_after="$(packages_arch_version docker || true)"
-  if [[ "${workstation_target:?workstation target required}" == desktop ]]; then
-    # Docker creates its firewalld zone when it starts. The desktop policy
-    # refers to that zone, including on the first install from a bare system.
-    personal_arch_ensure_unit firewalld.service
-  fi
+  # Both Linux workstations use Docker's firewalld zone from the first start.
+  personal_arch_ensure_unit firewalld.service
   packages_arch_reconcile_docker_activation "$docker_after"
 }

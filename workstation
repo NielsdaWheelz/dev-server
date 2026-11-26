@@ -32,6 +32,7 @@ workstation_manifests=()
 usage() {
   printf '%s\n' \
     'Usage: ./workstation apply' \
+    '       ./workstation target' \
     '       ./workstation help' \
     '' \
     'apply updates rolling software and reconciles configuration and exact repository pins.' \
@@ -243,6 +244,9 @@ workstation_apply() {
     personal_desktop_prepare_packages
   fi
   packages_install
+  if [[ "$workstation_platform" == arch ]]; then
+    personal_arch_configure_remote_services
+  fi
   if [[ "$workstation_platform" == macos ]]; then
     tmux_verify_stable_version /opt/homebrew/bin/tmux
   else
@@ -302,6 +306,11 @@ main() {
       return 64
     }
     workstation_apply
+    ;;
+  target)
+    (($# == 0)) || { usage >&2; return 64; }
+    workstation_select_target
+    printf '%s\n' "$workstation_target"
     ;;
   help | --help | -h)
     (($# == 0)) || {
