@@ -10,14 +10,25 @@ the usb contains the official arch live environment, `start-desktop`, and a git 
    ```
 
 3. the installer creates a 1 gib efi partition and an unencrypted ext4 root, installs stock arch and the boot loader, and copies its own repo revision to `/home/nnandal/Projects/dev-server`. if the usb carries `operator.pub`, the installer shows the key fingerprint and authorizes that public key for ssh on the new account. when prompted, enter the password for `nnandal` twice. keep it local.
-4. when the installer reports success, run `poweroff`, remove the usb, and start the tower. log in as `nnandal` at the console. the desktop and fleet services arrive with the first workstation apply.
+4. when the installer finishes, shut down, remove the usb, boot the nvme and log in as `nnandal` at the text console. the base install includes tailscale, the firewall and key-only openssh. physical network ingress is closed. ssh is enabled at boot when the usb supplied the operator public key. if you omitted it, authorize the intended public key at the console first and then run `sudo systemctl enable --now sshd`.
+5. sign in to the tailnet and print the tower's addresses and ssh host fingerprint.
+
+   ```sh
+   sudo tailscale up
+   sudo tailscale set --operator="$USER"
+   tailscale ip -4
+   tailscale ip -6
+   ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+   ```
+
+6. on the mac, follow the [private restore procedure](desktop-install.md#restore-private-workstation-inputs). it verifies the new ssh key and supplies the inputs before the first full apply. then run the following on the tower. a mac operator can run the same command in a pinned ssh session with a tty.
 
    ```sh
    cd ~/Projects/dev-server
    ./workstation apply
    ```
 
-   complete the actions printed by apply, including interactive enrollment. refer to the [desktop plan](desktop-install.md) for the headless, graphics and development checks.
+   complete the actions printed by apply, including account sign-ins, skid enrollment and the requested reboot.
 
 ## recovering from an interruption
 

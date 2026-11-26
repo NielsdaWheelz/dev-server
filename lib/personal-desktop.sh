@@ -49,7 +49,6 @@ personal_desktop_apply() {
   fi
   personal_arch_install_root_file "$(personal_arch_asset kde/powerdevilrc)" /etc/xdg/powerdevilrc 0644
   personal_arch_ensure_unit NetworkManager.service
-  personal_arch_configure_remote_services
   if [[ "$(tailscale status --json | jq -r .BackendState)" != Running ]]; then
     render_result ACTION tailscale 'finish desktop enrollment with sudo tailscale up, then rerun apply'
   fi

@@ -643,6 +643,13 @@ personal_arch_configure_firewall() {
 personal_arch_configure_ssh() {
   local source desired recorded effective address
   source="$(dev_server_assets_dir)/security/workstation-sshd.conf"
+  ensure_directory_as_root /etc/systemd/system/sshd.service.d 0755
+  personal_arch_install_root_file "$(dev_server_assets_dir)/security/sshd-firewall.conf" \
+    /etc/systemd/system/sshd.service.d/10-firewall.conf 0644
+  if [[ "$dev_server_install_status" != 'UP TO DATE' ]]; then
+    sudo systemctl daemon-reload
+  fi
+  sudo ssh-keygen -A
   sudo /usr/bin/sshd -t -f "$source"
   personal_arch_install_root_file "$source" /etc/ssh/sshd_config.d/00-dev-server.conf 0644
   sudo /usr/bin/sshd -t
@@ -657,6 +664,7 @@ personal_arch_configure_ssh() {
   sudo install -d -m 0700 /var/lib/dev-server /var/lib/dev-server/active
   desired="$(dev_server_sha256 "$source")"
   recorded="$(sudo cat /var/lib/dev-server/active/ssh.sha256 2>/dev/null || true)"
+  personal_arch_ensure_unit sshd.service
   if [[ "$desired" != "$recorded" ]]; then
     sudo systemctl reload sshd.service
     personal_arch_record_security_identity "$desired" /var/lib/dev-server/active/ssh.sha256
@@ -668,7 +676,6 @@ personal_arch_configure_remote_services() {
   local user
 
   personal_arch_configure_firewall
-  personal_arch_ensure_unit sshd.service
   personal_arch_configure_ssh
   personal_arch_ensure_unit docker.service 1 || [[ $? == 2 ]]
   personal_arch_ensure_unit tailscaled.service 1 || [[ $? == 2 ]]
@@ -685,7 +692,6 @@ personal_arch_configure_remote_services() {
 
 personal_arch_configure_services() {
   personal_arch_configure_zram
-  personal_arch_configure_remote_services
   personal_arch_ensure_unit reflector.timer
   personal_arch_ensure_unit fwupd-refresh.timer
   personal_arch_ensure_unit pkgfile-update.timer

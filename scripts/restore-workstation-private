@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""Restore one enrolled workstation's private inputs from its operator over pinned SSH."""
+
+import argparse
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+
+FILES = {"collector.json", "collector.env", "clients.env", "profiles.json"}
+CHECKOUT = Path(__file__).resolve().parent.parent
+
+
+def fail(message):
+    raise SystemExit(message)
+
+
+def load_bundle(directory):
+    if directory.is_symlink() or {path.name for path in directory.iterdir()} != FILES:
+        fail("expected one rendered host directory with exactly four memory files")
+    result = {}
+    for name in sorted(FILES):
+        path = directory / name
+        if path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o077:
+            fail("memory inputs must be private regular files")
+        result[name] = path.read_bytes().decode("utf-8")
+    return result
+
+
+def validate(machine, memory, layout):
+    if (not isinstance(memory, dict) or memory.keys() != FILES
+            or not all(isinstance(value, str) for value in memory.values())
+            or json.loads(memory["collector.json"])["machine"] != machine):
+        fail("the memory bundle does not belong to the selected machine")
+    if layout is not None and (machine != "desktop" or not isinstance(layout, str)
+                               or not isinstance(json.loads(layout), list)):
+        fail("the display layout must be a desktop kwin output configuration")
+
+
+def receive(machine, memory, layout, checkout, home):
+    validate(machine, memory, layout)
+    destination = checkout / "secrets/memory/bundle" / machine
+    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if destination.exists() or destination.is_symlink():
+        if load_bundle(destination) != memory:
+            fail("existing memory bundle differs; inspect its enrollment before changing it")
+    else:
+        # The rename publishes the complete bundle. A disconnected sender cannot
+        # leave four partially populated files where workstation apply will see them.
+        with tempfile.TemporaryDirectory(dir=destination.parent) as temporary:
+            staged = Path(temporary) / machine
+            staged.mkdir(mode=0o700)
+            for name, contents in memory.items():
+                (staged / name).write_bytes(contents.encode("utf-8"))
+                (staged / name).chmod(0o600)
+            staged.rename(destination)
+    print("memory bundle ready")
+
+    if layout is None:
+        return
+    destination = home / ".config/kwinoutputconfig.json"
+    if destination.exists() or destination.is_symlink():
+        print("existing display layout preserved")
+        return
+    kwin = subprocess.run(["pgrep", "-u", str(os.getuid()), "-x", "kwin_(wayland|x11)"],
+                          stdout=subprocess.DEVNULL, check=False)
+    if kwin.returncode != 1:
+        fail("restore the display layout before starting the plasma session")
+    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with tempfile.NamedTemporaryFile(dir=destination.parent) as stage:
+        stage.write(layout.encode("utf-8"))
+        stage.flush()
+        try:
+            os.link(stage.name, destination)
+        except FileExistsError:
+            print("existing display layout preserved")
+            return
+    print("display layout restored")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("machine", choices=("arch", "desktop"))
+    parser.add_argument("bundle", nargs="?", type=Path, help="this host's rendered four-file directory")
+    parser.add_argument("--display-layout", type=Path, help="optional first-login desktop kwinoutputconfig.json")
+    parser.add_argument("--ssh-host", help="pinned ssh alias (defaults to the machine)")
+    parser.add_argument("--receive", action="store_true", help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    if args.receive:
+        if args.bundle or args.display_layout or args.ssh_host:
+            parser.error("unexpected receiver arguments")
+        if subprocess.check_output([CHECKOUT / "workstation", "target"], text=True).strip() != args.machine:
+            fail("wrong receiving workstation")
+        if subprocess.check_output(["id", "-un"], text=True).strip() != "nnandal":
+            fail("connect as the workstation owner")
+        subprocess.run(["git", "-C", CHECKOUT, "check-ignore", "-q", "--",
+                        f"secrets/memory/bundle/{args.machine}/collector.env"], check=True)
+        data = json.load(sys.stdin)
+        receive(args.machine, data["memory"], data["layout"], CHECKOUT, Path.home())
+        return
+    if not args.bundle:
+        parser.error("give the selected machine's existing private bundle directory")
+    memory = load_bundle(args.bundle)
+    layout = args.display_layout.read_bytes().decode("utf-8") if args.display_layout else None
+    validate(args.machine, memory, layout)
+    ssh = ["ssh", "-T", "-S", "none", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+           "-o", "UpdateHostKeys=no", "--", args.ssh_host or args.machine]
+    remote = 'cd "$HOME/Projects/dev-server" && '
+    # Verify the actual checkout's hardware target and account before transmitting secrets.
+    target = subprocess.check_output([*ssh, remote + 'test "$(id -un)" = nnandal && ./workstation target'],
+                                     stdin=subprocess.DEVNULL, text=True).strip()
+    if target != args.machine:
+        fail("pinned destination is not the selected workstation")
+    subprocess.run([*ssh, remote + f"scripts/restore-workstation-private {args.machine} --receive"],
+                   input=json.dumps({"memory": memory, "layout": layout}).encode(), check=True)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, KeyError, TypeError, ValueError, subprocess.CalledProcessError):
+        fail("private restore failed; verify the source files, pinned ssh connection and installed checkout")
