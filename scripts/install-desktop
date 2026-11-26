@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+# run from the official arch usb, using a clean dev-server checkout.
+set -euo pipefail
+
+die() { printf '%s\n' "$*" >&2; exit 1; }
+
+case "${1:-}" in
+  '') mode=install ;;
+  --resume) mode=resume ;;
+  -h | --help)
+    printf '%s\n' 'usage: scripts/install-desktop [--resume]' \
+      'install replaces the selected internal nvme after confirmation.' \
+      'resume continues an interrupted installation on its existing filesystems.'
+    exit 0 ;;
+  *) die 'usage: scripts/install-desktop [--resume]' ;;
+esac
+(( $# <= 1 )) || die 'usage: scripts/install-desktop [--resume]'
+[[ $EUID == 0 && $(uname -m) == x86_64 && -d /run/archiso && -d /sys/firmware/efi/efivars ]] ||
+  die 'boot the official arch usb in uefi mode and run at its root prompt'
+exec </dev/tty
+repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+# shellcheck source=../lib/personal-desktop.sh
+source "$repo/lib/personal-desktop.sh"
+personal_desktop_board || die 'the motherboard does not match the desktop policy'
+revision=$(git -C "$repo" rev-parse --verify HEAD)
+[[ -z $(git -C "$repo" status --porcelain --untracked-files=normal) ]] ||
+  die 'use a clean checkout of the install revision'
+for tool in pacstrap arch-chroot genfstab sfdisk mkfs.fat mkfs.ext4 efibootmgr git; do
+  command -v "$tool" >/dev/null || die "the installer needs $tool"
+done
+operator_key=''
+if [[ -n ${DESKTOP_OPERATOR_PUBKEY:-} ]]; then
+  mapfile -t key_lines <"$DESKTOP_OPERATOR_PUBKEY"
+  (( ${#key_lines[@]} == 1 )) &&
+    [[ ${key_lines[0]} =~ ^ssh-ed25519[[:space:]]+([A-Za-z0-9+/=]+)([[:space:]].*)?$ ]] ||
+    die 'operator.pub must contain one ed25519 public key'
+  operator_key=${BASH_REMATCH[1]}
+  ssh-keygen -lf "$DESKTOP_OPERATOR_PUBKEY" || die 'invalid operator public key'
+fi
+
+lsblk -d -o NAME,MODEL,SERIAL,SIZE,TRAN
+read -r -p 'internal nvme device (e.g. /dev/nvme0n1): ' selection
+disk=$(realpath -e -- "$selection")
+[[ $disk =~ ^/dev/nvme[0-9]+n[0-9]+$ && -b $disk ]] ||
+  die 'select a whole internal nvme disk'
+[[ $(lsblk -dnr -o TYPE "$disk") == disk && $(lsblk -dnr -o TRAN "$disk") == nvme &&
+   $(lsblk -dnr -o RM,RO "$disk") == '0 0' ]] ||
+  die 'target must be writable, nonremovable nvme'
+in_use=$(lsblk -nr -o MOUNTPOINTS "$disk")
+[[ -z $in_use ]] || die 'the selected disk has a mounted filesystem or active swap'
+serial=$(lsblk -dn -o SERIAL "$disk" | sed 's/^ *//;s/ *$//')
+[[ -n $serial ]] || die 'could not identify target serial'
+lsblk -d -o PATH,MODEL,SERIAL,SIZE "$disk"
+
+esp=${disk}p1
+rootpart=${disk}p2
+marker=.dev-server-installing
+packages=(base linux mkinitcpio linux-firmware intel-ucode networkmanager sudo git python zsh)
+# Check the mirror and package names while failure is still cheap. This is the live environment.
+pacman -Sy --noconfirm
+pacman -Sp --print-format '%n' -- "${packages[@]}" >/dev/null
+
+if [[ $mode == install ]]; then
+  printf '%s\n' 'all existing partitions on this disk will be replaced.' \
+    'new layout: 1 gib efi at /boot, remaining space ext4 at /, unencrypted.'
+  read -r -p "type 'erase $serial' to continue: " confirmation
+  [[ $confirmation == "erase $serial" ]] || die 'cancelled'
+  sfdisk --lock=yes --wipe always --wipe-partitions always "$disk" <<'PARTITIONS'
+label: gpt
+
+size=1GiB, type=uefi
+type=linux
+PARTITIONS
+  udevadm settle
+  mkfs.fat -F 32 -n ARCHBOOT "$esp"
+  mkfs.ext4 -F -L arch-root "$rootpart"
+fi
+
+[[ $(blkid -s TYPE -o value "$esp") == vfat && $(blkid -s LABEL -o value "$esp") == ARCHBOOT &&
+   $(blkid -s TYPE -o value "$rootpart") == ext4 && $(blkid -s LABEL -o value "$rootpart") == arch-root ]] ||
+  die 'expected the desktop efi and ext4 filesystems on the selected disk'
+target=$(mktemp -d /run/desktop-install.XXXXXX)
+cleanup() {
+  local status=$?
+  trap - EXIT
+  if mountpoint -q "$target"; then
+    umount -R "$target" || status=1
+  fi
+  rmdir "$target" || status=1
+  exit "$status"
+}
+trap cleanup EXIT
+mount "$rootpart" "$target"
+if [[ $mode == install ]]; then
+  printf '%s\n' "$serial" "$revision" >"$target/$marker"
+else
+  [[ -f "$target/$marker" && $(<"$target/$marker") == "$serial"$'\n'"$revision" ]] ||
+    die 'resume requires an unfinished desktop install from this exact revision on this disk'
+fi
+mkdir -p "$target/boot" "$target/etc"
+mount -o umask=0077 "$esp" "$target/boot"
+printf '%s\n' 'KEYMAP=us' >"$target/etc/vconsole.conf"
+pacstrap -K "$target" "${packages[@]}"
+genfstab -U "$target" >"$target/etc/fstab"
+printf '%s\n' desktop >"$target/etc/hostname"
+printf '%s\n' 'LANG=en_US.UTF-8' >"$target/etc/locale.conf"
+sed -i 's/^#en_US.UTF-8 UTF-8$/en_US.UTF-8 UTF-8/' "$target/etc/locale.gen"
+arch-chroot "$target" locale-gen
+ln -sfn /usr/share/zoneinfo/America/Los_Angeles "$target/etc/localtime"
+arch-chroot "$target" systemctl enable NetworkManager systemd-timesyncd
+arch-chroot "$target" bootctl --esp-path=/boot --no-variables install
+
+root_uuid=$(blkid -s PARTUUID -o value "$rootpart")
+esp_uuid=$(blkid -s PARTUUID -o value "$esp")
+[[ -n $root_uuid && -n $esp_uuid ]] || die 'missing gpt partition identifiers'
+cat >"$target/boot/loader/entries/arch.conf" <<ENTRY
+title Arch Linux
+linux /vmlinuz-linux
+initrd /initramfs-linux.img
+options root=PARTUUID=$root_uuid rw
+ENTRY
+printf '%s\n' 'default arch.conf' 'timeout 2' >"$target/boot/loader/loader.conf"
+[[ -s "$target/boot/vmlinuz-linux" && -s "$target/boot/initramfs-linux.img" &&
+   -s "$target/boot/EFI/BOOT/BOOTX64.EFI" ]] || die 'missing kernel, initramfs or uefi fallback loader'
+entries=$(efibootmgr -v)
+if ! grep -Fi "$esp_uuid" <<<"$entries" | grep -Fiq '\EFI\systemd\systemd-bootx64.efi'; then
+  efibootmgr --create --disk "$disk" --part 1 --label 'Linux Boot Manager' \
+    --loader '\EFI\systemd\systemd-bootx64.efi'
+fi
+
+if ! arch-chroot "$target" id nnandal >/dev/null 2>&1; then
+  arch-chroot "$target" useradd -m -G wheel -s /usr/bin/zsh nnandal
+  arch-chroot "$target" runuser -u nnandal -- touch /home/nnandal/.zshrc
+fi
+if [[ -n $operator_key ]]; then
+  ssh_dir=$target/home/nnandal/.ssh
+  install -d -m 0700 "$ssh_dir"
+  touch "$ssh_dir/authorized_keys"
+  chmod 0600 "$ssh_dir/authorized_keys"
+  if ! awk -v key="$operator_key" '$1 == "ssh-ed25519" && $2 == key { seen=1 } END { exit !seen }' \
+      "$ssh_dir/authorized_keys"; then
+    printf '\nssh-ed25519 %s\n' "$operator_key" >>"$ssh_dir/authorized_keys"
+  fi
+  arch-chroot "$target" chown nnandal:nnandal /home/nnandal/.ssh /home/nnandal/.ssh/authorized_keys
+fi
+printf '%s\n' '%wheel ALL=(ALL:ALL) ALL' >"$target/etc/sudoers.d/10-wheel"
+chmod 0440 "$target/etc/sudoers.d/10-wheel"
+arch-chroot "$target" visudo -c
+
+projects=$target/home/nnandal/Projects
+mkdir -p "$projects"
+if [[ ! -e $projects/dev-server ]]; then
+  stage=$(mktemp -d "$projects/.dev-server.XXXXXX")
+  git clone --no-local --quiet -- "$repo" "$stage"
+  git -C "$stage" remote set-url origin https://github.com/NielsdaWheelz/dev-server.git
+  mv -T "$stage" "$projects/dev-server"
+fi
+installed_revision=$(git -c safe.directory="$projects/dev-server" -C "$projects/dev-server" rev-parse HEAD)
+[[ $installed_revision == "$revision" ]] || die 'installed checkout has a different revision'
+arch-chroot "$target" chown -R nnandal:nnandal /home/nnandal/Projects
+printf '%s\n' 'set the local password for nnandal. it will also authorize workstation apply.'
+arch-chroot "$target" passwd nnandal
+rm -- "$target/$marker"
+printf '%s\n' 'installed. remove the usb after shutdown, then start the tower.' \
+  'log in as nnandal and open ~/Projects/dev-server for workstation apply.'

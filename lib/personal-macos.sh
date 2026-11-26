@@ -2,6 +2,40 @@
 
 personal_macos_desktop_deferred=0
 
+# Select the private anchor before any host mutation. The account-side policy is
+# published separately by the operator from this same private directory.
+personal_macos_stage_firewall() {
+  local stage="$1" installed="$2" network expected actual
+  network="$(dev_server_home)/.config/fleet-security/desktop"
+  if [[ -e "$network/macos.pf.conf" || -L "$network/macos.pf.conf" ]]; then
+    [[ -f "$network/macos.pf.conf" && -s "$network/macos.pf.conf" ]] || die 'invalid private macos firewall anchor'
+    expected="$(dev_server_declared_snapshot "$network" macos.pf.conf)" || return 1
+    cp -p "$network/macos.pf.conf" "$stage/macos.pf.conf" || return 1
+    actual="$(dev_server_declared_snapshot "$stage" macos.pf.conf)" || return 1
+    [[ "$expected" == "$actual" ]] || die 'private macos firewall changed while staging; rerun'
+  elif [[ -e "$installed" ]]; then
+    python3 - "$installed" "$stage/macos.pf.conf" <<'PYNETWORK'
+import re
+import sys
+from pathlib import Path
+
+
+def peers(name):
+    for line in Path(name).read_text().splitlines():
+        if re.match(r"^\s*table\s+<dev_server_skid>", line):
+            match = re.fullmatch(r"\s*table\s+<dev_server_skid>\s+const\s+\{([^}]*)\}\s*", line)
+            if not match:
+                raise SystemExit("unable to compare the installed skid peer table")
+            return {address.strip() for address in match[1].split(",")}
+    return set()
+
+
+if peers(sys.argv[1]) - peers(sys.argv[2]):
+    raise SystemExit("restore ~/.config/fleet-security/desktop/macos.pf.conf before replacing private skid peers")
+PYNETWORK
+  fi
+}
+
 personal_macos_validate_declared_inputs() {
   local asset
 

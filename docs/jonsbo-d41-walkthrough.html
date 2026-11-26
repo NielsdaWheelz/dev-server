@@ -1,0 +1,903 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A step-by-step assembly guide for your Jonsbo D41 desktop.">
+<title>build your d41</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --background: #10151c;
+    --surface: #18202a;
+    --edge: #33404d;
+    --ink: #f1f4f7;
+    --muted: #b2bfcc;
+    --accent: #ffc568;
+    --cool: #a2d1ec;
+    font: 16px/1.5 system-ui, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; background: var(--background); color: var(--ink); }
+  main { max-width: 1380px; margin: auto; padding: clamp(16px, 3vw, 40px); }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; margin-bottom: 23px; }
+  h1, h2, p { margin: 0; }
+  h1, h2 { line-height: 1.08; letter-spacing: -.035em; }
+  h1 { font-size: clamp(2.25rem, 5vw, 3.75rem); }
+  h2 { font-size: clamp(1.8rem, 3vw, 2.5rem); }
+  header p, footer, .hint { color: var(--muted); }
+  .layout { display: grid; align-items: start; grid-template-columns: minmax(0, 1.52fr) minmax(330px, 1fr); gap: 20px; }
+  .viewer, .instruction, .timeline { border: 1px solid var(--edge); border-radius: 15px; background: var(--surface); }
+  .viewer { overflow: hidden; }
+  .stage { position: relative; height: clamp(330px, 42vw, 535px); overflow: hidden; background: radial-gradient(ellipse at 53% 42%, #263745, #141c25 70%); }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .marker { position: absolute; padding: 4px 8px; background: #10151cf0; color: var(--accent); border: 1px solid var(--accent); border-radius: 5px; font-size: .8125rem; font-weight: 650; white-space: nowrap; pointer-events: none; }
+  .marker::before { content: ""; position: absolute; width: 7px; height: 7px; border: 1px solid #10151c; border-radius: 50%; background: var(--accent); left: -5px; top: calc(50% - 3px); }
+  .marker.flip { transform: translateX(-100%); }
+  .marker.flip::before { left: auto; right: -5px; }
+  .hint { position: absolute; top: 14px; left: 15px; max-width: calc(100% - 30px); padding: 4px 7px; background: #141c25e8; border-radius: 4px; font-size: .875rem; pointer-events: none; }
+  .views { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 11px; border-top: 1px solid var(--edge); }
+  button, select { color: var(--ink); background: #222d39; border: 1px solid #455363; border-radius: 7px; padding: 7px 11px; font: inherit; }
+  button { cursor: pointer; }
+  button:hover:enabled, select:hover { background: #333f50; }
+  button:disabled { opacity: .45; cursor: default; }
+  :is(button, canvas, a, input, select, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .views button { font-size: .875rem; padding-block: 5px; }
+  .views #replay { margin-inline-start: auto; color: var(--accent); }
+  .instruction { padding: clamp(17px, 2.4vw, 28px); min-height: 426px; }
+  .count { color: var(--accent); font: 600 .875rem/1.35 ui-monospace, monospace; margin-bottom: 10px; }
+  .part { color: var(--cool); margin-top: 9px; font-size: .9375rem; }
+  ol { padding-left: 1.5em; margin: 17px 0; }
+  ol li { padding-left: .23em; margin-block: 9px; }
+  ol li::marker { color: var(--cool); }
+  .checkpoint { border-left: 3px solid var(--accent); padding: 8px 11px; background: #252c32; border-radius: 0 6px 6px 0; }
+  .checkpoint strong { display: block; color: var(--accent); font-size: .875rem; margin-bottom: 3px; }
+  details { margin-top: 14px; color: var(--muted); }
+  summary { cursor: pointer; color: var(--cool); }
+  details p { margin-top: 8px; }
+  dl { margin: 8px 0; display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 6px 10px; }
+  dt { color: var(--ink); }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  a { color: var(--cool); text-underline-offset: 3px; }
+  .timeline { margin-top: 16px; padding: 13px; display: grid; grid-template-columns: auto minmax(70px, 1fr) auto; gap: 10px 13px; align-items: center; }
+  .timeline input { width: 100%; margin: 0; min-height: 26px; accent-color: var(--accent); cursor: pointer; }
+  .timeline select { grid-column: 1 / -1; width: 100%; }
+  #next { background: var(--accent); border-color: var(--accent); color: #22190c; font-weight: 700; }
+  #next:hover:enabled { background: #ffda9b; }
+  footer { margin-top: 17px; font-size: .875rem; }
+  footer a { white-space: nowrap; }
+  footer nav { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 6px; }
+  .fallback { position: absolute; inset: 35% 12% auto; color: var(--muted); text-align: center; }
+  [hidden] { display: none !important; }
+  @media (max-width: 760px) {
+    .layout { grid-template-columns: minmax(0, 1fr); gap: 13px; }
+    .instruction { min-height: 0; }
+    .stage { height: clamp(250px, 76vw, 400px); }
+    .timeline { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 -5px 14px #10151cab; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>build your d41</h1>
+    <p>jonsbo d41 · i7-9700k · rtx 2080 · kraken x62</p>
+  </header>
+  <div class="layout">
+    <section class="viewer" aria-label="rotatable assembly model">
+      <div class="stage">
+        <canvas id="model" tabindex="0" aria-label="3d model. drag or use the arrow keys to rotate"></canvas>
+        <p id="fallback" class="fallback" hidden>3d is unavailable in this browser. you can still follow every step below.</p>
+        <span class="hint" id="hint">drag to turn · diagram, approximate fit</span>
+        <div id="markers" aria-hidden="true"></div>
+      </div>
+      <div class="views" id="views" role="group" aria-label="model views">
+        <button type="button" data-view="default">step view</button>
+        <button type="button" data-view="side">open side</button>
+        <button type="button" data-view="roof">roof</button>
+        <button type="button" data-view="rear">rear ports</button>
+        <button type="button" id="replay">replay motion</button>
+      </div>
+    </section>
+    <section class="instruction" aria-live="polite" aria-atomic="true">
+      <p class="count" id="count"></p>
+      <h2 id="title"></h2>
+      <p class="part" id="part"></p>
+      <ol id="tasks"></ol>
+      <p class="checkpoint"><strong>before you move on</strong><span id="check"></span></p>
+      <details id="details" hidden><summary id="summary"></summary><div id="detail-body"></div></details>
+    </section>
+  </div>
+  <nav class="timeline" aria-label="assembly steps">
+    <button type="button" id="prev">back</button>
+    <input type="range" id="slider" min="1" value="1" step="1" aria-label="assembly step">
+    <button type="button" id="next">next step</button>
+    <select id="jump" aria-label="jump to a step"></select>
+  </nav>
+  <footer>
+    <p>turn the model to see where a part goes. use the printed labels on your hardware to match the plugs.</p>
+    <nav aria-label="parts and manufacturer manuals">
+      <a href="desktop.md">your parts list</a>
+      <a href="https://www.jonsbo.com/Upfiles/down/D41_User%E2%80%99s_Manual.pdf">d41 case</a>
+      <a href="https://download.gigabyte.com/FileList/Manual/mb_manual_z390-aorus-ultra_1001_190219_e.pdf">z390 board</a>
+      <a href="https://assets.cdn.nzxt.com/uploads/download/attachment/676/Kraken_X42X52X62X72-manual-092818-web.pdf">kraken x62</a>
+      <a href="https://assets.cdn.nzxt.com/uploads/download/attachment/717/E_Series_manual-030818-ver3_-web.pdf">e650 power supply</a>
+      <a href="https://www.bhphotovideo.com/lit_files/439156.pdf">rtx 2080 ftw3 ultra</a>
+    </nav>
+  </footer>
+  <noscript><p>enable javascript to see the steps and model.</p></noscript>
+</main>
+<script>
+"use strict";
+
+const steps = [
+  {
+    title: "lay out the parts",
+    part: "start with the computer unplugged",
+    show: "case board cpu ram ssd power floorFans rearFan radiator pump gpu",
+    view: [.53, .26],
+    tasks: [
+      "clear a table. put the motherboard on its cardboard box. keep the glass panel away from the table edge.",
+      "set out a phillips screwdriver, thermal paste, the kraken’s intel mounting pieces and cables, and the original cables for your nzxt E650."
+    ],
+    check: "find the wide motherboard cable, the CPU cable, two PCIe cables, and one flat SATA power cable in the E650 set. if a cable’s origin is uncertain, stop before plugging it in.",
+    more: ["what should be on the table?", [
+      "gigabyte Z390 aorus ultra board, intel i7-9700K, two corsair memory sticks, one stick-shaped M.2 drive, evga RTX 2080, nzxt E650, kraken X62 with two 140 mm fans, and four 120 mm noctua fans.",
+      "the recorded drive is an adata xpg sx8200 pro 1 tb. check its label. leave the two external drives unplugged for the first boot."
+    ]]
+  },
+  {
+    title: "open the case",
+    part: "jonsbo d41 · side covers, roof, front",
+    show: "case covers", focus: "covers", move: true, view: [.64, .25],
+    marks: [["glass panel", 23, 186, 112], ["roof", -10, 378, 35]],
+    tasks: [
+      "stand the case upright. support each side panel, pull its top edge out from the rear corner and lift it off the bottom lip.",
+      "undo the two top screws at the back. slide the roof toward the rear, then lift it. pull off the front covers, upper first, to expose the power supply mounts."
+    ],
+    check: "you can see the empty roof and the power-supply mount behind the front.",
+    more: ["front bracket and optional screen", [
+      "for the bracket, remove the narrow cover inside the front of the case if it’s in the way. it has four screws. the power supply bracket has two fasteners behind the front panels.",
+      "if your case has a screen, route its two leads before the motherboard goes in. they are mini-HDMI for video and USB-C for power at the screen. leave the computer ends free until after the first boot.",
+      '<a href="https://www.jonsbo.com/Upfiles/down/D41_SCREEN_USER_GUIDE.pdf">jonsbo screen wiring diagram</a>'
+    ]]
+  },
+  {
+    title: "seat the processor",
+    part: "intel i7-9700k · motherboard on cardboard",
+    show: "board cpu", focus: "cpu", move: true, view: [.12, .12],
+    marks: [["processor socket", -99, 265, -48]],
+    tasks: [
+      "if the processor is already locked in place, leave it there and go to the next step.",
+      "if it is loose, open the metal socket lever. hold the chip by its edges. match its gold corner triangle and two edge notches to the socket. lower it flat, close the metal lid and latch the lever. if there’s a plastic socket cover, it should pop off."
+    ],
+    check: "the chip sits flat by itself before you latch it. keep your fingers away from the little socket pins."
+  },
+  {
+    title: "fit the memory and drive",
+    part: "two corsair sticks · one m.2 drive",
+    show: "board cpu ram ssd", focus: "ram ssd", move: true, view: [.1, .07],
+    marks: [["memory · slots 2 and 4", -12, 280, -37], ["m.2 drive", -105, 150, -57]],
+    tasks: [
+      "use the second and fourth memory slots counting away from the processor. they’re marked DDR4_A2 and DDR4_B2. open the clips, match the notch, and press evenly until the clips close.",
+      "leave the little M.2 drive in place if it’s already installed. if loose, use the middle M2A slot. lift its heatsink, slide the drive in at an angle, press it down to the 80 mark, secure it with its tiny screw, then replace the heatsink."
+    ],
+    check: "both memory sticks sit level. the drive lies flat and has its screw. it needs no cables.",
+    more: ["if the heatsink pad is new", ["peel any protective film from the heatsink’s soft pad before refitting it. the pad should touch the drive."]]
+  },
+  {
+    title: "mount the motherboard",
+    part: "gigabyte z390 aorus ultra · atx",
+    show: "case posts board cpu ram ssd", focus: "board posts", move: true, view: [.28, .23],
+    marks: [["board screws into little posts", -111, 183, -44]],
+    tasks: [
+      "on the table, fit the kraken’s intel backplate behind the processor. slide its four posts inward for intel 115x. screw its four matching spacers in from the front.",
+      "match the case’s little threaded posts to the board’s screw holes. move or remove any extra post. lower the board in with its ports through the rear opening, then start all the board screws before snugging them down."
+    ],
+    check: "each post has a matching hole. the board has its own built-in rear port plate."
+  },
+  {
+    title: "test the tight fit",
+    part: "kraken x62 · 280 mm radiator · e650",
+    show: "case board cpu ram ssd power radiator rearFan", focus: "power radiator rearFan", view: [.22, .16],
+    marks: [["cooler at the roof", -33, 350, 17], ["power supply · highest slots", 155, 288, 28]],
+    tasks: [
+      "hold the radiator and both 140 mm fans at the roof. have someone support the pump and radiator. the stack is about 56 mm thick. check that there’s room for a 120 mm fan at the rear.",
+      "try the power supply in the highest front bracket position (level 1). look for room above and below it for the plugs. check that the processor power cable can reach the upper-left socket without touching a fan."
+    ],
+    check: "the cooler clears the tall memory and the blocks above the processor. the power plug and cables fit with relaxed bends. if anything touches, pause here before you apply paste or force screws."
+  },
+  {
+    title: "mount the four case fans",
+    part: "three bottom intake · one rear exhaust",
+    show: "case board cpu ram ssd floorFans rearFan caseAirflow", focus: "floorFans rearFan caseAirflow", move: true, view: [.48, .37],
+    marks: [["air comes in from below", 52, 56, 24], ["air goes out the rear", -214, 285, 24]],
+    tasks: [
+      "put three noctuas on the floor with their arrows pointing up. if the unused drive cage blocks a fan, slide the dust filter out toward the front, remove the cage’s screws and refit the filter.",
+      "put one noctua at the back with its arrow pointing out. run the wires behind the tray before tightening the fans."
+    ],
+    check: "plug each fan into its own SYS_FAN socket so you can tune it separately. keep the floor filter fitted and every wire clear of the blades."
+  },
+  {
+    title: "hang the power supply",
+    part: "nzxt e650 · high at the front",
+    show: "case board cpu ram ssd floorFans rearFan power", focus: "power", move: true, view: [.53, .22],
+    marks: [["short case plug at the top", 167, 361, 25], ["power cables leave underneath", 161, 205, 42]],
+    tasks: [
+      "take out the front bracket. screw it to the face of the E650 with the socket and switch. that face points up. aim the big fan at the front mesh if it has a clear opening. if the front is solid there, face the fan inward.",
+      "plug the case’s short internal power lead into the top while it is still easy to reach. attach the original E650 cables for the board, processor, graphics card and cooler. hang and secure the bracket at level 1.",
+      "run the processor power cable behind the tray. join its two 4-pin halves and plug them into the 8-pin socket at the board’s upper left before the radiator goes in."
+    ],
+    check: "the outside wall cord is still unplugged. for first boot, the switch on the E650 must be on (I). flip it before covering it if you’ll lose access.",
+    more: ["where the power cord goes", [
+      "the d41 has a power inlet at the back. a short cable already inside the case connects that inlet to the E650 up front.",
+      "the extra 4-pin socket beside the board’s 8-pin socket stays empty with the original E650 cables."
+    ]]
+  },
+  {
+    title: "install the liquid cooler",
+    part: "kraken x62 · radiator at the roof · round pump on the processor",
+    show: "case board cpu ram ssd floorFans rearFan power radiator pump roofAirflow", focus: "radiator pump roofAirflow", move: true, view: [.29, .31],
+    marks: [["air goes out through the roof", -38, 374, 34], ["pump on the processor", -99, 260, -18]],
+    tasks: [
+      "with the short nzxt radiator screws, fasten the radiator at the roof. mount its two fans beneath it using the supplied fan screws and washers. point both fan arrows up, through the radiator.",
+      "wipe old paste off the processor and the pump’s copper face with an isopropyl alcohol wipe. let both dry. put a 3–4 mm dot of fresh paste in the processor’s center. lower the pump straight onto it and tighten the four nuts in a diagonal order until snug."
+    ],
+    check: "the pump sits flat, the hoses curve smoothly, and the radiator screws are the correct lengths. support the pump at all times while handling the radiator."
+  },
+  {
+    title: "plug in the board and cooler",
+    part: "wide board plug · small cpu plug · four kraken connections",
+    show: "case board cpu ram ssd floorFans rearFan power radiator pump mainWires", focus: "mainWires", view: [.19, .13],
+    marks: [["cpu power", -170, 331, -53], ["24-pin board power", 22, 265, -45]],
+    tasks: [
+      "push the wide 24-pin E650 plug into the right edge of the board. check that the 8-pin processor plug at the upper left has clicked in.",
+      "plug the kraken’s large cable bundle into the pump. connect its flat SATA plug to the E650 SATA cable. connect the small 3-pin lead to CPU_FAN and both radiator fans to the kraken’s fan plugs.",
+      "use the separate mini-usb cable from the pump to F_USB1 or F_USB2 along the bottom of the board."
+    ],
+    check: "the cooler has separate power through the flat SATA plug. plug one radiator fan into the cooler’s fully populated 4-pin fan plug.",
+    more: ["match the printed labels", [
+      ["wide motherboard cable", "ATX · right edge"],
+      ["4+4 CPU cable", "ATX_12V_2X4 · upper left"],
+      ["pump speed lead", "CPU_FAN · near the top"],
+      ["pump usb lead", "F_USB1 or F_USB2 · bottom"],
+      ["kraken sata power", "flat E650 SATA power cable"]
+    ]]
+  },
+  {
+    title: "connect the case buttons and ports",
+    part: "small wires from the d41 front",
+    show: "case board cpu ram ssd floorFans rearFan power radiator pump frontWires", focus: "frontWires", view: [.2, -.14],
+    marks: [["power button · F_PANEL", 12, 54, -39], ["front USB-A · F_USB30", 24, 206, -38]],
+    tasks: [
+      "start with the plug labeled POWER SW. put it across PW+ and PW− in the F_PANEL block at the bottom right of the board. either direction works for this switch.",
+      "plug in the front USB and headphone leads if you plan to use those ports. match the printed names below. line each plug up before pressing."
+    ],
+    check: "connect the button now while the graphics card is out. check the pin drawing if you’re unsure which two pins are for the switch.",
+    more: ["front cable map and pin drawing", [
+      ["POWER SW", "F_PANEL pins 6 and 8, marked PW+ and PW−. with the rear ports on the left and memory on the right, these are the third and fourth pins from the left in the upper row."],
+      ["front USB-A", "F_USB30"],
+      ["front USB-C", "F_USB31C"],
+      ["HD AUDIO", "F_AUDIO · bottom left"],
+      ["PLED, if present", "F_PANEL → PLED+ and PLED−"],
+      ["pin drawing", '<a href="https://download.gigabyte.com/FileList/Manual/mb_manual_z390-aorus-ultra_1001_190219_e.pdf#page=21">open gigabyte’s f_panel diagram</a>']
+    ]]
+  },
+  {
+    title: "slide in the graphics card",
+    part: "evga rtx 2080 ftw3 ultra · top long slot",
+    show: "case board cpu ram ssd floorFans rearFan power radiator pump gpu", focus: "gpu", move: true, view: [.28, .22],
+    marks: [["rtx 2080", -59, 189, 65], ["two 8-pin power sockets", 67, 217, 51]],
+    tasks: [
+      "open the small retaining bar at the back of the case. line the card up with the board’s top long slot (PCIEX16) to see which rear covers to remove.",
+      "open the latch at the end of the long slot. press the card in squarely until it seats. screw its metal tab to the back and close the retaining bar.",
+      "use the two original e650 pcie cables. join the 6+2 pins on each cable and click one complete plug into each 8-pin socket on the card."
+    ],
+    check: "both power plugs click. the card is level, and its HDMI and other video ports face out the rear."
+  },
+  {
+    title: "power up with the side open",
+    part: "one dell monitor · keyboard · power cord",
+    show: "case board cpu ram ssd floorFans rearFan power radiator pump gpu", focus: "gpu pump", view: [-.8, .18],
+    marks: [["monitor cable goes here", -220, 196, 9], ["watch the processor temperature", -100, 263, -18]],
+    tasks: [
+      "look for loose screws and wires near blades. connect one dell monitor by HDMI to the graphics card, and plug in the keyboard. plug the wall cord into the back of the case.",
+      "check the power-supply switch is on (I). press the case power button. tap Delete to enter the board’s setup screen.",
+      "look for 32 gb of memory, the M.2 drive, a CPU_FAN speed reading, and a processor temperature that settles. check that the fans turn."
+    ],
+    check: "if the temperature climbs fast or the pump speed stays at zero, power off and recheck the kraken’s flat SATA plug and small CPU_FAN plug.",
+    more: ["if nothing happens or the screen is blank", [
+      "if there are no lights or fans, switch off and unplug. check the case power-button pins, the 24-pin board plug, the top-left CPU plug and the case power lead.",
+      "if the fans turn but there’s no picture, select HDMI on the monitor and check the lead is on the graphics card. if it’s still blank after a minute, power off and unplug. check both memory sticks and both card power plugs. the board’s CPU, DRAM, VGA and BOOT lights can show where it is stuck.",
+      "the spare noctuas have three pins. in Smart Fan 5, use Voltage mode for their SYS_FAN sockets if you want speed control."
+    ]]
+  },
+  {
+    title: "close it up",
+    part: "panels · cables · outside accessories",
+    show: "case board cpu ram ssd floorFans rearFan power radiator pump gpu", focus: "case", view: [.61, .24],
+    marks: [["check space beside the card’s plugs", 47, 210, 55]],
+    tasks: [
+      "shut down and unplug. gather loose wires away from the blades and refit the front, roof and side panels. check that the glass and the cable-side panel close without pressure.",
+      "reconnect power. add your second display and external drives after the first boot works. if you have the case screen, connect its video lead to the graphics card and its power lead to USB.",
+      "if you plan to reinstall the operating system, identify and back up the existing drive before erasing or repartitioning it."
+    ],
+    check: "both panels close easily. the machine starts again and the fans sound clear.",
+    more: ["tune the six fans and connect both displays", [
+      "in Smart Fan 5, set the four noctua sockets to Voltage mode. with the case closed, run the same game scene until the processor and graphics temperatures settle. compare the rear fan at low and medium with the other fans unchanged. keep the quieter setting if temperatures are effectively the same.",
+      "then try a lower speed on the three floor fans. let the same scene warm up again and compare graphics temperature and noise. use the lowest speed that keeps both parts cool during the loads you actually run. keep the bottom vents above a hard surface.",
+      "use the graphics card’s USB-C video port for one monitor. for the other, use HDMI for a basic picture, or a cable made to send video from the card’s displayport to the monitor’s USB-C input.",
+      "for USB-C video, use the 65 w USB-C port on the back of the dell and select USB-C as the input. if the case screen uses the card’s HDMI port, use the two USB-C display connections for the dells.",
+      '<a href="issues/desktop-display-links.md">your dual-monitor setup notes</a>'
+    ]]
+  }
+];
+
+const byId = id => document.getElementById(id);
+const slider = byId("slider");
+const jump = byId("jump");
+const canvas = byId("model");
+const stage = canvas.parentElement;
+const markerLayer = byId("markers");
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+let index = 0;
+let marks = [];
+let yaw = .53, pitch = .26;
+let turn = null, installation = null, frame = 0;
+
+const views = {
+  side: [0, .025],
+  roof: [.25, 1.32],
+  rear: [-1.2, .2]
+};
+
+const movement = {
+  covers: [0, 10, 24],
+  board: [3, 0, 105],
+  cpu: [0, 0, 62],
+  ram: [0, 0, 64],
+  ssd: [0, 0, 42],
+  floorFans: [0, 57, 30],
+  rearFan: [50, 0, 0],
+  power: [0, 32, 65],
+  radiator: [0, 60, 0],
+  pump: [0, 0, 36],
+  gpu: [0, 5, 94]
+};
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+const cross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+const subtract = (a, b) => a.map((value, i) => value - b[i]);
+const unit = vector => {
+  const length = Math.hypot(...vector) || 1;
+  return vector.map(value => value / length);
+};
+const ease = x => 1 - (1 - x) ** 3;
+const color = value => [16, 8, 0].map(shift => ((value >> shift) & 255) / 255);
+
+const gl = canvas.getContext("webgl", {alpha: true, antialias: true});
+let renderer = null;
+if (gl) {
+  try {
+    renderer = createRenderer();
+  } catch (error) {
+    console.error(error);
+  }
+}
+if (!renderer) {
+  canvas.hidden = true;
+  byId("views").hidden = true;
+  byId("hint").hidden = true;
+  markerLayer.hidden = true;
+  byId("fallback").hidden = false;
+}
+
+function createRenderer() {
+  const program = gl.createProgram();
+  const vertexCode = `
+    attribute vec3 position;
+    attribute vec3 paint;
+    uniform vec3 right, up, toward, center, offset;
+    uniform vec2 scale;
+    uniform float distanceFrom, emphasis;
+    varying vec3 shade;
+    void main() {
+      vec3 point = position + offset - center;
+      float depth = distanceFrom - dot(toward, point);
+      gl_Position = vec4(dot(right, point) * scale.x, dot(up, point) * scale.y, depth * 1.02 - 102.0, depth);
+      vec3 marked = mix(paint, vec3(1.0, 0.66, 0.22), 0.68);
+      shade = emphasis > 0.0 ? mix(paint, marked, emphasis) : paint * (1.0 + emphasis);
+    }`;
+  const fragmentCode = `
+    precision mediump float;
+    varying vec3 shade;
+    void main() { gl_FragColor = vec4(shade, 1.0); }`;
+  for (const [type, source] of [[gl.VERTEX_SHADER, vertexCode], [gl.FRAGMENT_SHADER, fragmentCode]]) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw Error(gl.getShaderInfoLog(shader));
+    gl.attachShader(program, shader);
+  }
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(program));
+  gl.useProgram(program);
+  gl.enable(gl.DEPTH_TEST);
+  gl.clearColor(0, 0, 0, 0);
+  const attributes = ["position", "paint"].map(name => gl.getAttribLocation(program, name));
+  for (const address of attributes) gl.enableVertexAttribArray(address);
+  const uniforms = Object.fromEntries(
+    ["right", "up", "toward", "center", "offset", "scale", "distanceFrom", "emphasis"]
+      .map(name => [name, gl.getUniformLocation(program, name)])
+  );
+  const meshes = {};
+  const illumination = unit([-.36, .87, .56]);
+  let vertices = [];
+
+  function triangle(a, b, c, tint) {
+    const normal = unit(cross(subtract(b, a), subtract(c, a)));
+    const brightness = .64 + Math.max(0, dot(illumination, normal)) * .41;
+    const shade = color(tint).map(value => value * brightness);
+    for (const point of [a, b, c]) vertices.push(...point, ...shade);
+  }
+
+  function face(a, b, c, d, tint) {
+    triangle(a, b, c, tint);
+    triangle(a, c, d, tint);
+  }
+
+  function box(x, y, z, w, h, d, tint) {
+    const [x1, x2] = [x-w/2, x+w/2], [y1, y2] = [y-h/2, y+h/2], [z1, z2] = [z-d/2, z+d/2];
+    const a = [x1,y1,z1], b = [x2,y1,z1], c = [x2,y2,z1], d1 = [x1,y2,z1];
+    const e = [x1,y1,z2], f = [x2,y1,z2], g = [x2,y2,z2], h1 = [x1,y2,z2];
+    face(b,a,d1,c,tint); face(e,f,g,h1,tint);
+    face(a,e,h1,d1,tint); face(f,b,c,g,tint);
+    face(d1,h1,g,c,tint); face(a,b,f,e,tint);
+  }
+
+  function rod(start, end, radius, tint, sides = 12, tipRadius = radius) {
+    const direction = unit(subtract(end, start));
+    const u = unit(cross(Math.abs(direction[1]) > .8 ? [0,0,1] : [0,1,0], direction));
+    const v = cross(direction, u);
+    const ring = (origin, angle, size) => origin.map((point, i) =>
+      point + size * (u[i]*Math.cos(angle) + v[i]*Math.sin(angle)));
+    for (let i = 0; i < sides; i++) {
+      const angle = 2*Math.PI*i/sides, next = 2*Math.PI*(i+1)/sides;
+      const a = ring(start, angle, radius), b = ring(start, next, radius);
+      const c = ring(end, next, tipRadius), d = ring(end, angle, tipRadius);
+      face(a,b,c,d,tint);
+      triangle(start,b,a,tint);
+      triangle(end,d,c,tint);
+    }
+  }
+
+  function line(points, radius, tint) {
+    for (let i = 1; i < points.length; i++) rod(points[i-1], points[i], radius, tint, 8);
+  }
+
+  function fan(x, y, z, size, thickness, axis, shell, blades) {
+    const locate = (a, b, depth) => {
+      if (axis === "x") return [x + depth, y + a, z + b];
+      if (axis === "z") return [x + a, y + b, z + depth];
+      return [x + a, y + depth, z - b];
+    };
+    const block = (a, b, w, h, tint) => {
+      const p = locate(a, b, 0);
+      if (axis === "x") box(...p, thickness, w, h, tint);
+      else if (axis === "z") box(...p, w, h, thickness, tint);
+      else box(...p, w, thickness, h, tint);
+    };
+    const side = size / 2, hub = size * .13;
+    for (const sign of [-1, 1]) {
+      block(sign*(side - 4), 0, 8, size, shell);
+      block(0, sign*(side - 4), size, 8, shell);
+    }
+    for (const a of [-1, 1]) for (const b of [-1, 1]) block(a*(side-8), b*(side-8), 13, 13, shell);
+    rod(locate(0,0,-thickness/2), locate(0,0,thickness/2), hub, shell, 24);
+    for (const depth of [-thickness/2, thickness/2]) {
+      const tip = depth + Math.sign(depth)*.3;
+      rod(locate(0,0,depth), locate(0,0,tip), hub*.8, blades, 24);
+    }
+    const bladePoint = (r, angle, d) => locate(r*Math.cos(angle), r*Math.sin(angle), d);
+    for (let i = 0; i < 7; i++) {
+      const angle = i*2*Math.PI/7, rim = side-7;
+      const a = bladePoint(hub*.75, angle, -.4);
+      const b = bladePoint(rim*.82, angle+.26, -thickness*.23);
+      const c = bladePoint(rim, angle+.61, thickness*.22);
+      const d = bladePoint(rim*.77, angle+.76, thickness*.25);
+      const e = bladePoint(hub*.82, angle+.32, thickness*.2);
+      triangle(a,b,c,blades); triangle(a,c,d,blades); triangle(a,d,e,blades);
+    }
+  }
+
+  function mesh(name, build) {
+    vertices = [];
+    build();
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+    meshes[name] = {buffer, count: vertices.length / 6};
+  }
+
+  const frameColor = 0x758694, steel = 0xa6b4bd, dark = 0x354450, black = 0x253138;
+  const posts = [[-197,57],[-197,193],[-197,323],[-86,57],[-86,193],[-86,323],[25,57],[25,193],[25,323]];
+  mesh("case", () => {
+    for (const z of [-99,99]) {
+      box(0, 22, z, 440, 12, 7, frameColor);
+      box(0, 376, z, 440, 10, 7, frameColor);
+      for (const x of [-217,217]) box(x, 199, z, 8, 352, 7, frameColor);
+      for (const x of [-157,157]) box(x, 9, z*.86, 40, 14, 23, black);
+    }
+    for (const x of [-217,217]) {
+      box(x, 22, 0, 8, 10, 198, frameColor);
+      box(x, 375, 0, 8, 9, 198, frameColor);
+    }
+    box(-86, 198, -82, 250, 350, 4, dark);
+    box(132, 198, -82, 166, 350, 4, 0x455561);
+    for (const y of [109, 175, 241]) {
+      box(49,y,-77,15,44,4,black);
+      box(60,y,-77,4,44,4,frameColor);
+    }
+    for (const z of [-62, 62]) box(0, 27, z, 421, 4, 5, steel);
+    for (const z of [-73, 73]) box(-52, 369, z, 335, 4, 6, steel);
+    for (const y of [295, 311, 334, 349]) box(213,y,0,6,3,166,frameColor);
+    box(220,67,0,5,91,185,0x4e5f6c);
+    for (const z of [-56, -35, -14, 7, 28, 49, 70]) box(223,58,z,3,53,1.7,dark);
+    box(224,110,37,2,19,61,black);
+    rod([225,111,57],[226,111,57],5,steel,20);
+    for (const z of [34,14]) box(226,111,z,3,3,9,steel);
+    box(-219, 343, -53, 6, 31, 64, dark);
+    box(-223, 350, -57, 3, 14, 22, black);
+    for (const y of [79,98,117,136,155,174,193]) box(-219,y,3,4,4,138,dark);
+    for (const y of [251,267,283,299,315]) box(-218,y,24,4,2,95,frameColor);
+    line([[-215,353,-58],[-189,365,-75],[130,365,-75],[170,361,-49]],2.3,black);
+  });
+
+  mesh("covers", () => {
+    for (const y of [31,366]) box(0,y,102,427,5,3,0x97c6d4);
+    for (const x of [-211,211]) box(x,199,102,4,334,3,0x97c6d4);
+    for (const x of [-211,211]) box(x,199,-101,4,337,3,steel);
+    for (const z of [-92,92]) box(0,383,z,436,5,5,steel);
+    for (const x of [-212,212]) box(x,383,0,5,5,184,steel);
+    for (let x = -198; x <= 198; x += 15) box(x,383,0,2,3,178,dark);
+    for (const y of [105, 355]) box(221,y,0,3,4,185,steel);
+    for (const z of [-90,90]) box(221,230,z,4,247,4,steel);
+  });
+
+  mesh("posts", () => {
+    for (const [x,y] of posts) rod([x,y,-80],[x,y,-65],4.8,0xc5a068,6);
+  });
+
+  mesh("board", () => {
+    box(-86,190,-70,244,305,4,0x4c6965);
+    box(-184,274,-56,45,116,24,dark);
+    box(-176,287,-42,53,87,7,steel);
+    for (let y = 251; y < 328; y += 8) box(-176,y,-38,51,2,2,black);
+    box(-107,325,-56,70,18,22,steel);
+    for (let x=-139; x < -76; x+=7) box(x,325,-43,2,15,2,black);
+    box(-104,267,-64,54,55,6,0xb7a786);
+    for (const dx of [-38,38]) for (const dy of [-38,38])
+      rod([-104+dx,267+dy,-67],[-104+dx,267+dy,-54],3.2,steel,12);
+    for (const x of [-34,-22,-10,2]) {
+      box(x,264,-64,6,118,8,black);
+      for (const y of [207,320]) box(x,y,-59,7,6,4,steel);
+    }
+    for (const y of [118,160,202]) {
+      box(-132,y,-63,110,9,9,0x9eacb5);
+      box(-132,y,-58,102,2,2,black);
+    }
+    for (const y of [72,103,139,181]) {
+      box(-142,y,-64,103,14,7,0x66727c);
+      box(-124,y,-59,59,2,3,0x9daab5);
+    }
+    box(-103,148,-65,84,10,6,0x637382);
+    box(-17,100,-59,52,39,16,dark);
+    for (const [x,y,w,h] of [[29,265,8,46],[-164,331,22,8],[-147,320,9,7],[24,206,12,18],[24,159,9,22],[10,53,29,10],[-187,52,17,10],[-63,53,20,10],[-29,53,20,10]]) {
+      box(x,y,-63,w,h,10,black);
+    }
+    for (const [x,y] of posts) rod([x,y,-68],[x,y,-65],3.2,steel,12);
+    for (let i=0;i<8;i++) {
+      box(-41+i*4,218-i*2,-67.8,1.1,30,1.2,0x78908a);
+      box(-134,227+i*2,-67.7,52-i*3,1.1,1.1,0x78908a);
+    }
+  });
+
+  mesh("cpu", () => {
+    box(-104,267,-58,38,39,5,0xbcc9cb);
+    box(-104,267,-55,26,27,1.5,0x8babad);
+    triangle([-122,249,-54],[-113,249,-54],[-122,258,-54],0xffc064);
+  });
+
+  mesh("ram", () => {
+    for (const x of [-22,2]) {
+      box(x,264,-44,7,116,35,black);
+      box(x,264,-33,8,113,14,0x8b9da9);
+      box(x,264,-25,8,106,3,0xcbdae0);
+      for (let y=220;y<311;y+=12) box(x,y,-23,9,1.4,2,0x344551);
+    }
+  });
+
+  mesh("ssd", () => {
+    box(-101,148,-60,80,22,4,0x6d9d96);
+    for (const x of [-121,-104,-86]) box(x,148,-56,12,13,4,black);
+    box(-95,153,-53,37,4,2,steel);
+    rod([-136,148,-58],[-136,148,-54],3.2,steel);
+  });
+
+  mesh("power", () => {
+    box(172,278,2,85,150,150,0x4f5b68);
+    for (const z of [-72,76]) box(216,278,z,4,151,5,steel);
+    for (const y of [204,352]) box(216,y,2,4,4,153,steel);
+    box(172,354,2,89,4,158,frameColor);
+    fan(216,278,2,124,4,"x",black,0x82969d);
+    box(169,356,-37,29,4,25,black);
+    box(170,357,-37,21,3,18,steel);
+    box(194,357,-37,10,4,15,black);
+    for (let z=-48; z<=53; z+=20) box(171,202,z,20,6,13,black);
+    box(161,274,78,44,19,2,steel);
+  });
+
+  mesh("floorFans", () => {
+    for (const x of [-123,0,123]) fan(x,41,0,120,23,"y",0x8d7564,0xb7a498);
+  });
+
+  mesh("rearFan", () => fan(-205,278,23,120,23,"x",0x8d7564,0xb7a498));
+
+  mesh("radiator", () => {
+    box(-47,356,17,315,26,140,black);
+    for (let x=-190; x<100; x+=5) box(x,369,17,1.7,2,128,steel);
+    for (const z of [-54,88]) box(-47,357,z,314,26,2,frameColor);
+    for (const x of [-118,24]) fan(x,330,17,140,25,"y",0x495966,0xaebac7);
+    for (const z of [16,43]) rod([103,348,z],[115,344,z],7.2,black,12);
+  });
+
+  mesh("pump", () => {
+    rod([-104,267,-55],[-104,267,-18],37,0x3d5060,36);
+    rod([-104,267,-18],[-104,267,-16],32,0x89aeba,36);
+    rod([-104,267,-16],[-104,267,-14],29,black,36);
+    rod([-104,267,-14],[-104,267,-12],16,0x6d96a9,32);
+    for (const delta of [-6,6]) {
+      line([[-70,267+delta,-23],[-43,273+delta,-16],[2,281+delta,-9],[54,293+delta,4],
+        [91,310+delta,18],[111,326+delta,16+(delta+6)*2.25],[114,344,16+(delta+6)*2.25]],5.6,0x394851);
+    }
+  });
+
+  mesh("gpu", () => {
+    box(-58,188,6,302,48,134,0x59646d);
+    box(-58,214,6,301,4,133,0x9ba8b3);
+    box(-58,189,71,302,40,7,0x526672);
+    box(-58,189,75,115,12,1.5,0xc2cbd0);
+    for (const x of [-154,-58,38]) fan(x,163,6,90,5,"y",black,0x96a9b8);
+    for (let x=-191;x<84;x+=7) box(x,207,58,2,9,16,dark);
+    box(-216,193,1,6,42,129,steel);
+    for (const z of [-42,-17,9,35]) box(-220,201,z,3,7,13,black);
+    for (const x of [56,77]) {
+      box(x,217,51,18,8,13,black);
+      line([[x,221,51],[x+5,229,49],[96,236,38],[127,213,16],[158,200,15]],3.3,0x536978);
+    }
+  });
+
+  mesh("mainWires", () => {
+    line([[29,269,-51],[48,273,-48],[77,262,-70],[104,227,-71],[125,207,-47],[169,200,-30]],4.2,0x739bac);
+    line([[-163,332,-51],[-167,345,-49],[-151,350,-66],[-125,351,-80],[96,347,-80],[120,219,-73],[165,200,-53]],3.2,0x739bac);
+    line([[-133,284,-26],[-147,303,-34],[-148,319,-52],[-147,321,-62]],2.7,0xc1a36a);
+    line([[-90,238,-27],[-74,218,-42],[44,176,-56],[123,180,-53],[165,200,-40]],3.1,0xc1a36a);
+    line([[-117,239,-23],[-129,222,-44],[-150,177,-52],[-153,83,-53],[-75,60,-53],[-64,53,-61]],2.4,0xc1a36a);
+    line([[-76,289,-23],[-59,302,-19],[-44,313,-18],[30,317,-20]],2.4,0xc1a36a);
+  });
+
+  mesh("frontWires", () => {
+    for (const [x,y,z,offset] of [[9,54,-53,-2],[24,206,-52,8],[26,158,-53,0],[-185,52,-53,4]]) {
+      line([[x,y,z],[x+22,y+offset,z+7],[65,y+offset,-70],[143,97+offset,-70],[209,102+offset,23]],2.5,0x85bccd);
+      box(x,y,z,11,7,7,0xb1c6ce);
+    }
+  });
+
+  for (const [name, low, high, xs] of [
+    ["caseAirflow", 54, 112, [-123,0,123]],
+    ["roofAirflow", 379, 440, [-118,24]]
+  ]) {
+    mesh(name, () => {
+      for (const x of xs) for (const z of [-18,45]) {
+        rod([x,low,z],[x,high-15,z],2.8,0xc1e9ff);
+        rod([x,high-16,z],[x,high,z],8,0xc1e9ff,16,0);
+      }
+      if (name === "caseAirflow") {
+        for (const y of [260,296]) {
+          rod([-219,y,23],[-252,y,23],2.8,0xc1e9ff);
+          rod([-251,y,23],[-267,y,23],8,0xc1e9ff,16,0);
+        }
+      }
+    });
+  }
+
+  return {draw(step, camera, animation, active, assembledBoard) {
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.uniform3fv(uniforms.center, camera.center);
+    gl.uniform3fv(uniforms.right, camera.right);
+    gl.uniform3fv(uniforms.up, camera.up);
+    gl.uniform3fv(uniforms.toward, camera.toward);
+    gl.uniform2fv(uniforms.scale, camera.scale);
+    gl.uniform1f(uniforms.distanceFrom, camera.distance);
+    for (const name of step.show.split(" ")) {
+      const {buffer, count} = meshes[name];
+      const delta = partOffset(name, animation, active, assembledBoard);
+      const emphasis = active.has(name) ? (name === "case" ? .42 : .93) : active.size ? -.22 : 0;
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.vertexAttribPointer(attributes[0], 3, gl.FLOAT, false, 24, 0);
+      gl.vertexAttribPointer(attributes[1], 3, gl.FLOAT, false, 24, 12);
+      gl.uniform3fv(uniforms.offset, delta);
+      gl.uniform1f(uniforms.emphasis, emphasis);
+      gl.drawArrays(gl.TRIANGLES, 0, count);
+    }
+  }};
+}
+
+function partOffset(name, animation, active, assembledBoard) {
+  const attached = ["board", "cpu", "ram", "ssd"].includes(name);
+  const shift = (active.has(name) && name !== "posts" ? movement[name] : null)
+    || (assembledBoard && attached ? movement.board : null);
+  return shift ? shift.map(value => value * animation) : [0,0,0];
+}
+
+function requestFrame() {
+  if (renderer && !frame) frame = requestAnimationFrame(draw);
+}
+
+function draw(now) {
+  frame = 0;
+  const step = steps[index];
+  if (turn) {
+    const progress = clamp((now - turn.start) / 360, 0, 1);
+    yaw = turn.from[0] + (turn.to[0] - turn.from[0])*ease(progress);
+    pitch = turn.from[1] + (turn.to[1] - turn.from[1])*ease(progress);
+    if (progress === 1) turn = null;
+  }
+  const progress = installation === null ? 1 : clamp((now - installation) / 1050, 0, 1);
+  if (progress === 1) installation = null;
+  const animation = step.focus === "covers" ? ease(progress) : 1 - ease(progress);
+  const w = stage.clientWidth, h = stage.clientHeight;
+  const ratio = Math.min(devicePixelRatio || 1, 2);
+  const width = Math.round(w * ratio), height = Math.round(h * ratio);
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  const bench = !step.show.startsWith("case");
+  const assemblyScale = Math.min(1, (w / h) / (bench ? 1.08 : 1.22));
+  const camera = {
+    center: bench ? [-87, 188, -58] : [0, 202, 0],
+    distance: bench ? 650 : 830,
+    scale: [2.92 * h / w * assemblyScale, 2.92 * assemblyScale],
+    right: [Math.cos(yaw), 0, -Math.sin(yaw)],
+    up: [-Math.sin(yaw)*Math.sin(pitch), Math.cos(pitch), -Math.cos(yaw)*Math.sin(pitch)],
+    toward: [Math.sin(yaw)*Math.cos(pitch), Math.sin(pitch), Math.cos(yaw)*Math.cos(pitch)]
+  };
+  const active = new Set(step.focus ? step.focus.split(" ") : []);
+  const assembledBoard = step.focus === "board posts";
+  renderer.draw(step, camera, animation, active, assembledBoard);
+  for (const [i, mark] of (step.marks || []).entries()) {
+    const [, x, y, z] = mark;
+    const focusName = [...active][i] || [...active][0];
+    const offset = partOffset(focusName, animation, active, assembledBoard);
+    const point = subtract([x + offset[0], y + offset[1], z + offset[2]], camera.center);
+    const depth = camera.distance - dot(camera.toward, point);
+    const px = (1 + dot(camera.right, point) * camera.scale[0] / depth) * w / 2;
+    const py = (1 - dot(camera.up, point) * camera.scale[1] / depth) * h / 2;
+    const element = marks[i];
+    const flip = px + element.offsetWidth > w - 8 && px > element.offsetWidth;
+    element.classList.toggle("flip", flip);
+    element.style.left = clamp(px, flip ? element.offsetWidth + 4 : 5, flip ? w - 5 : w - element.offsetWidth - 4) + "px";
+    element.style.top = clamp(py - 12, 40, h - 31) + "px";
+  }
+  if (turn || installation !== null) requestFrame();
+}
+
+function setView(view) {
+  const [targetYaw, targetPitch] = view;
+  if (reducedMotion.matches) {
+    yaw = targetYaw;
+    pitch = targetPitch;
+    turn = null;
+  } else {
+    const delta = Math.atan2(Math.sin(targetYaw-yaw), Math.cos(targetYaw-yaw));
+    turn = {from: [yaw,pitch], to: [yaw + delta,targetPitch], start: performance.now()};
+  }
+  requestFrame();
+}
+
+function selectStep(value) {
+  index = clamp(value, 0, steps.length - 1);
+  const step = steps[index];
+  byId("count").textContent = `step ${index+1} of ${steps.length}`;
+  byId("title").textContent = step.title;
+  byId("part").textContent = step.part;
+  byId("check").textContent = step.check;
+  byId("tasks").replaceChildren(...step.tasks.map(text => {
+    const item = document.createElement("li");
+    item.textContent = text;
+    return item;
+  }));
+  const details = byId("details");
+  details.open = false;
+  details.hidden = !step.more;
+  if (step.more) {
+    const [summary, entries] = step.more;
+    byId("summary").textContent = summary;
+    const body = byId("detail-body");
+    if (typeof entries[0] === "string") {
+      body.innerHTML = entries.map(text => `<p>${text}</p>`).join("");
+    } else {
+      body.innerHTML = `<dl>${entries.map(([left,right]) => `<dt>${left}</dt><dd>${right}</dd>`).join("")}</dl>`;
+    }
+  }
+  marks = (step.marks || []).map(([text]) => {
+    const marker = document.createElement("span");
+    marker.className = "marker";
+    marker.textContent = text;
+    return marker;
+  });
+  markerLayer.replaceChildren(...marks);
+  slider.value = String(index+1);
+  slider.setAttribute("aria-valuetext", `step ${index+1}, ${step.title}`);
+  jump.value = String(index);
+  byId("prev").disabled = index === 0;
+  byId("next").disabled = index === steps.length-1;
+  byId("replay").disabled = !step.move || reducedMotion.matches;
+  installation = step.move && !reducedMotion.matches ? performance.now() : null;
+  setView(step.view);
+}
+
+slider.max = String(steps.length);
+for (const [i, step] of steps.entries()) jump.add(new Option(`${i+1}. ${step.title}`, i));
+slider.addEventListener("input", () => selectStep(Number(slider.value)-1));
+jump.addEventListener("change", () => selectStep(Number(jump.value)));
+byId("prev").addEventListener("click", () => selectStep(index-1));
+byId("next").addEventListener("click", () => selectStep(index+1));
+for (const button of document.querySelectorAll("[data-view]")) {
+  button.addEventListener("click", () => setView(views[button.dataset.view] || steps[index].view));
+}
+byId("replay").addEventListener("click", () => {
+  installation = performance.now();
+  setView(steps[index].view);
+});
+reducedMotion.addEventListener("change", () => {
+  byId("replay").disabled = !steps[index].move || reducedMotion.matches;
+  if (reducedMotion.matches) {
+    installation = null;
+    setView(turn ? turn.to : [yaw, pitch]);
+  }
+});
+
+let drag = null;
+canvas.addEventListener("pointerdown", event => {
+  if (!event.isPrimary || event.button !== 0) return;
+  canvas.setPointerCapture(event.pointerId);
+  turn = null;
+  drag = [event.clientX, event.clientY];
+});
+canvas.addEventListener("pointermove", event => {
+  if (!drag || !event.isPrimary) return;
+  yaw -= (event.clientX - drag[0])*.011;
+  pitch = clamp(pitch + (event.clientY - drag[1])*.011, -1.5, 1.5);
+  drag = [event.clientX, event.clientY];
+  requestFrame();
+});
+canvas.addEventListener("lostpointercapture", () => drag = null);
+canvas.addEventListener("keydown", event => {
+  const delta = {ArrowLeft: [.14,0], ArrowRight: [-.14,0], ArrowUp: [0,.14], ArrowDown: [0,-.14]}[event.key];
+  if (!delta) return;
+  event.preventDefault();
+  turn = null;
+  yaw += delta[0];
+  pitch = clamp(pitch + delta[1], -1.5, 1.5);
+  requestFrame();
+});
+if (renderer) new ResizeObserver(requestFrame).observe(stage);
+selectStep(0);
+</script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""Put the Arch UEFI installer and a retained dev-server revision on a FAT32 USB."""
+
+import argparse
+import hashlib
+import plistlib
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+
+
+def digest(path):
+    with path.open("rb") as src:
+        return hashlib.file_digest(src, "sha256").hexdigest()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("iso", type=Path)
+    parser.add_argument("official_sha256", help="from the official arch release page")
+    parser.add_argument("mount", type=Path, help="mounted empty or previously prepared fat32 usb on macos")
+    parser.add_argument("branch", help="local branch containing the tested installer and workstation policy")
+    parser.add_argument("--public-key", type=Path, help="mac operator's ed25519 .pub file")
+    args = parser.parse_args()
+    mount = args.mount.resolve(strict=True)
+    info = plistlib.loads(subprocess.check_output(["diskutil", "info", "-plist", mount]))
+    if not (info.get("MountPoint") == str(mount) and info.get("BusProtocol") == "USB"
+            and info.get("RemovableMedia") and not info.get("Internal")
+            and info.get("FilesystemName") == "MS-DOS FAT32"):
+        parser.error("select a mounted removable fat32 usb volume")
+    if digest(args.iso) != args.official_sha256.lower():
+        parser.error("arch iso differs from the official sha256")
+
+    repo = Path(__file__).resolve().parents[1]
+    ref = f"refs/heads/{args.branch}"
+    rev = subprocess.check_output(["git", "rev-parse", "--verify", f"{ref}^{{commit}}"], cwd=repo, text=True).strip()
+    with tempfile.TemporaryDirectory() as tmp:
+        stage = Path(tmp)
+        subprocess.run(["bsdtar", "--no-same-owner", "-xf", args.iso.resolve(), "-C", stage], check=True)
+        # Arch can copy its root to RAM and release the usb; the checkout lives there too.
+        for entry in (stage / "loader/entries").glob("*archiso*linux.conf"):
+            lines = entry.read_text().splitlines()
+            entry.chmod(0o644)
+            entry.write_text("\n".join(line + " copytoram=n" if line.startswith("options ") else line for line in lines) + "\n")
+        if not (stage / "EFI/BOOT/BOOTx64.EFI").is_file() or not (stage / "loader/entries/01-archiso-linux.conf").is_file():
+            parser.error("arch iso lacks the expected x86-64 uefi entry")
+        bundle = stage / "dev-server.bundle"
+        subprocess.run(["git", "bundle", "create", bundle, ref], cwd=repo, check=True)
+        head = subprocess.check_output(["git", "bundle", "list-heads", bundle], text=True).strip()
+        if head != f"{rev} {ref}":
+            parser.error("branch changed during bundling")
+        (stage / "dev-server.bundle.sha256").write_text(f"{digest(bundle)}  dev-server.bundle\n")
+        launcher = subprocess.check_output(["git", "show", f"{rev}:scripts/start-desktop"], cwd=repo)
+        (stage / "start-desktop").write_bytes(launcher)
+        if args.public_key:
+            key = args.public_key.read_text().strip()
+            if "\n" in key or not key.startswith("ssh-ed25519 "):
+                parser.error("expected one ssh-ed25519 public key")
+            subprocess.run(["ssh-keygen", "-lf", args.public_key], check=True)
+            (stage / "operator.pub").write_text(key + "\n")
+        # Only reuse a drive containing this installer or macos filesystem metadata.
+        known = {p.name for p in stage.iterdir()} | {".Spotlight-V100", ".fseventsd", ".Trashes", ".DS_Store"}
+        for p in mount.iterdir():
+            if p.name not in known and not p.name.startswith("._"):
+                parser.error(f"unexpected file on installer volume: {p.name}")
+        for src in sorted(stage.rglob("*")):
+            dst = mount / src.relative_to(stage)
+            if src.is_dir():
+                dst.mkdir(exist_ok=True)
+                continue
+            expected = digest(src)
+            if not dst.is_file() or digest(dst) != expected:
+                shutil.copyfile(src, dst)
+                if digest(dst) != expected:
+                    raise RuntimeError(f"usb readback failed for {dst}")
+        subprocess.run(["sync"], check=True)
+    print(f"verified uefi installer on {mount}, dev-server {rev}")
+
+
+if __name__ == "__main__":
+    main()

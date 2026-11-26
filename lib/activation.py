@@ -274,10 +274,10 @@ def main():
     command = sys.argv[1:]
     if command == ["check"]:
         return check(path)
-    if len(command) == 3 and command[0] == "apply" and command[1] in ("macbook", "arch", "devbox"):
+    if len(command) == 3 and command[0] == "apply" and command[1] in ("macbook", "arch", "desktop", "devbox"):
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         return apply(path, command[1], Path(command[2]))
-    if len(command) == 3 and command[0] == "run" and command[1] in ("macbook", "arch", "devbox"):
+    if len(command) == 3 and command[0] == "run" and command[1] in ("macbook", "arch", "desktop", "devbox"):
         return run(path, command[1], Path(command[2]))
     return 64
 

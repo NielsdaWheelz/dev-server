@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# entry point on the fat32 install usb, at the arch live console.
+set -euo pipefail
+[[ -d /run/archiso && $EUID == 0 ]] || { echo 'boot the arch install usb first' >&2; exit 1; }
+media=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+cd "$media"
+sha256sum -c dev-server.bundle.sha256
+# The live login prompt can appear while archiso is still importing signing keys.
+systemctl start pacman-init.service
+if ! command -v git >/dev/null; then
+  pacman -Sy --needed --noconfirm git
+fi
+repo=$(mktemp -d /root/desktop-source.XXXXXX)
+trap 'rm -rf -- "$repo"' EXIT
+read -r revision ref < <(git bundle list-heads dev-server.bundle)
+git clone --quiet --branch "${ref#refs/heads/}" "$media/dev-server.bundle" "$repo"
+[[ $(git -C "$repo" rev-parse HEAD) == "$revision" ]]
+if [[ -f $media/operator.pub ]]; then
+  export DESKTOP_OPERATOR_PUBKEY="$media/operator.pub"
+fi
+"$repo/scripts/install-desktop" "$@"
