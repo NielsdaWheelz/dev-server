@@ -11,9 +11,6 @@ personal_desktop_prepare_packages() {
   local repos
   # shellcheck disable=SC2154 # created by workstation before package installation.
   local config="$workstation_declared_stage/pacman.conf"
-  # A kernel or microcode update must write the ESP the firmware actually boots.
-  [[ "$(findmnt -n --mountpoint /boot -o FSTYPE)" == vfat ]] ||
-    die 'mount the desktop EFI system partition at /boot before applying updates'
   repos="$(pacman-conf --repo-list)" || die 'could not read pacman configuration'
   if ! grep -Fxq multilib <<<"$repos"; then
     cp /etc/pacman.conf "$config"
@@ -25,15 +22,8 @@ personal_desktop_prepare_packages() {
 }
 
 personal_desktop_apply() {
-  local user home config_dir audio_mutations
-  user="$(id -un)"
+  local home config_dir audio_mutations
   home="$(dev_server_home)"
-  if [[ "$(getent passwd "$user" | cut -d: -f7)" != /usr/bin/zsh ]]; then
-    sudo usermod -s /usr/bin/zsh "$user"
-    render_result CHANGED "$user" 'zsh login shell'
-  fi
-  ensure_directory "$home/.config/ghostty" 0755
-  install_managed_file "$(personal_arch_asset dotfiles/ghostty.config)" "$home/.config/ghostty/config" 0644 desktop.session
   for config_dir in alsa-card-profile alsa-card-profile/profile-sets wireplumber wireplumber/wireplumber.conf.d; do
     ensure_directory "$home/.config/$config_dir" 0755
   done
@@ -47,15 +37,5 @@ personal_desktop_apply() {
     systemctl --user restart wireplumber.service || die 'could not reload desktop audio configuration'
     render_result RESTARTED wireplumber.service
   fi
-  personal_arch_install_root_file "$(personal_arch_asset kde/powerdevilrc)" /etc/xdg/powerdevilrc 0644
-  personal_arch_configure_gui_defaults || return 1
-  personal_arch_ensure_unit NetworkManager.service
-  if [[ "$(tailscale status --json | jq -r .BackendState)" != Running ]]; then
-    render_result ACTION tailscale 'finish desktop enrollment with sudo tailscale up, then rerun apply'
-  fi
-  if [[ "$(loginctl show-user "$user" --property=Linger --value)" != yes ]]; then
-    sudo loginctl enable-linger "$user"
-    render_result CHANGED "$user" 'user services start before login'
-  fi
-  personal_arch_enable_plasma_login
+  personal_arch_plasma_apply kde/powerdevilrc
 }

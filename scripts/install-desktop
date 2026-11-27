@@ -4,24 +4,33 @@ set -euo pipefail
 
 die() { printf '%s\n' "$*" >&2; exit 1; }
 
-case "${1:-}" in
-  '') mode=install ;;
+mode=install
+install_host=desktop
+for option in "$@"; do
+  case "$option" in
+  --huawei) install_host=huawei ;;
   --resume) mode=resume ;;
   -h | --help)
-    printf '%s\n' 'usage: scripts/install-desktop [--resume]' \
+    printf '%s\n' 'usage: scripts/install-desktop [--huawei] [--resume]' \
       'install replaces the selected internal nvme after confirmation.' \
       'resume continues an interrupted installation on its existing filesystems.'
     exit 0 ;;
-  *) die 'usage: scripts/install-desktop [--resume]' ;;
-esac
-(( $# <= 1 )) || die 'usage: scripts/install-desktop [--resume]'
+  *) die 'usage: scripts/install-desktop [--huawei] [--resume]' ;;
+  esac
+done
 [[ $EUID == 0 && $(uname -m) == x86_64 && -d /run/archiso && -d /sys/firmware/efi/efivars ]] ||
   die 'boot the official arch usb in uefi mode and run at its root prompt'
 exec </dev/tty
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
-# shellcheck source=../lib/personal-desktop.sh
-source "$repo/lib/personal-desktop.sh"
-personal_desktop_board || die 'the motherboard does not match the desktop policy'
+if [[ "$install_host" == huawei ]]; then
+  # shellcheck source=lib/personal-arch.sh
+  source "$repo/lib/personal-arch.sh"
+  personal_arch_owned_host || die 'the system does not match the huawei mach-wx9 policy'
+else
+  # shellcheck source=lib/personal-desktop.sh
+  source "$repo/lib/personal-desktop.sh"
+  personal_desktop_board || die 'the motherboard does not match the desktop policy'
+fi
 revision=$(git -C "$repo" rev-parse --verify HEAD)
 [[ -z $(git -C "$repo" status --porcelain --untracked-files=normal) ]] ||
   die 'use a clean checkout of the install revision'
@@ -56,12 +65,15 @@ esp=${disk}p1
 rootpart=${disk}p2
 marker=.dev-server-installing
 packages=(base linux mkinitcpio linux-firmware intel-ucode networkmanager sudo git python zsh firewalld openssh tailscale)
+if [[ "$install_host" == huawei ]]; then
+  packages+=(wpa_supplicant)
+fi
 # Check the mirror and package names while failure is still cheap. This is the live environment.
 pacman -Sy --noconfirm
 pacman -Sp --print-format '%n' -- "${packages[@]}" >/dev/null
 
 if [[ $mode == install ]]; then
-  printf '%s\n' 'all existing partitions on this disk will be replaced.' \
+  printf '%s\n' "installing $install_host. all existing partitions on this disk will be replaced." \
     'new layout: 1 gib efi at /boot, remaining space ext4 at /, unencrypted.'
   read -r -p "type 'erase $serial' to continue: " confirmation
   [[ $confirmation == "erase $serial" ]] || die 'cancelled'
@@ -78,7 +90,7 @@ fi
 
 [[ $(blkid -s TYPE -o value "$esp") == vfat && $(blkid -s LABEL -o value "$esp") == ARCHBOOT &&
    $(blkid -s TYPE -o value "$rootpart") == ext4 && $(blkid -s LABEL -o value "$rootpart") == arch-root ]] ||
-  die 'expected the desktop efi and ext4 filesystems on the selected disk'
+  die 'expected the efi and ext4 filesystems on the selected disk'
 target=$(mktemp -d /run/desktop-install.XXXXXX)
 cleanup() {
   local status=$?
@@ -92,17 +104,17 @@ cleanup() {
 trap cleanup EXIT
 mount "$rootpart" "$target"
 if [[ $mode == install ]]; then
-  printf '%s\n' "$serial" "$revision" >"$target/$marker"
+  printf '%s\n' "$serial" "$revision" "$install_host" >"$target/$marker"
 else
-  [[ -f "$target/$marker" && $(<"$target/$marker") == "$serial"$'\n'"$revision" ]] ||
-    die 'resume requires an unfinished desktop install from this exact revision on this disk'
+  [[ -f "$target/$marker" && $(<"$target/$marker") == "$serial"$'\n'"$revision"$'\n'"$install_host" ]] ||
+    die 'resume requires an unfinished install from this exact revision on this disk and host'
 fi
 mkdir -p "$target/boot" "$target/etc"
 mount -o umask=0077 "$esp" "$target/boot"
 printf '%s\n' 'KEYMAP=us' >"$target/etc/vconsole.conf"
 pacstrap -K "$target" "${packages[@]}"
 genfstab -U "$target" >"$target/etc/fstab"
-printf '%s\n' desktop >"$target/etc/hostname"
+printf '%s\n' "$install_host" >"$target/etc/hostname"
 printf '%s\n' 'LANG=en_US.UTF-8' >"$target/etc/locale.conf"
 sed -i 's/^#en_US.UTF-8 UTF-8$/en_US.UTF-8 UTF-8/' "$target/etc/locale.gen"
 arch-chroot "$target" locale-gen
@@ -172,5 +184,10 @@ arch-chroot "$target" chown -R nnandal:nnandal /home/nnandal/Projects
 printf '%s\n' 'set the local password for nnandal. it will also authorize workstation apply.'
 arch-chroot "$target" passwd nnandal
 rm -- "$target/$marker"
-printf '%s\n' 'installed. remove the usb after shutdown, then start the tower.' \
-  'log in as nnandal and follow docs/desktop-bootstrap.md for network sign-in and private restore before apply.'
+if [[ "$install_host" == huawei ]]; then
+  bootstrap_doc=docs/huawei-install.md
+else
+  bootstrap_doc=docs/desktop-bootstrap.md
+fi
+printf '%s\n' "installed. remove the usb after shutdown, then start $install_host." \
+  "log in as nnandal and follow $bootstrap_doc for network sign-in and private restore before apply."

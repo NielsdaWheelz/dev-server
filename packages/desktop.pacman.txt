@@ -1,14 +1,6 @@
-intel-ucode
 lib32-nvidia-utils
-linux
-linux-firmware
-networkmanager
 nvidia-open
 nvidia-utils
-pipewire-alsa
-pipewire-pulse
 solaar
 steam
-vim
 vulkan-tools
-wireplumber

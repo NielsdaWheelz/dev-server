@@ -64,18 +64,18 @@ through their native commands.
 ## workstation
 
 macos needs homebrew and the app store tailscale app, installed and signed in.
-linux targets the owned huawei laptop and gigabyte tower. the laptop uses
-endeavouros, pacman and yay. the tower uses stock arch and pacman. workstations need
-git, curl, python 3, tmux, tailscale, and native service tools. existing github,
-ai-tool, ssh, tailscale, and skid credentials are preserved.
+linux targets the owned huawei laptop and gigabyte tower. clean installs use
+stock arch and pacman. the older huawei endeavouros install still uses pacman
+and yay until the reinstall. workstations need git, curl, python 3, tmux,
+tailscale, and native service tools. apply preserves existing github, ai-tool,
+ssh, tailscale, and skid credentials.
 
 both linux workstations install kde plasma, firefox with the 1password
 extension, vlc with codecs, and weekly ssd trim and package-cache cleanup.
 firefox handles web links and vlc handles mp4 and mkv by default. plasma
 starts in breeze dark. personal application and theme choices take precedence.
 steam, the nvidia driver and the saved three-display layout belong to the
-tower. apply migrates the existing huawei to plasma at the next reboot, keeps
-xfce available at login and uses separate laptop power settings.
+tower. the huawei uses separate laptop power settings. [huawei clean install](docs/huawei-install.md)
 
 arch's operator connections to macbook, devbox and nexus use the separate
 protected `~/.ssh/id_ed25519_fleet` key. its original ssh identity is retained

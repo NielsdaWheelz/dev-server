@@ -126,8 +126,8 @@ not a whole-host transaction; one apply per host at a time is a precondition.
 linux workstation apply selects the owned huawei laptop or gigabyte tower.
 the two share the arch package machinery, kde plasma, dotfiles, provider
 accounts and signed skid installer. each has its own host policy and package
-manifest. the tower runs stock arch and steam. the huawei retains its current
-endeavouros boot and xfce fallback. apply changes the login manager at the next
+manifest. both clean installations use stock arch. the tower adds steam and
+the huawei has its own power policy. apply enables plasma login for the next
 boot. disk installation runs separately from apply. arch elevation uses
 `ARCH_PASS` through askpass, including yay. values come from the environment,
 literal ignored repo `.env`, or an interactive prompt. validate credentials
