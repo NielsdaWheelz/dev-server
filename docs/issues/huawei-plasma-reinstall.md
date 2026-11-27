@@ -31,9 +31,10 @@ selection and reached the plasma greeter. docker and a skid terminal worked
 from the mac before graphical login. the installer now declares the same
 boot argument on the huawei.
 
-resolve on the laptop with the [install procedure](../huawei-install.md).
-check independent nvme boot, plasma, wifi, bluetooth/audio, touchpad,
-brightness, lid suspend and resume, the two power profiles and a second
-ordinary apply. verify pinned ssh, skid and the native account status lines.
-the existing `arch` memory identity and enrollment status remain covered by
-[the memory activation issue](universal-memory-activation.md).
+the live laptop passed independent nvme boot, plasma login, wifi, pinned ssh,
+skid and the native account status-line checks. the existing `arch` memory
+identity is enrolled for the five signed-in accounts. [memory activation](universal-memory-activation.md)
+
+finish on the laptop with the [install procedure](../huawei-install.md).
+check bluetooth and audio playback, touchpad, brightness, lid suspend and
+resume, the two power profiles and a second ordinary apply.
