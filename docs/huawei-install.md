@@ -21,7 +21,8 @@
 4. run the installer. match the internal nvme against the backup inventory
    before typing its path and the requested erase confirmation. the installer
    replaces every partition with a 1 gib efi partition and an unencrypted
-   ext4 root, installs stock arch, and names the host `huawei`. set the local
+   ext4 root, installs stock arch, and names the host `huawei`. the huawei
+   boots with intel graphics to avoid the observed nouveau crash. set the local
    password for `nnandal` when prompted. resume an interrupted install with
    the same usb and `--huawei --resume`.
 

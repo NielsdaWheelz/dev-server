@@ -136,11 +136,15 @@ arch-chroot "$target" bootctl --esp-path=/boot --no-variables install
 root_uuid=$(blkid -s PARTUUID -o value "$rootpart")
 esp_uuid=$(blkid -s PARTUUID -o value "$esp")
 [[ -n $root_uuid && -n $esp_uuid ]] || die 'missing gpt partition identifiers'
+kernel_options="root=PARTUUID=$root_uuid rw"
+if [[ "$install_host" == huawei ]]; then
+  kernel_options+=' module_blacklist=nouveau'
+fi
 cat >"$target/boot/loader/entries/arch.conf" <<ENTRY
 title Arch Linux
 linux /vmlinuz-linux
 initrd /initramfs-linux.img
-options root=PARTUUID=$root_uuid rw
+options $kernel_options
 ENTRY
 printf '%s\n' 'default arch.conf' 'timeout 2' >"$target/boot/loader/loader.conf"
 [[ -s "$target/boot/vmlinuz-linux" && -s "$target/boot/initramfs-linux.img" &&
