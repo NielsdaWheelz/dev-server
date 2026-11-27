@@ -35,6 +35,14 @@ the live laptop passed independent nvme boot, plasma login, wifi, pinned ssh,
 skid and the native account status-line checks. the existing `arch` memory
 identity is enrolled for the five signed-in accounts. [memory activation](universal-memory-activation.md)
 
-finish on the laptop with the [install procedure](../huawei-install.md).
+the second apply configured the merged setup and deferred its authenticated
+memory check while the central jarvis service was stopped for maintenance.
+once it serves again, verify that the laptop's five enrolled capture lanes
+still report active baselines.
+
+remove the offline pre-reinstall `arch` device in the tailscale admin console.
+verify that the new `huawei` device remains online and the old device is absent.
+
+finish the physical checks in the [install procedure](../huawei-install.md).
 check bluetooth and audio playback, touchpad, brightness, lid suspend and
-resume, the two power profiles and a second ordinary apply.
+resume, and the two power profiles.
