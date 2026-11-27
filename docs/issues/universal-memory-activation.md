@@ -1,13 +1,20 @@
 # universal memory host activation
 
+on 2026-11-26 the huawei joined with its existing `arch` memory identity.
+the owner approved a replacement collector key and future reads and capture
+for all three codex accounts and both work claude accounts. personal claude
+stayed disabled on the laptop. the five complete read snapshots and newly
+captured request/reply pairs were verified. the named private change preserved
+the selected jarvis release and the other hosts' credentials.
+
 status: macbook and devbox run the qualified collector and each has six active
 native lanes. fresh normal codex-work2 turns on both hosts pass unique capture,
 checkpoint and installed mcp readback proof. the pending-baseline, model and host
 deferrals below remain explicit.
 
 the owner authorized sharing across all controlled personal/work/work2 profiles.
-the declaration retains eighteen native lanes plus `(devbox, jarvis)`; arch is
-disabled and nexus deployment waits for its next release. nexus must adopt
+the original declaration retained eighteen native lanes plus `(devbox, jarvis)`;
+arch was deferred and nexus deployment waits for its next release. nexus must adopt
 universal-memory `11f4220031d56f71d5a732b748a9bbb52c842e0e` or a qualified
 descendant before reading the new native provenance.
 
@@ -98,8 +105,7 @@ remaining proof and owner-approved deferrals:
 - macbook claude-work2: the authenticated model journey remains unverified after
   its quota-blocked attempt. the previously reported reset time is not evidence
   that this check subsequently ran.
-- arch and nexus: installation remains deferred; nexus capture belongs to its
-  next release.
+- nexus capture belongs to its next release.
 - historical import, backup/restore and broad usefulness/load evaluation remain
   deferred.
 

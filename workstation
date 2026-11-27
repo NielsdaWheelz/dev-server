@@ -26,6 +26,7 @@ source "$base_dir/lib/activation.sh"
 
 workstation_platform=''
 workstation_target=''
+workstation_stock_linux=0
 workstation_declared_stage=''
 workstation_manifests=()
 
@@ -52,14 +53,20 @@ workstation_select_target() {
     workstation_platform=arch
     if personal_arch_owned_host; then
       workstation_target=arch
-      workstation_manifests=(packages/arch.common.txt packages/arch.pacman.txt packages/arch.aur.txt)
+      if grep -Fxq ID=arch /etc/os-release; then
+        workstation_stock_linux=1
+        workstation_manifests=(packages/arch.common.txt packages/plasma.pacman.txt packages/huawei.pacman.txt)
+      else
+        workstation_manifests=(packages/arch.common.txt packages/arch.pacman.txt packages/arch.aur.txt)
+      fi
     elif [[ -f /etc/arch-release && "$(< /proc/sys/kernel/hostname)" == desktop ]] && personal_desktop_board; then
-      [[ "$(id -un)" == nnandal ]] || die 'run desktop apply as the operator nnandal'
       workstation_target=desktop
-      workstation_manifests=(packages/arch.common.txt packages/desktop.pacman.txt)
+      workstation_stock_linux=1
+      workstation_manifests=(packages/arch.common.txt packages/plasma.pacman.txt packages/desktop.pacman.txt)
     else
       die 'workstation apply supports only the owned arch laptop and desktop'
     fi
+    [[ "$(id -un)" == nnandal ]] || die 'run workstation apply as the operator nnandal'
     # shellcheck source=lib/packages-arch.sh
     source "$base_dir/lib/packages-arch.sh"
     ;;
@@ -208,8 +215,8 @@ workstation_prepare_arch_sudo() {
       break
     done <"$base_dir/.env"
   fi
-  if [[ "$workstation_target" == desktop && -z "${ARCH_PASS:-}" && -t 0 ]]; then
-    IFS= read -r -s -p 'desktop sudo password: ' ARCH_PASS || die 'could not read the local sudo password'
+  if [[ -z "${ARCH_PASS:-}" && -t 0 ]]; then
+    IFS= read -r -s -p 'workstation sudo password: ' ARCH_PASS || die 'could not read the local sudo password'
     printf '\n' >&2
   fi
   [[ -n "${ARCH_PASS:-}" ]] || die 'set ARCH_PASS in the environment or the repo .env for arch apply'
@@ -227,6 +234,10 @@ workstation_preflight() {
   workstation_select_target
   workstation_stage_declared_inputs
   if [[ "$workstation_platform" == arch ]]; then
+    if ((workstation_stock_linux)); then
+      [[ "$(findmnt -n --mountpoint /boot -o FSTYPE)" == vfat ]] ||
+        die 'mount the EFI system partition at /boot before applying updates'
+    fi
     workstation_prepare_arch_sudo
     exec </dev/null
   fi
@@ -254,7 +265,15 @@ workstation_apply() {
   fi
   dotfiles_install "$workstation_platform"
   case "$workstation_target" in
-  arch) personal_arch_apply ;;
+  arch)
+    if ((workstation_stock_linux)); then
+      personal_arch_ensure_unit bluetooth.service
+      personal_arch_ensure_unit power-profiles-daemon.service
+      personal_arch_plasma_apply kde/huawei-powerdevilrc
+    else
+      personal_arch_apply
+    fi
+    ;;
   desktop) personal_desktop_apply ;;
   macbook) personal_macos_apply ;;
   esac

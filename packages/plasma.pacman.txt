@@ -1,0 +1,13 @@
+dolphin
+intel-ucode
+kwallet-pam
+linux
+linux-firmware
+networkmanager
+pipewire-alsa
+pipewire-pulse
+plasma-meta
+vim
+wireplumber
+xdg-desktop-portal-kde
+xorg-xwayland

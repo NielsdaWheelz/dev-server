@@ -346,6 +346,45 @@ personal_arch_configure_gui_defaults() {
   personal_arch_ensure_unit paccache.timer
 }
 
+personal_arch_enable_plasma_login() {
+  # Keep the console available during apply. Start the greeter on the next boot.
+  if ! systemctl is-enabled --quiet plasmalogin.service; then
+    sudo systemctl enable plasmalogin.service || die 'could not enable Plasma Login Manager'
+    render_result CHANGED plasmalogin.service enabled
+  fi
+  if [[ "$(systemctl get-default)" != graphical.target ]]; then
+    sudo systemctl set-default graphical.target || die 'could not set the graphical boot target'
+    render_result CHANGED 'boot target' graphical.target
+  fi
+  if ! systemctl is-active --quiet plasmalogin.service || personal_arch_reboot_pending; then
+    personal_arch_reboot_deferred=1
+  fi
+}
+
+personal_arch_plasma_apply() {
+  local power_settings="$1" user home
+  user="$(id -un)"
+  home="$(dev_server_home)"
+  if [[ "$(getent passwd "$user" | cut -d: -f7)" != /usr/bin/zsh ]]; then
+    sudo usermod -s /usr/bin/zsh "$user"
+    render_result CHANGED "$user" 'zsh login shell'
+  fi
+  ensure_directory "$home/.config/ghostty" 0755
+  install_managed_file "$(personal_arch_asset dotfiles/ghostty.config)" "$home/.config/ghostty/config" 0644 desktop.session
+  ensure_directory_as_root /etc/xdg 0755
+  personal_arch_install_root_file "$(personal_arch_asset "$power_settings")" /etc/xdg/powerdevilrc 0644
+  personal_arch_configure_gui_defaults || return 1
+  personal_arch_ensure_unit NetworkManager.service
+  if [[ "$(tailscale status --json | jq -r .BackendState)" != Running ]]; then
+    render_result ACTION tailscale 'finish enrollment with sudo tailscale up, then rerun apply'
+  fi
+  if [[ "$(loginctl show-user "$user" --property=Linger --value)" != yes ]]; then
+    sudo loginctl enable-linger "$user"
+    render_result CHANGED "$user" 'user services start before login'
+  fi
+  personal_arch_enable_plasma_login
+}
+
 # xfce reads this file directly for its preferred browser and terminal.
 personal_arch_xfce_helpers() {
   local current="$1" defaults="$2"
@@ -638,7 +677,7 @@ personal_arch_configure_firewall() {
     /etc/firewalld/policies/dev-server-docker.xml 0644
   [[ "$dev_server_install_status" == 'UP TO DATE' ]] || changed=1
   declarations=("$assets/arch-public.xml" "$assets/arch-docker-ingress.xml")
-  if [[ "${workstation_target:?workstation target required}" == desktop ]]; then
+  if ((workstation_stock_linux)); then
     personal_arch_install_root_file "$assets/desktop-tailnet.xml" \
       /etc/firewalld/zones/desktop-tailnet.xml 0644
     [[ "$dev_server_install_status" == 'UP TO DATE' ]] || changed=1
@@ -761,8 +800,6 @@ personal_arch_apply() {
   personal_arch_configure_xfce
   personal_arch_configure_services
   if personal_arch_reboot_pending; then
-    # Read by workstation_report_deferrals.
-    # shellcheck disable=SC2034
     personal_arch_reboot_deferred=1
   fi
 }

@@ -59,8 +59,10 @@ def main():
                 parser.error("expected one ssh-ed25519 public key")
             subprocess.run(["ssh-keygen", "-lf", args.public_key], check=True)
             (stage / "operator.pub").write_text(key + "\n")
-        # Only reuse a drive containing this installer or macos filesystem metadata.
-        known = {p.name for p in stage.iterdir()} | {".Spotlight-V100", ".fseventsd", ".Trashes", ".DS_Store"}
+        # Only reuse a drive containing this installer or system volume metadata.
+        known = {p.name for p in stage.iterdir()} | {
+            ".Spotlight-V100", ".fseventsd", ".Trashes", ".DS_Store", "System Volume Information",
+        }
         for p in mount.iterdir():
             if p.name not in known and not p.name.startswith("._"):
                 parser.error(f"unexpected file on installer volume: {p.name}")

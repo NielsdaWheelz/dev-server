@@ -124,13 +124,14 @@ loss. an unresolved result blocks another activation; inspect
 `~/.local/state/dev-server/apply.json` and actual owners before retrying. this is
 not a whole-host transaction; one apply per host at a time is a precondition.
 linux workstation apply selects the owned huawei laptop or gigabyte tower.
-the two share the arch package machinery, dotfiles, provider accounts and
-signed skid installer. each has its own host policy and package manifest.
-the tower runs stock arch, kde and steam. disk installation runs separately
-from apply. arch elevation uses
-`ARCH_PASS` through askpass, including yay; values come from the environment or
-literal ignored repo `.env`, never evaluation. validate credentials before host
-changes.
+the two share the arch package machinery, kde plasma, dotfiles, provider
+accounts and signed skid installer. each has its own host policy and package
+manifest. both clean installations use stock arch. the tower adds steam and
+the huawei has its own power policy. apply enables plasma login for the next
+boot. disk installation runs separately from apply. arch elevation uses
+`ARCH_PASS` through askpass, including yay. values come from the environment,
+literal ignored repo `.env`, or an interactive prompt. validate credentials
+before host changes.
 
 ansible owns ubuntu packages, privileged configuration, and native handlers.
 it consumes the staged controller closure and reports real changes. native
