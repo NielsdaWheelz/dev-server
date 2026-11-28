@@ -572,7 +572,8 @@ it with the version selected by its native updater. if the caller disconnects,
 inputs. a missing socket or version mismatch requires operator attention.
 
 ubuntu provisions the distro's bubblewrap apparmor profile and verifies user,
-network and pid namespace creation without disabling the global restriction.
+network and pid namespace creation. the host keeps both the unprivileged
+user namespace and unconfined profile transition restrictions enabled.
 earlyoom remains enabled and prefers preserving codex and claude. compare its
 active arguments with the installed policy so interrupted activation is
 repaired on the next apply; unchanged policy does not restart the service.
