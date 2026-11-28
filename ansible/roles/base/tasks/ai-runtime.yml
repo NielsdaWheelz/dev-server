@@ -8,25 +8,28 @@
   environment:
     NEEDRESTART_MODE: l
 
-- name: Persist Ubuntu's AppArmor user namespace boundary
+- name: Persist Ubuntu's AppArmor namespace and profile transition boundaries
   ansible.builtin.copy:
+    src: 60-dev-server-userns.conf
     dest: /etc/sysctl.d/60-dev-server-userns.conf
     owner: root
     group: root
     mode: "0644"
-    content: |
-      kernel.apparmor_restrict_unprivileged_userns=1
 
-- name: Read the active AppArmor user namespace boundary
+- name: Read the active AppArmor namespace and profile transition boundaries
   ansible.builtin.command:
-    argv: [sysctl, -n, kernel.apparmor_restrict_unprivileged_userns]
+    argv:
+      - sysctl
+      - -n
+      - kernel.apparmor_restrict_unprivileged_userns
+      - kernel.apparmor_restrict_unprivileged_unconfined
   register: base_userns_policy
   changed_when: false
 
-- name: Activate the declared AppArmor user namespace boundary
+- name: Activate the declared AppArmor namespace and profile transition boundaries
   ansible.builtin.command:
-    argv: [sysctl, -w, kernel.apparmor_restrict_unprivileged_userns=1]
-  when: base_userns_policy.stdout != '1'
+    argv: [sysctl, -p, /etc/sysctl.d/60-dev-server-userns.conf]
+  when: base_userns_policy.stdout_lines != ['1', '1']
   changed_when: true
 
 - name: Install the Ubuntu bubblewrap user namespace profile
